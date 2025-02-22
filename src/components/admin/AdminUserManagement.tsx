@@ -255,10 +255,14 @@ const AdminUserManagement: React.FC = () => {
     setEditingUser(null);
   };
 
-  // Filtrar usuarios basado en el término de búsqueda
+  const [showInactiveUsers, setShowInactiveUsers] = useState(true);
+
+  // Filtrado
   const filteredUsers = users.filter(user =>
-    user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.role.toLowerCase().includes(searchTerm.toLowerCase())
+    (user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+     user.role.toLowerCase().includes(searchTerm.toLowerCase())) &&
+    // Opción de mostrar/ocultar usuarios inactivos
+    (showInactiveUsers || user.isActive)
   );
 
   return (
