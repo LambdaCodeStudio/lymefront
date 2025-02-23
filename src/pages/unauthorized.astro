@@ -1,0 +1,10 @@
+---
+// src/pages/unauthorized.astro
+import Layout from '../layouts/main/Layout.astro';
+import UnauthorizedPage from '../components/auth/UnauthorizedPage';
+import '@/styles/globals.css'
+---
+
+<Layout title="Unauthorized">
+  <UnauthorizedPage client:load />
+</Layout>

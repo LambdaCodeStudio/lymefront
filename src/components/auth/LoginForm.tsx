@@ -1,21 +1,42 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AtSign, Lock, ArrowRight } from 'lucide-react';
 import { InputField, AuthLayout } from './shared/AuthComponents';
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Label } from "@/components/ui/label";
-import api from '../../services/api';
 
 export const LoginForm = () => {
+  // Estado para el formulario incluyendo "recordar sesión"
   const [formData, setFormData] = useState({
     email: '',
-    password: ''
+    password: '',
+    rememberMe: false
   });
+  
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
 
-  const getRedirectPath = (role) => {
+  // Cargar email guardado al montar el componente
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('rememberedEmail');
+    if (savedEmail) {
+      setFormData(prev => ({
+        ...prev,
+        email: savedEmail,
+        rememberMe: true
+      }));
+    }
+  }, []);
+
+  // Función para manejar el guardado de credenciales
+  const handleRememberMe = (checked: boolean) => {
+    setFormData(prev => ({ ...prev, rememberMe: checked }));
+    if (!checked) {
+      localStorage.removeItem('rememberedEmail');
+    }
+  };
+
+  // Determinar la ruta de redirección según el rol
+  const getRedirectPath = (role: string) => {
     const rolePaths = {
       'admin': '/admin',
       'supervisor': '/supervisor',
@@ -25,55 +46,49 @@ export const LoginForm = () => {
     return rolePaths[role] || '/dashboard';
   };
 
-  const saveAuthData = (token, userData, remember) => {
-    // Si remember está activado, guardamos en localStorage
-    if (remember) {
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(userData));
-    } else {
-      // Si no, guardamos en sessionStorage (se borra al cerrar el navegador)
-      sessionStorage.setItem('token', token);
-      sessionStorage.setItem('user', JSON.stringify(userData));
-    }
-
-    // Siempre guardamos el token en cookie para las peticiones API
-    document.cookie = `token=${token}; path=/; ${remember ? 'max-age=2592000' : 'session'}; secure; samesite=strict`;
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
 
     try {
-      const response = await api.post('/auth/login', {
-        email: formData.email,
-        password: formData.password
+      // Realizar la petición de login
+      const response = await fetch('http://localhost:4000/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          email: formData.email,
+          password: formData.password
+        })
       });
 
-      if (response.data.token) {
-        const userData = {
-          email: formData.email,
-          role: response.data.role
-        };
+      const data = await response.json();
 
-        // Guardar datos de autenticación
-        saveAuthData(response.data.token, userData, rememberMe);
-
-        //Guardar rol en localStorage
-        localStorage.setItem('userRole', response.data.role);
-        
-        // Redireccionar según el rol
-        const redirectPath = getRedirectPath(response.data.role);
-        window.location.href = redirectPath;
-      } else {
-        throw new Error('No se recibió token en la respuesta');
+      if (!response.ok) {
+        throw new Error(data.msg || 'Error de autenticación');
       }
+
+      // Guardar token y rol en localStorage
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('userRole', data.role);
+
+      // Si recordar está activado, guardar el email
+      if (formData.rememberMe) {
+        localStorage.setItem('rememberedEmail', formData.email);
+      } else {
+        localStorage.removeItem('rememberedEmail');
+      }
+
+      // Redireccionar según el rol
+      const redirectPath = getRedirectPath(data.role);
+      window.location.href = redirectPath;
+
     } catch (err: any) {
-      console.error('Error detallado:', err);
+      console.error('Error en login:', err);
       setError(
         err.response?.data?.msg || 
-        err.response?.data?.error || 
         err.message || 
         'Error al iniciar sesión'
       );
@@ -92,37 +107,41 @@ export const LoginForm = () => {
           <InputField
             type="email"
             value={formData.email}
-            onChange={(e) => setFormData({...formData, email: e.target.value})}
+            onChange={(e) => setFormData(prev => ({...prev, email: e.target.value}))}
             placeholder="Correo electrónico"
             icon={AtSign}
             error={error}
+            required
           />
 
           <InputField
             type={showPassword ? 'text' : 'password'}
             value={formData.password}
-            onChange={(e) => setFormData({...formData, password: e.target.value})}
+            onChange={(e) => setFormData(prev => ({...prev, password: e.target.value}))}
             placeholder="Contraseña"
             icon={Lock}
             error={error}
+            required
             showPasswordToggle
             onPasswordToggle={() => setShowPassword(!showPassword)}
           />
 
+          {/* Checkbox para recordar sesión */}
           <div className="flex items-center">
             <input
-              id="remember"
               type="checkbox"
-              checked={rememberMe}
-              onChange={(e) => setRememberMe(e.target.checked)}
-              className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+              id="remember-me"
+              checked={formData.rememberMe}
+              onChange={(e) => handleRememberMe(e.target.checked)}
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 
+                border-gray-300 rounded cursor-pointer"
             />
-            <Label
-              htmlFor="remember"
-              className="ml-2 block text-sm text-gray-700"
+            <label
+              htmlFor="remember-me"
+              className="ml-2 block text-sm text-gray-700 cursor-pointer"
             >
-              Recordar sesión
-            </Label>
+              Recordar mi correo
+            </label>
           </div>
         </div>
 
@@ -139,7 +158,7 @@ export const LoginForm = () => {
             border border-transparent rounded-lg text-white bg-blue-600 
             hover:bg-blue-700 focus:outline-none focus:ring-2 
             focus:ring-offset-2 focus:ring-blue-500 transition-all
-            duration-200 ease-in-out"
+            duration-200 ease-in-out disabled:bg-blue-400 disabled:cursor-not-allowed"
         >
           <span className="flex items-center">
             {isLoading ? 'Iniciando sesión...' : 'Iniciar Sesión'}

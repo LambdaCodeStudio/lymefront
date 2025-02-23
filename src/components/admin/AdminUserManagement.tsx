@@ -17,24 +17,27 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { 
-  Plus, 
-  Search, 
-  UserCog, 
-  Trash2, 
+import {
+  Plus,
+  Search,
+  UserCog,
+  Trash2,
   AlertCircle,
   CheckCircle,
   XCircle,
   Clock
 } from 'lucide-react';
 
-// Interfaces TypeScript para seguridad de tipos
+// Interfaces para tipado
 interface User {
   _id: string;
   email: string;
   role: 'admin' | 'supervisor' | 'basic' | 'temporal';
   isActive: boolean;
-  createdBy?: string;
+  createdBy?: {
+    _id: string;
+    email: string;
+  };
   expiresAt?: string;
 }
 
@@ -46,13 +49,14 @@ interface FormData {
 }
 
 const AdminUserManagement: React.FC = () => {
+  // Estados
   const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string>('');
-  const [showModal, setShowModal] = useState<boolean>(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [searchTerm, setSearchTerm] = useState<string>('');
-  
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showInactiveUsers, setShowInactiveUsers] = useState(true);
   const [formData, setFormData] = useState<FormData>({
     email: '',
     password: '',
@@ -60,101 +64,91 @@ const AdminUserManagement: React.FC = () => {
     expirationMinutes: 30
   });
 
-  // Roles disponibles basados en los permisos del usuario actual
-  const availableRoles: { value: User['role'], label: string }[] = [
+  // Roles disponibles
+  const availableRoles = [
     { value: 'supervisor', label: 'Supervisor' },
     { value: 'basic', label: 'Básico' },
     { value: 'temporal', label: 'Temporal' }
   ];
 
-  // Obtener token de autenticación
-  const getAuthToken = (): string | null => {
-    return localStorage.getItem('token') || 
-           document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1] || 
-           null;
-  };
+  // Obtener token
+  const getAuthToken = () => localStorage.getItem('token');
 
-  // Obtener usuarios
+  // Cargar usuarios
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      setError('');
-      
       const token = getAuthToken();
       if (!token) {
         throw new Error('No hay token de autenticación');
       }
 
-      // Verificar permisos del usuario actual
-      const meResponse = await fetch('http://localhost:4000/api/auth/me', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+      const response = await fetch('http://localhost:4000/api/auth/users', {
+        headers: { 'Authorization': `Bearer ${token}` }
       });
 
-      if (!meResponse.ok) {
-        if (meResponse.status === 401) {
-          throw new Error('Sesión expirada');
+      if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.removeItem('token');
+          window.location.href = '/login';
+          return;
         }
-        throw new Error('Error al verificar permisos');
-      }
-
-      const currentUser = await meResponse.json();
-
-      // Verificar si el usuario actual tiene privilegios de admin
-      if (currentUser.role !== 'admin') {
-        throw new Error('No tienes permisos para gestionar usuarios');
-      }
-
-      // Obtener todos los usuarios
-      const usersResponse = await fetch('http://localhost:4000/api/auth/users', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      if (!usersResponse.ok) {
         throw new Error('Error al cargar usuarios');
       }
-      
-      const allUsers = await usersResponse.json();
-      setUsers(allUsers);
+
+      const data = await response.json();
+
+      // Procesar usuarios
+      const processedUsers = data.map((user: User) => ({
+        ...user,
+        isActive: user.role === 'temporal' && user.expiresAt ?
+          new Date(user.expiresAt) > new Date() :
+          user.isActive ?? true
+      }));
+
+      setUsers(processedUsers);
     } catch (err: any) {
-      setError(`Error al cargar usuarios: ${err.message}`);
-      
-      // Redirigir a login si la sesión expiró
-      if (err.message === 'Sesión expirada') {
-        window.location.href = '/login';
-      }
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Carga inicial de usuarios
+  // Cargar usuarios al montar
   useEffect(() => {
     fetchUsers();
   }, []);
 
-  // Manejador de envío para crear/editar usuarios
+  // Crear o actualizar usuario
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+
     try {
       const token = getAuthToken();
       if (!token) throw new Error('No hay token de autenticación');
 
-      // Elegir endpoint basado en el rol del usuario
-      const endpoint = formData.role === 'temporal'
-        ? 'http://localhost:4000/api/auth/temporary'
-        : 'http://localhost:4000/api/auth/register';
-
-      const payload: any = {
+      let endpoint = 'http://localhost:4000/api/auth/';
+      let method = 'POST';
+      let payload: any = {
         email: formData.email,
-        password: formData.password,
         role: formData.role
       };
 
-      // Agregar expiración para usuarios temporales
+      // Si estamos editando
+      if (editingUser) {
+        endpoint += `users/${editingUser._id}`;
+        method = 'PUT';
+        if (formData.password?.trim()) {
+          payload.password = formData.password;
+        }
+      } else {
+        // Si estamos creando
+        endpoint += formData.role === 'temporal' ? 'temporary' : 'register';
+        payload.password = formData.password;
+      }
+
+      // Manejar expiración para usuarios temporales
       if (formData.role === 'temporal' && formData.expirationMinutes) {
         const expirationDate = new Date();
         expirationDate.setMinutes(expirationDate.getMinutes() + formData.expirationMinutes);
@@ -162,7 +156,7 @@ const AdminUserManagement: React.FC = () => {
       }
 
       const response = await fetch(endpoint, {
-        method: 'POST',
+        method,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
@@ -171,80 +165,81 @@ const AdminUserManagement: React.FC = () => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.msg || 'Error al crear usuario');
+        const error = await response.json();
+        throw new Error(error.msg || 'Error en la operación');
       }
-      
-      // Reiniciar formulario y actualizar usuarios
+
+      await fetchUsers();
       setShowModal(false);
       resetForm();
-      fetchUsers();
     } catch (err: any) {
       setError(err.message);
     }
   };
 
-  // Manejador de eliminación de usuario
+  // Eliminar usuario
   const handleDelete = async (userId: string) => {
     if (!window.confirm('¿Estás seguro de eliminar este usuario?')) return;
-    
+
     try {
       const token = getAuthToken();
       const response = await fetch(`http://localhost:4000/api/auth/users/${userId}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       });
-      
+
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.msg || 'Error al eliminar usuario');
       }
-      
-      fetchUsers();
+
+      await fetchUsers();
     } catch (err: any) {
       setError(err.message);
     }
   };
 
-  // Alternar estado del usuario (activo/inactivo)
+  // Activar/desactivar usuario
   const handleToggleStatus = async (userId: string, activate: boolean) => {
     try {
       const token = getAuthToken();
-      const response = await fetch(`http://localhost:4000/api/auth/users/${userId}/${activate ? 'activate' : 'deactivate'}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`
+      const response = await fetch(
+        `http://localhost:4000/api/auth/users/${userId}/${activate ? 'activate' : 'deactivate'}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
         }
-      });
-      
+      );
+
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.msg || `Error al ${activate ? 'activar' : 'desactivar'} usuario`);
       }
-      
-      fetchUsers();
+
+      await fetchUsers();
     } catch (err: any) {
       setError(err.message);
     }
   };
 
-  // Preparar usuario para editar
+  // Preparar edición de usuario
   const handleEdit = (user: User) => {
     setEditingUser(user);
     setFormData({
       email: user.email,
-      password: '', // No mostrar la contraseña actual
+      password: '',
       role: user.role,
-      expirationMinutes: user.role === 'temporal' && user.expiresAt 
-        ? Math.round((new Date(user.expiresAt).getTime() - Date.now()) / 60000) 
-        : 30
+      expirationMinutes: user.role === 'temporal' && user.expiresAt ?
+        Math.round((new Date(user.expiresAt).getTime() - Date.now()) / 60000) :
+        30
     });
     setShowModal(true);
   };
 
-  // Reiniciar formulario al estado inicial
+  // Resetear formulario
   const resetForm = () => {
     setFormData({
       email: '',
@@ -255,13 +250,10 @@ const AdminUserManagement: React.FC = () => {
     setEditingUser(null);
   };
 
-  const [showInactiveUsers, setShowInactiveUsers] = useState(true);
-
-  // Filtrado
+  // Filtrar usuarios
   const filteredUsers = users.filter(user =>
     (user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-     user.role.toLowerCase().includes(searchTerm.toLowerCase())) &&
-    // Opción de mostrar/ocultar usuarios inactivos
+      user.role.toLowerCase().includes(searchTerm.toLowerCase())) &&
     (showInactiveUsers || user.isActive)
   );
 
@@ -287,17 +279,16 @@ const AdminUserManagement: React.FC = () => {
             className="pl-10"
           />
         </div>
-        
-        <Button 
-          onClick={() => {
+
+        <div className="flex items-center gap-4">
+          <Button onClick={() => {
             resetForm();
             setShowModal(true);
-          }}
-          className="w-full sm:w-auto"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Nuevo Usuario
-        </Button>
+          }}>
+            <Plus className="w-4 h-4 mr-2" />
+            Nuevo Usuario
+          </Button>
+        </div>
       </div>
 
       {/* Tabla de Usuarios */}
@@ -347,13 +338,11 @@ const AdminUserManagement: React.FC = () => {
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full
-                        ${!user.isActive 
-                          ? 'bg-red-100 text-red-800' 
+                        ${!user.isActive
+                          ? 'bg-red-100 text-red-800'
                           : user.role === 'temporal'
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : 'bg-green-100 text-green-800'
-                        }`}
-                      >
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-green-100 text-green-800'}`}>
                         {user.isActive ? 'Activo' : 'Inactivo'}
                       </span>
                     </td>
@@ -366,8 +355,7 @@ const AdminUserManagement: React.FC = () => {
                           variant="ghost"
                           size="sm"
                           onClick={() => handleToggleStatus(user._id, !user.isActive)}
-                          className={user.isActive ? 'text-red-600' : 'text-green-600'}
-                        >
+                          className={user.isActive ? 'text-red-600' : 'text-green-600'}>
                           {user.isActive ? (
                             <XCircle className="w-4 h-4" />
                           ) : (
@@ -377,16 +365,14 @@ const AdminUserManagement: React.FC = () => {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleEdit(user)}
-                        >
+                          onClick={() => handleEdit(user)}>
                           <UserCog className="w-4 h-4" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleDelete(user._id)}
-                          className="text-red-600"
-                        >
+                          className="text-red-600">
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
@@ -421,26 +407,38 @@ const AdminUserManagement: React.FC = () => {
                 />
               </div>
 
-              {!editingUser && (
-                <div>
-                  <Label htmlFor="password">Contraseña</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    required
-                    minLength={6}
-                    placeholder="Mínimo 6 caracteres"
-                  />
-                </div>
-              )}
+              <div>
+                <Label htmlFor="password">
+                  {editingUser ? 'Nueva Contraseña (opcional)' : 'Contraseña'}
+                </Label>
+                <Input
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  required={!editingUser}
+                  minLength={6}
+                  placeholder={editingUser ? "Dejar vacío para mantener la actual" : "Mínimo 6 caracteres"}
+                  className="w-full"
+                />
+                {!editingUser && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    La contraseña debe tener al menos 6 caracteres
+                  </p>
+                )}
+              </div>
 
               <div>
                 <Label htmlFor="role">Rol</Label>
                 <Select
                   value={formData.role}
-                  onValueChange={(value: User['role']) => setFormData({ ...formData, role: value })}
+                  onValueChange={(value: User['role']) => {
+                    setFormData({
+                      ...formData,
+                      role: value,
+                      // Resetear tiempo de expiración si se cambia a temporal
+                      expirationMinutes: value === 'temporal' ? 30 : undefined
+                    });
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Seleccionar rol" />
@@ -464,22 +462,30 @@ const AdminUserManagement: React.FC = () => {
                     id="expirationMinutes"
                     type="number"
                     min={1}
-                    max={1440}
+                    max={1440} // 24 horas máximo
                     value={formData.expirationMinutes}
-                    onChange={(e) => setFormData({ 
-                      ...formData, 
-                      expirationMinutes: parseInt(e.target.value) 
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      expirationMinutes: parseInt(e.target.value)
                     })}
                     required
+                    className="w-full"
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    El usuario temporal expirará después del tiempo seleccionado
+                    Tiempo máximo: 24 horas (1440 minutos)
                   </p>
                 </div>
               )}
             </div>
 
-            <DialogFooter>
+            {error && (
+              <Alert variant="destructive" className="mt-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            <DialogFooter className="gap-2">
               <Button
                 type="button"
                 variant="outline"
@@ -490,8 +496,16 @@ const AdminUserManagement: React.FC = () => {
               >
                 Cancelar
               </Button>
-              <Button type="submit">
-                {editingUser ? 'Guardar Cambios' : 'Crear Usuario'}
+              <Button
+                type="submit"
+                disabled={loading}
+              >
+                {loading ? (
+                  <span className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Procesando...
+                  </span>
+                ) : editingUser ? 'Guardar Cambios' : 'Crear Usuario'}
               </Button>
             </DialogFooter>
           </form>
