@@ -4,12 +4,15 @@ import {
   Users, 
   Download,
   ChevronDown,
+  ShoppingCart,
   X
 } from 'lucide-react';
 
 import InventorySection from './InventorySection';
 import AdminUserManagement from './AdminUserManagement';
 import DownloadsManagement from './DownloadsManagement';
+import ClientsSection from './ClientSection';
+import OrdersSection from './OrdersSection';
 
 interface Section {
   id: string;
@@ -33,11 +36,23 @@ const AdminDashboard = () => {
       icon: Users,
       component: <AdminUserManagement />
     },
+    // {
+    //   id: 'downloads',
+    //   label: 'Descargas',
+    //   icon: Download,
+    //   component: <DownloadsManagement />
+    // },
     {
-      id: 'downloads',
-      label: 'Descargas',
-      icon: Download,
-      component: <DownloadsManagement />
+      id: 'clients',
+      label: 'Clientes',
+      icon: Users,
+      component: <ClientsSection/>
+    },
+    {
+      id: 'orders',
+      label: 'Pedidos',
+      icon: ShoppingCart,
+      component: <OrdersSection />
     }
   ];
 

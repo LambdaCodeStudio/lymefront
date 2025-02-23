@@ -41,6 +41,7 @@ interface User {
   expiresAt?: string;
 }
 
+
 interface FormData {
   email: string;
   password: string;
@@ -101,9 +102,14 @@ const AdminUserManagement: React.FC = () => {
       // Procesar usuarios
       const processedUsers = data.map((user: User) => ({
         ...user,
-        isActive: user.role === 'temporal' && user.expiresAt ?
-          new Date(user.expiresAt) > new Date() :
-          user.isActive ?? true
+        // Un usuario temporal está activo si:
+        // 1. Su campo isActive es true Y
+        // 2. No ha expirado (si tiene fecha de expiración)
+        isActive: user.isActive && (
+          user.role !== 'temporal' ||
+          !user.expiresAt ||
+          new Date(user.expiresAt) > new Date()
+        )
       }));
 
       setUsers(processedUsers);
@@ -219,7 +225,18 @@ const AdminUserManagement: React.FC = () => {
         throw new Error(error.msg || `Error al ${activate ? 'activar' : 'desactivar'} usuario`);
       }
 
-      await fetchUsers();
+      // Actualizar el estado local inmediatamente
+      setUsers(prevUsers => prevUsers.map(user => {
+        if (user._id === userId) {
+          return {
+            ...user,
+            isActive: activate
+          };
+        }
+        return user;
+      }));
+
+      await fetchUsers(); // Recargar todos los usuarios para asegurar sincronización
     } catch (err: any) {
       setError(err.message);
     }
@@ -337,14 +354,27 @@ const AdminUserManagement: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full
-                        ${!user.isActive
-                          ? 'bg-red-100 text-red-800'
-                          : user.role === 'temporal'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-green-100 text-green-800'}`}>
-                        {user.isActive ? 'Activo' : 'Inactivo'}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full
+      ${!user.isActive
+                            ? 'bg-red-100 text-red-800'
+                            : user.role === 'temporal'
+                              ? user.expiresAt && new Date(user.expiresAt) > new Date()
+                                ? 'bg-yellow-100 text-yellow-800'
+                                : 'bg-red-100 text-red-800'
+                              : 'bg-green-100 text-green-800'
+                          }`}
+                        >
+                          {!user.isActive
+                            ? 'Inactivo'
+                            : user.role === 'temporal'
+                              ? user.expiresAt && new Date(user.expiresAt) > new Date()
+                                ? 'Temporal Activo'
+                                : 'Expirado'
+                              : 'Activo'
+                          }
+                        </span>
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500">
                       {user.createdBy?.email || '-'}

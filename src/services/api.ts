@@ -1,39 +1,35 @@
 // src/services/api.ts
 import axios from 'axios';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
-
 const api = axios.create({
-  baseURL: `${BASE_URL}/api`,  // Asegurarnos de que incluimos /api
+  baseURL: 'http://localhost:4000/api',
   headers: {
     'Content-Type': 'application/json',
-    'Accept': 'application/json'
+  }
+});
+
+// Interceptor para agregar el token a todas las peticiones
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
   },
-  withCredentials: true
-});
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 
-// Interceptor para logs de desarrollo
-api.interceptors.request.use(request => {
-  console.log('Request:', {
-    url: request.url,
-    method: request.method,
-    data: request.data,
-    headers: request.headers
-  });
-  return request;
-});
-
+// Interceptor para manejar errores de respuesta
 api.interceptors.response.use(
-  response => {
-    console.log('Response:', response.data);
-    return response;
-  },
-  error => {
-    console.error('API Error:', {
-      message: error.message,
-      response: error.response?.data,
-      status: error.response?.status
-    });
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      window.location.href = '/login';
+    }
     return Promise.reject(error);
   }
 );
