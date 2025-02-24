@@ -25,8 +25,11 @@ import {
   AlertCircle,
   CheckCircle,
   XCircle,
-  Clock
+  Clock,
+  UserPlus
 } from 'lucide-react';
+import { useDashboard } from './AdminDashboard';
+
 
 // Interfaces para tipado
 interface User {
@@ -41,7 +44,6 @@ interface User {
   expiresAt?: string;
 }
 
-
 interface FormData {
   email: string;
   password: string;
@@ -50,6 +52,8 @@ interface FormData {
 }
 
 const AdminUserManagement: React.FC = () => {
+  // Acceder al contexto del dashboard
+  const { changeSection } = useDashboard();
   // Estados
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,12 +62,14 @@ const AdminUserManagement: React.FC = () => {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showInactiveUsers, setShowInactiveUsers] = useState(true);
+  const [successMessage, setSuccessMessage] = useState<string>('');
   const [formData, setFormData] = useState<FormData>({
     email: '',
     password: '',
     role: 'basic',
     expirationMinutes: 30
   });
+
 
   // Roles disponibles
   const availableRoles = [
@@ -175,9 +181,27 @@ const AdminUserManagement: React.FC = () => {
         throw new Error(error.msg || 'Error en la operación');
       }
 
+      const data = await response.json();
       await fetchUsers();
       setShowModal(false);
       resetForm();
+      
+      // Mostrar mensaje de éxito y preguntar si quiere asignar un cliente
+      setSuccessMessage(`Usuario ${editingUser ? 'actualizado' : 'creado'} correctamente.`);
+      
+      // Si es un usuario nuevo (no editando) y es básico, preguntar si quiere asignar cliente
+      if (!editingUser && formData.role === 'basic') {
+        if (window.confirm('¿Desea asignar un cliente a este usuario ahora?')) {
+          // Guardar temporalmente el ID de usuario para usarlo en el componente de clientes
+          localStorage.setItem('lastCreatedUserId', data.userId || '');
+          
+          // Cambiar a la sección de clientes usando el contexto
+          changeSection('clients', data.userId);
+        }
+      }
+      
+      // Limpiar mensaje después de unos segundos
+      setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err: any) {
       setError(err.message);
     }
@@ -200,6 +224,10 @@ const AdminUserManagement: React.FC = () => {
       }
 
       await fetchUsers();
+      setSuccessMessage('Usuario eliminado correctamente');
+      
+      // Limpiar mensaje después de unos segundos
+      setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err: any) {
       setError(err.message);
     }
@@ -237,6 +265,10 @@ const AdminUserManagement: React.FC = () => {
       }));
 
       await fetchUsers(); // Recargar todos los usuarios para asegurar sincronización
+      setSuccessMessage(`Usuario ${activate ? 'activado' : 'desactivado'} correctamente`);
+      
+      // Limpiar mensaje después de unos segundos
+      setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err: any) {
       setError(err.message);
     }
@@ -254,6 +286,16 @@ const AdminUserManagement: React.FC = () => {
         30
     });
     setShowModal(true);
+  };
+
+  // Ir a la gestión de clientes para este usuario
+  const handleAssignClient = (userId: string, email: string) => {
+    // Guardar el ID del usuario seleccionado para usar en el componente de clientes
+    localStorage.setItem('selectedUserId', userId);
+    localStorage.setItem('selectedUserEmail', email);
+    
+    // Cambiar a la sección de clientes usando el contexto
+    changeSection('clients', userId);
   };
 
   // Resetear formulario
@@ -281,6 +323,14 @@ const AdminUserManagement: React.FC = () => {
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+      
+      {/* Mensaje de éxito */}
+      {successMessage && (
+        <Alert variant="default" className="bg-green-50 border-green-200">
+          <CheckCircle className="h-4 w-4 text-green-500" />
+          <AlertDescription>{successMessage}</AlertDescription>
         </Alert>
       )}
 
@@ -381,6 +431,17 @@ const AdminUserManagement: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end space-x-2">
+                        {/* Botón de Asignar Cliente (solo para usuarios básicos activos) */}
+                        {user.role === 'basic' && user.isActive && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleAssignClient(user._id, user.email)} 
+                            className="text-blue-600">
+                            <UserPlus className="w-4 h-4" />
+                          </Button>
+                        )}
+                        
                         <Button
                           variant="ghost"
                           size="sm"

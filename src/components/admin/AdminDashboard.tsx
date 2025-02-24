@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { 
   Package2, 
   Users, 
@@ -10,9 +10,20 @@ import {
 
 import InventorySection from './InventorySection';
 import AdminUserManagement from './AdminUserManagement';
-import DownloadsManagement from './DownloadsManagement';
 import ClientsSection from './ClientSection';
 import OrdersSection from './OrdersSection';
+
+// Crear un contexto para compartir la función de cambio de sección
+export const DashboardContext = createContext<{
+  changeSection: (sectionId: string, userId?: string) => void;
+  selectedUserId: string | null;
+}>({
+  changeSection: () => {},
+  selectedUserId: null
+});
+
+// Hook personalizado para usar el contexto
+export const useDashboard = () => useContext(DashboardContext);
 
 interface Section {
   id: string;
@@ -22,6 +33,23 @@ interface Section {
 }
 
 const AdminDashboard = () => {
+  // Estado para mantener el ID de la sección expandida
+  const [expandedSection, setExpandedSection] = useState<string | null>(null);
+  
+  // Estado para almacenar el ID del usuario seleccionado (para pasar entre secciones)
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  
+  // Ref para mantener el estado previo para animaciones
+  const previousSection = useRef<string | null>(null);
+
+  // Función para cambiar de sección (será compartida vía contexto)
+  const changeSection = (sectionId: string, userId?: string) => {
+    setExpandedSection(sectionId);
+    if (userId) {
+      setSelectedUserId(userId);
+    }
+  };
+
   // Definimos las secciones disponibles del dashboard
   const sections: Section[] = [
     {
@@ -36,17 +64,11 @@ const AdminDashboard = () => {
       icon: Users,
       component: <AdminUserManagement />
     },
-    // {
-    //   id: 'downloads',
-    //   label: 'Descargas',
-    //   icon: Download,
-    //   component: <DownloadsManagement />
-    // },
     {
       id: 'clients',
       label: 'Clientes',
       icon: Users,
-      component: <ClientsSection/>
+      component: <ClientsSection />
     },
     {
       id: 'orders',
@@ -55,12 +77,6 @@ const AdminDashboard = () => {
       component: <OrdersSection />
     }
   ];
-
-  // Estado para mantener el ID de la sección expandida
-  const [expandedSection, setExpandedSection] = useState<string | null>(null);
-  
-  // Ref para mantener el estado previo para animaciones
-  const previousSection = useRef<string | null>(null);
 
   // Cargar el estado guardado al montar el componente
   useEffect(() => {
@@ -164,29 +180,37 @@ const AdminDashboard = () => {
     );
   };
 
+  // Valor del contexto que será compartido
+  const dashboardContextValue = {
+    changeSection,
+    selectedUserId
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 py-6">
-      <div className="max-w-7xl mx-auto px-4">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6 
-          transform transition-all duration-300 ease-out
-          hover:translate-x-2"
-        >
-          Panel de Administración
-        </h1>
-        
-        <div className="bg-white rounded-lg shadow-md 
-          transition-all duration-300 ease-in-out
-          hover:shadow-lg"
-        >
-          {sections.map(section => (
-            <NavItem 
-              key={section.id} 
-              section={section}
-            />
-          ))}
+    <DashboardContext.Provider value={dashboardContextValue}>
+      <div className="min-h-screen bg-gray-50 py-6">
+        <div className="max-w-7xl mx-auto px-4">
+          <h1 className="text-2xl font-bold text-gray-900 mb-6 
+            transform transition-all duration-300 ease-out
+            hover:translate-x-2"
+          >
+            Panel de Administración
+          </h1>
+          
+          <div className="bg-white rounded-lg shadow-md 
+            transition-all duration-300 ease-in-out
+            hover:shadow-lg"
+          >
+            {sections.map(section => (
+              <NavItem 
+                key={section.id} 
+                section={section}
+              />
+            ))}
+          </div>
         </div>
       </div>
-    </div>
+    </DashboardContext.Provider>
   );
 };
 
