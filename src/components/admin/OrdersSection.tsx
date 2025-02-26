@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Plus, 
-  Search, 
-  FileEdit, 
-  Trash2, 
-  Loader2, 
+import {
+  Plus,
+  Search,
+  FileEdit,
+  Trash2,
+  Loader2,
   AlertCircle,
   CalendarRange,
   Filter,
@@ -16,19 +16,19 @@ import {
   Eye
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogFooter 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter
 } from "@/components/ui/dialog";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +39,7 @@ import { Badge } from "@/components/ui/badge";
 interface User {
   _id: string;
   email: string;
+  nombre?: string;
   role: string;
 }
 
@@ -69,10 +70,10 @@ interface Order {
   _id: string;
   servicio: string;
   seccionDelServicio: string;
-  userId: string;
-  userEmail?: string;
+  userId: string | User;
   fecha: string;
   productos: OrderProduct[];
+  detalle?: string;
 }
 
 interface CreateOrderData {
@@ -80,10 +81,7 @@ interface CreateOrderData {
   seccionDelServicio: string;
   userId: string;
   productos: OrderProduct[];
-}
-
-interface UpdateOrderData extends CreateOrderData {
-  id: string;
+  detalle?: string;
 }
 
 // Componente
@@ -91,8 +89,9 @@ const OrdersSection = () => {
   // Estados
   const [orders, setOrders] = useState<Order[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
-  const [clientSections, setClientSections] = useState<{[key: string]: Client[]}>({});
+  const [clientSections, setClientSections] = useState<{ [key: string]: Client[] }>({});
   const [products, setProducts] = useState<Product[]>([]);
+  const [cachedProducts, setCachedProducts] = useState<{ [key: string]: Product }>({});
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -101,18 +100,18 @@ const OrdersSection = () => {
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
   const [orderDetailsOpen, setOrderDetailsOpen] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string>('');
-  
+
   // Estados para filtros
   const [dateFilter, setDateFilter] = useState({
     fechaInicio: '',
     fechaFin: ''
   });
-  
+
   // Estados para modales
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
   const [showSectionModal, setShowSectionModal] = useState(false);
-  
+
   // Estados para el formulario de pedido
   const [orderForm, setOrderForm] = useState<CreateOrderData>({
     servicio: '',
@@ -120,19 +119,20 @@ const OrdersSection = () => {
     userId: '',
     productos: []
   });
-  
+
   // Estados para selección de productos
   const [selectedProduct, setSelectedProduct] = useState<string>("none");
   const [productQuantity, setProductQuantity] = useState<number>(1);
-  
+
   // Estados para el usuario actual
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   // Efecto inicial para cargar datos
   useEffect(() => {
     fetchCurrentUser();
-    fetchOrders();
     fetchProducts();
+    fetchUsers(); // Cargar usuarios primero para tener los datos disponibles
+    fetchOrders();
   }, []);
 
   // Cargar usuario actual
@@ -154,7 +154,7 @@ const OrdersSection = () => {
       const userData = await response.json();
       console.log("Usuario cargado:", userData);
       setCurrentUser(userData);
-      
+
       // Usamos _id en lugar de id para cargar los clientes
       if (userData._id) {
         // Actualizamos también el formulario con el userId correcto
@@ -171,10 +171,8 @@ const OrdersSection = () => {
         }));
         fetchClients(userData.id);
       }
-      
-      fetchUsers();
     } catch (err) {
-      setError('Error al cargar información del usuario: ' + 
+      setError('Error al cargar información del usuario: ' +
         (err instanceof Error ? err.message : String(err)));
     }
   };
@@ -202,13 +200,69 @@ const OrdersSection = () => {
       }
 
       const data = await response.json();
+      console.log("Pedidos recibidos:", data);
       setOrders(data);
       setError(null);
     } catch (err) {
-      setError('Error al cargar los pedidos: ' + 
+      setError('Error al cargar los pedidos: ' +
         (err instanceof Error ? err.message : String(err)));
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Obtener detalles de producto por ID
+  const getProductDetails = async (productId: string | { _id: string;[key: string]: any }) => {
+    // Extraer el ID de manera segura
+    const id = typeof productId === 'object' ? productId._id : productId;
+
+    // Validar que el ID sea una cadena no vacía
+    if (!id || typeof id !== 'string') {
+      console.error("ID de producto inválido", productId);
+      return null;
+    }
+
+    // Primero revisar si ya tenemos este producto en caché
+    if (cachedProducts[id]) {
+      return cachedProducts[id];
+    }
+
+    // Luego revisar en la lista de productos cargados
+    const localProduct = products.find(p => p._id === id);
+    if (localProduct) {
+      // Agregar a caché
+      setCachedProducts(prev => ({
+        ...prev,
+        [id]: localProduct
+      }));
+      return localProduct;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return null;
+
+      const response = await fetch(`http://localhost:4000/api/producto/${id}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!response.ok) {
+        console.error(`Error al obtener producto. Status: ${response.status}`);
+        return null;
+      }
+
+      const product = await response.json();
+
+      // Agregar a caché
+      setCachedProducts(prev => ({
+        ...prev,
+        [id]: product
+      }));
+
+      return product;
+    } catch (error) {
+      console.error("Error obteniendo producto:", error);
+      return null;
     }
   };
 
@@ -218,7 +272,7 @@ const OrdersSection = () => {
       setError('Por favor seleccione ambas fechas');
       return;
     }
-    
+
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
@@ -227,7 +281,7 @@ const OrdersSection = () => {
       }
 
       const response = await fetch(
-        `http://localhost:4000/api/pedido/fecha?fechaInicio=${dateFilter.fechaInicio}&fechaFin=${dateFilter.fechaFin}`, 
+        `http://localhost:4000/api/pedido/fecha?fechaInicio=${dateFilter.fechaInicio}&fechaFin=${dateFilter.fechaFin}`,
         {
           headers: { 'Authorization': `Bearer ${token}` }
         }
@@ -240,18 +294,18 @@ const OrdersSection = () => {
       const data = await response.json();
       setOrders(data);
       setError(null);
-      
+
       // Mensaje de éxito mostrando cuántos pedidos se encontraron
       if (data.length === 0) {
         setSuccessMessage('No se encontraron pedidos en el rango de fechas seleccionado');
       } else {
         setSuccessMessage(`Se encontraron ${data.length} pedidos en el rango seleccionado`);
       }
-      
+
       // Eliminar mensaje después de 3 segundos
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err) {
-      setError('Error al filtrar por fecha: ' + 
+      setError('Error al filtrar por fecha: ' +
         (err instanceof Error ? err.message : String(err)));
     } finally {
       setLoading(false);
@@ -277,11 +331,43 @@ const OrdersSection = () => {
       const productsData = await response.json();
       // Filtrar productos con stock > 0
       setProducts(productsData.filter((p: Product) => p.stock > 0));
+
+      // También añadirlos al caché
+      const productsCache = productsData.reduce((cache: { [key: string]: Product }, product: Product) => {
+        cache[product._id] = product;
+        return cache;
+      }, {});
+      setCachedProducts(productsCache);
+
       console.log(`Productos cargados: ${productsData.length}, con stock > 0: ${productsData.filter((p: Product) => p.stock > 0).length}`);
     } catch (err) {
       console.error('Error al cargar productos:', err);
-      // No mostramos error aquí para no interrumpir el flujo principal, pero lo logueamos
       setDebugInfo(prev => prev + "\nError productos: " + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
+  // Cargar usuarios
+  const fetchUsers = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
+
+      const response = await fetch('http://localhost:4000/api/auth/users', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al cargar usuarios');
+      }
+
+      const data = await response.json();
+      setUsers(data);
+      console.log("Usuarios cargados:", data.length);
+    } catch (err) {
+      console.error('Error al cargar usuarios:', err);
+      setDebugInfo(prev => prev + "\nError usuarios: " + (err instanceof Error ? err.message : String(err)));
     }
   };
 
@@ -305,45 +391,21 @@ const OrdersSection = () => {
       const clientsData = await response.json();
       console.log(`Clientes cargados: ${clientsData.length}`);
       setClients(clientsData);
-      
+
       // Agrupar clientes por servicio (para las secciones)
-      const grouped = clientsData.reduce((acc: {[key: string]: Client[]}, client: Client) => {
+      const grouped = clientsData.reduce((acc: { [key: string]: Client[] }, client: Client) => {
         if (!acc[client.servicio]) {
           acc[client.servicio] = [];
         }
         acc[client.servicio].push(client);
         return acc;
       }, {});
-      
+
       setClientSections(grouped);
       setDebugInfo(`Clientes cargados: ${clientsData.length}, Servicios: ${Object.keys(grouped).length}`);
     } catch (err) {
       console.error('Error al cargar clientes:', err);
       setDebugInfo(prev => prev + "\nError clientes: " + (err instanceof Error ? err.message : String(err)));
-    }
-  };
-
-  // Cargar usuarios
-  const fetchUsers = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-
-      const response = await fetch('http://localhost:4000/api/auth/users', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!response.ok) {
-        throw new Error('Error al cargar usuarios');
-      }
-
-      const data = await response.json();
-      setUsers(data);
-    } catch (err) {
-      console.error('Error al cargar usuarios:', err);
-      setDebugInfo(prev => prev + "\nError usuarios: " + (err instanceof Error ? err.message : String(err)));
     }
   };
 
@@ -369,12 +431,17 @@ const OrdersSection = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      // Preparar datos del pedido asegurándonos de usar _id
+      // Preparar datos del pedido - Enviamos solo lo que requiere la API
+      // IMPORTANTE: Solo enviamos productoId y cantidad en el array de productos
       const pedidoData = {
-        userId: orderForm.userId || (currentUser?._id || currentUser?.id),
+        userId: orderForm.userId || (currentUser?._id || currentUser?.id || ""),
         servicio: orderForm.servicio,
-        seccionDelServicio: orderForm.seccionDelServicio,
-        productos: orderForm.productos
+        seccionDelServicio: orderForm.seccionDelServicio || "",
+        detalle: orderForm.detalle || " ",
+        productos: orderForm.productos.map(p => ({
+          productoId: p.productoId,
+          cantidad: p.cantidad
+        }))
       };
 
       console.log("Enviando pedido:", JSON.stringify(pedidoData));
@@ -400,7 +467,7 @@ const OrdersSection = () => {
       setSuccessMessage('Pedido creado correctamente');
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err) {
-      setError('Error al crear pedido: ' + 
+      setError('Error al crear pedido: ' +
         (err instanceof Error ? err.message : String(err)));
     } finally {
       setLoading(false);
@@ -410,7 +477,7 @@ const OrdersSection = () => {
   // Actualizar pedido
   const handleUpdateOrder = async () => {
     if (!currentOrder?._id) return;
-    
+
     setLoading(true);
     setError(null);
 
@@ -420,13 +487,27 @@ const OrdersSection = () => {
         throw new Error('No hay token de autenticación');
       }
 
+      // Solo enviamos los campos necesarios y en el formato correcto
+      const updateData = {
+        servicio: orderForm.servicio,
+        seccionDelServicio: orderForm.seccionDelServicio || "",
+        detalle: orderForm.detalle || " ",
+        // Importante: solo enviar productoId y cantidad
+        productos: orderForm.productos.map(p => ({
+          productoId: p.productoId,
+          cantidad: p.cantidad
+        }))
+      };
+
+      console.log("Actualizando pedido:", currentOrder._id, "con datos:", updateData);
+
       const response = await fetch(`http://localhost:4000/api/pedido/${currentOrder._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(orderForm)
+        body: JSON.stringify(updateData)
       });
 
       if (!response.ok) {
@@ -440,7 +521,7 @@ const OrdersSection = () => {
       setSuccessMessage('Pedido actualizado correctamente');
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err) {
-      setError('Error al actualizar pedido: ' + 
+      setError('Error al actualizar pedido: ' +
         (err instanceof Error ? err.message : String(err)));
     } finally {
       setLoading(false);
@@ -450,7 +531,7 @@ const OrdersSection = () => {
   // Eliminar pedido
   const handleDeleteOrder = async (id: string) => {
     if (!window.confirm('¿Está seguro de eliminar este pedido?')) return;
-    
+
     try {
       const token = localStorage.getItem('token');
       if (!token) {
@@ -473,7 +554,7 @@ const OrdersSection = () => {
       setSuccessMessage('Pedido eliminado correctamente');
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err) {
-      setError('Error al eliminar pedido: ' + 
+      setError('Error al eliminar pedido: ' +
         (err instanceof Error ? err.message : String(err)));
     }
   };
@@ -481,18 +562,47 @@ const OrdersSection = () => {
   // Preparar edición de pedido
   const handleEditOrder = (order: Order) => {
     setCurrentOrder(order);
-    setOrderForm({
-      servicio: order.servicio,
-      seccionDelServicio: order.seccionDelServicio || '',
-      userId: order.userId,
-      productos: order.productos.map(p => ({
-        productoId: p.productoId,
-        cantidad: p.cantidad,
-        nombre: p.nombre,
-        precio: p.precio
-      }))
+
+    // Preparar los productos para edición
+    const preppedProductos = Array.isArray(order.productos)
+      ? order.productos.map(async (p) => {
+        // Intentar obtener nombre y precio si no están en el producto
+        try {
+          if (!p.nombre || !p.precio) {
+            const details = await getProductDetails(p.productoId);
+            return {
+              productoId: p.productoId,
+              cantidad: p.cantidad,
+              nombre: p.nombre || details?.nombre || "Producto no encontrado",
+              precio: p.precio || details?.precio || 0
+            };
+          }
+          return p;
+        } catch (err) {
+          console.error("Error al obtener detalles del producto:", err);
+          return {
+            productoId: p.productoId,
+            cantidad: p.cantidad,
+            nombre: p.nombre || "Error al cargar",
+            precio: p.precio || 0
+          };
+        }
+      })
+      : [];
+
+    // Resolver las promesas para obtener los productos con sus detalles
+    Promise.all(preppedProductos).then(productos => {
+      setOrderForm({
+        servicio: order.servicio,
+        seccionDelServicio: order.seccionDelServicio || '',
+        userId: typeof order.userId === 'object' ? order.userId._id : order.userId,
+        productos: productos,
+        detalle: order.detalle || " "
+      });
+
+      setShowCreateModal(true);
+      console.log("Editando orden:", order);
     });
-    setShowCreateModal(true);
   };
 
   // Ver detalles del pedido
@@ -513,25 +623,25 @@ const OrdersSection = () => {
       console.log(`Cliente no encontrado: ${clienteId}`);
       return;
     }
-    
+
     console.log(`Cliente seleccionado: ${selectedClient.servicio}, ID: ${selectedClient._id}`);
-    
+
     // Actualizar el formulario con el cliente seleccionado
-    setOrderForm(prev => ({ 
-      ...prev, 
+    setOrderForm(prev => ({
+      ...prev,
       servicio: selectedClient.servicio,
       seccionDelServicio: selectedClient.seccionDelServicio || '',  // Usar sección del cliente por defecto
       userId: currentUser?._id || currentUser?.id || ""
     }));
-    
+
     // Si hay varias secciones para este servicio, verificamos
     const sections = clientSections[selectedClient.servicio] || [];
     console.log(`Secciones encontradas: ${sections.length}`);
-    
+
     if (sections.length === 1) {
-      setOrderForm(prev => ({ 
-        ...prev, 
-        seccionDelServicio: sections[0].seccionDelServicio 
+      setOrderForm(prev => ({
+        ...prev,
+        seccionDelServicio: sections[0].seccionDelServicio
       }));
     } else if (sections.length > 1) {
       // Si hay más de una sección, abrimos el modal para que elija
@@ -541,9 +651,9 @@ const OrdersSection = () => {
 
   // Manejar selección de sección
   const handleSectionSelect = (seccion: string) => {
-    setOrderForm(prev => ({ 
-      ...prev, 
-      seccionDelServicio: seccion 
+    setOrderForm(prev => ({
+      ...prev,
+      seccionDelServicio: seccion
     }));
     setShowSectionModal(false);
   };
@@ -567,7 +677,7 @@ const OrdersSection = () => {
       // Actualizar cantidad si ya existe
       const updatedProducts = [...orderForm.productos];
       updatedProducts[existingProductIndex].cantidad += productQuantity;
-      
+
       setOrderForm(prev => ({
         ...prev,
         productos: updatedProducts
@@ -598,7 +708,7 @@ const OrdersSection = () => {
   const handleRemoveProduct = (index: number) => {
     const updatedProducts = [...orderForm.productos];
     updatedProducts.splice(index, 1);
-    
+
     setOrderForm(prev => ({
       ...prev,
       productos: updatedProducts
@@ -611,7 +721,8 @@ const OrdersSection = () => {
       servicio: '',
       seccionDelServicio: '',
       userId: currentUser?._id || currentUser?.id || '',
-      productos: []
+      productos: [],
+      detalle: ' '
     });
     setCurrentOrder(null);
   };
@@ -619,28 +730,44 @@ const OrdersSection = () => {
   // Calcular total del pedido
   const calculateTotal = (productos: OrderProduct[]) => {
     return productos.reduce((total, item) => {
-      const precio = item.precio || 0;
+      const precio = item.precio || getProductPrice(item.productoId) || 0;
       return total + (precio * item.cantidad);
     }, 0);
   };
 
   // Obtener nombre de producto por ID
   const getProductName = (id: string) => {
-    const product = products.find(p => p._id === id);
+    const product = cachedProducts[id] || products.find(p => p._id === id);
     return product?.nombre || 'Producto no encontrado';
   };
 
+  // Obtener precio de producto por ID
+  const getProductPrice = (id: string) => {
+    const product = cachedProducts[id] || products.find(p => p._id === id);
+    return product?.precio || 0;
+  };
+
   // Obtener email de usuario por ID
-  const getUserEmailById = (userId: string) => {
-    const user = users.find(u => u._id === userId);
-    return user?.email || 'Usuario no encontrado';
+  const getUserEmail = (userId: any) => {
+    // Si userId es un objeto con email
+    if (typeof userId === 'object' && userId !== null && userId.email) {
+      return userId.email;
+    }
+
+    // Si userId es un string (ID)
+    if (typeof userId === 'string') {
+      const user = users.find(u => u._id === userId);
+      return user?.email || 'Usuario no encontrado';
+    }
+
+    return 'Usuario no encontrado';
   };
 
   // Filtrar pedidos por término de búsqueda
-  const filteredOrders = orders.filter(order => 
+  const filteredOrders = orders.filter(order =>
     order.servicio.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    order.seccionDelServicio?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    getUserEmailById(order.userId).toLowerCase().includes(searchTerm.toLowerCase())
+    (order.seccionDelServicio || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    getUserEmail(order.userId).toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   if (loading && orders.length === 0) {
@@ -688,7 +815,7 @@ const OrdersSection = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          
+
           <Button
             onClick={() => {
               resetOrderForm();
@@ -707,7 +834,7 @@ const OrdersSection = () => {
               id="fechaInicio"
               type="date"
               value={dateFilter.fechaInicio}
-              onChange={(e) => setDateFilter({...dateFilter, fechaInicio: e.target.value})}
+              onChange={(e) => setDateFilter({ ...dateFilter, fechaInicio: e.target.value })}
               className="w-full"
             />
           </div>
@@ -717,11 +844,11 @@ const OrdersSection = () => {
               id="fechaFin"
               type="date"
               value={dateFilter.fechaFin}
-              onChange={(e) => setDateFilter({...dateFilter, fechaFin: e.target.value})}
+              onChange={(e) => setDateFilter({ ...dateFilter, fechaFin: e.target.value })}
               className="w-full"
             />
           </div>
-          <Button 
+          <Button
             variant="outline"
             onClick={fetchOrdersByDate}
           >
@@ -809,7 +936,7 @@ const OrdersSection = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
-                          {getUserEmailById(order.userId)}
+                          {getUserEmail(order.userId)}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -817,8 +944,8 @@ const OrdersSection = () => {
                           <Badge variant="secondary">
                             {order.productos.length} producto{order.productos.length !== 1 ? 's' : ''}
                           </Badge>
-                          <Button 
-                            variant="ghost" 
+                          <Button
+                            variant="ghost"
                             size="sm"
                             onClick={() => toggleOrderDetails(order._id)}
                           >
@@ -845,7 +972,7 @@ const OrdersSection = () => {
                         </div>
                       </td>
                     </tr>
-                    
+
                     {/* Detalles del pedido (expandible) */}
                     {orderDetailsOpen === order._id && (
                       <tr>
@@ -863,21 +990,99 @@ const OrdersSection = () => {
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-200">
-                                  {order.productos.map((item, index) => (
-                                    <tr key={index} className="hover:bg-gray-100">
-                                      <td className="px-4 py-2 text-sm">
-                                        {item.nombre || getProductName(item.productoId)}
-                                      </td>
-                                      <td className="px-4 py-2 text-sm">{item.cantidad}</td>
-                                      <td className="px-4 py-2 text-sm">${item.precio?.toFixed(2)}</td>
-                                      <td className="px-4 py-2 text-sm font-medium">
-                                        ${((item.precio || 0) * item.cantidad).toFixed(2)}
-                                      </td>
-                                    </tr>
-                                  ))}
+                                  {order.productos.map((item, index) => {
+                                    // Componente inline para manejar los detalles del producto
+                                    const ProductDetail = () => {
+                                      const [productName, setProductName] = useState("Cargando...");
+                                      const [productPrice, setProductPrice] = useState(0);
+
+                                      useEffect(() => {
+                                        const fetchProductDetails = async () => {
+                                          try {
+                                            // Primero verificar si ya tenemos nombre y precio
+                                            if (item.nombre && item.precio) {
+                                              setProductName(item.nombre);
+                                              setProductPrice(item.precio);
+                                              return;
+                                            }
+
+                                            // Verificar en caché
+                                            const cachedProduct = cachedProducts[item.productoId];
+                                            if (cachedProduct) {
+                                              setProductName(cachedProduct.nombre);
+                                              setProductPrice(cachedProduct.precio);
+                                              return;
+                                            }
+
+                                            // Si no está en caché, obtener del backend
+                                            const productDetails = await getProductDetails(item.productoId);
+                                            if (productDetails) {
+                                              setProductName(productDetails.nombre);
+                                              setProductPrice(productDetails.precio);
+                                            } else {
+                                              setProductName("Producto no encontrado");
+                                              setProductPrice(0);
+                                            }
+                                          } catch (error) {
+                                            console.error("Error al cargar detalles del producto:", error);
+                                            setProductName("Error al cargar");
+                                            setProductPrice(0);
+                                          }
+                                        };
+
+                                        fetchProductDetails();
+                                      }, [item.productoId, item.nombre, item.precio]);
+
+                                      return (
+                                        <>
+                                          <td className="px-4 py-2 text-sm">{productName}</td>
+                                          <td className="px-4 py-2 text-sm">{item.cantidad}</td>
+                                          <td className="px-4 py-2 text-sm">${productPrice.toFixed(2)}</td>
+                                          <td className="px-4 py-2 text-sm font-medium">
+                                            ${(productPrice * item.cantidad).toFixed(2)}
+                                          </td>
+                                        </>
+                                      );
+                                    };
+
+                                    return (
+                                      <tr key={index} className="hover:bg-gray-100">
+                                        <ProductDetail />
+                                      </tr>
+                                    );
+                                  })}
+
+                                  {/* Total calculado dinámicamente */}
                                   <tr className="bg-blue-50">
                                     <td colSpan={3} className="px-4 py-2 text-right font-medium">Total del Pedido:</td>
-                                    <td className="px-4 py-2 font-bold">${calculateTotal(order.productos).toFixed(2)}</td>
+                                    <td className="px-4 py-2 font-bold">
+                                      ${(() => {
+                                        // Función para obtener precio de forma síncrona
+                                        const getProductPriceSync = (productoId: string) => {
+                                          // Primero buscar en caché
+                                          if (cachedProducts[productoId]) {
+                                            return cachedProducts[productoId].precio;
+                                          }
+
+                                          // Luego buscar en lista de productos
+                                          const product = products.find(p => p._id === productoId);
+                                          if (product) {
+                                            return product.precio;
+                                          }
+
+                                          // Si no se encuentra, usar función getProductPrice como último recurso
+                                          return getProductPrice(productoId) || 0;
+                                        };
+
+                                        const total = order.productos.reduce((total, item) => {
+                                          // Obtener precio de forma síncrona
+                                          const price = item.precio || getProductPriceSync(item.productoId) || 0;
+                                          return total + (price * item.cantidad);
+                                        }, 0);
+
+                                        return total.toFixed(2);
+                                      })()}
+                                    </td>
                                   </tr>
                                 </tbody>
                               </table>
@@ -902,7 +1107,7 @@ const OrdersSection = () => {
               {currentOrder ? 'Editar Pedido' : 'Nuevo Pedido'}
             </DialogTitle>
           </DialogHeader>
-          
+
           <div className="py-4 space-y-6">
             {/* Sección de Cliente */}
             <div>
@@ -910,7 +1115,7 @@ const OrdersSection = () => {
                 <Building className="w-5 h-5 mr-2 text-gray-500" />
                 Selección de Cliente
               </h2>
-              
+
               {clients.length === 0 ? (
                 <Alert>
                   <AlertDescription>
@@ -923,7 +1128,7 @@ const OrdersSection = () => {
                     <Label htmlFor="cliente">Cliente</Label>
                     <Select
                       value={
-                        clients.find(c => c.servicio === orderForm.servicio)?._id || 
+                        clients.find(c => c.servicio === orderForm.servicio)?._id ||
                         "none"
                       }
                       onValueChange={handleClientChange}
@@ -934,8 +1139,8 @@ const OrdersSection = () => {
                       <SelectContent>
                         <SelectItem value="none" disabled>Seleccione un cliente</SelectItem>
                         {Object.entries(clientSections).map(([servicio, serviceClients]) => (
-                          <SelectItem 
-                            key={servicio} 
+                          <SelectItem
+                            key={servicio}
                             value={serviceClients[0]._id}
                           >
                             {servicio}
@@ -944,7 +1149,7 @@ const OrdersSection = () => {
                       </SelectContent>
                     </Select>
                   </div>
-                  
+
                   {orderForm.seccionDelServicio && (
                     <div className="flex items-center p-3 bg-gray-50 rounded-md">
                       <MapPin className="w-4 h-4 text-gray-500 mr-2" />
@@ -954,7 +1159,7 @@ const OrdersSection = () => {
                 </div>
               )}
             </div>
-            
+
             {/* Estado del formulario para debug */}
             {orderForm.servicio && (
               <div className="p-3 bg-gray-50 rounded-md text-xs text-gray-600">
@@ -963,7 +1168,7 @@ const OrdersSection = () => {
                 <div><strong>Usuario:</strong> {orderForm.userId || "No asignado"}</div>
               </div>
             )}
-            
+
             {/* Productos del Pedido */}
             <div>
               <div className="flex justify-between items-center mb-4">
@@ -971,8 +1176,8 @@ const OrdersSection = () => {
                   <ShoppingCart className="w-5 h-5 mr-2 text-gray-500" />
                   Productos
                 </h2>
-                
-                <Button 
+
+                <Button
                   variant="outline"
                   onClick={() => {
                     setShowProductModal(true);
@@ -984,7 +1189,7 @@ const OrdersSection = () => {
                   Agregar Producto
                 </Button>
               </div>
-              
+
               {orderForm.productos.length === 0 ? (
                 <div className="text-center py-8 text-gray-500 border border-dashed rounded-md">
                   No hay productos en el pedido
@@ -992,21 +1197,21 @@ const OrdersSection = () => {
               ) : (
                 <div className="space-y-2">
                   {orderForm.productos.map((item, index) => {
-                    const product = products.find(p => p._id === item.productoId);
+                    const product = products.find(p => p._id === item.productoId) || cachedProducts[item.productoId];
                     return (
-                      <div 
-                        key={index} 
+                      <div
+                        key={index}
                         className="flex justify-between items-center p-3 bg-gray-50 rounded-md"
                       >
                         <div>
-                          <div className="font-medium">{item.nombre || product?.nombre}</div>
+                          <div className="font-medium">{item.nombre || product?.nombre || getProductName(item.productoId)}</div>
                           <div className="text-sm text-gray-500">
-                            Cantidad: {item.cantidad} x ${item.precio || product?.precio}
+                            Cantidad: {item.cantidad} x ${item.precio || product?.precio || getProductPrice(item.productoId)}
                           </div>
                         </div>
                         <div className="flex items-center gap-4">
                           <div className="font-medium">
-                            ${((item.precio || product?.precio || 0) * item.cantidad).toFixed(2)}
+                            ${((item.precio || product?.precio || getProductPrice(item.productoId) || 0) * item.cantidad).toFixed(2)}
                           </div>
                           <Button
                             variant="ghost"
@@ -1019,7 +1224,7 @@ const OrdersSection = () => {
                       </div>
                     );
                   })}
-                  
+
                   {/* Total */}
                   <div className="flex justify-between items-center p-3 bg-blue-50 rounded-md mt-4">
                     <div className="font-medium">Total</div>
@@ -1029,7 +1234,7 @@ const OrdersSection = () => {
               )}
             </div>
           </div>
-          
+
           <DialogFooter className="gap-2">
             <Button
               variant="outline"
@@ -1061,32 +1266,32 @@ const OrdersSection = () => {
           <DialogHeader>
             <DialogTitle>Seleccionar Sección</DialogTitle>
           </DialogHeader>
-          
+
           <div className="py-4">
             <p className="text-sm text-gray-500 mb-4">
               Seleccione la sección para este pedido:
             </p>
-            
+
             <div className="space-y-2">
-              {orderForm.servicio && 
-               clientSections[orderForm.servicio]?.map((client) => (
-                <div
-                  key={client._id}
-                  className="p-3 border rounded-md hover:bg-gray-50 cursor-pointer"
-                  onClick={() => handleSectionSelect(client.seccionDelServicio || "")}
-                >
-                  <div className="flex items-center">
-                    <MapPin className="w-4 h-4 text-gray-500 mr-2" />
-                    <span>{client.seccionDelServicio || 'Principal'}</span>
+              {orderForm.servicio &&
+                clientSections[orderForm.servicio]?.map((client) => (
+                  <div
+                    key={client._id}
+                    className="p-3 border rounded-md hover:bg-gray-50 cursor-pointer"
+                    onClick={() => handleSectionSelect(client.seccionDelServicio || "")}
+                  >
+                    <div className="flex items-center">
+                      <MapPin className="w-4 h-4 text-gray-500 mr-2" />
+                      <span>{client.seccionDelServicio || 'Principal'}</span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
             </div>
           </div>
-          
+
           <DialogFooter>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => setShowSectionModal(false)}
             >
               Cancelar
@@ -1101,7 +1306,7 @@ const OrdersSection = () => {
           <DialogHeader>
             <DialogTitle>Agregar Producto</DialogTitle>
           </DialogHeader>
-          
+
           <div className="space-y-4 py-4">
             <div>
               <Label htmlFor="producto">Producto</Label>
@@ -1122,7 +1327,7 @@ const OrdersSection = () => {
                 </SelectContent>
               </Select>
             </div>
-            
+
             <div>
               <Label htmlFor="cantidad">Cantidad</Label>
               <Input
@@ -1139,10 +1344,10 @@ const OrdersSection = () => {
               Productos disponibles: {products.length}
             </div>
           </div>
-          
+
           <DialogFooter>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => setShowProductModal(false)}
             >
               Cancelar
@@ -1155,6 +1360,20 @@ const OrdersSection = () => {
       </Dialog>
     </div>
   );
+};
+
+// Función auxiliar para cerrar modales
+const setShowModal = (value: boolean) => {
+  const modalElements = document.querySelectorAll('[role="dialog"]');
+  if (!value && modalElements.length) {
+    // Cerrar todos los modales
+    modalElements.forEach(el => {
+      const closeButton = el.querySelector('button[aria-label="Close"]');
+      if (closeButton instanceof HTMLElement) {
+        closeButton.click();
+      }
+    });
+  }
 };
 
 export default OrdersSection;
