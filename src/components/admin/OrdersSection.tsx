@@ -572,7 +572,7 @@ const OrdersSection = () => {
     setOrderForm({
       servicio: '',
       seccionDelServicio: '',
-      userId: currentUser?.id || '',
+      userId: currentUser?._id || '',
       productos: []
     });
     setCurrentOrder(null);

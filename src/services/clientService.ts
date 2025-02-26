@@ -1,4 +1,4 @@
-import type { Client, CreateClientData, UpdateClientData } from '../types/client';
+import type { Client, CreateClientData, UpdateClientData } from '../types/backend-types';
 import api from './api';
 
 export const clientService = {

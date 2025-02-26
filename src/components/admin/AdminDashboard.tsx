@@ -47,6 +47,8 @@ const AdminDashboard = () => {
     setExpandedSection(sectionId);
     if (userId) {
       setSelectedUserId(userId);
+      // Para debugging
+      console.log(`Cambiando a sección ${sectionId} con userId: ${userId}`);
     }
   };
 
