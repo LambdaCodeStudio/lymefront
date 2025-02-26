@@ -100,6 +100,7 @@ const OrdersSection = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
   const [orderDetailsOpen, setOrderDetailsOpen] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string>('');
   
   // Estados para filtros
   const [dateFilter, setDateFilter] = useState({
@@ -151,10 +152,26 @@ const OrdersSection = () => {
       }
 
       const userData = await response.json();
+      console.log("Usuario cargado:", userData);
       setCurrentUser(userData);
       
-      // Una vez que tenemos el usuario, cargamos sus clientes
-      fetchClients(userData.id);
+      // Usamos _id en lugar de id para cargar los clientes
+      if (userData._id) {
+        // Actualizamos también el formulario con el userId correcto
+        setOrderForm(prev => ({
+          ...prev,
+          userId: userData._id
+        }));
+        fetchClients(userData._id);
+      } else if (userData.id) {
+        // Por compatibilidad, si no hay _id pero sí id
+        setOrderForm(prev => ({
+          ...prev,
+          userId: userData.id
+        }));
+        fetchClients(userData.id);
+      }
+      
       fetchUsers();
     } catch (err) {
       setError('Error al cargar información del usuario: ' + 
@@ -260,9 +277,11 @@ const OrdersSection = () => {
       const productsData = await response.json();
       // Filtrar productos con stock > 0
       setProducts(productsData.filter((p: Product) => p.stock > 0));
+      console.log(`Productos cargados: ${productsData.length}, con stock > 0: ${productsData.filter((p: Product) => p.stock > 0).length}`);
     } catch (err) {
       console.error('Error al cargar productos:', err);
-      // No mostramos error aquí para no interrumpir el flujo principal
+      // No mostramos error aquí para no interrumpir el flujo principal, pero lo logueamos
+      setDebugInfo(prev => prev + "\nError productos: " + (err instanceof Error ? err.message : String(err)));
     }
   };
 
@@ -274,15 +293,17 @@ const OrdersSection = () => {
         throw new Error('No hay token de autenticación');
       }
 
+      console.log(`Cargando clientes para usuario ID: ${userId}`);
       const response = await fetch(`http://localhost:4000/api/cliente/user/${userId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
       if (!response.ok) {
-        throw new Error('Error al cargar clientes del usuario');
+        throw new Error(`Error al cargar clientes del usuario (status: ${response.status})`);
       }
 
       const clientsData = await response.json();
+      console.log(`Clientes cargados: ${clientsData.length}`);
       setClients(clientsData);
       
       // Agrupar clientes por servicio (para las secciones)
@@ -295,9 +316,10 @@ const OrdersSection = () => {
       }, {});
       
       setClientSections(grouped);
+      setDebugInfo(`Clientes cargados: ${clientsData.length}, Servicios: ${Object.keys(grouped).length}`);
     } catch (err) {
       console.error('Error al cargar clientes:', err);
-      // No mostramos error aquí para no interrumpir el flujo principal
+      setDebugInfo(prev => prev + "\nError clientes: " + (err instanceof Error ? err.message : String(err)));
     }
   };
 
@@ -321,7 +343,7 @@ const OrdersSection = () => {
       setUsers(data);
     } catch (err) {
       console.error('Error al cargar usuarios:', err);
-      // No mostramos error aquí para no interrumpir el flujo principal
+      setDebugInfo(prev => prev + "\nError usuarios: " + (err instanceof Error ? err.message : String(err)));
     }
   };
 
@@ -347,13 +369,15 @@ const OrdersSection = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      // Preparar datos del pedido
+      // Preparar datos del pedido asegurándonos de usar _id
       const pedidoData = {
-        userId: orderForm.userId || currentUser?.id,
+        userId: orderForm.userId || (currentUser?._id || currentUser?.id),
         servicio: orderForm.servicio,
         seccionDelServicio: orderForm.seccionDelServicio,
         productos: orderForm.productos
       };
+
+      console.log("Enviando pedido:", JSON.stringify(pedidoData));
 
       const response = await fetch('http://localhost:4000/api/pedido', {
         method: 'POST',
@@ -366,7 +390,7 @@ const OrdersSection = () => {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.mensaje || 'Error al crear el pedido');
+        throw new Error(errorData.mensaje || `Error al crear el pedido (status: ${response.status})`);
       }
 
       // Éxito
@@ -482,17 +506,28 @@ const OrdersSection = () => {
 
   // Manejar selección de cliente
   const handleClientChange = (clienteId: string) => {
+    if (clienteId === "none") return;
+
     const selectedClient = clients.find(c => c._id === clienteId);
-    if (!selectedClient) return;
+    if (!selectedClient) {
+      console.log(`Cliente no encontrado: ${clienteId}`);
+      return;
+    }
+    
+    console.log(`Cliente seleccionado: ${selectedClient.servicio}, ID: ${selectedClient._id}`);
     
     // Actualizar el formulario con el cliente seleccionado
     setOrderForm(prev => ({ 
       ...prev, 
-      servicio: selectedClient.servicio
+      servicio: selectedClient.servicio,
+      seccionDelServicio: selectedClient.seccionDelServicio || '',  // Usar sección del cliente por defecto
+      userId: currentUser?._id || currentUser?.id || ""
     }));
     
-    // Si solo hay una sección para este cliente, la seleccionamos automáticamente
+    // Si hay varias secciones para este servicio, verificamos
     const sections = clientSections[selectedClient.servicio] || [];
+    console.log(`Secciones encontradas: ${sections.length}`);
+    
     if (sections.length === 1) {
       setOrderForm(prev => ({ 
         ...prev, 
@@ -506,7 +541,10 @@ const OrdersSection = () => {
 
   // Manejar selección de sección
   const handleSectionSelect = (seccion: string) => {
-    setOrderForm(prev => ({ ...prev, seccion }));
+    setOrderForm(prev => ({ 
+      ...prev, 
+      seccionDelServicio: seccion 
+    }));
     setShowSectionModal(false);
   };
 
@@ -572,7 +610,7 @@ const OrdersSection = () => {
     setOrderForm({
       servicio: '',
       seccionDelServicio: '',
-      userId: currentUser?._id || '',
+      userId: currentUser?._id || currentUser?.id || '',
       productos: []
     });
     setCurrentOrder(null);
@@ -627,6 +665,13 @@ const OrdersSection = () => {
         <Alert variant="default" className="mb-4 bg-green-50 border-green-200">
           <Check className="h-4 w-4 text-green-500" />
           <AlertDescription>{successMessage}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Información de depuración */}
+      {debugInfo && (
+        <Alert className="mb-4 bg-blue-50 border-blue-200">
+          <div className="text-sm text-blue-700 whitespace-pre-line">{debugInfo}</div>
         </Alert>
       )}
 
@@ -869,7 +914,7 @@ const OrdersSection = () => {
               {clients.length === 0 ? (
                 <Alert>
                   <AlertDescription>
-                    No tiene clientes asignados. Contacte a un administrador para que le asigne clientes.
+                    No tiene clientes asignados o no se pudieron cargar. Contacte a un administrador para que le asigne clientes.
                   </AlertDescription>
                 </Alert>
               ) : (
@@ -877,7 +922,10 @@ const OrdersSection = () => {
                   <div>
                     <Label htmlFor="cliente">Cliente</Label>
                     <Select
-                      value={orderForm.servicio ? clients.find(c => c.servicio === orderForm.servicio)?._id || "none" : "none"}
+                      value={
+                        clients.find(c => c.servicio === orderForm.servicio)?._id || 
+                        "none"
+                      }
                       onValueChange={handleClientChange}
                     >
                       <SelectTrigger>
@@ -885,10 +933,10 @@ const OrdersSection = () => {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none" disabled>Seleccione un cliente</SelectItem>
-                        {Object.keys(clientSections).map(servicio => (
+                        {Object.entries(clientSections).map(([servicio, serviceClients]) => (
                           <SelectItem 
                             key={servicio} 
-                            value={clientSections[servicio][0]._id}
+                            value={serviceClients[0]._id}
                           >
                             {servicio}
                           </SelectItem>
@@ -907,6 +955,15 @@ const OrdersSection = () => {
               )}
             </div>
             
+            {/* Estado del formulario para debug */}
+            {orderForm.servicio && (
+              <div className="p-3 bg-gray-50 rounded-md text-xs text-gray-600">
+                <div><strong>Cliente:</strong> {orderForm.servicio}</div>
+                <div><strong>Sección:</strong> {orderForm.seccionDelServicio || "No especificada"}</div>
+                <div><strong>Usuario:</strong> {orderForm.userId || "No asignado"}</div>
+              </div>
+            )}
+            
             {/* Productos del Pedido */}
             <div>
               <div className="flex justify-between items-center mb-4">
@@ -917,7 +974,10 @@ const OrdersSection = () => {
                 
                 <Button 
                   variant="outline"
-                  onClick={() => setShowProductModal(true)}
+                  onClick={() => {
+                    setShowProductModal(true);
+                    console.log("Productos disponibles:", products.length);
+                  }}
                   disabled={!orderForm.servicio || products.length === 0}
                 >
                   <Plus className="w-4 h-4 mr-2" />
@@ -1013,7 +1073,7 @@ const OrdersSection = () => {
                 <div
                   key={client._id}
                   className="p-3 border rounded-md hover:bg-gray-50 cursor-pointer"
-                  onClick={() => handleSectionSelect(client.seccionDelServicio)}
+                  onClick={() => handleSectionSelect(client.seccionDelServicio || "")}
                 >
                   <div className="flex items-center">
                     <MapPin className="w-4 h-4 text-gray-500 mr-2" />
@@ -1056,7 +1116,7 @@ const OrdersSection = () => {
                   <SelectItem value="none" disabled>Seleccione un producto</SelectItem>
                   {products.map(product => (
                     <SelectItem key={product._id} value={product._id}>
-                      {product.nombre} - ${product.precio} (Stock: {product.stock})
+                      {product.nombre} - ${product.precio.toFixed(2)} (Stock: {product.stock})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1070,8 +1130,13 @@ const OrdersSection = () => {
                 type="number"
                 min="1"
                 value={productQuantity}
-                onChange={(e) => setProductQuantity(parseInt(e.target.value))}
+                onChange={(e) => setProductQuantity(parseInt(e.target.value) || 1)}
               />
+            </div>
+
+            {/* Información de productos disponibles */}
+            <div className="text-xs text-gray-500">
+              Productos disponibles: {products.length}
             </div>
           </div>
           
