@@ -1,14 +1,12 @@
 ---
-import Layout from '../layouts/main/Layout.astro';
+import AuthLayout from '../layouts/AuthLayout.astro';
 import { LoginForm } from '../components/auth/LoginForm';
 ---
 
-<Layout title="Login">
+<AuthLayout title="Iniciar sesión">
   <main class="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
     <div class="max-w-md w-full space-y-8">
-      <div>
-      </div>
       <LoginForm client:load />
     </div>
   </main>
-</Layout>
+</AuthLayout>

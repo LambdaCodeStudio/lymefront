@@ -1,15 +1,19 @@
+export type OrderStatus = 'pending' | 'processing' | 'completed' | 'cancelled';
+
 export interface OrderProduct {
     productoId: string;
     cantidad: number;
   }
   
   export interface Order {
+    id: any;
     _id: string;
     servicio: string;
     seccionDelServicio: string;
     userId: string;
     fecha: string;
     productos: OrderProduct[];
+    status?: OrderStatus; 
   }
   
   export interface CreateOrderData {

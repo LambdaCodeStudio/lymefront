@@ -1,42 +1,44 @@
-// src/services/userService.js
+// src/services/userService.ts
+import { BaseService } from './baseService';
 import api from './api';
+import type { User, CreateUserDTO, LoginResponse } from '@/types/users';
 
-export const userService = {
-  // Obtener usuario actual
-  getCurrentUser: async () => {
-    const response = await api.get('/auth/me');
-    return response.data;
-  },
-
-  // Obtener todos los usuarios
-  getAllUsers: async () => {
-    const response = await api.get('/auth/users');
-    return response.data;
-  },
-
-  // Crear usuario
-  createUser: async (userData) => {
-    const endpoint = userData.role === 'temporal' ? '/auth/temporary' : '/auth/register';
-    const response = await api.post(endpoint, userData);
-    return response.data;
-  },
-
-  // Actualizar usuario
-  updateUser: async (userId, userData) => {
-    const response = await api.put(`/auth/users/${userId}`, userData);
-    return response.data;
-  },
-
-  // Eliminar usuario
-  deleteUser: async (userId) => {
-    const response = await api.delete(`/auth/users/${userId}`);
-    return response.data;
-  },
-
-  // Activar/Desactivar usuario
-  toggleUserStatus: async (userId, isActive) => {
-    const action = isActive ? 'activate' : 'deactivate';
-    const response = await api.put(`/auth/users/${userId}/toggle-status`);
-    return response.data;
+class UserService extends BaseService<User> {
+  constructor() {
+    super('/auth/users');
   }
-};
+
+  // Autenticación
+  async login(email: string, password: string): Promise<LoginResponse> {
+    return await api.post<LoginResponse>('/auth/login', { email, password });
+  }
+
+  async register(userData: CreateUserDTO): Promise<User> {
+    return await api.post<User>('/auth/register', userData);
+  }
+
+  // Métodos específicos para usuarios
+  async getCurrentUser(): Promise<User> {
+    return await api.get<User>('/auth/me');
+  }
+  
+  async createTemporaryUser(userData: CreateUserDTO): Promise<User> {
+    return await api.post<User>('/auth/temporary', userData);
+  }
+
+  async toggleUserStatus(userId: string): Promise<User> {
+    return await api.put<User>(`/auth/users/${userId}/toggle-status`);
+  }
+
+  // Método para crear usuario determinando el endpoint según el rol
+  async createUser(userData: CreateUserDTO): Promise<User> {
+    const endpoint = userData.role === 'temporal' 
+      ? '/auth/temporary' 
+      : '/auth/register';
+      
+    return await api.post<User>(endpoint, userData);
+  }
+}
+
+// Exportar instancia singleton
+export const userService = new UserService();

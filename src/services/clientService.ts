@@ -1,34 +1,26 @@
-import type { Client, CreateClientData, UpdateClientData } from '../types/backend-types';
+// src/services/clientService.ts
+import { BaseService, PaginationParams } from './baseService';
 import api from './api';
+import type { Client } from '@/types/client';
 
-export const clientService = {
-  getClients: async (): Promise<Client[]> => {
-    const { data } = await api.get('/cliente');
-    return data;
-  },
-
-  getClient: async (id: string): Promise<Client> => {
-    const { data } = await api.get(`/cliente/${id}`);
-    return data;
-  },
-
-  getClientsByUser: async (userId: string): Promise<Client[]> => {
-    const { data } = await api.get(`/cliente/user/${userId}`);
-    return data;
-  },
-
-  createClient: async (clientData: CreateClientData): Promise<Client> => {
-    const { data } = await api.post('/cliente', clientData);
-    return data;
-  },
-
-  updateClient: async (data: UpdateClientData): Promise<Client> => {
-    const { id, ...updateData } = data;
-    const response = await api.put(`/cliente/${id}`, updateData);
-    return response.data;
-  },
-
-  deleteClient: async (id: string): Promise<void> => {
-    await api.delete(`/cliente/${id}`);
+class ClientService extends BaseService<Client> {
+  constructor() {
+    super('/clientes');
   }
-};
+
+  // Métodos específicos para clientes
+  async searchClients(term: string): Promise<Client[]> {
+    return await api.get<Client[]>(`${this.endpoint}/search`, { term });
+  }
+
+  async getClientsWithActiveOrders(): Promise<Client[]> {
+    return await api.get<Client[]>(`${this.endpoint}/with-active-orders`);
+  }
+
+  async getClientStats(clientId: string): Promise<any> {
+    return await api.get<any>(`${this.endpoint}/${clientId}/stats`);
+  }
+}
+
+// Exportar instancia singleton
+export const clientService = new ClientService();

@@ -1,37 +1,92 @@
 // src/services/api.ts
-import axios from 'axios';
+import axios, { type AxiosInstance, AxiosError, type AxiosRequestConfig, type AxiosResponse } from 'axios';
 
-const api = axios.create({
-  baseURL: 'http://localhost:4000/api',
+// Configuración del API base
+const API_CONFIG = {
+  baseURL: import.meta.env.PUBLIC_API_URL || 'http://localhost:4000/api',
   headers: {
     'Content-Type': 'application/json',
-  }
-});
-
-// Interceptor para agregar el token a todas las peticiones
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
+  timeout: 15000, // 15 segundos de timeout
+};
 
-// Interceptor para manejar errores de respuesta
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      window.location.href = '/login';
+// Clase base para el cliente API
+export class ApiClient {
+  private client: AxiosInstance;
+
+  constructor(config: AxiosRequestConfig = {}) {
+    this.client = axios.create({
+      ...API_CONFIG,
+      ...config,
+    });
+
+    this.setupInterceptors();
+  }
+
+  private setupInterceptors(): void {
+    // Interceptor de solicitudes
+    this.client.interceptors.request.use(
+      (config) => {
+        const token = localStorage.getItem('token');
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+        return config;
+      },
+      (error) => Promise.reject(error)
+    );
+
+    // Interceptor de respuestas
+    this.client.interceptors.response.use(
+      (response) => response,
+      (error: AxiosError) => {
+        // Manejar errores de autenticación
+        if (error.response?.status === 401) {
+          localStorage.removeItem('token');
+          window.location.href = '/login';
+        }
+        return Promise.reject(this.handleError(error));
+      }
+    );
+  }
+
+  // Método para manejar errores de manera consistente
+  private handleError(error: AxiosError): Error {
+    const errorResponse = error.response?.data;
+    if (errorResponse && typeof errorResponse === 'object' && 'msg' in errorResponse) {
+      return new Error(errorResponse.msg as string);
     }
-    return Promise.reject(error);
+    
+    return error as Error;
   }
-);
 
+  // Métodos para realizar peticiones HTTP
+  public async get<T>(url: string, params = {}): Promise<T> {
+    const response = await this.client.get<T>(url, { params });
+    return response.data;
+  }
+
+  public async post<T>(url: string, data = {}, config = {}): Promise<T> {
+    const response = await this.client.post<T>(url, data, config);
+    return response.data;
+  }
+
+  public async put<T>(url: string, data = {}, config = {}): Promise<T> {
+    const response = await this.client.put<T>(url, data, config);
+    return response.data;
+  }
+
+  public async delete<T>(url: string, config = {}): Promise<T> {
+    const response = await this.client.delete<T>(url, config);
+    return response.data;
+  }
+
+  // Método para personalizar cliente
+  public getClient(): AxiosInstance {
+    return this.client;
+  }
+}
+
+// Instancia por defecto para uso general
+const api = new ApiClient();
 export default api;

@@ -1,102 +1,198 @@
-// hooks/useInventory.ts
-import { useState, useEffect } from 'react';
-import { inventoryService } from '../services/inventoryService';
-import type { Product, ProductFilters, CreateProductData, UpdateProductData } from '../types/inventory';
+// src/hooks/useInventory.ts
+import { useState, useEffect, useCallback } from 'react';
+import { inventoryService } from '@/services/inventoryService';
+import type { Product, ProductFilters, CreateProductData, UpdateProductData } from '@/types/inventory';
 
-export const useInventory = () => {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState<ProductFilters>({});
+interface InventoryState {
+  products: Product[];
+  loading: boolean;
+  error: string | null;
+  currentProduct: Product | null;
+}
 
-  const loadProducts = async () => {
+export const useInventory = (initialFilters?: ProductFilters) => {
+  const [state, setState] = useState<InventoryState>({
+    products: [],
+    loading: true,
+    error: null,
+    currentProduct: null
+  });
+
+  const [filters, setFilters] = useState<ProductFilters | undefined>(initialFilters);
+
+  // Cargar productos
+  const loadProducts = useCallback(async (searchFilters?: ProductFilters) => {
     try {
-      setLoading(true);
-      setError(null);
-      const data = await inventoryService.getProducts(filters);
-      setProducts(data);
-    } catch (err) {
-      setError('Error al cargar los productos');
-      console.error(err);
-    } finally {
-      setLoading(false);
+      setState(prev => ({ ...prev, loading: true, error: null }));
+      
+      const filtersToUse = searchFilters || filters;
+      const products = await inventoryService.getProducts(filtersToUse);
+      
+      setState(prev => ({
+        ...prev,
+        products,
+        loading: false
+      }));
+      
+      return products;
+    } catch (error: any) {
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        error: error.message || 'Error al cargar productos'
+      }));
+      
+      return [];
     }
-  };
-
-  useEffect(() => {
-    loadProducts();
   }, [filters]);
 
-  const createProduct = async (data: CreateProductData) => {
+  // Cargar al montar y cuando cambien los filtros
+  useEffect(() => {
+    loadProducts();
+  }, [loadProducts]);
+
+  // Obtener un producto por ID
+  const getProduct = async (id: string): Promise<Product | null> => {
     try {
-      setLoading(true);
-      await inventoryService.createProduct(data);
-      await loadProducts();
-      return true;
-    } catch (err) {
-      setError('Error al crear el producto');
-      console.error(err);
-      return false;
-    } finally {
-      setLoading(false);
+      setState(prev => ({ ...prev, loading: true, error: null }));
+      
+      const product = await inventoryService.getById(id);
+      
+      setState(prev => ({
+        ...prev,
+        currentProduct: product,
+        loading: false
+      }));
+      
+      return product;
+    } catch (error: any) {
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        error: error.message || 'Error al obtener el producto'
+      }));
+      
+      return null;
     }
   };
 
-  const updateProduct = async (data: UpdateProductData) => {
+  // Crear un nuevo producto
+  const createProduct = async (productData: CreateProductData): Promise<Product | null> => {
     try {
-      setLoading(true);
-      await inventoryService.updateProduct(data);
-      await loadProducts();
-      return true;
-    } catch (err) {
-      setError('Error al actualizar el producto');
-      console.error(err);
-      return false;
-    } finally {
-      setLoading(false);
+      setState(prev => ({ ...prev, loading: true, error: null }));
+      
+      const product = await inventoryService.create(productData);
+      
+      // Actualizar la lista de productos
+      setState(prev => ({
+        ...prev,
+        products: [product, ...prev.products],
+        loading: false
+      }));
+      
+      return product;
+    } catch (error: any) {
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        error: error.message || 'Error al crear el producto'
+      }));
+      
+      return null;
     }
   };
 
-  const deleteProduct = async (id: string) => {
+  // Actualizar un producto
+  const updateProduct = async (data: UpdateProductData): Promise<Product | null> => {
     try {
-      setLoading(true);
-      await inventoryService.deleteProduct(id);
-      await loadProducts();
-      return true;
-    } catch (err) {
-      setError('Error al eliminar el producto');
-      console.error(err);
-      return false;
-    } finally {
-      setLoading(false);
+      setState(prev => ({ ...prev, loading: true, error: null }));
+      
+      const product = await inventoryService.updateProduct(data);
+      
+      // Actualizar la lista de productos
+      setState(prev => ({
+        ...prev,
+        products: prev.products.map(p => p.id === product.id ? product : p),
+        currentProduct: product,
+        loading: false
+      }));
+      
+      return product;
+    } catch (error: any) {
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        error: error.message || 'Error al actualizar el producto'
+      }));
+      
+      return null;
     }
   };
 
-  const exportToExcel = async () => {
+  // Eliminar un producto
+  const deleteProduct = async (id: string): Promise<boolean> => {
     try {
+      setState(prev => ({ ...prev, loading: true, error: null }));
+      
+      await inventoryService.delete(id);
+      
+      // Eliminar de la lista
+      setState(prev => ({
+        ...prev,
+        products: prev.products.filter(p => p.id !== id),
+        loading: false
+      }));
+      
+      return true;
+    } catch (error: any) {
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        error: error.message || 'Error al eliminar el producto'
+      }));
+      
+      return false;
+    }
+  };
+
+  // Exportar a Excel
+  const exportProductsToExcel = async (): Promise<Blob | null> => {
+    try {
+      setState(prev => ({ ...prev, loading: true, error: null }));
+      
       const blob = await inventoryService.exportToExcel(filters);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'inventario.xlsx';
-      a.click();
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      setError('Error al exportar el inventario');
-      console.error(err);
+      
+      setState(prev => ({
+        ...prev,
+        loading: false
+      }));
+      
+      return blob;
+    } catch (error: any) {
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        error: error.message || 'Error al exportar productos'
+      }));
+      
+      return null;
     }
+  };
+
+  // Actualizar filtros
+  const updateFilters = (newFilters: ProductFilters) => {
+    setFilters(newFilters);
   };
 
   return {
-    products,
-    loading,
-    error,
-    filters,
-    setFilters,
+    ...state,
+    loadProducts,
+    getProduct,
     createProduct,
     updateProduct,
     deleteProduct,
-    exportToExcel,
-    refreshProducts: loadProducts
+    exportProductsToExcel,
+    updateFilters,
+    filters
   };
 };

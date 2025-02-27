@@ -28,5 +28,6 @@ export interface UpdateUserDTO {
 
 export interface LoginResponse {
   token: string;
-  user: User;
+  role: UserRole;
+  user?: User;
 }

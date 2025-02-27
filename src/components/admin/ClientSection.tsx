@@ -12,7 +12,9 @@ import {
   MapPin,
   Users,
   Filter,
-  Mail
+  Mail,
+  Settings,
+  AlertTriangle
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
@@ -20,7 +22,8 @@ import {
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogFooter 
+  DialogFooter,
+  DialogDescription 
 } from "@/components/ui/dialog";
 import { 
   Select, 
@@ -40,7 +43,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useDashboard } from './AdminDashboard';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useDashboard } from '@/hooks/useDashboard';
 import type { UserRole } from '@/types/users';
 
 // Tipo extendido para los usuarios con la estructura que viene del backend
@@ -96,10 +105,19 @@ const ClientsSection: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [showServiceModal, setShowServiceModal] = useState(false);
+  const [showDeleteServiceModal, setShowDeleteServiceModal] = useState(false);
   const [currentClient, setCurrentClient] = useState<Client | null>(null);
+  const [currentService, setCurrentService] = useState<string>('');
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [activeUserId, setActiveUserId] = useState<string>("all"); // Para filtrar por usuario
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+  const [serviceFormData, setServiceFormData] = useState<{ nuevoNombre: string }>({ nuevoNombre: '' });
+  const [deletingOperation, setDeletingOperation] = useState(false);
+
+  // Estado para el modal de confirmación de eliminación de clientes individuales
+  const [showDeleteClientModal, setShowDeleteClientModal] = useState(false);
+  const [clientToDelete, setClientToDelete] = useState<string | null>(null);
 
   // Estado para el formulario
   const [formData, setFormData] = useState<CreateClientData>({
@@ -237,7 +255,7 @@ const ClientsSection: React.FC = () => {
       
       // Si hay un usuario activo seleccionado, mostrar en consola para depuración
       if (activeUserId !== "all") {
-        const activeUser = activeBasicUsers.find(u => u._id === activeUserId);
+        const activeUser = activeBasicUsers.find((u: { _id: string; }) => u._id === activeUserId);
         console.log("Usuario activo seleccionado:", activeUser?.email || "Email no disponible");
       }
     } catch (err) {
@@ -274,7 +292,9 @@ const ClientsSection: React.FC = () => {
       await fetchClients();
       setShowModal(false);
       resetForm();
-      setSuccessMessage('Cliente creado correctamente');
+      setSuccessMessage(formData.seccionDelServicio 
+        ? `Nueva sección "${formData.seccionDelServicio}" agregada al servicio "${formData.servicio}"`
+        : 'Cliente creado correctamente');
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err) {
       setError('Error al crear cliente: ' + (err instanceof Error ? err.message : String(err)));
@@ -328,14 +348,14 @@ const ClientsSection: React.FC = () => {
 
   // Eliminar cliente
   const handleDeleteClient = async (id: string) => {
-    if (typeof window === 'undefined' || !window.confirm('¿Está seguro de eliminar este cliente?')) return;
-    
     try {
+      setDeletingOperation(true);
       const token = getAuthToken();
       if (!token) {
         throw new Error('No hay token de autenticación');
       }
 
+      console.log(`Eliminando cliente con ID: ${id}`);
       const response = await fetch(`http://localhost:4000/api/cliente/${id}`, {
         method: 'DELETE',
         headers: {
@@ -343,16 +363,37 @@ const ClientsSection: React.FC = () => {
         }
       });
 
+      // Guardar el status para debug
+      const statusCode = response.status;
+      console.log(`Status code al eliminar cliente ${id}: ${statusCode}`);
+
+      // Intentar obtener el cuerpo de la respuesta para más detalles
+      let responseBody;
+      try {
+        // La respuesta podría ser JSON o texto
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          responseBody = await response.json();
+        } else {
+          responseBody = await response.text();
+        }
+        console.log(`Respuesta del servidor:`, responseBody);
+      } catch (parseError) {
+        console.error('Error al parsear respuesta:', parseError);
+      }
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.mensaje || 'Error al eliminar cliente');
+        throw new Error(`Error al eliminar cliente (${statusCode}): ${responseBody?.mensaje || responseBody || 'Error desconocido'}`);
       }
 
       await fetchClients();
       setSuccessMessage('Cliente eliminado correctamente');
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err) {
+      console.error('Error completo al eliminar cliente:', err);
       setError('Error al eliminar cliente: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setDeletingOperation(false);
     }
   };
 
@@ -369,13 +410,177 @@ const ClientsSection: React.FC = () => {
 
   // Agregar nueva sección a un cliente existente
   const handleAddSection = (client: Client) => {
-    setCurrentClient(null); // Indicamos que es una nueva entidad
+    console.log(`Agregando nueva sección al servicio: ${client.servicio}`);
+    
+    // Indicamos que es una nueva entidad (no es edición)
+    setCurrentClient(null);
+    
+    // Preparar el formulario con datos del servicio padre
     setFormData({
-      servicio: client.servicio, // Mismo servicio
-      seccionDelServicio: '', // Nueva sección
-      userId: typeof client.userId === 'object' ? client.userId._id : client.userId // Mismo usuario
+      servicio: client.servicio,       // Mantener el mismo servicio (cliente padre)
+      seccionDelServicio: '',          // Nueva sección (vacía para que el usuario la complete)
+      userId: typeof client.userId === 'object' 
+        ? client.userId._id 
+        : client.userId                // Mantener el mismo usuario por defecto
     });
+    
+    // Abrir el modal para agregar sección
     setShowModal(true);
+  };
+
+  // Editar servicio (Cliente Padre)
+  const handleEditService = (servicio: string) => {
+    setCurrentService(servicio);
+    setServiceFormData({ nuevoNombre: servicio });
+    setShowServiceModal(true);
+  };
+
+  // Mostrar confirmación para eliminar servicio
+  const handleShowDeleteService = (servicio: string) => {
+    setCurrentService(servicio);
+    setShowDeleteServiceModal(true);
+  };
+
+  // Actualizar nombre de servicio (Cliente Padre)
+  const handleUpdateService = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentService || !serviceFormData.nuevoNombre) return;
+
+    try {
+      const token = getAuthToken();
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
+
+      const clientesDelServicio = clients.filter(c => c.servicio === currentService);
+      
+      // Actualizamos cada cliente que pertenece a este servicio
+      const updatePromises = clientesDelServicio.map(client => {
+        return fetch(`http://localhost:4000/api/cliente/${client._id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            servicio: serviceFormData.nuevoNombre,
+            seccionDelServicio: client.seccionDelServicio,
+            userId: typeof client.userId === 'object' ? client.userId._id : client.userId
+          })
+        });
+      });
+
+      // Esperar a que todas las actualizaciones se completen
+      const results = await Promise.allSettled(updatePromises);
+      
+      // Verificar si hubo errores
+      const errors = results.filter(r => r.status === 'rejected');
+      if (errors.length > 0) {
+        throw new Error(`Ocurrieron ${errors.length} errores al actualizar el servicio`);
+      }
+
+      await fetchClients();
+      setShowServiceModal(false);
+      setSuccessMessage(`Servicio "${currentService}" actualizado a "${serviceFormData.nuevoNombre}"`);
+      setTimeout(() => setSuccessMessage(''), 5000);
+    } catch (err) {
+      setError('Error al actualizar servicio: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
+  // Eliminar servicio completo (Cliente Padre y todas sus secciones)
+  const handleDeleteService = async () => {
+    if (!currentService) return;
+
+    try {
+      setDeletingOperation(true);
+      const token = getAuthToken();
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
+
+      const clientesDelServicio = clients.filter(c => c.servicio === currentService);
+      console.log(`Eliminando servicio "${currentService}" con ${clientesDelServicio.length} secciones`);
+      
+      // Eliminamos cada cliente de forma secuencial para mayor control
+      const fallosEliminacion = [];
+      
+      // Procesamos uno por uno para mejor control y depuración
+      for (const client of clientesDelServicio) {
+        console.log(`Eliminando sección: ${client._id} - ${client.seccionDelServicio || 'Sin sección'}`);
+        try {
+          const response = await fetch(`http://localhost:4000/api/cliente/${client._id}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          
+          // Verificar el resultado de cada eliminación
+          if (!response.ok) {
+            // Intentar obtener el detalle del error
+            let errorDetail;
+            try {
+              errorDetail = await response.json();
+            } catch (e) {
+              errorDetail = await response.text();
+            }
+            
+            fallosEliminacion.push({
+              id: client._id,
+              seccion: client.seccionDelServicio || 'Sin sección',
+              status: response.status,
+              mensaje: errorDetail?.mensaje || 'Error desconocido'
+            });
+            console.error(`Error al eliminar sección ${client._id}:`, errorDetail);
+          } else {
+            console.log(`Sección ${client._id} eliminada correctamente`);
+          }
+        } catch (error) {
+          fallosEliminacion.push({
+            id: client._id,
+            seccion: client.seccionDelServicio || 'Sin sección',
+            mensaje: error.message || 'Error en la petición'
+          });
+          console.error(`Excepción al eliminar sección ${client._id}:`, error);
+        }
+        
+        // Pequeña pausa para evitar sobrecarga
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      // Verificar si hubo errores
+      if (fallosEliminacion.length > 0) {
+        console.error('Fallos en eliminación:', fallosEliminacion);
+        throw new Error(`No se pudieron eliminar ${fallosEliminacion.length} de ${clientesDelServicio.length} secciones`);
+      }
+
+      // Asegurarse de que la lista de clientes se actualiza
+      await fetchClients();
+      setShowDeleteServiceModal(false);
+      setSuccessMessage(`Servicio "${currentService}" y todas sus secciones eliminados correctamente`);
+      setTimeout(() => setSuccessMessage(''), 5000);
+    } catch (err) {
+      console.error('Error completo al eliminar servicio:', err);
+      setError('Error al eliminar servicio: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setDeletingOperation(false);
+    }
+  };
+
+  // Mostrar confirmación para eliminar cliente
+  const confirmDeleteClient = (id: string) => {
+    setClientToDelete(id);
+    setShowDeleteClientModal(true);
+  };
+  
+  // Ejecutar eliminación después de confirmación en el modal
+  const executeDeleteClient = () => {
+    if (clientToDelete) {
+      handleDeleteClient(clientToDelete);
+      setShowDeleteClientModal(false);
+      setClientToDelete(null);
+    }
   };
 
   // Resetear formulario
@@ -623,17 +828,41 @@ const ClientsSection: React.FC = () => {
                     <h3 className="text-lg font-medium">{servicio}</h3>
                   </div>
                   
-                  {/* Botón para agregar nueva sección al servicio */}
-                  {clientesDelServicio.length > 0 && activeUserId !== "all" && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleAddSection(clientesDelServicio[0])}
-                    >
-                      <Plus className="w-4 h-4 mr-1" />
-                      Agregar Sección
-                    </Button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {/* Botón para agregar nueva sección al servicio */}
+                    {activeUserId !== "all" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleAddSection(clientesDelServicio[0])}
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        Agregar Sección
+                      </Button>
+                    )}
+
+                    {/* Menú desplegable para opciones del servicio */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm">
+                          <Settings className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleEditService(servicio)}>
+                          <FileEdit className="w-4 h-4 mr-2 text-blue-600" />
+                          Editar Servicio
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          className="text-red-600"
+                          onClick={() => handleShowDeleteService(servicio)}
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Eliminar Servicio
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
                 
                 <div className="divide-y divide-gray-100">
@@ -692,13 +921,15 @@ const ClientsSection: React.FC = () => {
                           variant="ghost"
                           size="sm"
                           onClick={() => handleEditClient(client)}
+                          disabled={deletingOperation}
                         >
                           <FileEdit className="w-4 h-4 text-blue-600" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDeleteClient(client._id)}
+                          onClick={() => confirmDeleteClient(client._id)}
+                          disabled={deletingOperation}
                         >
                           <Trash2 className="w-4 h-4 text-red-600" />
                         </Button>
@@ -720,17 +951,42 @@ const ClientsSection: React.FC = () => {
                     <h3 className="text-base font-semibold">{servicio}</h3>
                   </div>
                   
-                  {/* Botón móvil para agregar nueva sección */}
-                  {clientesDelServicio.length > 0 && activeUserId !== "all" && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleAddSection(clientesDelServicio[0])}
-                      className="h-8 w-8 p-0"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </Button>
-                  )}
+                  <div className="flex gap-2">
+                    {/* Botón móvil para agregar nueva sección */}
+                    {activeUserId !== "all" && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleAddSection(clientesDelServicio[0])}
+                        className="h-8 w-8 p-0"
+                        disabled={deletingOperation}
+                      >
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                    )}
+                    
+                    {/* Menú móvil para opciones del servicio */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" disabled={deletingOperation}>
+                          <Settings className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleEditService(servicio)}>
+                          <FileEdit className="w-4 h-4 mr-2 text-blue-600" />
+                          Editar Servicio
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          className="text-red-600"
+                          onClick={() => handleShowDeleteService(servicio)}
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Eliminar Servicio
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
                 
                 <div className="grid grid-cols-1 gap-3">
@@ -774,14 +1030,16 @@ const ClientsSection: React.FC = () => {
                           size="sm"
                           onClick={() => handleEditClient(client)}
                           className="h-8 w-8 p-0"
+                          disabled={deletingOperation}
                         >
                           <FileEdit className="w-4 h-4 text-blue-600" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDeleteClient(client._id)}
+                          onClick={() => confirmDeleteClient(client._id)}
                           className="h-8 w-8 p-0"
+                          disabled={deletingOperation}
                         >
                           <Trash2 className="w-4 h-4 text-red-600" />
                         </Button>
@@ -800,35 +1058,70 @@ const ClientsSection: React.FC = () => {
         <DialogContent className="sm:max-w-md max-h-[90vh] overflow-auto">
           <DialogHeader className="sticky top-0 bg-white pt-4 pb-2 z-10">
             <DialogTitle>
-              {currentClient ? 'Editar Cliente' : 'Nuevo Cliente'}
+              {currentClient 
+                ? 'Editar Cliente' 
+                : formData.seccionDelServicio || !formData.servicio 
+                  ? 'Nuevo Cliente' 
+                  : 'Nueva Sección'}
             </DialogTitle>
+            {formData.servicio && !currentClient && (
+              <DialogDescription>
+                Agregando nueva sección al servicio: <strong>{formData.servicio}</strong>
+              </DialogDescription>
+            )}
           </DialogHeader>
           
           <form onSubmit={currentClient ? handleUpdateClient : handleCreateClient} className="space-y-4 py-2">
             <div>
               <Label htmlFor="servicio" className="text-sm">Servicio</Label>
-              <Input
-                id="servicio"
-                placeholder="Ej: Ministerio de Salud, Estudiante La Plata"
-                value={formData.servicio}
-                onChange={(e) => setFormData({...formData, servicio: e.target.value})}
-                required
-                className="mt-1"
-              />
+              {/* Campo de servicio deshabilitado cuando es edición de sección o nueva sección */}
+              {(currentClient?.seccionDelServicio || (!currentClient && formData.servicio && !formData.seccionDelServicio)) ? (
+                <div className="mt-1 p-3 bg-gray-50 border border-gray-200 rounded-md flex items-center text-sm">
+                  <Building className="text-gray-500 w-4 h-4 mr-2" />
+                  <span>
+                    Servicio: <strong>{formData.servicio}</strong>
+                  </span>
+                </div>
+              ) : (
+                <Input
+                  id="servicio"
+                  placeholder="Ej: Ministerio de Salud, Estudiante La Plata"
+                  value={formData.servicio}
+                  onChange={(e) => setFormData({...formData, servicio: e.target.value})}
+                  required
+                  className="mt-1"
+                />
+              )}
+              {(currentClient?.seccionDelServicio || (!currentClient && formData.servicio)) && (
+                <p className="text-xs text-gray-500 mt-1">
+                  El nombre del servicio padre no se puede modificar cuando se edita o añade una sección
+                </p>
+              )}
             </div>
 
             <div>
-              <Label htmlFor="seccionDelServicio" className="text-sm">Sección del Servicio (opcional)</Label>
+              <Label htmlFor="seccionDelServicio" className="text-sm">
+                {(currentClient?.seccionDelServicio || (!currentClient && formData.servicio)) 
+                  ? "Nombre de la Sección" 
+                  : "Sección del Servicio (opcional)"}
+              </Label>
               <Input
                 id="seccionDelServicio"
-                placeholder="Ej: Edificio Avellaneda, Puerto Madero"
+                placeholder={
+                  (currentClient?.seccionDelServicio || (!currentClient && formData.servicio))
+                    ? "Ej: Edificio Avellaneda, Puerto Madero"
+                    : "Deje en blanco si no aplica una sección específica"
+                }
                 value={formData.seccionDelServicio}
                 onChange={(e) => setFormData({...formData, seccionDelServicio: e.target.value})}
                 className="mt-1"
+                required={!currentClient && formData.servicio ? true : false}
               />
-              <p className="text-xs text-gray-500 mt-1">
-                Deje en blanco si no aplica una sección específica
-              </p>
+              {!(currentClient?.seccionDelServicio || (!currentClient && formData.servicio)) && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Deje en blanco si no aplica una sección específica
+                </p>
+              )}
             </div>
 
             <div>
@@ -882,17 +1175,162 @@ const ClientsSection: React.FC = () => {
               </Button>
               <Button
                 type="submit"
-                disabled={loading}
+                disabled={loading || deletingOperation}
               >
-                {loading ? (
+                {loading || deletingOperation ? (
                   <span className="flex items-center gap-2">
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     Procesando...
                   </span>
-                ) : currentClient ? 'Guardar Cambios' : 'Crear Cliente'}
+                ) : currentClient 
+                  ? 'Guardar Cambios' 
+                  : formData.seccionDelServicio || !formData.servicio 
+                    ? 'Crear Cliente' 
+                    : 'Agregar Sección'}
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Editar Servicio */}
+      <Dialog open={showServiceModal} onOpenChange={setShowServiceModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Servicio</DialogTitle>
+            <DialogDescription>
+              Cambiar el nombre del servicio "{currentService}". Esta acción actualizará todas las secciones asociadas.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <form onSubmit={handleUpdateService} className="space-y-4 py-2">
+            <div>
+              <Label htmlFor="nuevoNombre" className="text-sm">Nuevo Nombre del Servicio</Label>
+              <Input
+                id="nuevoNombre"
+                placeholder="Ingrese el nuevo nombre del servicio"
+                value={serviceFormData.nuevoNombre}
+                onChange={(e) => setServiceFormData({nuevoNombre: e.target.value})}
+                required
+                className="mt-1"
+              />
+            </div>
+
+            <DialogFooter className="gap-2 mt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowServiceModal(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                disabled={deletingOperation}
+              >
+                {deletingOperation ? (
+                  <span className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Procesando...
+                  </span>
+                ) : 'Guardar Cambios'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Confirmación para Eliminar Servicio */}
+      <Dialog open={showDeleteServiceModal} onOpenChange={(open) => !deletingOperation && setShowDeleteServiceModal(open)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-red-600 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" />
+              Eliminar Servicio Completo
+            </DialogTitle>
+            <DialogDescription>
+              ¿Está seguro de eliminar el servicio "{currentService}" y todas sus secciones? Esta acción no se puede deshacer.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="bg-red-50 p-3 rounded-md border border-red-200 text-sm">
+            <p>Se eliminarán <strong>{
+              clients.filter(c => c.servicio === currentService).length
+            } secciones</strong> asociadas a este servicio.</p>
+          </div>
+          
+          <DialogFooter className="gap-2 mt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowDeleteServiceModal(false)}
+              disabled={deletingOperation}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleDeleteService}
+              disabled={deletingOperation}
+            >
+              {deletingOperation ? (
+                <span className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Eliminando...
+                </span>
+              ) : 'Eliminar Servicio'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Modal de Confirmación para Eliminar Cliente individual */}
+      <Dialog open={showDeleteClientModal} onOpenChange={(open) => !deletingOperation && setShowDeleteClientModal(open)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-red-600 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" />
+              Eliminar Cliente
+            </DialogTitle>
+            <DialogDescription>
+              ¿Está seguro de eliminar este cliente? Esta acción no se puede deshacer.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {clientToDelete && (
+            <div className="bg-red-50 p-3 rounded-md border border-red-200 text-sm">
+              <p>ID del cliente: <strong>{clientToDelete}</strong></p>
+              {clients.find(c => c._id === clientToDelete)?.seccionDelServicio && (
+                <p className="mt-1">Sección: <strong>{clients.find(c => c._id === clientToDelete)?.seccionDelServicio}</strong></p>
+              )}
+              <p className="mt-1">Servicio: <strong>{clients.find(c => c._id === clientToDelete)?.servicio}</strong></p>
+            </div>
+          )}
+          
+          <DialogFooter className="gap-2 mt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowDeleteClientModal(false)}
+              disabled={deletingOperation}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={executeDeleteClient}
+              disabled={deletingOperation}
+            >
+              {deletingOperation ? (
+                <span className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Eliminando...
+                </span>
+              ) : 'Eliminar Cliente'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

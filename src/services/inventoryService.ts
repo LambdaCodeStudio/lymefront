@@ -1,37 +1,34 @@
-import type { Product, ProductFilters, CreateProductData, UpdateProductData } from '../types/inventory';
+// src/services/inventoryService.ts
+import { BaseService, PaginationParams } from './baseService';
 import api from './api';
+import type { Product, ProductFilters, CreateProductData, UpdateProductData } from '@/types/inventory';
 
-export const inventoryService = {
-  getProducts: async (filters?: ProductFilters): Promise<Product[]> => {
-    const { data } = await api.get('/api/producto', { params: filters });
-    return data;
-  },
+class InventoryService extends BaseService<Product> {
+  constructor() {
+    super('/producto');
+  }
 
-  getProduct: async (id: string): Promise<Product> => {
-    const { data } = await api.get(`/api/producto/${id}`);
-    return data;
-  },
+  // Método para obtener productos con filtros
+  async getProducts(filters?: ProductFilters): Promise<Product[]> {
+    return await api.get<Product[]>('/producto', filters);
+  }
 
-  createProduct: async (productData: CreateProductData): Promise<Product> => {
-    const { data } = await api.post('/api/producto', productData);
-    return data;
-  },
-
-  updateProduct: async (data: UpdateProductData): Promise<Product> => {
-    const { id, ...updateData } = data;
-    const response = await api.put(`/api/producto/${id}`, updateData);
-    return response.data;
-  },
-
-  deleteProduct: async (id: string): Promise<void> => {
-    await api.delete(`/api/producto/${id}`);
-  },
-
-  exportToExcel: async (filters?: ProductFilters): Promise<Blob> => {
-    const response = await api.get('/api/producto/export', {
+  // Método para exportar a Excel
+  async exportToExcel(filters?: ProductFilters): Promise<Blob> {
+    const client = api.getClient();
+    const response = await client.get('/producto/export', {
       params: filters,
-      responseType: 'blob'
+      responseType: 'blob',
     });
     return response.data;
   }
-};
+
+  // Sobrescribir el método update para manejar el formato específico
+  async updateProduct(data: UpdateProductData): Promise<Product> {
+    const { id, ...updateData } = data;
+    return await this.update(id, updateData);
+  }
+}
+
+// Exportar instancia singleton
+export const inventoryService = new InventoryService();

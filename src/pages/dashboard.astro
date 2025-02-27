@@ -1,9 +1,9 @@
 ---
-import Layout from '../layouts/main/Layout.astro';
+import AuthLayout from '../layouts/AuthLayout.astro';
 import { Navbar } from '../components/common/Navbar';
 ---
 
-<Layout title="Dashboard">
+<AuthLayout title="Dashboard">
   <Navbar client:load />
   <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
     <div class="px-4 py-6 sm:px-0">
@@ -28,4 +28,4 @@ import { Navbar } from '../components/common/Navbar';
       </div>
     </div>
   </main>
-</Layout>
+</AuthLayout>

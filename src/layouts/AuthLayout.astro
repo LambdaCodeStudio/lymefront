@@ -1,0 +1,16 @@
+---
+import { AuthProvider } from '@/components/auth/AuthProvider';
+import MainLayout from './main/Layout.astro';
+
+interface Props {
+  title?: string;
+}
+
+const { title = 'Lyme - Autenticación' } = Astro.props;
+---
+
+<MainLayout title={title}>
+  <AuthProvider client:only="react">
+    <slot />
+  </AuthProvider>
+</MainLayout>

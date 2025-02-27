@@ -1,150 +1,190 @@
 // src/hooks/useAuth.ts
-import { useState, useEffect } from 'react';
-import api from '../services/api';
-
-interface User {
-  id: string;
-  email: string;
-  role: 'admin' | 'supervisor' | 'basic' | 'temporal';
-  isActive: boolean;
-}
+import { useState, useEffect, useCallback } from 'react';
+import { userService } from '@/services/userService';
+import type { User, LoginResponse, UserRole, CreateUserDTO } from '@/types/users';
 
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   loading: boolean;
-}
-
-interface LoginResponse {
-  token: string;
-  user: User;
+  error: string | null;
 }
 
 export const useAuth = () => {
   const [auth, setAuth] = useState<AuthState>({
     user: null,
     isAuthenticated: false,
-    loading: true
+    loading: true,
+    error: null
   });
 
-  useEffect(() => {
-    checkAuth();
-  }, []);
+  // Funciones para manejar el token en localStorage
+  const getStoredToken = (): string | null => {
+    return localStorage.getItem('token');
+  };
 
-  const checkAuth = async () => {
+  const setStoredToken = (token: string) => {
+    localStorage.setItem('token', token);
+  };
+
+  const removeStoredToken = () => {
+    localStorage.removeItem('token');
+  };
+
+  // Verificar autenticación al iniciar
+  const checkAuth = useCallback(async () => {
     try {
       const token = getStoredToken();
       
       if (!token) {
-        setAuth({ user: null, isAuthenticated: false, loading: false });
-        return;
+        setAuth({ user: null, isAuthenticated: false, loading: false, error: null });
+        return false;
       }
 
-      const { data } = await api.get('/api/auth/me');
+      const user = await userService.getCurrentUser();
+      
       setAuth({
-        user: data,
+        user,
         isAuthenticated: true,
-        loading: false
+        loading: false,
+        error: null
       });
+      
+      return true;
     } catch (error) {
       console.error('Error checking auth:', error);
       removeStoredToken();
       setAuth({
         user: null,
         isAuthenticated: false,
-        loading: false
+        loading: false,
+        error: 'Sesión expirada o inválida'
       });
+      
+      return false;
     }
-  };
+  }, []);
 
-  const getStoredToken = (): string | null => {
-    return document.cookie
-      .split('; ')
-      .find(row => row.startsWith('token='))
-      ?.split('=')[1] || null;
-  };
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
 
-  const setStoredToken = (token: string) => {
-    document.cookie = `token=${token}; path=/; max-age=86400; secure; samesite=strict`;
-  };
-
-  const removeStoredToken = () => {
-    document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT';
-  };
-
+  // Función de login actualizada para manejar la respuesta de la API
   const login = async (email: string, password: string): Promise<LoginResponse> => {
     try {
-      const { data } = await api.post<LoginResponse>('/api/auth/login', {
-        email,
-        password
-      });
-
-      // Verificar que recibimos los datos necesarios
-      if (!data.token || !data.user) {
-        throw new Error('Respuesta inválida del servidor');
+      setAuth(prev => ({ ...prev, loading: true, error: null }));
+      
+      const response = await userService.login(email, password);
+      
+      // Verificar si tenemos token
+      if (!response.token) {
+        throw new Error('Respuesta sin token de autenticación');
       }
 
       // Guardar token
-      setStoredToken(data.token);
+      setStoredToken(response.token);
+
+      // Si la respuesta no tiene user pero tiene role, creamos un user mínimo
+      let userData: User;
+      
+      if (response.user) {
+        userData = response.user;
+      } else {
+        // Crear un objeto user básico con el rol de la respuesta
+        userData = {
+          _id: '', // Se completará cuando obtengamos los datos completos
+          role: response.role
+        };
+        
+        // Intentar obtener los datos completos del usuario
+        try {
+          const fullUserData = await userService.getCurrentUser();
+          userData = fullUserData;
+        } catch (userError) {
+          console.warn('No se pudieron cargar los datos completos del usuario:', userError);
+          // Continuamos con los datos básicos
+        }
+      }
 
       // Actualizar estado
       setAuth({
-        user: data.user,
+        user: userData,
         isAuthenticated: true,
-        loading: false
+        loading: false,
+        error: null
       });
 
-      return data;
+      // Asegurar que la respuesta tenga user para compatibilidad con el código existente
+      return {
+        token: response.token,
+        role: response.role,
+        user: userData
+      };
     } catch (error: any) {
-      // Si el error viene del servidor, usar ese mensaje
-      if (error.response?.data?.msg) {
-        throw new Error(error.response.data.msg);
-      }
-      // Si es un error de red u otro tipo
-      throw new Error('Error al iniciar sesión');
+      // Actualizar estado con el error
+      console.error('Error detallado del login:', error);
+      setAuth(prev => ({ 
+        ...prev, 
+        loading: false,
+        error: error.message || 'Error al iniciar sesión'
+      }));
+      
+      throw error;
     }
   };
 
+  // Función de logout
   const logout = () => {
     removeStoredToken();
     setAuth({
       user: null,
       isAuthenticated: false,
-      loading: false
+      loading: false,
+      error: null
     });
     window.location.href = '/login';
   };
 
-  const registerAdmin = async (email: string, password: string): Promise<LoginResponse> => {
+  // Función para registrar nuevo usuario
+  const register = async (email: string, password: string, role: UserRole = 'basic'): Promise<User> => {
     try {
-      const { data } = await api.post<LoginResponse>('/api/auth/register/admin', {
-        email,
-        password
-      });
+      setAuth(prev => ({ ...prev, loading: true, error: null }));
+      
+      const userData: CreateUserDTO = { email, password, role };
+      const user = await userService.register(userData);
 
-      setStoredToken(data.token);
-      setAuth({
-        user: data.user,
-        isAuthenticated: true,
-        loading: false
-      });
+      // No autenticamos automáticamente tras el registro
+      setAuth(prev => ({ ...prev, loading: false }));
 
-      return data;
+      return user;
     } catch (error: any) {
-      if (error.response?.data?.msg) {
-        throw new Error(error.response.data.msg);
-      }
-      throw new Error('Error al registrar administrador');
+      setAuth(prev => ({ 
+        ...prev, 
+        loading: false, 
+        error: error.message || 'Error al registrar usuario'
+      }));
+      
+      throw error;
     }
   };
 
+  // Verificar si el usuario tiene un rol específico
+  const hasRole = (requiredRole: UserRole | UserRole[]): boolean => {
+    if (!auth.user) return false;
+    
+    if (Array.isArray(requiredRole)) {
+      return requiredRole.includes(auth.user.role as UserRole);
+    }
+    
+    return auth.user.role === requiredRole;
+  };
+
   return {
-    user: auth.user,
-    isAuthenticated: auth.isAuthenticated,
-    loading: auth.loading,
+    ...auth,
     login,
     logout,
-    registerAdmin,
-    checkAuth
+    register,
+    checkAuth,
+    hasRole
   };
 };
