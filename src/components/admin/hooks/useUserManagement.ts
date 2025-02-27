@@ -3,6 +3,7 @@
  * Centraliza la lógica de manejo de usuarios, estados y operaciones CRUD
  */
 import { useState, useEffect } from 'react';
+import { useNotification } from '@/context/NotificationContext';
 import { 
   getAllUsers, 
   createUser, 
@@ -19,6 +20,21 @@ import { useDashboard } from '@/hooks/useDashboard';
  * Hook para la gestión completa de usuarios
  */
 export function useUserManagement() {
+  // Detectar si NotificationProvider está disponible
+  let notificationSystem;
+  try {
+    notificationSystem = useNotification();
+  } catch (e) {
+    // Crear un sistema de notificación falso si el proveedor no está disponible
+    notificationSystem = {
+      addNotification: (message: string, type: string) => {
+        console.log(`Notification (${type}): ${message}`);
+      }
+    };
+  }
+  
+  const { addNotification } = notificationSystem;
+
   // Estado para usuarios y pantalla
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,7 +82,9 @@ export function useUserManagement() {
       setUsers(data);
       setError('');
     } catch (err: any) {
-      setError(err.message || 'Error al cargar usuarios');
+      const errorMsg = err.message || 'Error al cargar usuarios';
+      setError(errorMsg);
+      addNotification(errorMsg, 'error');
     } finally {
       setLoading(false);
     }
@@ -86,7 +104,9 @@ export function useUserManagement() {
       if (editingUser) {
         // Actualizar usuario existente
         await updateUser(editingUser._id, formData);
-        setSuccessMessage('Usuario actualizado correctamente');
+        const message = 'Usuario actualizado correctamente';
+        setSuccessMessage(message);
+        addNotification(message, 'success');
       } else {
         // Crear nuevo usuario
         const data = await createUser(formData);
@@ -102,7 +122,9 @@ export function useUserManagement() {
           }
         }
         
-        setSuccessMessage('Usuario creado correctamente');
+        const message = 'Usuario creado correctamente';
+        setSuccessMessage(message);
+        addNotification(message, 'success');
       }
 
       await fetchUsers();
@@ -112,7 +134,9 @@ export function useUserManagement() {
       // Limpiar mensaje después de unos segundos
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err: any) {
-      setError(err.message || 'Error en la operación');
+      const errorMsg = err.message || 'Error en la operación';
+      setError(errorMsg);
+      addNotification(errorMsg, 'error');
     } finally {
       setLoading(false);
     }
@@ -125,12 +149,16 @@ export function useUserManagement() {
     try {
       await deleteUser(userId);
       await fetchUsers();
-      setSuccessMessage('Usuario eliminado correctamente');
+      const message = 'Usuario eliminado correctamente';
+      setSuccessMessage(message);
+      addNotification(message, 'success');
       
       // Limpiar mensaje después de unos segundos
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err: any) {
-      setError(err.message || 'Error al eliminar usuario');
+      const errorMsg = err.message || 'Error al eliminar usuario';
+      setError(errorMsg);
+      addNotification(errorMsg, 'error');
     }
   };
 
@@ -151,12 +179,16 @@ export function useUserManagement() {
       }));
 
       await fetchUsers(); // Recargar todos los usuarios para asegurar sincronización
-      setSuccessMessage(`Usuario ${activate ? 'activado' : 'desactivado'} correctamente`);
+      const message = `Usuario ${activate ? 'activado' : 'desactivado'} correctamente`;
+      setSuccessMessage(message);
+      addNotification(message, 'success');
       
       // Limpiar mensaje después de unos segundos
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err: any) {
-      setError(err.message || 'Error al cambiar estado del usuario');
+      const errorMsg = err.message || 'Error al cambiar estado del usuario';
+      setError(errorMsg);
+      addNotification(errorMsg, 'error');
     }
   };
 

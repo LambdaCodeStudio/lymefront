@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { NotificationProvider } from '@/context/NotificationContext';
 
 // Importar componentes modularizados
 import UserTable from './components/UserTable';
@@ -22,9 +23,9 @@ import { useUserManagement } from './hooks/useUserManagement';
 import { filterUsers, getUserIdentifier, getFullName } from './utils/userUtils';
 
 /**
- * Componente principal para la gestión de usuarios
+ * Componente interno que usa el hook useUserManagement
  */
-const AdminUserManagement: React.FC = () => {
+const UserManagementContent: React.FC = () => {
   // Usar el hook de gestión de usuarios que centraliza toda la lógica
   const {
     users,
@@ -150,6 +151,17 @@ const AdminUserManagement: React.FC = () => {
         error={error}
       />
     </div>
+  );
+};
+
+/**
+ * Componente principal que envuelve el contenido con NotificationProvider
+ */
+const AdminUserManagement: React.FC = () => {
+  return (
+    <NotificationProvider>
+      <UserManagementContent />
+    </NotificationProvider>
   );
 };
 

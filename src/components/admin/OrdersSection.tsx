@@ -13,7 +13,12 @@ import {
   MapPin,
   Check,
   X,
-  Eye
+  Eye,
+  ChevronDown,
+  ChevronUp,
+  Calendar,
+  User,
+  DollarSign
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
@@ -34,10 +39,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+// Importamos la función de actualización del inventario
+import { refreshInventory, getAuthToken } from '@/utils/inventoryUtils';
 
 // Tipos
 interface User {
   _id: string;
+  id?: string;
   email: string;
   nombre?: string;
   role: string;
@@ -60,7 +81,7 @@ interface Product {
 }
 
 interface OrderProduct {
-  productoId: string;
+  productoId: string | { _id: string; [key: string]: any };
   cantidad: number;
   nombre?: string;
   precio?: number;
@@ -84,7 +105,303 @@ interface CreateOrderData {
   detalle?: string;
 }
 
-// Componente
+// Componente ProductDetail mejorado
+const ProductDetail = ({ item, cachedProducts, products, getProductDetails }) => {
+  const [productName, setProductName] = useState("Cargando...");
+  const [productPrice, setProductPrice] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchProductDetails = async () => {
+      setIsLoading(true);
+      try {
+        // Extraer el ID del producto de manera segura
+        const productId = typeof item.productoId === 'object' && item.productoId && item.productoId._id 
+          ? item.productoId._id 
+          : typeof item.productoId === 'string' 
+            ? item.productoId 
+            : null;
+            
+        if (!productId) {
+          setProductName("ID de producto inválido");
+          setProductPrice(0);
+          setIsLoading(false);
+          return;
+        }
+        
+        // Si ya tenemos nombre y precio en el item, usarlos
+        if (item.nombre && typeof item.precio === 'number') {
+          setProductName(item.nombre);
+          setProductPrice(item.precio);
+          setIsLoading(false);
+          return;
+        }
+
+        // Si el producto está en caché, usar esa información
+        if (cachedProducts[productId]) {
+          setProductName(cachedProducts[productId].nombre);
+          setProductPrice(cachedProducts[productId].precio);
+          setIsLoading(false);
+          return;
+        }
+
+        // Si el producto está en la lista de productos, usar esa información
+        const localProduct = products.find(p => p._id === productId);
+        if (localProduct) {
+          setProductName(localProduct.nombre);
+          setProductPrice(localProduct.precio);
+          setIsLoading(false);
+          return;
+        }
+
+        // Si no tenemos la información, obtenerla del servidor
+        const productDetails = await getProductDetails(productId);
+        if (productDetails) {
+          setProductName(productDetails.nombre);
+          setProductPrice(productDetails.precio);
+        } else {
+          setProductName("Producto no encontrado");
+          setProductPrice(0);
+        }
+      } catch (error) {
+        console.error("Error al cargar detalles del producto:", error);
+        setProductName("Error al cargar");
+        setProductPrice(0);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchProductDetails();
+  }, [item, cachedProducts, products, getProductDetails]);
+
+  // Mostrar un indicador de carga mientras se obtienen los datos
+  if (isLoading) {
+    return (
+      <>
+        <td className="px-4 py-2 text-sm">Cargando...</td>
+        <td className="px-4 py-2 text-sm">{item.cantidad}</td>
+        <td className="px-4 py-2 text-sm">$0.00</td>
+        <td className="px-4 py-2 text-sm font-medium">$0.00</td>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <td className="px-4 py-2 text-sm">{productName}</td>
+      <td className="px-4 py-2 text-sm">{item.cantidad}</td>
+      <td className="px-4 py-2 text-sm">${productPrice.toFixed(2)}</td>
+      <td className="px-4 py-2 text-sm font-medium">
+        ${(productPrice * item.cantidad).toFixed(2)}
+      </td>
+    </>
+  );
+};
+
+// Componente ProductDetailCard para visualización móvil
+const ProductDetailCard = ({ item, cachedProducts, products, getProductDetails }) => {
+  const [productName, setProductName] = useState("Cargando...");
+  const [productPrice, setProductPrice] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchProductDetails = async () => {
+      setIsLoading(true);
+      try {
+        // Extraer el ID del producto de manera segura
+        const productId = typeof item.productoId === 'object' && item.productoId && item.productoId._id 
+          ? item.productoId._id 
+          : typeof item.productoId === 'string' 
+            ? item.productoId 
+            : null;
+            
+        if (!productId) {
+          setProductName("ID de producto inválido");
+          setProductPrice(0);
+          setIsLoading(false);
+          return;
+        }
+        
+        // Si ya tenemos nombre y precio en el item, usarlos
+        if (item.nombre && typeof item.precio === 'number') {
+          setProductName(item.nombre);
+          setProductPrice(item.precio);
+          setIsLoading(false);
+          return;
+        }
+
+        // Si el producto está en caché, usar esa información
+        if (cachedProducts[productId]) {
+          setProductName(cachedProducts[productId].nombre);
+          setProductPrice(cachedProducts[productId].precio);
+          setIsLoading(false);
+          return;
+        }
+
+        // Si el producto está en la lista de productos, usar esa información
+        const localProduct = products.find(p => p._id === productId);
+        if (localProduct) {
+          setProductName(localProduct.nombre);
+          setProductPrice(localProduct.precio);
+          setIsLoading(false);
+          return;
+        }
+
+        // Si no tenemos la información, obtenerla del servidor
+        const productDetails = await getProductDetails(productId);
+        if (productDetails) {
+          setProductName(productDetails.nombre);
+          setProductPrice(productDetails.precio);
+        } else {
+          setProductName("Producto no encontrado");
+          setProductPrice(0);
+        }
+      } catch (error) {
+        console.error("Error al cargar detalles del producto:", error);
+        setProductName("Error al cargar");
+        setProductPrice(0);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchProductDetails();
+  }, [item, cachedProducts, products, getProductDetails]);
+
+  if (isLoading) {
+    return (
+      <div className="py-2 flex justify-between items-center border-b">
+        <div>
+          <div className="font-medium">Cargando...</div>
+          <div className="text-xs text-gray-500">Cantidad: {item.cantidad}</div>
+        </div>
+        <div className="text-sm font-medium">$0.00</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="py-2 flex justify-between items-center border-b">
+      <div>
+        <div className="font-medium">{productName}</div>
+        <div className="text-xs text-gray-500">Cantidad: {item.cantidad} x ${productPrice.toFixed(2)}</div>
+      </div>
+      <div className="text-sm font-medium">${(productPrice * item.cantidad).toFixed(2)}</div>
+    </div>
+  );
+};
+
+// Componente para calcular el total del pedido
+const OrderTotalCalculator = ({ order, cachedProducts, products, getProductDetails }) => {
+  const [total, setTotal] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const calculateTotal = async () => {
+      setIsLoading(true);
+      let calculatedTotal = 0;
+      
+      if (!order || !Array.isArray(order.productos)) {
+        setTotal(0);
+        setIsLoading(false);
+        return;
+      }
+      
+      // Si no hay productos, establecer el total en 0
+      if (order.productos.length === 0) {
+        setTotal(0);
+        setIsLoading(false);
+        return;
+      }
+      
+      // Crear un array de promesas para cargar todos los productos no cacheados
+      const productPromises = order.productos.map(async (item) => {
+        if (!item) return null;
+        
+        // Obtener el ID del producto de manera segura
+        const productId = typeof item.productoId === 'object' && item.productoId && item.productoId._id 
+          ? item.productoId._id 
+          : typeof item.productoId === 'string' 
+            ? item.productoId 
+            : null;
+            
+        if (!productId) return null;
+        
+        // Si ya tenemos el precio en el item, lo usamos
+        if (typeof item.precio === 'number') {
+          return {
+            id: productId,
+            precio: item.precio,
+            cantidad: item.cantidad || 1
+          };
+        }
+        
+        // Si el producto está en caché, usamos su precio
+        if (cachedProducts[productId] && typeof cachedProducts[productId].precio === 'number') {
+          return {
+            id: productId,
+            precio: cachedProducts[productId].precio,
+            cantidad: item.cantidad || 1
+          };
+        }
+        
+        // Si el producto está en la lista de productos, usamos su precio
+        const localProduct = products.find(p => p._id === productId);
+        if (localProduct && typeof localProduct.precio === 'number') {
+          return {
+            id: productId,
+            precio: localProduct.precio,
+            cantidad: item.cantidad || 1
+          };
+        }
+        
+        // Si no encontramos el precio, cargamos el producto del servidor
+        try {
+          const productDetails = await getProductDetails(productId);
+          if (productDetails && typeof productDetails.precio === 'number') {
+            return {
+              id: productId,
+              precio: productDetails.precio,
+              cantidad: item.cantidad || 1
+            };
+          }
+        } catch (error) {
+          console.error(`Error al cargar detalles del producto ${productId}:`, error);
+        }
+        
+        // Si no pudimos obtener el precio, devolvemos un objeto con precio 0
+        return {
+          id: productId,
+          precio: 0,
+          cantidad: item.cantidad || 1
+        };
+      });
+      
+      // Esperar a que todas las promesas se resuelvan
+      const resolvedProducts = await Promise.all(productPromises);
+      
+      // Calcular el total
+      calculatedTotal = resolvedProducts.reduce((sum, product) => {
+        if (!product) return sum;
+        return sum + (product.precio * product.cantidad);
+      }, 0);
+      
+      setTotal(calculatedTotal);
+      setIsLoading(false);
+    };
+    
+    calculateTotal();
+  }, [order, cachedProducts, products, getProductDetails]);
+  
+  if (isLoading) {
+    return <span>Calculando...</span>;
+  }
+  
+  return <span>${total.toFixed(2)}</span>;
+};
+
+// Componente principal
 const OrdersSection = () => {
   // Estados
   const [orders, setOrders] = useState<Order[]>([]);
@@ -99,7 +416,9 @@ const OrdersSection = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
   const [orderDetailsOpen, setOrderDetailsOpen] = useState<string | null>(null);
+  const [mobileOrderDetailsOpen, setMobileOrderDetailsOpen] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string>('');
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   // Estados para filtros
   const [dateFilter, setDateFilter] = useState({
@@ -138,7 +457,7 @@ const OrdersSection = () => {
   // Cargar usuario actual
   const fetchCurrentUser = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getAuthToken();
       if (!token) {
         throw new Error('No hay token de autenticación');
       }
@@ -181,7 +500,7 @@ const OrdersSection = () => {
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
+      const token = getAuthToken();
       if (!token) {
         throw new Error('No hay token de autenticación');
       }
@@ -239,7 +558,7 @@ const OrdersSection = () => {
     }
 
     try {
-      const token = localStorage.getItem('token');
+      const token = getAuthToken();
       if (!token) return null;
 
       const response = await fetch(`http://localhost:4000/api/producto/${id}`, {
@@ -266,6 +585,100 @@ const OrdersSection = () => {
     }
   };
 
+  // Función para toggleOrderDetails - versión escritorio
+  const toggleOrderDetails = async (orderId: string) => {
+    if (orderDetailsOpen === orderId) {
+      setOrderDetailsOpen(null);
+    } else {
+      setOrderDetailsOpen(orderId);
+      
+      // Cargar los detalles de los productos
+      const order = orders.find(o => o._id === orderId);
+      if (order && Array.isArray(order.productos)) {
+        try {
+          const productPromises = order.productos.map(async (item) => {
+            // Extraer ID de manera segura
+            const productId = typeof item.productoId === 'object' && item.productoId && item.productoId._id 
+              ? item.productoId._id 
+              : typeof item.productoId === 'string' 
+                ? item.productoId 
+                : null;
+                
+            if (!productId) return;
+            
+            // Si no está en caché y no está en la lista de productos, cargarlo
+            if (!cachedProducts[productId] && !products.find(p => p._id === productId)) {
+              try {
+                const product = await getProductDetails(productId);
+                if (product) {
+                  // Actualizar caché
+                  setCachedProducts(prev => ({
+                    ...prev,
+                    [productId]: product
+                  }));
+                }
+              } catch (error) {
+                console.error(`Error al cargar detalles del producto ${productId}:`, error);
+              }
+            }
+          });
+          
+          // Esperar a que todas las cargas se completen
+          await Promise.all(productPromises);
+        } catch (error) {
+          console.error("Error al cargar detalles de productos:", error);
+        }
+      }
+    }
+  };
+
+  // Función para toggleMobileOrderDetails - versión móvil
+  const toggleMobileOrderDetails = async (orderId: string) => {
+    if (mobileOrderDetailsOpen === orderId) {
+      setMobileOrderDetailsOpen(null);
+    } else {
+      setMobileOrderDetailsOpen(orderId);
+      
+      // Cargar los detalles de los productos
+      const order = orders.find(o => o._id === orderId);
+      if (order && Array.isArray(order.productos)) {
+        try {
+          const productPromises = order.productos.map(async (item) => {
+            // Extraer ID de manera segura
+            const productId = typeof item.productoId === 'object' && item.productoId && item.productoId._id 
+              ? item.productoId._id 
+              : typeof item.productoId === 'string' 
+                ? item.productoId 
+                : null;
+                
+            if (!productId) return;
+            
+            // Si no está en caché y no está en la lista de productos, cargarlo
+            if (!cachedProducts[productId] && !products.find(p => p._id === productId)) {
+              try {
+                const product = await getProductDetails(productId);
+                if (product) {
+                  // Actualizar caché
+                  setCachedProducts(prev => ({
+                    ...prev,
+                    [productId]: product
+                  }));
+                }
+              } catch (error) {
+                console.error(`Error al cargar detalles del producto ${productId}:`, error);
+              }
+            }
+          });
+          
+          // Esperar a que todas las cargas se completen
+          await Promise.all(productPromises);
+        } catch (error) {
+          console.error("Error al cargar detalles de productos:", error);
+        }
+      }
+    }
+  };
+
   // Cargar pedidos por rango de fechas
   const fetchOrdersByDate = async () => {
     if (!dateFilter.fechaInicio || !dateFilter.fechaFin) {
@@ -275,7 +688,7 @@ const OrdersSection = () => {
 
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
+      const token = getAuthToken();
       if (!token) {
         throw new Error('No hay token de autenticación');
       }
@@ -304,6 +717,9 @@ const OrdersSection = () => {
 
       // Eliminar mensaje después de 3 segundos
       setTimeout(() => setSuccessMessage(''), 3000);
+      
+      // Cerrar filtros móviles si están abiertos
+      setShowMobileFilters(false);
     } catch (err) {
       setError('Error al filtrar por fecha: ' +
         (err instanceof Error ? err.message : String(err)));
@@ -315,7 +731,7 @@ const OrdersSection = () => {
   // Cargar productos
   const fetchProducts = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getAuthToken();
       if (!token) {
         throw new Error('No hay token de autenticación');
       }
@@ -349,7 +765,7 @@ const OrdersSection = () => {
   // Cargar usuarios
   const fetchUsers = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getAuthToken();
       if (!token) {
         throw new Error('No hay token de autenticación');
       }
@@ -374,7 +790,7 @@ const OrdersSection = () => {
   // Cargar clientes del usuario
   const fetchClients = async (userId: string) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getAuthToken();
       if (!token) {
         throw new Error('No hay token de autenticación');
       }
@@ -426,7 +842,7 @@ const OrdersSection = () => {
     setError(null);
 
     try {
-      const token = localStorage.getItem('token');
+      const token = getAuthToken();
       if (!token) {
         throw new Error('No hay token de autenticación');
       }
@@ -439,7 +855,7 @@ const OrdersSection = () => {
         seccionDelServicio: orderForm.seccionDelServicio || "",
         detalle: orderForm.detalle || " ",
         productos: orderForm.productos.map(p => ({
-          productoId: p.productoId,
+          productoId: typeof p.productoId === 'object' ? p.productoId._id : p.productoId,
           cantidad: p.cantidad
         }))
       };
@@ -462,6 +878,12 @@ const OrdersSection = () => {
 
       // Éxito
       await fetchOrders();
+      await fetchProducts(); // Recargar productos para actualizar stock
+      
+      // Notificar a todos los componentes sobre el cambio en el inventario
+      await refreshInventory();
+      console.log("Notificación de actualización de inventario enviada después de crear pedido");
+
       setShowCreateModal(false);
       resetOrderForm();
       setSuccessMessage('Pedido creado correctamente');
@@ -482,7 +904,7 @@ const OrdersSection = () => {
     setError(null);
 
     try {
-      const token = localStorage.getItem('token');
+      const token = getAuthToken();
       if (!token) {
         throw new Error('No hay token de autenticación');
       }
@@ -494,7 +916,7 @@ const OrdersSection = () => {
         detalle: orderForm.detalle || " ",
         // Importante: solo enviar productoId y cantidad
         productos: orderForm.productos.map(p => ({
-          productoId: p.productoId,
+          productoId: typeof p.productoId === 'object' ? p.productoId._id : p.productoId,
           cantidad: p.cantidad
         }))
       };
@@ -516,6 +938,12 @@ const OrdersSection = () => {
       }
 
       await fetchOrders();
+      await fetchProducts(); // Recargar productos para actualizar stock
+      
+      // Notificar a todos los componentes sobre el cambio en el inventario
+      await refreshInventory();
+      console.log("Notificación de actualización de inventario enviada después de actualizar pedido");
+      
       setShowCreateModal(false);
       resetOrderForm();
       setSuccessMessage('Pedido actualizado correctamente');
@@ -533,7 +961,8 @@ const OrdersSection = () => {
     if (!window.confirm('¿Está seguro de eliminar este pedido?')) return;
 
     try {
-      const token = localStorage.getItem('token');
+      setLoading(true);
+      const token = getAuthToken();
       if (!token) {
         throw new Error('No hay token de autenticación');
       }
@@ -551,11 +980,19 @@ const OrdersSection = () => {
       }
 
       await fetchOrders();
+      await fetchProducts(); // Recargar productos para actualizar stock
+      
+      // Notificar a todos los componentes sobre el cambio en el inventario
+      await refreshInventory();
+      console.log("Notificación de actualización de inventario enviada después de eliminar pedido");
+      
       setSuccessMessage('Pedido eliminado correctamente');
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err) {
       setError('Error al eliminar pedido: ' +
         (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -568,20 +1005,29 @@ const OrdersSection = () => {
       ? order.productos.map(async (p) => {
         // Intentar obtener nombre y precio si no están en el producto
         try {
+          const productId = typeof p.productoId === 'object' && p.productoId 
+            ? p.productoId._id 
+            : p.productoId;
+            
           if (!p.nombre || !p.precio) {
-            const details = await getProductDetails(p.productoId);
+            const details = await getProductDetails(productId);
             return {
-              productoId: p.productoId,
+              productoId: productId,
               cantidad: p.cantidad,
-              nombre: p.nombre || details?.nombre || "Producto no encontrado",
-              precio: p.precio || details?.precio || 0
+              nombre: p.nombre || (details?.nombre || "Producto no encontrado"),
+              precio: p.precio || (details?.precio || 0)
             };
           }
-          return p;
+          return {
+            productoId: productId,
+            cantidad: p.cantidad,
+            nombre: p.nombre,
+            precio: p.precio
+          };
         } catch (err) {
           console.error("Error al obtener detalles del producto:", err);
           return {
-            productoId: p.productoId,
+            productoId: typeof p.productoId === 'object' ? p.productoId._id : p.productoId,
             cantidad: p.cantidad,
             nombre: p.nombre || "Error al cargar",
             precio: p.precio || 0
@@ -603,15 +1049,6 @@ const OrdersSection = () => {
       setShowCreateModal(true);
       console.log("Editando orden:", order);
     });
-  };
-
-  // Ver detalles del pedido
-  const toggleOrderDetails = (orderId: string) => {
-    if (orderDetailsOpen === orderId) {
-      setOrderDetailsOpen(null);
-    } else {
-      setOrderDetailsOpen(orderId);
-    }
   };
 
   // Manejar selección de cliente
@@ -668,15 +1105,30 @@ const OrdersSection = () => {
     const product = products.find(p => p._id === selectedProduct);
     if (!product) return;
 
+    // Verificar si hay suficiente stock
+    if (product.stock < productQuantity) {
+      setError(`Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`);
+      return;
+    }
+
     // Verificar si ya existe este producto en el pedido
     const existingProductIndex = orderForm.productos.findIndex(
-      item => item.productoId === selectedProduct
+      item => (typeof item.productoId === 'object' ? item.productoId._id : item.productoId) === selectedProduct
     );
 
     if (existingProductIndex >= 0) {
+      // Verificar stock para la cantidad total
+      const currentQuantity = orderForm.productos[existingProductIndex].cantidad;
+      const newQuantity = currentQuantity + productQuantity;
+      
+      if (product.stock < newQuantity) {
+        setError(`Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`);
+        return;
+      }
+      
       // Actualizar cantidad si ya existe
       const updatedProducts = [...orderForm.productos];
-      updatedProducts[existingProductIndex].cantidad += productQuantity;
+      updatedProducts[existingProductIndex].cantidad = newQuantity;
 
       setOrderForm(prev => ({
         ...prev,
@@ -730,7 +1182,27 @@ const OrdersSection = () => {
   // Calcular total del pedido
   const calculateTotal = (productos: OrderProduct[]) => {
     return productos.reduce((total, item) => {
-      const precio = item.precio || getProductPrice(item.productoId) || 0;
+      let precio = 0;
+      
+      // Primero usar precio del item si existe
+      if (typeof item.precio === 'number') {
+        precio = item.precio;
+      } else {
+        // Obtener id del producto
+        const productId = typeof item.productoId === 'object' ? item.productoId._id : item.productoId;
+        
+        // Buscar en caché
+        if (cachedProducts[productId]) {
+          precio = cachedProducts[productId].precio;
+        } else {
+          // Buscar en lista de productos
+          const product = products.find(p => p._id === productId);
+          if (product) {
+            precio = product.precio;
+          }
+        }
+      }
+      
       return total + (precio * item.cantidad);
     }, 0);
   };
@@ -762,6 +1234,41 @@ const OrdersSection = () => {
 
     return 'Usuario no encontrado';
   };
+  
+  // Obtener nombre completo del usuario
+  const getUserFullName = (userId: string) => {
+    if (!userId) return 'No asignado';
+    
+    const user = users.find(u => u._id === userId);
+    
+    if (!user) return 'Usuario no encontrado';
+    
+    // Si tiene nombre y apellido, mostrar ambos
+    if (user.nombre) {
+      if (user.nombre && typeof user.nombre === 'string') {
+        // Verificar si tiene apellido (asumiendo que puede estar en otra propiedad)
+        const apellido = user.apellido || '';
+        return `${user.nombre} ${apellido}`.trim();
+      }
+      return user.nombre;
+    }
+    
+    // Si no tiene nombre, mostrar el email
+    if (user.email) {
+      return user.email;
+    }
+    
+    // Si no tiene nombre ni email, mostrar el ID acortado
+    return `ID: ${userId.substring(0, 8)}...`;
+  };
+
+  // Limpiar todos los filtros
+  const clearAllFilters = () => {
+    setSearchTerm('');
+    setDateFilter({ fechaInicio: '', fechaFin: '' });
+    fetchOrders();
+    setShowMobileFilters(false);
+  };
 
   // Filtrar pedidos por término de búsqueda
   const filteredOrders = orders.filter(order =>
@@ -779,7 +1286,7 @@ const OrdersSection = () => {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 md:p-6">
       {/* Alertas */}
       {error && (
         <Alert variant="destructive" className="mb-4">
@@ -795,15 +1302,8 @@ const OrdersSection = () => {
         </Alert>
       )}
 
-      {/* Información de depuración */}
-      {debugInfo && (
-        <Alert className="mb-4 bg-blue-50 border-blue-200">
-          <div className="text-sm text-blue-700 whitespace-pre-line">{debugInfo}</div>
-        </Alert>
-      )}
-
-      {/* Barra de filtros y acciones */}
-      <div className="mb-6 space-y-4">
+      {/* Barra de filtros y acciones para escritorio */}
+      <div className="mb-6 space-y-4 hidden md:block">
         <div className="flex flex-wrap gap-4 items-center justify-between">
           <div className="relative flex-1 min-w-[280px]">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -855,13 +1355,10 @@ const OrdersSection = () => {
             <Filter className="w-4 h-4 mr-2" />
             Filtrar por Fecha
           </Button>
-          {(dateFilter.fechaInicio || dateFilter.fechaFin) && (
+          {(dateFilter.fechaInicio || dateFilter.fechaFin || searchTerm) && (
             <Button
               variant="ghost"
-              onClick={() => {
-                setDateFilter({ fechaInicio: '', fechaFin: '' });
-                fetchOrders();
-              }}
+              onClick={clearAllFilters}
             >
               Limpiar filtros
             </Button>
@@ -869,239 +1366,373 @@ const OrdersSection = () => {
         </div>
       </div>
 
-      {/* Tabla de pedidos */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        {filteredOrders.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
-            No se encontraron pedidos
-            {searchTerm && ` que coincidan con "${searchTerm}"`}
-            {(dateFilter.fechaInicio || dateFilter.fechaFin) && " en el rango de fechas seleccionado"}
+      {/* Barra de filtros y acciones para móvil */}
+      <div className="mb-6 space-y-4 md:hidden">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <Input
+              type="text"
+              placeholder="Buscar pedidos..."
+              className="pl-10"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Fecha
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Cliente
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Sección
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Usuario
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Productos
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {filteredOrders.map((order) => (
-                  <React.Fragment key={order._id}>
-                    <tr className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {new Date(order.fecha).toLocaleDateString()}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {new Date(order.fecha).toLocaleTimeString()}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <Building className="w-4 h-4 text-gray-400 mr-2" />
-                          <div className="text-sm font-medium text-gray-900">
-                            {order.servicio}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {order.seccionDelServicio ? (
-                          <div className="flex items-center">
-                            <MapPin className="w-4 h-4 text-gray-400 mr-2" />
-                            <div className="text-sm text-gray-900">
-                              {order.seccionDelServicio}
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-gray-500">Sin sección</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {getUserEmail(order.userId)}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="secondary">
-                            {order.productos.length} producto{order.productos.length !== 1 ? 's' : ''}
-                          </Badge>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => toggleOrderDetails(order._id)}
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <div className="flex justify-end space-x-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEditOrder(order)}
-                          >
-                            <FileEdit className="w-4 h-4 text-blue-600" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteOrder(order._id)}
-                          >
-                            <Trash2 className="w-4 h-4 text-red-600" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setShowMobileFilters(!showMobileFilters)}
+            className="flex-shrink-0"
+          >
+            <Filter className="w-4 h-4" />
+          </Button>
+          <Button
+            size="icon"
+            onClick={() => {
+              resetOrderForm();
+              setShowCreateModal(true);
+            }}
+            className="flex-shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+          </Button>
+        </div>
 
-                    {/* Detalles del pedido (expandible) */}
-                    {orderDetailsOpen === order._id && (
-                      <tr>
-                        <td colSpan={6} className="px-6 py-4 bg-gray-50">
-                          <div className="space-y-3">
-                            <div className="font-medium text-gray-900">Detalles del Pedido</div>
-                            <div className="overflow-x-auto">
-                              <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-100">
-                                  <tr>
-                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Producto</th>
-                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Cantidad</th>
-                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Precio</th>
-                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Total</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-200">
-                                  {order.productos.map((item, index) => {
-                                    // Componente inline para manejar los detalles del producto
-                                    const ProductDetail = () => {
-                                      const [productName, setProductName] = useState("Cargando...");
-                                      const [productPrice, setProductPrice] = useState(0);
+        {showMobileFilters && (
+          <div className="p-4 bg-gray-50 rounded-lg border space-y-4">
+            <h3 className="font-medium text-sm">Filtrar por fecha</h3>
+            <div className="space-y-2">
+              <div>
+                <Label htmlFor="mFechaInicio" className="text-xs">Fecha Inicio</Label>
+                <Input
+                  id="mFechaInicio"
+                  type="date"
+                  value={dateFilter.fechaInicio}
+                  onChange={(e) => setDateFilter({ ...dateFilter, fechaInicio: e.target.value })}
+                  className="w-full text-sm"
+                />
+              </div>
+              <div>
+                <Label htmlFor="mFechaFin" className="text-xs">Fecha Fin</Label>
+                <Input
+                  id="mFechaFin"
+                  type="date"
+                  value={dateFilter.fechaFin}
+                  onChange={(e) => setDateFilter({ ...dateFilter, fechaFin: e.target.value })}
+                  className="w-full text-sm"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={clearAllFilters}
+                className="text-xs"
+              >
+                Limpiar
+              </Button>
+              <Button
+                size="sm"
+                onClick={fetchOrdersByDate}
+                className="text-xs"
+              >
+                Aplicar Filtros
+              </Button>
+            </div>
+          </div>
+        )}
 
-                                      useEffect(() => {
-                                        const fetchProductDetails = async () => {
-                                          try {
-                                            // Primero verificar si ya tenemos nombre y precio
-                                            if (item.nombre && item.precio) {
-                                              setProductName(item.nombre);
-                                              setProductPrice(item.precio);
-                                              return;
-                                            }
-
-                                            // Verificar en caché
-                                            const cachedProduct = cachedProducts[item.productoId];
-                                            if (cachedProduct) {
-                                              setProductName(cachedProduct.nombre);
-                                              setProductPrice(cachedProduct.precio);
-                                              return;
-                                            }
-
-                                            // Si no está en caché, obtener del backend
-                                            const productDetails = await getProductDetails(item.productoId);
-                                            if (productDetails) {
-                                              setProductName(productDetails.nombre);
-                                              setProductPrice(productDetails.precio);
-                                            } else {
-                                              setProductName("Producto no encontrado");
-                                              setProductPrice(0);
-                                            }
-                                          } catch (error) {
-                                            console.error("Error al cargar detalles del producto:", error);
-                                            setProductName("Error al cargar");
-                                            setProductPrice(0);
-                                          }
-                                        };
-
-                                        fetchProductDetails();
-                                      }, [item.productoId, item.nombre, item.precio]);
-
-                                      return (
-                                        <>
-                                          <td className="px-4 py-2 text-sm">{productName}</td>
-                                          <td className="px-4 py-2 text-sm">{item.cantidad}</td>
-                                          <td className="px-4 py-2 text-sm">${productPrice.toFixed(2)}</td>
-                                          <td className="px-4 py-2 text-sm font-medium">
-                                            ${(productPrice * item.cantidad).toFixed(2)}
-                                          </td>
-                                        </>
-                                      );
-                                    };
-
-                                    return (
-                                      <tr key={index} className="hover:bg-gray-100">
-                                        <ProductDetail />
-                                      </tr>
-                                    );
-                                  })}
-
-                                  {/* Total calculado dinámicamente */}
-                                  <tr className="bg-blue-50">
-                                    <td colSpan={3} className="px-4 py-2 text-right font-medium">Total del Pedido:</td>
-                                    <td className="px-4 py-2 font-bold">
-                                      ${(() => {
-                                        // Función para obtener precio de forma síncrona
-                                        const getProductPriceSync = (productoId: string) => {
-                                          // Primero buscar en caché
-                                          if (cachedProducts[productoId]) {
-                                            return cachedProducts[productoId].precio;
-                                          }
-
-                                          // Luego buscar en lista de productos
-                                          const product = products.find(p => p._id === productoId);
-                                          if (product) {
-                                            return product.precio;
-                                          }
-
-                                          // Si no se encuentra, usar función getProductPrice como último recurso
-                                          return getProductPrice(productoId) || 0;
-                                        };
-
-                                        const total = order.productos.reduce((total, item) => {
-                                          // Obtener precio de forma síncrona
-                                          const price = item.precio || getProductPriceSync(item.productoId) || 0;
-                                          return total + (price * item.cantidad);
-                                        }, 0);
-
-                                        return total.toFixed(2);
-                                      })()}
-                                    </td>
-                                  </tr>
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
+        {(dateFilter.fechaInicio || dateFilter.fechaFin) && (
+          <div className="px-3 py-2 bg-blue-50 rounded-md text-xs text-blue-600 flex items-center justify-between">
+            <div>
+              <CalendarRange className="w-3 h-3 inline mr-1" />
+              <span>
+                {dateFilter.fechaInicio && new Date(dateFilter.fechaInicio).toLocaleDateString()}
+                {dateFilter.fechaInicio && dateFilter.fechaFin && ' al '}
+                {dateFilter.fechaFin && new Date(dateFilter.fechaFin).toLocaleDateString()}
+              </span>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearAllFilters}
+              className="h-6 text-xs px-2"
+            >
+              <X className="w-3 h-3" />
+            </Button>
           </div>
         )}
       </div>
 
+      {/* Sin resultados */}
+      {filteredOrders.length === 0 ? (
+        <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+          No se encontraron pedidos
+          {searchTerm && ` que coincidan con "${searchTerm}"`}
+          {(dateFilter.fechaInicio || dateFilter.fechaFin) && " en el rango de fechas seleccionado"}
+        </div>
+      ) : (
+        <>
+          {/* Tabla de pedidos para pantallas medianas y grandes */}
+          <div className="bg-white rounded-lg shadow overflow-hidden hidden md:block">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Fecha
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Cliente
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Sección
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Usuario
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Productos
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Acciones
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {filteredOrders.map((order) => (
+                    <React.Fragment key={order._id}>
+                      <tr className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">
+                            {new Date(order.fecha).toLocaleDateString()}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {new Date(order.fecha).toLocaleTimeString()}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <Building className="w-4 h-4 text-gray-400 mr-2" />
+                            <div className="text-sm font-medium text-gray-900">
+                              {order.servicio}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {order.seccionDelServicio ? (
+                            <div className="flex items-center">
+                              <MapPin className="w-4 h-4 text-gray-400 mr-2" />
+                              <div className="text-sm text-gray-900">
+                                {order.seccionDelServicio}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-500">Sin sección</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">
+                            {getUserEmail(order.userId)}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary">
+                              {order.productos.length} producto{order.productos.length !== 1 ? 's' : ''}
+                            </Badge>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => toggleOrderDetails(order._id)}
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right">
+                          <div className="flex justify-end space-x-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditOrder(order)}
+                            >
+                              <FileEdit className="w-4 h-4 text-blue-600" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteOrder(order._id)}
+                            >
+                              <Trash2 className="w-4 h-4 text-red-600" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* Detalles del pedido (expandible) */}
+                      {orderDetailsOpen === order._id && (
+                        <tr>
+                          <td colSpan={6} className="px-6 py-4 bg-gray-50">
+                            <div className="space-y-3">
+                              <div className="font-medium text-gray-900">Detalles del Pedido</div>
+                              <div className="overflow-x-auto">
+                                <table className="min-w-full divide-y divide-gray-200">
+                                  <thead className="bg-gray-100">
+                                    <tr>
+                                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Producto</th>
+                                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Cantidad</th>
+                                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Precio</th>
+                                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Total</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-200">
+                                    {order.productos.map((item, index) => (
+                                      <tr key={index} className="hover:bg-gray-100">
+                                        <ProductDetail 
+                                          item={item} 
+                                          cachedProducts={cachedProducts} 
+                                          products={products} 
+                                          getProductDetails={getProductDetails} 
+                                        />
+                                      </tr>
+                                    ))}
+
+                                    {/* Total */}
+                                    <tr className="bg-blue-50">
+                                      <td colSpan={3} className="px-4 py-2 text-right font-medium">Total del Pedido:</td>
+                                      <td className="px-4 py-2 font-bold">
+                                        <OrderTotalCalculator 
+                                          order={order} 
+                                          cachedProducts={cachedProducts} 
+                                          products={products} 
+                                          getProductDetails={getProductDetails} 
+                                        />
+                                      </td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Vista de tarjetas para móviles */}
+          <div className="space-y-4 md:hidden">
+            {filteredOrders.map((order) => (
+              <Card key={order._id} className="overflow-hidden shadow-sm">
+                <CardHeader className="pb-2">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle className="text-sm font-medium flex items-center">
+                        <Building className="w-4 h-4 text-gray-500 mr-1" />
+                        {order.servicio}
+                      </CardTitle>
+                      {order.seccionDelServicio && (
+                        <div className="text-xs text-gray-500 flex items-center mt-1">
+                          <MapPin className="w-3 h-3 mr-1" />
+                          {order.seccionDelServicio}
+                        </div>
+                      )}
+                    </div>
+                    <Badge variant="outline" className="text-xs">
+                      {new Date(order.fecha).toLocaleDateString()}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="py-2">
+                  <div className="text-xs space-y-1">
+                    <div className="flex items-center">
+                      <User className="w-3 h-3 text-gray-500 mr-1" />
+                      <span className="text-gray-600">{getUserEmail(order.userId)}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <ShoppingCart className="w-3 h-3 text-gray-500 mr-1" />
+                      <span className="text-gray-600">{order.productos.length} productos</span>
+                    </div>
+                  </div>
+
+                  {/* Detalles expandibles en móvil */}
+                  <Accordion
+                    type="single"
+                    collapsible
+                    className="mt-2"
+                    value={mobileOrderDetailsOpen === order._id ? "details" : ""}
+                  >
+                    <AccordionItem value="details" className="border-0">
+                      <AccordionTrigger
+                        onClick={() => toggleMobileOrderDetails(order._id)}
+                        className="py-1 text-xs font-medium text-blue-600"
+                      >
+                        Ver detalles
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        <div className="text-xs pt-2 pb-1">
+                          <div className="font-medium mb-2">Productos:</div>
+                          <div className="space-y-1">
+                            {order.productos.map((item, index) => (
+                              <ProductDetailCard
+                                key={index}
+                                item={item}
+                                cachedProducts={cachedProducts}
+                                products={products}
+                                getProductDetails={getProductDetails}
+                              />
+                            ))}
+                          </div>
+                          <div className="flex justify-between items-center pt-2 font-medium text-sm">
+                            <span>Total:</span>
+                            <div className="flex items-center text-blue-700">
+                              <DollarSign className="w-3 h-3 mr-1" />
+                              <OrderTotalCalculator
+                                order={order}
+                                cachedProducts={cachedProducts}
+                                products={products}
+                                getProductDetails={getProductDetails}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
+                </CardContent>
+                <CardFooter className="py-2 px-4 bg-gray-50 flex justify-end gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2"
+                    onClick={() => handleEditOrder(order)}
+                  >
+                    <FileEdit className="w-4 h-4 text-blue-600" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2"
+                    onClick={() => handleDeleteOrder(order._id)}
+                  >
+                    <Trash2 className="w-4 h-4 text-red-600" />
+                  </Button>
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
+
       {/* Modal de Crear/Editar Pedido */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {currentOrder ? 'Editar Pedido' : 'Nuevo Pedido'}
@@ -1197,21 +1828,22 @@ const OrdersSection = () => {
               ) : (
                 <div className="space-y-2">
                   {orderForm.productos.map((item, index) => {
-                    const product = products.find(p => p._id === item.productoId) || cachedProducts[item.productoId];
+                    const productId = typeof item.productoId === 'object' ? item.productoId._id : item.productoId;
+                    const product = products.find(p => p._id === productId) || cachedProducts[productId];
                     return (
                       <div
                         key={index}
                         className="flex justify-between items-center p-3 bg-gray-50 rounded-md"
                       >
                         <div>
-                          <div className="font-medium">{item.nombre || product?.nombre || getProductName(item.productoId)}</div>
+                          <div className="font-medium">{item.nombre || product?.nombre || getProductName(productId)}</div>
                           <div className="text-sm text-gray-500">
-                            Cantidad: {item.cantidad} x ${item.precio || product?.precio || getProductPrice(item.productoId)}
+                            Cantidad: {item.cantidad} x ${item.precio || product?.precio || getProductPrice(productId)}
                           </div>
                         </div>
                         <div className="flex items-center gap-4">
                           <div className="font-medium">
-                            ${((item.precio || product?.precio || getProductPrice(item.productoId) || 0) * item.cantidad).toFixed(2)}
+                            ${((item.precio || product?.precio || getProductPrice(productId) || 0) * item.cantidad).toFixed(2)}
                           </div>
                           <Button
                             variant="ghost"
@@ -1360,20 +1992,6 @@ const OrdersSection = () => {
       </Dialog>
     </div>
   );
-};
-
-// Función auxiliar para cerrar modales
-const setShowModal = (value: boolean) => {
-  const modalElements = document.querySelectorAll('[role="dialog"]');
-  if (!value && modalElements.length) {
-    // Cerrar todos los modales
-    modalElements.forEach(el => {
-      const closeButton = el.querySelector('button[aria-label="Close"]');
-      if (closeButton instanceof HTMLElement) {
-        closeButton.click();
-      }
-    });
-  }
 };
 
 export default OrdersSection;

@@ -1,11 +1,15 @@
----
-import AuthLayout from '../layouts/AuthLayout.astro';
-import { Navbar } from '../components/common/Navbar';
-import AdminDashboard from '../components/admin/AdminDashboard';
-import '@/styles/global.css'
----
-
-<AuthLayout title="Panel de Administrador">
-  <Navbar client:load />
-  <AdminDashboard client:load />
+---
+import AuthLayout from '../layouts/AuthLayout.astro';
+import NotificationExample from '../components/ui/NotificationExample';
+import { Navbar } from '../components/common/Navbar';
+import AdminDashboard from '../components/admin/AdminDashboard';
+import '@/styles/global.css'
+import '../styles/notifications.css'
+console.log("Loaded admin.astro with notifications styling")
+---
+
+<AuthLayout title="Panel de Administrador">
+  <Navbar client:load />
+  <NotificationExample client:load />
+  <AdminDashboard client:load />
 </AuthLayout>

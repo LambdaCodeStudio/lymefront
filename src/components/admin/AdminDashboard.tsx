@@ -12,6 +12,7 @@ import OrdersSection from './OrdersSection';
 import { DashboardContext, useDashboardState } from '@/hooks/useDashboard';
 import DashboardSection from './shared/DashboardSection';
 import { useAuth } from '@/hooks/useAuth';
+import { InventoryProvider } from '@/context/InventoryProvider';
 
 // Definición de las secciones
 interface Section {
@@ -45,12 +46,12 @@ const AdminDashboard: React.FC = () => {
 
   // Verificar si es administrador
   useEffect(() => {
-    if (auth.user && auth.user.role !== 'admin') {
+    if (auth.user && auth.user.role !== 'admin' && auth.user.role !== 'basic') {
       window.location.href = '/unauthorized';
     }
   }, [auth.user]);
 
-  // Definimos las secciones disponibles
+  // Definimos las secciones disponibles con el componente de Inventario envuelto en InventoryProvider
   const sections: Section[] = [
     {
       id: 'inventory',
@@ -88,32 +89,34 @@ const AdminDashboard: React.FC = () => {
   }
 
   return (
-    <DashboardContext.Provider value={dashboardState}>
-      <div className="min-h-screen bg-gray-50 py-6">
-        <div className="max-w-7xl mx-auto px-4">
-          <h1 className="text-2xl font-bold text-gray-900 mb-6 transform transition-all duration-300 ease-out hover:translate-x-2">
-            Panel de Administración
-          </h1>
-          
-          <div className="bg-white rounded-lg shadow-md transition-all duration-300 ease-in-out hover:shadow-lg">
-            {sections.map(section => (
-              <DashboardSection 
-                key={section.id}
-                id={section.id}
-                label={section.label}
-                icon={section.icon}
-                isExpanded={currentSection === section.id}
-                onToggle={() => changeSection(
-                  currentSection === section.id ? null : section.id
-                )}
-              >
-                {section.component}
-              </DashboardSection>
-            ))}
+    <InventoryProvider>
+      <DashboardContext.Provider value={dashboardState}>
+        <div className="min-h-screen bg-gray-50 py-6">
+          <div className="max-w-7xl mx-auto px-4">
+            <h1 className="text-2xl font-bold text-gray-900 mb-6 transform transition-all duration-300 ease-out hover:translate-x-2">
+              Panel de Administración
+            </h1>
+            
+            <div className="bg-white rounded-lg shadow-md transition-all duration-300 ease-in-out hover:shadow-lg">
+              {sections.map(section => (
+                <DashboardSection 
+                  key={section.id}
+                  id={section.id}
+                  label={section.label}
+                  icon={section.icon}
+                  isExpanded={currentSection === section.id}
+                  onToggle={() => changeSection(
+                    currentSection === section.id ? null : section.id
+                  )}
+                >
+                  {section.component}
+                </DashboardSection>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
-    </DashboardContext.Provider>
+      </DashboardContext.Provider>
+    </InventoryProvider>
   );
 };
 

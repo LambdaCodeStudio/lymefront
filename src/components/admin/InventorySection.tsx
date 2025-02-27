@@ -42,6 +42,10 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import type { Product, ProductFilters } from '@/types/inventory';
+// Importar el contexto de notificaciones
+import { useNotification } from '@/context/NotificationContext';
+// Importar el observable
+import { inventoryObservable, getAuthToken } from '@/utils/inventoryUtils';
 
 // Extendemos la interfaz Product para incluir campos de imagen
 interface ProductExtended extends Product {
@@ -52,7 +56,7 @@ interface ProductExtended extends Product {
 interface FormData {
   nombre: string;
   descripcion: string;
-  categoria: 'limpieza' | 'mantenimiento';
+  categoria: string; // Cambiado de tipo específico a string para evitar problemas de tipado
   subCategoria: string;
   precio: string;
   stock: string;
@@ -61,6 +65,21 @@ interface FormData {
 }
 
 const InventorySection: React.FC = () => {
+  // Intentar usar el sistema de notificaciones
+  let notificationSystem;
+  try {
+    notificationSystem = useNotification();
+  } catch (e) {
+    // Crear un sistema de notificación falso si el proveedor no está disponible
+    notificationSystem = {
+      addNotification: (message: string, type: string) => {
+        console.log(`Notification (${type}): ${message}`);
+      }
+    };
+  }
+  
+  const { addNotification } = notificationSystem;
+
   const [products, setProducts] = useState<ProductExtended[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>('');
@@ -90,7 +109,7 @@ const InventorySection: React.FC = () => {
   });
 
   // Subcategorías organizadas por categoría
-  const subCategorias = {
+  const subCategorias: Record<string, Array<{value: string, label: string}>> = {
     limpieza: [
       { value: 'accesorios', label: 'Accesorios' },
       { value: 'aerosoles', label: 'Aerosoles' },
@@ -111,25 +130,38 @@ const InventorySection: React.FC = () => {
     ]
   };
 
-  // Obtener token de autenticación de forma segura (solo en el cliente)
-  const getAuthToken = () => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('token');
-    }
-    return null;
-  };
+  // Debugging para ver cambios en el formulario
+  useEffect(() => {
+    console.log("Estado actual del formulario:", formData);
+  }, [formData]);
 
-  // Cargar productos
+  // Cargar productos y suscribirse al observable
   useEffect(() => {
     fetchProducts();
+    
+    // Suscribirse al observable de inventario
+    const unsubscribe = inventoryObservable.subscribe(() => {
+      console.log('InventorySection: Actualización de inventario notificada por observable');
+      fetchProducts();
+    });
+    
+    // Limpiar la suscripción al desmontar el componente
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const fetchProducts = async () => {
     try {
       setLoading(true);
+      const token = getAuthToken();
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
+
       const response = await fetch('http://localhost:4000/api/producto', {
         headers: {
-          'Authorization': `Bearer ${getAuthToken()}`
+          'Authorization': `Bearer ${token}`
         }
       });
       
@@ -147,9 +179,12 @@ const InventorySection: React.FC = () => {
       }
       
       const data = await response.json();
+      console.log(`Productos actualizados: ${data.length}`);
       setProducts(data);
     } catch (err: any) {
-      setError('Error al cargar productos: ' + err.message);
+      const errorMsg = 'Error al cargar productos: ' + err.message;
+      setError(errorMsg);
+      addNotification(errorMsg, 'error');
     } finally {
       setLoading(false);
     }
@@ -208,6 +243,8 @@ const InventorySection: React.FC = () => {
         imagen: formData.imagen?.split(',')[1] || null // Extraer la parte base64 sin el prefijo data:image
       };
       
+      console.log("Enviando payload:", payload);
+      
       const response = await fetch(url, {
         method,
         headers: {
@@ -224,13 +261,19 @@ const InventorySection: React.FC = () => {
       
       setShowModal(false);
       resetForm();
-      fetchProducts();
-      setSuccessMessage(`Producto ${editingProduct ? 'actualizado' : 'creado'} correctamente`);
+      await fetchProducts(); // Actualizar datos localmente
+      // No es necesario llamar a refreshInventory aquí, solo lo hacemos en OrdersSection
+      
+      const successMsg = `Producto ${editingProduct ? 'actualizado' : 'creado'} correctamente`;
+      setSuccessMessage(successMsg);
+      addNotification(successMsg, 'success');
       
       // Limpiar mensaje después de unos segundos
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err: any) {
-      setError('Error al guardar producto: ' + err.message);
+      const errorMsg = 'Error al guardar producto: ' + err.message;
+      setError(errorMsg);
+      addNotification(errorMsg, 'error');
     }
   };
 
@@ -256,13 +299,19 @@ const InventorySection: React.FC = () => {
         throw new Error(error.error || 'Error al eliminar producto');
       }
       
-      fetchProducts();
-      setSuccessMessage('Producto eliminado correctamente');
+      await fetchProducts(); // Actualizar datos localmente
+      // No es necesario llamar a refreshInventory aquí, solo lo hacemos en OrdersSection
+      
+      const successMsg = 'Producto eliminado correctamente';
+      setSuccessMessage(successMsg);
+      addNotification(successMsg, 'success');
       
       // Limpiar mensaje después de unos segundos
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err: any) {
-      setError('Error al eliminar producto: ' + err.message);
+      const errorMsg = 'Error al eliminar producto: ' + err.message;
+      setError(errorMsg);
+      addNotification(errorMsg, 'error');
     }
   };
 
@@ -286,13 +335,19 @@ const InventorySection: React.FC = () => {
         throw new Error(error.error || 'Error al registrar la venta');
       }
       
-      fetchProducts();
-      setSuccessMessage('Venta registrada correctamente');
+      await fetchProducts(); // Actualizar datos localmente
+      // No es necesario llamar a refreshInventory aquí, solo lo hacemos en OrdersSection
+      
+      const successMsg = 'Venta registrada correctamente';
+      setSuccessMessage(successMsg);
+      addNotification(successMsg, 'success');
       
       // Limpiar mensaje después de unos segundos
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err: any) {
-      setError('Error al registrar venta: ' + err.message);
+      const errorMsg = 'Error al registrar venta: ' + err.message;
+      setError(errorMsg);
+      addNotification(errorMsg, 'error');
     }
   };
 
@@ -316,13 +371,19 @@ const InventorySection: React.FC = () => {
         throw new Error(error.error || 'Error al cancelar la venta');
       }
       
-      fetchProducts();
-      setSuccessMessage('Venta cancelada correctamente');
+      await fetchProducts(); // Actualizar datos localmente
+      // No es necesario llamar a refreshInventory aquí, solo lo hacemos en OrdersSection
+      
+      const successMsg = 'Venta cancelada correctamente';
+      setSuccessMessage(successMsg);
+      addNotification(successMsg, 'success');
       
       // Limpiar mensaje después de unos segundos
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err: any) {
-      setError('Error al cancelar venta: ' + err.message);
+      const errorMsg = 'Error al cancelar venta: ' + err.message;
+      setError(errorMsg);
+      addNotification(errorMsg, 'error');
     }
   };
 
@@ -358,6 +419,22 @@ const InventorySection: React.FC = () => {
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+  };
+
+  // Manejar cambio de categoría
+  const handleCategoryChange = (value: string) => {
+    console.log("Cambiando categoría a:", value);
+    
+    // Asegurarnos de que la subcategoría corresponda a la nueva categoría
+    const defaultSubcategoria = subCategorias[value][0].value;
+    
+    setFormData({
+      ...formData,
+      categoria: value,
+      subCategoria: defaultSubcategoria
+    });
+    
+    console.log("Nueva subcategoría seleccionada:", defaultSubcategoria);
   };
 
   // Filtrar productos
@@ -700,15 +777,9 @@ const InventorySection: React.FC = () => {
                   <Label htmlFor="categoria" className="text-sm">Categoría</Label>
                   <Select
                     value={formData.categoria}
-                    onValueChange={(value: 'limpieza' | 'mantenimiento') => {
-                      setFormData({
-                        ...formData,
-                        categoria: value,
-                        subCategoria: subCategorias[value][0].value
-                      });
-                    }}
+                    onValueChange={handleCategoryChange}
                   >
-                    <SelectTrigger className="mt-1">
+                    <SelectTrigger id="categoria" className="mt-1">
                       <SelectValue placeholder="Seleccionar categoría" />
                     </SelectTrigger>
                     <SelectContent>
@@ -724,11 +795,11 @@ const InventorySection: React.FC = () => {
                     value={formData.subCategoria}
                     onValueChange={(value) => setFormData({ ...formData, subCategoria: value })}
                   >
-                    <SelectTrigger className="mt-1">
+                    <SelectTrigger id="subCategoria" className="mt-1">
                       <SelectValue placeholder="Seleccionar subcategoría" />
                     </SelectTrigger>
                     <SelectContent>
-                      {subCategorias[formData.categoria].map((sub) => (
+                      {subCategorias[formData.categoria]?.map((sub) => (
                         <SelectItem key={sub.value} value={sub.value}>
                           {sub.label}
                         </SelectItem>

@@ -1,5 +1,6 @@
 // src/services/inventoryService.ts
-import { BaseService, PaginationParams } from './baseService';
+import { BaseService } from './baseService';
+import type { PaginationParams } from './baseService';
 import api from './api';
 import type { Product, ProductFilters, CreateProductData, UpdateProductData } from '@/types/inventory';
 
