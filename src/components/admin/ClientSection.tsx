@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Plus, 
-  Search, 
-  FileEdit, 
-  Trash2, 
-  Loader2, 
+import {
+  Plus,
+  Search,
+  FileEdit,
+  Trash2,
+  Loader2,
   AlertCircle,
   UserPlus,
   Check,
@@ -17,20 +17,20 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
   DialogFooter,
-  DialogDescription 
+  DialogDescription
 } from "@/components/ui/dialog";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -97,7 +97,7 @@ interface UpdateClientData {
 const ClientsSection: React.FC = () => {
   // Acceder al contexto del dashboard
   const { selectedUserId } = useDashboard();
-  
+
   // Estados
   const [clients, setClients] = useState<Client[]>([]);
   const [users, setUsers] = useState<UserExtended[]>([]);
@@ -144,12 +144,12 @@ const ClientsSection: React.FC = () => {
     if (typeof window !== 'undefined') {
       const storedSelectedUserId = localStorage.getItem('selectedUserId');
       const lastCreatedUserId = localStorage.getItem('lastCreatedUserId');
-      
+
       // Priorizar el userId del contexto, luego el almacenado, luego el último creado
       if (selectedUserId) {
         console.log("Usando selectedUserId del contexto:", selectedUserId);
         setActiveUserId(selectedUserId);
-        
+
         // Inicializar el formulario con este usuario si se abre para agregar un nuevo cliente
         setFormData(prev => ({
           ...prev,
@@ -241,18 +241,18 @@ const ClientsSection: React.FC = () => {
 
       const data = await response.json();
       // Filtrar solo usuarios básicos y activos
-      const activeBasicUsers = data.filter((user: any) => 
+      const activeBasicUsers = data.filter((user: any) =>
         user.role === 'basic' && user.isActive === true
       );
       console.log("Usuarios básicos activos:", activeBasicUsers.length);
-      
+
       // Asegurar que tenemos los emails para todos los usuarios
       activeBasicUsers.forEach((user: UserExtended) => {
         console.log(`Usuario: ${user._id}, Email: ${user.email || 'No disponible'}`);
       });
-      
+
       setUsers(activeBasicUsers);
-      
+
       // Si hay un usuario activo seleccionado, mostrar en consola para depuración
       if (activeUserId !== "all") {
         const activeUser = activeBasicUsers.find((u: { _id: string; }) => u._id === activeUserId);
@@ -292,7 +292,7 @@ const ClientsSection: React.FC = () => {
       await fetchClients();
       setShowModal(false);
       resetForm();
-      setSuccessMessage(formData.seccionDelServicio 
+      setSuccessMessage(formData.seccionDelServicio
         ? `Nueva sección "${formData.seccionDelServicio}" agregada al servicio "${formData.servicio}"`
         : 'Cliente creado correctamente');
       setTimeout(() => setSuccessMessage(''), 5000);
@@ -411,19 +411,19 @@ const ClientsSection: React.FC = () => {
   // Agregar nueva sección a un cliente existente
   const handleAddSection = (client: Client) => {
     console.log(`Agregando nueva sección al servicio: ${client.servicio}`);
-    
+
     // Indicamos que es una nueva entidad (no es edición)
     setCurrentClient(null);
-    
+
     // Preparar el formulario con datos del servicio padre
     setFormData({
       servicio: client.servicio,       // Mantener el mismo servicio (cliente padre)
       seccionDelServicio: '',          // Nueva sección (vacía para que el usuario la complete)
-      userId: typeof client.userId === 'object' 
-        ? client.userId._id 
+      userId: typeof client.userId === 'object'
+        ? client.userId._id
         : client.userId                // Mantener el mismo usuario por defecto
     });
-    
+
     // Abrir el modal para agregar sección
     setShowModal(true);
   };
@@ -453,7 +453,7 @@ const ClientsSection: React.FC = () => {
       }
 
       const clientesDelServicio = clients.filter(c => c.servicio === currentService);
-      
+
       // Actualizamos cada cliente que pertenece a este servicio
       const updatePromises = clientesDelServicio.map(client => {
         return fetch(`http://localhost:4000/api/cliente/${client._id}`, {
@@ -472,7 +472,7 @@ const ClientsSection: React.FC = () => {
 
       // Esperar a que todas las actualizaciones se completen
       const results = await Promise.allSettled(updatePromises);
-      
+
       // Verificar si hubo errores
       const errors = results.filter(r => r.status === 'rejected');
       if (errors.length > 0) {
@@ -501,10 +501,10 @@ const ClientsSection: React.FC = () => {
 
       const clientesDelServicio = clients.filter(c => c.servicio === currentService);
       console.log(`Eliminando servicio "${currentService}" con ${clientesDelServicio.length} secciones`);
-      
+
       // Eliminamos cada cliente de forma secuencial para mayor control
       const fallosEliminacion = [];
-      
+
       // Procesamos uno por uno para mejor control y depuración
       for (const client of clientesDelServicio) {
         console.log(`Eliminando sección: ${client._id} - ${client.seccionDelServicio || 'Sin sección'}`);
@@ -515,7 +515,7 @@ const ClientsSection: React.FC = () => {
               'Authorization': `Bearer ${token}`
             }
           });
-          
+
           // Verificar el resultado de cada eliminación
           if (!response.ok) {
             // Intentar obtener el detalle del error
@@ -525,7 +525,7 @@ const ClientsSection: React.FC = () => {
             } catch (e) {
               errorDetail = await response.text();
             }
-            
+
             fallosEliminacion.push({
               id: client._id,
               seccion: client.seccionDelServicio || 'Sin sección',
@@ -544,11 +544,11 @@ const ClientsSection: React.FC = () => {
           });
           console.error(`Excepción al eliminar sección ${client._id}:`, error);
         }
-        
+
         // Pequeña pausa para evitar sobrecarga
         await new Promise(resolve => setTimeout(resolve, 100));
       }
-      
+
       // Verificar si hubo errores
       if (fallosEliminacion.length > 0) {
         console.error('Fallos en eliminación:', fallosEliminacion);
@@ -573,7 +573,7 @@ const ClientsSection: React.FC = () => {
     setClientToDelete(id);
     setShowDeleteClientModal(true);
   };
-  
+
   // Ejecutar eliminación después de confirmación en el modal
   const executeDeleteClient = () => {
     if (clientToDelete) {
@@ -598,13 +598,13 @@ const ClientsSection: React.FC = () => {
   const getUserIdentifierById = (userId: string) => {
     const user = users.find(u => u._id === userId);
     if (!user) return 'Usuario no encontrado';
-    
+
     // Priorizar mostrar el email, ya que es lo que se usa principalmente para identificar usuarios
     if (user.email) return user.email;
     if (user.usuario) return user.usuario;
     if (user.nombre && user.apellido) return `${user.nombre} ${user.apellido}`;
     if (user.nombre) return user.nombre;
-    
+
     return `Usuario ID: ${userId.substring(0, 8)}`;
   };
 
@@ -614,32 +614,32 @@ const ClientsSection: React.FC = () => {
     if (typeof client.userId === 'object' && client.userId !== null) {
       if (client.userId.email) return client.userId.email;
       if (client.userId.usuario) return client.userId.usuario;
-      if (client.userId.nombre && client.userId.apellido) 
+      if (client.userId.nombre && client.userId.apellido)
         return `${client.userId.nombre} ${client.userId.apellido}`;
       return 'Correo no disponible';
     }
-    
+
     // Si sigue siendo un string (ID), buscar en users
     const user = users.find(u => u._id === client.userId);
     if (user?.email) return user.email;
     if (user?.usuario) return user.usuario;
-    
+
     return 'Correo no disponible';
   };
 
   // Filtrar clientes
   const filteredClients = clients.filter(client => {
     // Filtro por texto de búsqueda
-    const matchesSearch = 
+    const matchesSearch =
       client.servicio.toLowerCase().includes(searchTerm.toLowerCase()) ||
       client.seccionDelServicio.toLowerCase().includes(searchTerm.toLowerCase());
-    
+
     // Filtro por usuario seleccionado
-    const matchesUser = activeUserId === "all" || 
-      (typeof client.userId === 'object' 
-        ? client.userId._id === activeUserId 
+    const matchesUser = activeUserId === "all" ||
+      (typeof client.userId === 'object'
+        ? client.userId._id === activeUserId
         : client.userId === activeUserId);
-    
+
     return matchesSearch && matchesUser;
   });
 
@@ -655,8 +655,8 @@ const ClientsSection: React.FC = () => {
   // Modal automático para crear cliente si hay un usuario seleccionado y no hay clientes
   useEffect(() => {
     if (activeUserId !== "all" && !loading && clients.filter(c => {
-      return typeof c.userId === 'object' 
-        ? c.userId._id === activeUserId 
+      return typeof c.userId === 'object'
+        ? c.userId._id === activeUserId
         : c.userId === activeUserId;
     }).length === 0) {
       // Abrir automáticamente el modal para crear un cliente para este usuario
@@ -714,7 +714,7 @@ const ClientsSection: React.FC = () => {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        
+
         {/* Filtro por usuario */}
         <div>
           <Select
@@ -734,7 +734,7 @@ const ClientsSection: React.FC = () => {
             </SelectContent>
           </Select>
         </div>
-        
+
         {/* Botón Nuevo Cliente */}
         <div className="flex justify-end">
           <Button
@@ -762,8 +762,8 @@ const ClientsSection: React.FC = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             className="flex-shrink-0"
             onClick={() => setIsMobileFilterOpen(!isMobileFilterOpen)}
           >
@@ -827,19 +827,17 @@ const ClientsSection: React.FC = () => {
                     <Building className="w-5 h-5 text-gray-500 mr-2" />
                     <h3 className="text-lg font-medium">{servicio}</h3>
                   </div>
-                  
+
                   <div className="flex items-center gap-2">
                     {/* Botón para agregar nueva sección al servicio */}
-                    {activeUserId !== "all" && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleAddSection(clientesDelServicio[0])}
-                      >
-                        <Plus className="w-4 h-4 mr-1" />
-                        Agregar Sección
-                      </Button>
-                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleAddSection(clientesDelServicio[0])}
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      Agregar Sección
+                    </Button>
 
                     {/* Menú desplegable para opciones del servicio */}
                     <DropdownMenu>
@@ -853,7 +851,7 @@ const ClientsSection: React.FC = () => {
                           <FileEdit className="w-4 h-4 mr-2 text-blue-600" />
                           Editar Servicio
                         </DropdownMenuItem>
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           className="text-red-600"
                           onClick={() => handleShowDeleteService(servicio)}
                         >
@@ -864,7 +862,7 @@ const ClientsSection: React.FC = () => {
                     </DropdownMenu>
                   </div>
                 </div>
-                
+
                 <div className="divide-y divide-gray-100">
                   {clientesDelServicio.map(client => (
                     <div key={client._id} className="p-4 hover:bg-gray-50 flex justify-between items-center">
@@ -879,10 +877,10 @@ const ClientsSection: React.FC = () => {
                                   <div className="flex items-center">
                                     <Users className="w-3 h-3 mr-1 inline" />
                                     Usuario Asignado: <strong className="ml-1">{
-                                      typeof client.userId === 'object' && client.userId.email 
-                                        ? client.userId.email 
-                                        : typeof client.userId === 'string' 
-                                          ? getUserIdentifierById(client.userId) 
+                                      typeof client.userId === 'object' && client.userId.email
+                                        ? client.userId.email
+                                        : typeof client.userId === 'string'
+                                          ? getUserIdentifierById(client.userId)
                                           : 'No disponible'
                                     }</strong>
                                   </div>
@@ -899,10 +897,10 @@ const ClientsSection: React.FC = () => {
                               <div className="flex items-center">
                                 <Users className="w-3 h-3 mr-1 inline" />
                                 Usuario Asignado: <strong className="ml-1">{
-                                  typeof client.userId === 'object' && client.userId.email 
-                                    ? client.userId.email 
-                                    : typeof client.userId === 'string' 
-                                      ? getUserIdentifierById(client.userId) 
+                                  typeof client.userId === 'object' && client.userId.email
+                                    ? client.userId.email
+                                    : typeof client.userId === 'string'
+                                      ? getUserIdentifierById(client.userId)
                                       : 'No disponible'
                                 }</strong>
                               </div>
@@ -915,7 +913,7 @@ const ClientsSection: React.FC = () => {
                           )}
                         </div>
                       </div>
-                      
+
                       <div className="flex gap-2">
                         <Button
                           variant="ghost"
@@ -950,7 +948,7 @@ const ClientsSection: React.FC = () => {
                     <Building className="w-4 h-4 text-gray-500 mr-2" />
                     <h3 className="text-base font-semibold">{servicio}</h3>
                   </div>
-                  
+
                   <div className="flex gap-2">
                     {/* Botón móvil para agregar nueva sección */}
                     {activeUserId !== "all" && (
@@ -964,7 +962,7 @@ const ClientsSection: React.FC = () => {
                         <Plus className="w-4 h-4" />
                       </Button>
                     )}
-                    
+
                     {/* Menú móvil para opciones del servicio */}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -977,7 +975,7 @@ const ClientsSection: React.FC = () => {
                           <FileEdit className="w-4 h-4 mr-2 text-blue-600" />
                           Editar Servicio
                         </DropdownMenuItem>
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           className="text-red-600"
                           onClick={() => handleShowDeleteService(servicio)}
                         >
@@ -988,7 +986,7 @@ const ClientsSection: React.FC = () => {
                     </DropdownMenu>
                   </div>
                 </div>
-                
+
                 <div className="grid grid-cols-1 gap-3">
                   {clientesDelServicio.map(client => (
                     <Card key={client._id} className="overflow-hidden">
@@ -1010,10 +1008,10 @@ const ClientsSection: React.FC = () => {
                           <div className="flex items-center">
                             <Users className="w-3 h-3 mr-1" />
                             <span>Usuario Asignado: <strong>{
-                              typeof client.userId === 'object' && client.userId.email 
-                                ? client.userId.email 
-                                : typeof client.userId === 'string' 
-                                  ? getUserIdentifierById(client.userId) 
+                              typeof client.userId === 'object' && client.userId.email
+                                ? client.userId.email
+                                : typeof client.userId === 'string'
+                                  ? getUserIdentifierById(client.userId)
                                   : 'No disponible'
                             }</strong></span>
                           </div>
@@ -1058,10 +1056,10 @@ const ClientsSection: React.FC = () => {
         <DialogContent className="sm:max-w-md max-h-[90vh] overflow-auto">
           <DialogHeader className="sticky top-0 bg-white pt-4 pb-2 z-10">
             <DialogTitle>
-              {currentClient 
-                ? 'Editar Cliente' 
-                : formData.seccionDelServicio || !formData.servicio 
-                  ? 'Nuevo Cliente' 
+              {currentClient
+                ? 'Editar Cliente'
+                : formData.seccionDelServicio || !formData.servicio
+                  ? 'Nuevo Cliente'
                   : 'Nueva Sección'}
             </DialogTitle>
             {formData.servicio && !currentClient && (
@@ -1070,7 +1068,7 @@ const ClientsSection: React.FC = () => {
               </DialogDescription>
             )}
           </DialogHeader>
-          
+
           <form onSubmit={currentClient ? handleUpdateClient : handleCreateClient} className="space-y-4 py-2">
             <div>
               <Label htmlFor="servicio" className="text-sm">Servicio</Label>
@@ -1087,7 +1085,7 @@ const ClientsSection: React.FC = () => {
                   id="servicio"
                   placeholder="Ej: Ministerio de Salud, Estudiante La Plata"
                   value={formData.servicio}
-                  onChange={(e) => setFormData({...formData, servicio: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, servicio: e.target.value })}
                   required
                   className="mt-1"
                 />
@@ -1101,8 +1099,8 @@ const ClientsSection: React.FC = () => {
 
             <div>
               <Label htmlFor="seccionDelServicio" className="text-sm">
-                {(currentClient?.seccionDelServicio || (!currentClient && formData.servicio)) 
-                  ? "Nombre de la Sección" 
+                {(currentClient?.seccionDelServicio || (!currentClient && formData.servicio))
+                  ? "Nombre de la Sección"
                   : "Sección del Servicio (opcional)"}
               </Label>
               <Input
@@ -1113,7 +1111,7 @@ const ClientsSection: React.FC = () => {
                     : "Deje en blanco si no aplica una sección específica"
                 }
                 value={formData.seccionDelServicio}
-                onChange={(e) => setFormData({...formData, seccionDelServicio: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, seccionDelServicio: e.target.value })}
                 className="mt-1"
                 required={!currentClient && formData.servicio ? true : false}
               />
@@ -1137,7 +1135,7 @@ const ClientsSection: React.FC = () => {
                 <>
                   <Select
                     value={formData.userId}
-                    onValueChange={(value) => setFormData({...formData, userId: value})}
+                    onValueChange={(value) => setFormData({ ...formData, userId: value })}
                   >
                     <SelectTrigger className="mt-1">
                       <SelectValue placeholder="Seleccionar usuario" />
@@ -1150,7 +1148,7 @@ const ClientsSection: React.FC = () => {
                       ))}
                     </SelectContent>
                   </Select>
-                  
+
                   {/* Añadir muestra del correo del usuario seleccionado */}
                   {formData.userId && (
                     <div className="mt-2 text-sm text-blue-600 flex items-center">
@@ -1182,10 +1180,10 @@ const ClientsSection: React.FC = () => {
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     Procesando...
                   </span>
-                ) : currentClient 
-                  ? 'Guardar Cambios' 
-                  : formData.seccionDelServicio || !formData.servicio 
-                    ? 'Crear Cliente' 
+                ) : currentClient
+                  ? 'Guardar Cambios'
+                  : formData.seccionDelServicio || !formData.servicio
+                    ? 'Crear Cliente'
                     : 'Agregar Sección'}
               </Button>
             </DialogFooter>
@@ -1202,7 +1200,7 @@ const ClientsSection: React.FC = () => {
               Cambiar el nombre del servicio "{currentService}". Esta acción actualizará todas las secciones asociadas.
             </DialogDescription>
           </DialogHeader>
-          
+
           <form onSubmit={handleUpdateService} className="space-y-4 py-2">
             <div>
               <Label htmlFor="nuevoNombre" className="text-sm">Nuevo Nombre del Servicio</Label>
@@ -1210,7 +1208,7 @@ const ClientsSection: React.FC = () => {
                 id="nuevoNombre"
                 placeholder="Ingrese el nuevo nombre del servicio"
                 value={serviceFormData.nuevoNombre}
-                onChange={(e) => setServiceFormData({nuevoNombre: e.target.value})}
+                onChange={(e) => setServiceFormData({ nuevoNombre: e.target.value })}
                 required
                 className="mt-1"
               />
@@ -1252,13 +1250,13 @@ const ClientsSection: React.FC = () => {
               ¿Está seguro de eliminar el servicio "{currentService}" y todas sus secciones? Esta acción no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="bg-red-50 p-3 rounded-md border border-red-200 text-sm">
             <p>Se eliminarán <strong>{
               clients.filter(c => c.servicio === currentService).length
             } secciones</strong> asociadas a este servicio.</p>
           </div>
-          
+
           <DialogFooter className="gap-2 mt-4">
             <Button
               type="button"
@@ -1284,7 +1282,7 @@ const ClientsSection: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      
+
       {/* Modal de Confirmación para Eliminar Cliente individual */}
       <Dialog open={showDeleteClientModal} onOpenChange={(open) => !deletingOperation && setShowDeleteClientModal(open)}>
         <DialogContent className="sm:max-w-md">
@@ -1297,7 +1295,7 @@ const ClientsSection: React.FC = () => {
               ¿Está seguro de eliminar este cliente? Esta acción no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
-          
+
           {clientToDelete && (
             <div className="bg-red-50 p-3 rounded-md border border-red-200 text-sm">
               <p>ID del cliente: <strong>{clientToDelete}</strong></p>
@@ -1307,7 +1305,7 @@ const ClientsSection: React.FC = () => {
               <p className="mt-1">Servicio: <strong>{clients.find(c => c._id === clientToDelete)?.servicio}</strong></p>
             </div>
           )}
-          
+
           <DialogFooter className="gap-2 mt-4">
             <Button
               type="button"
