@@ -1,0 +1,82 @@
+/* shop-global.css - Add to your styles folder and import in your main CSS file */
+
+/* Base theme overrides for shop */
+.shop-theme {
+    background-color: #0f172a !important; /* slate-900 */
+    color: #f8fafc !important; /* slate-50 */
+  }
+  
+  /* Force background classes to use dark mode */
+  .bg-white, 
+  .bg-gray-50, 
+  .bg-gray-100, 
+  .bg-gray-200, 
+  .bg-gray-300 {
+    background-color: rgba(30, 41, 59, 0.8) !important; /* slate-800 with opacity */
+  }
+  
+  /* Input fields styling */
+  .shop-theme input,
+  .shop-theme textarea,
+  .shop-theme select {
+    background-color: rgba(51, 65, 85, 0.5) !important; /* slate-700 with opacity */
+    border-color: #475569 !important; /* slate-600 */
+    color: #f1f5f9 !important; /* slate-100 */
+  }
+  
+  .shop-theme input::placeholder,
+  .shop-theme textarea::placeholder {
+    color: #94a3b8 !important; /* slate-400 */
+  }
+  
+  /* Card styling */
+  .shop-theme .card {
+    background-color: rgba(30, 41, 59, 0.7) !important; /* slate-800 with opacity */
+    border-color: #1e293b !important; /* slate-800 */
+  }
+  
+  /* Button styling */
+  .shop-theme button:not([class*="bg-"]) {
+    background-color: #4c1d95 !important; /* purple-900 */
+    color: #f1f5f9 !important; /* slate-100 */
+  }
+  
+  /* Text color overrides */
+  .shop-theme .text-gray-700,
+  .shop-theme .text-gray-800,
+  .shop-theme .text-gray-900,
+  .shop-theme .text-black {
+    color: #e2e8f0 !important; /* slate-200 */
+  }
+  
+  .shop-theme .text-gray-500,
+  .shop-theme .text-gray-600 {
+    color: #94a3b8 !important; /* slate-400 */
+  }
+  
+  /* Dialog/Modal styling */
+  .shop-theme .dialog,
+  .shop-theme .modal {
+    background-color: #1e293b !important; /* slate-800 */
+    border-color: #334155 !important; /* slate-700 */
+  }
+  
+  /* Table styling */
+  .shop-theme table {
+    background-color: rgba(30, 41, 59, 0.7) !important; /* slate-800 with opacity */
+    color: #f1f5f9 !important; /* slate-100 */
+  }
+  
+  .shop-theme th, 
+  .shop-theme td {
+    border-color: #334155 !important; /* slate-700 */
+  }
+  
+  /* Ensure that shadow effects work well in dark mode */
+  .shop-theme .shadow,
+  .shop-theme .shadow-sm,
+  .shop-theme .shadow-md,
+  .shop-theme .shadow-lg,
+  .shop-theme .shadow-xl {
+    --tw-shadow-color: rgba(76, 29, 149, 0.15) !important; /* purple-900 with opacity */
+  }
