@@ -11,6 +11,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { NotificationProvider } from '@/context/NotificationContext';
+import { NotificationsContainer } from '@/components/ui/Notifications';
 
 // Importar componentes modularizados
 import UserTable from './components/UserTable';
@@ -35,7 +36,6 @@ const UserManagementContent: React.FC = () => {
     editingUser,
     searchTerm,
     showInactiveUsers,
-    successMessage,
     formData,
     availableRoles,
     setSearchTerm,
@@ -55,18 +55,14 @@ const UserManagementContent: React.FC = () => {
 
   return (
     <div className="p-4 md:p-6 space-y-6">
-      {/* Alertas */}
+      {/* Contenedor de notificaciones */}
+      <NotificationsContainer />
+      
+      {/* Alertas solo para errores críticos */}
       {error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      
-      {successMessage && (
-        <Alert variant="default" className="bg-green-50 border-green-200">
-          <CheckCircle className="h-4 w-4 text-green-500" />
-          <AlertDescription>{successMessage}</AlertDescription>
         </Alert>
       )}
 

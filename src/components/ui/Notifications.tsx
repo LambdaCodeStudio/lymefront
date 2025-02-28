@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNotification, Notification } from '../../context/NotificationContext';
+import { useNotification, type Notification } from '../../context/NotificationContext';
 
 const getNotificationStyles = (type: Notification['type']) => {
   const baseStyles = 'p-4 mb-3 rounded-md shadow-lg flex justify-between items-center';

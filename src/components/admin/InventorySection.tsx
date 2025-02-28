@@ -34,15 +34,14 @@ import {
   CheckCircle,
   PackageOpen,
   DollarSign,
-  ShoppingCart,
-  ArrowLeft,
+  AlertTriangle,
   Image,
   X
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import type { Product, ProductFilters } from '@/types/inventory';
-// Importar el contexto de notificaciones
+// Importación correcta sin try/catch
 import { useNotification } from '@/context/NotificationContext';
 // Importar el observable
 import { inventoryObservable, getAuthToken } from '@/utils/inventoryUtils';
@@ -56,7 +55,7 @@ interface ProductExtended extends Product {
 interface FormData {
   nombre: string;
   descripcion: string;
-  categoria: string; // Cambiado de tipo específico a string para evitar problemas de tipado
+  categoria: string; 
   subCategoria: string;
   precio: string;
   stock: string;
@@ -64,21 +63,14 @@ interface FormData {
   imagen?: string | null;
 }
 
+// Definir umbral de stock bajo
+const LOW_STOCK_THRESHOLD = 10;
+
 const InventorySection: React.FC = () => {
-  // Intentar usar el sistema de notificaciones
-  let notificationSystem;
-  try {
-    notificationSystem = useNotification();
-  } catch (e) {
-    // Crear un sistema de notificación falso si el proveedor no está disponible
-    notificationSystem = {
-      addNotification: (message: string, type: string) => {
-        console.log(`Notification (${type}): ${message}`);
-      }
-    };
-  }
-  
-  const { addNotification } = notificationSystem;
+  // Usar directamente el contexto de notificaciones sin fallback
+  const { addNotification } = useNotification();
+  // También podríamos verificar si está disponible
+  console.log('NotificationContext disponible:', addNotification ? true : false);
 
   const [products, setProducts] = useState<ProductExtended[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -97,6 +89,7 @@ const InventorySection: React.FC = () => {
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
   
+  // Inicializar formData con valores predeterminados
   const [formData, setFormData] = useState<FormData>({
     nombre: '',
     descripcion: '',
@@ -134,6 +127,30 @@ const InventorySection: React.FC = () => {
   useEffect(() => {
     console.log("Estado actual del formulario:", formData);
   }, [formData]);
+
+  // Depuración específica para categorías
+  useEffect(() => {
+    console.log("Categoría actual:", formData.categoria);
+    console.log("Subcategoría actual:", formData.subCategoria);
+    console.log("Subcategorías disponibles:", subCategorias[formData.categoria] || 'No hay subcategorías');
+  }, [formData.categoria, formData.subCategoria]);
+
+  // Verificar productos con stock bajo y enviar notificación
+  useEffect(() => {
+    const lowStockProducts = products.filter(product => 
+      product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD
+    );
+    
+    if (lowStockProducts.length > 0) {
+      const productNames = lowStockProducts.map(p => p.nombre).join(', ');
+      const message = `Alerta: ${lowStockProducts.length} producto${lowStockProducts.length > 1 ? 's' : ''} con stock bajo: ${productNames}`;
+      
+      // Notificar solo si hay productos y es la primera carga (no en cada actualización)
+      if (!loading && addNotification) {
+        addNotification(message, 'warning');
+      }
+    }
+  }, [products, loading]);
 
   // Cargar productos y suscribirse al observable
   useEffect(() => {
@@ -184,7 +201,14 @@ const InventorySection: React.FC = () => {
     } catch (err: any) {
       const errorMsg = 'Error al cargar productos: ' + err.message;
       setError(errorMsg);
-      addNotification(errorMsg, 'error');
+      
+      // Asegurarnos de que addNotification sea una función antes de llamarla
+      if (typeof addNotification === 'function') {
+        addNotification(errorMsg, 'error');
+        console.log('Notificación de error enviada:', errorMsg);
+      } else {
+        console.error('addNotification no está disponible:', errorMsg);
+      }
     } finally {
       setLoading(false);
     }
@@ -262,10 +286,12 @@ const InventorySection: React.FC = () => {
       setShowModal(false);
       resetForm();
       await fetchProducts(); // Actualizar datos localmente
-      // No es necesario llamar a refreshInventory aquí, solo lo hacemos en OrdersSection
       
       const successMsg = `Producto ${editingProduct ? 'actualizado' : 'creado'} correctamente`;
       setSuccessMessage(successMsg);
+      
+      // Notificación de éxito - VERIFICAR QUE SE LLAME CORRECTAMENTE
+      console.log('Intentando mostrar notificación de éxito:', successMsg);
       addNotification(successMsg, 'success');
       
       // Limpiar mensaje después de unos segundos
@@ -273,6 +299,9 @@ const InventorySection: React.FC = () => {
     } catch (err: any) {
       const errorMsg = 'Error al guardar producto: ' + err.message;
       setError(errorMsg);
+      
+      // Notificación de error
+      console.log('Intentando mostrar notificación de error:', errorMsg);
       addNotification(errorMsg, 'error');
     }
   };
@@ -300,10 +329,12 @@ const InventorySection: React.FC = () => {
       }
       
       await fetchProducts(); // Actualizar datos localmente
-      // No es necesario llamar a refreshInventory aquí, solo lo hacemos en OrdersSection
       
       const successMsg = 'Producto eliminado correctamente';
       setSuccessMessage(successMsg);
+      
+      // Notificación de éxito
+      console.log('Intentando mostrar notificación de éxito (eliminar):', successMsg);
       addNotification(successMsg, 'success');
       
       // Limpiar mensaje después de unos segundos
@@ -311,78 +342,9 @@ const InventorySection: React.FC = () => {
     } catch (err: any) {
       const errorMsg = 'Error al eliminar producto: ' + err.message;
       setError(errorMsg);
-      addNotification(errorMsg, 'error');
-    }
-  };
-
-  // Registrar venta
-  const handleSell = async (id: string) => {
-    try {
-      const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
       
-      const response = await fetch(`http://localhost:4000/api/producto/${id}/vender`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Error al registrar la venta');
-      }
-      
-      await fetchProducts(); // Actualizar datos localmente
-      // No es necesario llamar a refreshInventory aquí, solo lo hacemos en OrdersSection
-      
-      const successMsg = 'Venta registrada correctamente';
-      setSuccessMessage(successMsg);
-      addNotification(successMsg, 'success');
-      
-      // Limpiar mensaje después de unos segundos
-      setTimeout(() => setSuccessMessage(''), 5000);
-    } catch (err: any) {
-      const errorMsg = 'Error al registrar venta: ' + err.message;
-      setError(errorMsg);
-      addNotification(errorMsg, 'error');
-    }
-  };
-
-  // Cancelar venta
-  const handleCancelSale = async (id: string) => {
-    try {
-      const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-      
-      const response = await fetch(`http://localhost:4000/api/producto/${id}/cancelar-venta`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Error al cancelar la venta');
-      }
-      
-      await fetchProducts(); // Actualizar datos localmente
-      // No es necesario llamar a refreshInventory aquí, solo lo hacemos en OrdersSection
-      
-      const successMsg = 'Venta cancelada correctamente';
-      setSuccessMessage(successMsg);
-      addNotification(successMsg, 'success');
-      
-      // Limpiar mensaje después de unos segundos
-      setTimeout(() => setSuccessMessage(''), 5000);
-    } catch (err: any) {
-      const errorMsg = 'Error al cancelar venta: ' + err.message;
-      setError(errorMsg);
+      // Notificación de error
+      console.log('Intentando mostrar notificación de error:', errorMsg);
       addNotification(errorMsg, 'error');
     }
   };
@@ -425,16 +387,69 @@ const InventorySection: React.FC = () => {
   const handleCategoryChange = (value: string) => {
     console.log("Cambiando categoría a:", value);
     
-    // Asegurarnos de que la subcategoría corresponda a la nueva categoría
-    const defaultSubcategoria = subCategorias[value][0].value;
-    
-    setFormData({
-      ...formData,
-      categoria: value,
-      subCategoria: defaultSubcategoria
-    });
-    
-    console.log("Nueva subcategoría seleccionada:", defaultSubcategoria);
+    try {
+      // Validar que value es una categoría válida
+      if (!subCategorias[value]) {
+        console.error(`Categoría no válida: ${value}`);
+        addNotification(`Error: Categoría '${value}' no válida`, 'error');
+        return;
+      }
+      
+      // Asegurarnos de que la subcategoría corresponda a la nueva categoría
+      const defaultSubcategoria = subCategorias[value][0].value;
+      console.log("Subcategorías disponibles:", subCategorias[value]);
+      console.log("Nueva subcategoría seleccionada:", defaultSubcategoria);
+      
+      // Importante: actualizar primero la categoría y luego en un segundo estado la subcategoría
+      // para evitar problemas de sincronización de estado en React
+      setFormData(prevState => ({
+        ...prevState,
+        categoria: value
+      }));
+      
+      // Actualizar la subcategoría en un segundo cambio de estado
+      setTimeout(() => {
+        setFormData(prevState => ({
+          ...prevState,
+          subCategoria: defaultSubcategoria
+        }));
+      }, 0);
+      
+      // Registrar cambio para depuración
+      console.log(`Categoría cambiada a: ${value}, subcategoría a: ${defaultSubcategoria}`);
+    } catch (error) {
+      console.error("Error al cambiar categoría:", error);
+      addNotification("Error al cambiar categoría", 'error');
+    }
+  };
+
+  // Función para renderizar indicador de stock
+  const renderStockIndicator = (stock: number) => {
+    if (stock <= 0) {
+      return (
+        <div className="flex items-center gap-1">
+          <AlertCircle className="w-4 h-4 text-red-500" />
+          <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+            Sin stock
+          </span>
+        </div>
+      );
+    } else if (stock <= LOW_STOCK_THRESHOLD) {
+      return (
+        <div className="flex items-center gap-1">
+          <AlertTriangle className="w-4 h-4 text-yellow-500 animate-pulse" />
+          <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800 border border-yellow-300">
+            {stock} unidades - ¡Stock bajo!
+          </span>
+        </div>
+      );
+    } else {
+      return (
+        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+          {stock} unidades
+        </span>
+      );
+    }
   };
 
   // Filtrar productos
@@ -518,6 +533,16 @@ const InventorySection: React.FC = () => {
         </div>
       )}
 
+      {/* Alerta para productos con stock bajo */}
+      {!loading && products.some(p => p.stock > 0 && p.stock <= LOW_STOCK_THRESHOLD) && (
+        <Alert variant="warning" className="bg-yellow-50 border-yellow-200">
+          <AlertTriangle className="h-4 w-4 text-yellow-500" />
+          <AlertDescription>
+            Hay productos con stock bajo. Por favor, revise el inventario.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Mensaje cuando no hay productos */}
       {!loading && filteredProducts.length === 0 && (
         <div className="bg-white rounded-lg shadow p-8 text-center">
@@ -554,7 +579,16 @@ const InventorySection: React.FC = () => {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredProducts.map((product) => (
-                  <tr key={product._id} className="hover:bg-gray-50">
+                  <tr 
+                    key={product._id} 
+                    className={`hover:bg-gray-50 ${
+                      product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD 
+                        ? 'bg-yellow-50 hover:bg-yellow-100' 
+                        : product.stock <= 0 
+                          ? 'bg-red-50 hover:bg-red-100'
+                          : ''
+                    }`}
+                  >
                     <td className="px-6 py-4">
                       <div className="flex items-center">
                         {product.imagen && (
@@ -586,40 +620,13 @@ const InventorySection: React.FC = () => {
                       ${product.precio.toFixed(2)}
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full
-                        ${product.stock <= 0 
-                          ? 'bg-red-100 text-red-800' 
-                          : product.stock < 10
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : 'bg-green-100 text-green-800'
-                        }`}
-                      >
-                        {product.stock} unidades
-                      </span>
+                      {renderStockIndicator(product.stock)}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-500">
                       {product.vendidos || 0}
                     </td>
                     <td className="px-6 py-4 text-right text-sm font-medium">
                       <div className="flex justify-end space-x-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleSell(product._id)}
-                          disabled={product.stock <= 0}
-                          className="text-green-600 hover:text-green-800"
-                        >
-                          <ShoppingCart className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleCancelSale(product._id)}
-                          disabled={product.vendidos <= 0}
-                          className="text-orange-600 hover:text-orange-800"
-                        >
-                          <ArrowLeft className="w-4 h-4" />
-                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -649,7 +656,16 @@ const InventorySection: React.FC = () => {
       {/* Vista de Tarjetas para dispositivos móviles */}
       <div className="md:hidden grid grid-cols-1 gap-4">
         {!loading && filteredProducts.map(product => (
-          <Card key={product._id} className="overflow-hidden">
+          <Card 
+            key={product._id} 
+            className={`overflow-hidden ${
+              product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD 
+                ? 'border-yellow-300 bg-yellow-50' 
+                : product.stock <= 0 
+                  ? 'border-red-300 bg-red-50'
+                  : ''
+            }`}
+          >
             <CardHeader className="p-4 pb-2">
               <div className="flex justify-between items-center">
                 <CardTitle className="text-base truncate mr-2">{product.nombre}</CardTitle>
@@ -680,15 +696,17 @@ const InventorySection: React.FC = () => {
                     </div>
                     <div className="flex items-center">
                       <PackageOpen className="w-4 h-4 text-gray-400 mr-1" />
-                      <span className={`font-medium
-                        ${product.stock <= 0 
+                      <span className={`font-medium ${
+                        product.stock <= 0 
                           ? 'text-red-600' 
-                          : product.stock < 10
-                          ? 'text-yellow-600'
-                          : 'text-green-600'
-                        }`}
-                      >
-                        {product.stock} unid.
+                          : product.stock <= LOW_STOCK_THRESHOLD
+                            ? 'text-yellow-600 flex items-center gap-1'
+                            : 'text-green-600'
+                      }`}>
+                        {product.stock <= LOW_STOCK_THRESHOLD && product.stock > 0 && (
+                          <AlertTriangle className="w-3 h-3 text-yellow-500 animate-pulse" />
+                        )}
+                        {product.stock <= 0 ? 'Sin stock' : `${product.stock} unid.`}
                       </span>
                     </div>
                   </div>
@@ -700,24 +718,6 @@ const InventorySection: React.FC = () => {
               </div>
             </CardContent>
             <CardFooter className="p-2 flex justify-end gap-2 bg-gray-50">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleSell(product._id)}
-                disabled={product.stock <= 0}
-                className="text-green-600 hover:text-green-800 hover:bg-green-50"
-              >
-                <ShoppingCart className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleCancelSale(product._id)}
-                disabled={product.vendidos <= 0}
-                className="text-orange-600 hover:text-orange-800 hover:bg-orange-50"
-              >
-                <ArrowLeft className="w-4 h-4" />
-              </Button>
               <Button
                 variant="ghost"
                 size="sm"

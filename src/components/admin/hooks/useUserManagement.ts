@@ -20,20 +20,13 @@ import { useDashboard } from '@/hooks/useDashboard';
  * Hook para la gestión completa de usuarios
  */
 export function useUserManagement() {
-  // Detectar si NotificationProvider está disponible
-  let notificationSystem;
-  try {
-    notificationSystem = useNotification();
-  } catch (e) {
-    // Crear un sistema de notificación falso si el proveedor no está disponible
-    notificationSystem = {
-      addNotification: (message: string, type: string) => {
-        console.log(`Notification (${type}): ${message}`);
-      }
-    };
-  }
+  // Usar directamente useNotification sin sistema de fallback, como en InventorySection
+  const { addNotification } = useNotification();
   
-  const { addNotification } = notificationSystem;
+  // Registrar disponibilidad del contexto para depuración
+  useEffect(() => {
+    console.log('NotificationContext disponible:', addNotification ? true : false);
+  }, [addNotification]);
 
   // Estado para usuarios y pantalla
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -84,7 +77,14 @@ export function useUserManagement() {
     } catch (err: any) {
       const errorMsg = err.message || 'Error al cargar usuarios';
       setError(errorMsg);
-      addNotification(errorMsg, 'error');
+      
+      // Enviar notificación si está disponible
+      if (addNotification) {
+        addNotification(errorMsg, 'error');
+        console.log('Notificación de error enviada:', errorMsg);
+      } else {
+        console.error('addNotification no disponible:', errorMsg);
+      }
     } finally {
       setLoading(false);
     }
@@ -106,7 +106,10 @@ export function useUserManagement() {
         await updateUser(editingUser._id, formData);
         const message = 'Usuario actualizado correctamente';
         setSuccessMessage(message);
-        addNotification(message, 'success');
+        
+        if (addNotification) {
+          addNotification(message, 'success');
+        }
       } else {
         // Crear nuevo usuario
         const data = await createUser(formData);
@@ -124,7 +127,10 @@ export function useUserManagement() {
         
         const message = 'Usuario creado correctamente';
         setSuccessMessage(message);
-        addNotification(message, 'success');
+        
+        if (addNotification) {
+          addNotification(message, 'success');
+        }
       }
 
       await fetchUsers();
@@ -136,7 +142,10 @@ export function useUserManagement() {
     } catch (err: any) {
       const errorMsg = err.message || 'Error en la operación';
       setError(errorMsg);
-      addNotification(errorMsg, 'error');
+      
+      if (addNotification) {
+        addNotification(errorMsg, 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -151,14 +160,20 @@ export function useUserManagement() {
       await fetchUsers();
       const message = 'Usuario eliminado correctamente';
       setSuccessMessage(message);
-      addNotification(message, 'success');
+      
+      if (addNotification) {
+        addNotification(message, 'success');
+      }
       
       // Limpiar mensaje después de unos segundos
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err: any) {
       const errorMsg = err.message || 'Error al eliminar usuario';
       setError(errorMsg);
-      addNotification(errorMsg, 'error');
+      
+      if (addNotification) {
+        addNotification(errorMsg, 'error');
+      }
     }
   };
 
@@ -181,14 +196,20 @@ export function useUserManagement() {
       await fetchUsers(); // Recargar todos los usuarios para asegurar sincronización
       const message = `Usuario ${activate ? 'activado' : 'desactivado'} correctamente`;
       setSuccessMessage(message);
-      addNotification(message, 'success');
+      
+      if (addNotification) {
+        addNotification(message, 'success');
+      }
       
       // Limpiar mensaje después de unos segundos
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err: any) {
       const errorMsg = err.message || 'Error al cambiar estado del usuario';
       setError(errorMsg);
-      addNotification(errorMsg, 'error');
+      
+      if (addNotification) {
+        addNotification(errorMsg, 'error');
+      }
     }
   };
 
@@ -209,6 +230,11 @@ export function useUserManagement() {
         30
     });
     setShowModal(true);
+    
+    // Notificación informativa opcional para edición
+    if (addNotification) {
+      addNotification(`Editando usuario: ${user.email || user.usuario || user._id.substring(0, 8)}`, 'info');
+    }
   };
 
   // Ir a la gestión de clientes para este usuario
@@ -220,6 +246,11 @@ export function useUserManagement() {
     
     // Cambiar a la sección de clientes usando el contexto
     changeSection('clients', userId);
+    
+    // Notificación informativa opcional para asignación de clientes
+    if (addNotification) {
+      addNotification(`Asignando clientes a usuario: ${identifier}`, 'info');
+    }
   };
 
   // Resetear formulario

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNotification } from '@/context/NotificationContext';
 import {
   Plus,
   Search,
@@ -403,6 +404,9 @@ const OrderTotalCalculator = ({ order, cachedProducts, products, getProductDetai
 
 // Componente principal
 const OrdersSection = () => {
+  // Usar el hook de notificaciones
+  const { addNotification } = useNotification();
+  
   // Estados
   const [orders, setOrders] = useState<Order[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -419,6 +423,11 @@ const OrdersSection = () => {
   const [mobileOrderDetailsOpen, setMobileOrderDetailsOpen] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string>('');
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+
+  // Verificar disponibilidad del contexto de notificaciones
+  useEffect(() => {
+    console.log('NotificationContext disponible:', addNotification ? true : false);
+  }, [addNotification]);
 
   // Estados para filtros
   const [dateFilter, setDateFilter] = useState({
@@ -491,8 +500,14 @@ const OrdersSection = () => {
         fetchClients(userData.id);
       }
     } catch (err) {
-      setError('Error al cargar información del usuario: ' +
-        (err instanceof Error ? err.message : String(err)));
+      const errorMsg = 'Error al cargar información del usuario: ' + 
+        (err instanceof Error ? err.message : String(err));
+      setError(errorMsg);
+      
+      // Notificación para error de información de usuario
+      if (addNotification) {
+        addNotification(errorMsg, 'error');
+      }
     }
   };
 
@@ -522,9 +537,20 @@ const OrdersSection = () => {
       console.log("Pedidos recibidos:", data);
       setOrders(data);
       setError(null);
+      
+      // Notificación opcional para indicar que los pedidos se cargaron correctamente
+      if (addNotification && data.length > 0) {
+        addNotification(`Se cargaron ${data.length} pedidos correctamente`, 'info');
+      }
     } catch (err) {
-      setError('Error al cargar los pedidos: ' +
-        (err instanceof Error ? err.message : String(err)));
+      const errorMsg = 'Error al cargar los pedidos: ' +
+        (err instanceof Error ? err.message : String(err));
+      setError(errorMsg);
+      
+      // Notificación para error de carga de pedidos
+      if (addNotification) {
+        addNotification(errorMsg, 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -581,6 +607,12 @@ const OrdersSection = () => {
       return product;
     } catch (error) {
       console.error("Error obteniendo producto:", error);
+      
+      // Notificación opcional para errores críticos
+      if (addNotification) {
+        addNotification(`Error al obtener detalles del producto: ${error instanceof Error ? error.message : 'Desconocido'}`, 'error');
+      }
+      
       return null;
     }
   };
@@ -627,6 +659,11 @@ const OrdersSection = () => {
           await Promise.all(productPromises);
         } catch (error) {
           console.error("Error al cargar detalles de productos:", error);
+          
+          // Notificación para error de carga de detalles
+          if (addNotification) {
+            addNotification('Error al cargar detalles de los productos del pedido', 'error');
+          }
         }
       }
     }
@@ -674,6 +711,11 @@ const OrdersSection = () => {
           await Promise.all(productPromises);
         } catch (error) {
           console.error("Error al cargar detalles de productos:", error);
+          
+          // Notificación para error de carga de detalles en móvil
+          if (addNotification) {
+            addNotification('Error al cargar detalles de los productos del pedido', 'error');
+          }
         }
       }
     }
@@ -682,7 +724,14 @@ const OrdersSection = () => {
   // Cargar pedidos por rango de fechas
   const fetchOrdersByDate = async () => {
     if (!dateFilter.fechaInicio || !dateFilter.fechaFin) {
-      setError('Por favor seleccione ambas fechas');
+      const errorMsg = 'Por favor seleccione ambas fechas';
+      setError(errorMsg);
+      
+      // Notificación para campos faltantes
+      if (addNotification) {
+        addNotification(errorMsg, 'warning');
+      }
+      
       return;
     }
 
@@ -709,20 +758,34 @@ const OrdersSection = () => {
       setError(null);
 
       // Mensaje de éxito mostrando cuántos pedidos se encontraron
+      let successMsg = '';
       if (data.length === 0) {
-        setSuccessMessage('No se encontraron pedidos en el rango de fechas seleccionado');
+        successMsg = 'No se encontraron pedidos en el rango de fechas seleccionado';
       } else {
-        setSuccessMessage(`Se encontraron ${data.length} pedidos en el rango seleccionado`);
+        successMsg = `Se encontraron ${data.length} pedidos en el rango seleccionado`;
       }
-
+      
+      setSuccessMessage(successMsg);
+      
+      // Notificación de filtro aplicado
+      if (addNotification) {
+        addNotification(successMsg, data.length === 0 ? 'info' : 'success');
+      }
+      
       // Eliminar mensaje después de 3 segundos
       setTimeout(() => setSuccessMessage(''), 3000);
       
       // Cerrar filtros móviles si están abiertos
       setShowMobileFilters(false);
     } catch (err) {
-      setError('Error al filtrar por fecha: ' +
-        (err instanceof Error ? err.message : String(err)));
+      const errorMsg = 'Error al filtrar por fecha: ' +
+        (err instanceof Error ? err.message : String(err));
+      setError(errorMsg);
+      
+      // Notificación para error de filtro por fecha
+      if (addNotification) {
+        addNotification(errorMsg, 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -746,7 +809,8 @@ const OrdersSection = () => {
 
       const productsData = await response.json();
       // Filtrar productos con stock > 0
-      setProducts(productsData.filter((p: Product) => p.stock > 0));
+      const availableProducts = productsData.filter((p: Product) => p.stock > 0);
+      setProducts(availableProducts);
 
       // También añadirlos al caché
       const productsCache = productsData.reduce((cache: { [key: string]: Product }, product: Product) => {
@@ -755,10 +819,20 @@ const OrdersSection = () => {
       }, {});
       setCachedProducts(productsCache);
 
-      console.log(`Productos cargados: ${productsData.length}, con stock > 0: ${productsData.filter((p: Product) => p.stock > 0).length}`);
+      console.log(`Productos cargados: ${productsData.length}, con stock > 0: ${availableProducts.length}`);
+      
+      // Notificación opcional para productos disponibles
+      if (addNotification && availableProducts.length === 0) {
+        addNotification('No hay productos con stock disponible para crear pedidos', 'warning');
+      }
     } catch (err) {
       console.error('Error al cargar productos:', err);
       setDebugInfo(prev => prev + "\nError productos: " + (err instanceof Error ? err.message : String(err)));
+      
+      // Notificación para error crítico de carga de productos
+      if (addNotification) {
+        addNotification('Error al cargar productos. Algunas funcionalidades pueden estar limitadas.', 'error');
+      }
     }
   };
 
@@ -784,6 +858,11 @@ const OrdersSection = () => {
     } catch (err) {
       console.error('Error al cargar usuarios:', err);
       setDebugInfo(prev => prev + "\nError usuarios: " + (err instanceof Error ? err.message : String(err)));
+      
+      // Notificación para error de carga de usuarios
+      if (addNotification) {
+        addNotification('Error al cargar usuarios. Algunas funcionalidades pueden estar limitadas.', 'warning');
+      }
     }
   };
 
@@ -819,9 +898,19 @@ const OrdersSection = () => {
 
       setClientSections(grouped);
       setDebugInfo(`Clientes cargados: ${clientsData.length}, Servicios: ${Object.keys(grouped).length}`);
+      
+      // Notificación para clientes no encontrados
+      if (addNotification && clientsData.length === 0) {
+        addNotification('No se encontraron clientes asignados a este usuario. Contacte a un administrador.', 'warning');
+      }
     } catch (err) {
       console.error('Error al cargar clientes:', err);
       setDebugInfo(prev => prev + "\nError clientes: " + (err instanceof Error ? err.message : String(err)));
+      
+      // Notificación para error de carga de clientes
+      if (addNotification) {
+        addNotification('Error al cargar clientes. No podrá crear nuevos pedidos.', 'error');
+      }
     }
   };
 
@@ -829,12 +918,26 @@ const OrdersSection = () => {
   const handleCreateOrder = async () => {
     // Validaciones
     if (!orderForm.servicio) {
-      setError('Debe seleccionar un cliente');
+      const errorMsg = 'Debe seleccionar un cliente';
+      setError(errorMsg);
+      
+      // Notificación para validación
+      if (addNotification) {
+        addNotification(errorMsg, 'warning');
+      }
+      
       return;
     }
 
     if (orderForm.productos.length === 0) {
-      setError('Debe agregar al menos un producto');
+      const errorMsg = 'Debe agregar al menos un producto';
+      setError(errorMsg);
+      
+      // Notificación para validación
+      if (addNotification) {
+        addNotification(errorMsg, 'warning');
+      }
+      
       return;
     }
 
@@ -886,11 +989,25 @@ const OrdersSection = () => {
 
       setShowCreateModal(false);
       resetOrderForm();
-      setSuccessMessage('Pedido creado correctamente');
+      
+      const successMsg = 'Pedido creado correctamente';
+      setSuccessMessage(successMsg);
+      
+      // Notificación de éxito para creación de pedido
+      if (addNotification) {
+        addNotification(successMsg, 'success');
+      }
+      
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err) {
-      setError('Error al crear pedido: ' +
-        (err instanceof Error ? err.message : String(err)));
+      const errorMsg = 'Error al crear pedido: ' +
+        (err instanceof Error ? err.message : String(err));
+      setError(errorMsg);
+      
+      // Notificación para error de creación de pedido
+      if (addNotification) {
+        addNotification(errorMsg, 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -946,11 +1063,25 @@ const OrdersSection = () => {
       
       setShowCreateModal(false);
       resetOrderForm();
-      setSuccessMessage('Pedido actualizado correctamente');
+      
+      const successMsg = 'Pedido actualizado correctamente';
+      setSuccessMessage(successMsg);
+      
+      // Notificación de éxito para actualización de pedido
+      if (addNotification) {
+        addNotification(successMsg, 'success');
+      }
+      
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err) {
-      setError('Error al actualizar pedido: ' +
-        (err instanceof Error ? err.message : String(err)));
+      const errorMsg = 'Error al actualizar pedido: ' +
+        (err instanceof Error ? err.message : String(err));
+      setError(errorMsg);
+      
+      // Notificación para error de actualización de pedido
+      if (addNotification) {
+        addNotification(errorMsg, 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -986,11 +1117,24 @@ const OrdersSection = () => {
       await refreshInventory();
       console.log("Notificación de actualización de inventario enviada después de eliminar pedido");
       
-      setSuccessMessage('Pedido eliminado correctamente');
+      const successMsg = 'Pedido eliminado correctamente';
+      setSuccessMessage(successMsg);
+      
+      // Notificación de éxito para eliminación de pedido
+      if (addNotification) {
+        addNotification(successMsg, 'success');
+      }
+      
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err) {
-      setError('Error al eliminar pedido: ' +
-        (err instanceof Error ? err.message : String(err)));
+      const errorMsg = 'Error al eliminar pedido: ' +
+        (err instanceof Error ? err.message : String(err));
+      setError(errorMsg);
+      
+      // Notificación para error de eliminación de pedido
+      if (addNotification) {
+        addNotification(errorMsg, 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -1048,6 +1192,11 @@ const OrdersSection = () => {
 
       setShowCreateModal(true);
       console.log("Editando orden:", order);
+      
+      // Notificación informativa opcional para edición
+      if (addNotification) {
+        addNotification(`Editando pedido de ${order.servicio}`, 'info');
+      }
     });
   };
 
@@ -1058,6 +1207,12 @@ const OrdersSection = () => {
     const selectedClient = clients.find(c => c._id === clienteId);
     if (!selectedClient) {
       console.log(`Cliente no encontrado: ${clienteId}`);
+      
+      // Notificación para cliente no encontrado
+      if (addNotification) {
+        addNotification('Cliente seleccionado no encontrado', 'warning');
+      }
+      
       return;
     }
 
@@ -1093,12 +1248,24 @@ const OrdersSection = () => {
       seccionDelServicio: seccion
     }));
     setShowSectionModal(false);
+    
+    // Notificación opcional para selección de sección
+    if (addNotification) {
+      addNotification(`Sección "${seccion}" seleccionada`, 'info');
+    }
   };
 
   // Agregar producto al pedido
   const handleAddProduct = () => {
     if (!selectedProduct || selectedProduct === "none" || productQuantity <= 0) {
-      setError('Seleccione un producto y una cantidad válida');
+      const errorMsg = 'Seleccione un producto y una cantidad válida';
+      setError(errorMsg);
+      
+      // Notificación para validación
+      if (addNotification) {
+        addNotification(errorMsg, 'warning');
+      }
+      
       return;
     }
 
@@ -1107,7 +1274,14 @@ const OrdersSection = () => {
 
     // Verificar si hay suficiente stock
     if (product.stock < productQuantity) {
-      setError(`Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`);
+      const errorMsg = `Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`;
+      setError(errorMsg);
+      
+      // Notificación para stock insuficiente
+      if (addNotification) {
+        addNotification(errorMsg, 'warning');
+      }
+      
       return;
     }
 
@@ -1122,7 +1296,14 @@ const OrdersSection = () => {
       const newQuantity = currentQuantity + productQuantity;
       
       if (product.stock < newQuantity) {
-        setError(`Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`);
+        const errorMsg = `Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`;
+        setError(errorMsg);
+        
+        // Notificación para stock insuficiente
+        if (addNotification) {
+          addNotification(errorMsg, 'warning');
+        }
+        
         return;
       }
       
@@ -1134,6 +1315,11 @@ const OrdersSection = () => {
         ...prev,
         productos: updatedProducts
       }));
+      
+      // Notificación para producto actualizado
+      if (addNotification) {
+        addNotification(`Cantidad actualizada: ${product.nombre} (${newQuantity})`, 'success');
+      }
     } else {
       // Agregar nuevo producto
       setOrderForm(prev => ({
@@ -1148,6 +1334,11 @@ const OrdersSection = () => {
           }
         ]
       }));
+      
+      // Notificación para producto agregado
+      if (addNotification) {
+        addNotification(`Producto agregado: ${product.nombre} (${productQuantity})`, 'success');
+      }
     }
 
     // Resetear selección
@@ -1158,6 +1349,11 @@ const OrdersSection = () => {
 
   // Eliminar producto del pedido
   const handleRemoveProduct = (index: number) => {
+    // Guardar una referencia al producto antes de eliminarlo para mostrar en la notificación
+    const product = orderForm.productos[index];
+    const productName = product.nombre || 
+      getProductName(typeof product.productoId === 'object' ? product.productoId._id : product.productoId);
+    
     const updatedProducts = [...orderForm.productos];
     updatedProducts.splice(index, 1);
 
@@ -1165,6 +1361,11 @@ const OrdersSection = () => {
       ...prev,
       productos: updatedProducts
     }));
+    
+    // Notificación para producto eliminado
+    if (addNotification) {
+      addNotification(`Producto eliminado: ${productName}`, 'info');
+    }
   };
 
   // Resetear formulario de pedido
@@ -1268,6 +1469,11 @@ const OrdersSection = () => {
     setDateFilter({ fechaInicio: '', fechaFin: '' });
     fetchOrders();
     setShowMobileFilters(false);
+    
+    // Notificación para filtros limpiados
+    if (addNotification) {
+      addNotification('Filtros eliminados. Mostrando todos los pedidos.', 'info');
+    }
   };
 
   // Filtrar pedidos por término de búsqueda

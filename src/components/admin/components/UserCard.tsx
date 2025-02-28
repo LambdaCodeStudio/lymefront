@@ -92,7 +92,7 @@ const UserCard: React.FC<UserCardProps> = ({
           )}
           {user.createdBy && (
             <div className="col-span-2">
-              <span className="text-gray-500">Creado por:</span>
+              <span className="text-gray-500">Creado por: </span>
               <span className="ml-1">{user.createdBy.email || user.createdBy.usuario || user.createdBy._id.substring(0, 8)}</span>
             </div>
           )}
