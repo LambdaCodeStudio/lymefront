@@ -2,7 +2,8 @@ import React, { useEffect } from 'react';
 import { 
   Package2, 
   Users, 
-  ShoppingCart 
+  ShoppingCart, 
+  Download
 } from 'lucide-react';
 
 import InventorySection from './InventorySection';
@@ -15,6 +16,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { InventoryProvider } from '@/context/InventoryProvider';
 import { NotificationProvider } from '@/context/NotificationContext';
 import NotificationsContainer from '@/components/ui/Notifications';
+import DownloadsManagement from './DownloadsManagement';
 
 // Definición de las secciones
 interface Section {
@@ -78,6 +80,12 @@ const AdminDashboard: React.FC = () => {
       label: 'Pedidos',
       icon: ShoppingCart,
       component: <OrdersSection />
+    },
+    {
+      id: 'downloads',
+      label: 'Descargas',
+      icon: Download,
+      component: <DownloadsManagement />
     }
   ];
 
