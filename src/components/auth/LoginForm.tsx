@@ -49,8 +49,8 @@ export const LoginForm: React.FC<LoginFormProps> = ({ redirectPath }) => {
     const rolePaths: Record<string, string> = {
       'admin': '/admin',
       'supervisor': '/supervisor',
-      'basic': '/dashboard',
-      'temporal': '/dashboard'
+      'basic': '/shop',
+      'temporal': '/shop'
     };
     
     return rolePaths[role] || '/dashboard';

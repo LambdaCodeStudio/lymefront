@@ -15,6 +15,7 @@ import {
 } from '../services/userService';
 import { getAvailableRoles, type RoleType } from '../shared/UserRolesConfig';
 import { useDashboard } from '@/hooks/useDashboard';
+import eventService from '@/services/EventService';
 
 /**
  * Hook para la gestión completa de usuarios
@@ -62,8 +63,25 @@ export function useUserManagement() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const role = localStorage.getItem('userRole') as RoleType | null;
-      setUserRole(role);
-      setAvailableRoles(getAvailableRoles(role));
+      console.log('Rol recuperado del localStorage:', role);
+      
+      // Verificar que sea un rol válido
+      if (role && ['admin', 'supervisor', 'basic', 'temporal'].includes(role)) {
+        setUserRole(role);
+        setAvailableRoles(getAvailableRoles(role));
+        console.log(`Roles disponibles para ${role}:`, getAvailableRoles(role));
+      } else {
+        console.error('Rol inválido o no encontrado en localStorage:', role);
+        // Si es admin, asegurar que tenga acceso completo incluso si hay un error
+        if (role === 'admin') {
+          setUserRole('admin');
+          setAvailableRoles([
+            { value: 'supervisor', label: 'Supervisor' },
+            { value: 'basic', label: 'Básico' },
+            { value: 'temporal', label: 'Temporal' }
+          ]);
+        }
+      }
     }
   }, []);
 
@@ -107,12 +125,35 @@ export function useUserManagement() {
         const message = 'Usuario actualizado correctamente';
         setSuccessMessage(message);
         
+        // Disparar evento para que otros componentes actualicen sus datos
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('userUpdated', 'true');
+          
+          // Utilizar el Event Service si está disponible
+          eventService.emit('userUpdated', { 
+            userId: editingUser._id, 
+            action: 'update',
+            role: formData.role 
+          });
+        }
+        
         if (addNotification) {
           addNotification(message, 'success');
         }
       } else {
         // Crear nuevo usuario
         const data = await createUser(formData);
+        
+        // Disparar evento para que otros componentes actualicen sus datos
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('userUpdated', 'true');
+          
+          // Utilizar el Event Service si está disponible
+          eventService.emit('userCreated', { 
+            userId: data._id, 
+            role: formData.role 
+          });
+        }
         
         // Preguntar si quiere asignar un cliente si es usuario básico
         if (formData.role === 'basic' && typeof window !== 'undefined') {
@@ -156,13 +197,39 @@ export function useUserManagement() {
     if (!window.confirm('¿Estás seguro de eliminar este usuario?')) return;
 
     try {
-      await deleteUser(userId);
+      const response = await deleteUser(userId);
       await fetchUsers();
-      const message = 'Usuario eliminado correctamente';
+      
+      // Disparar evento para que otros componentes actualicen sus datos
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('userUpdated', 'true');
+        
+        // Utilizar el Event Service si está disponible
+        eventService.emit('userDeleted', { 
+          userId: userId,
+          clientesEnStandBy: response?.clientesEnStandBy || 0
+        });
+      }
+      
+      const message = response?.clientesEnStandBy > 0 
+        ? `Usuario eliminado correctamente. ${response.clientesEnStandBy} clientes quedaron pendientes de reasignación.`
+        : 'Usuario eliminado correctamente';
+      
       setSuccessMessage(message);
       
       if (addNotification) {
         addNotification(message, 'success');
+        
+        // Si hay clientes pendientes de reasignación, mostrar una notificación adicional
+        if (response?.clientesEnStandBy > 0) {
+          setTimeout(() => {
+            addNotification(
+              'Hay clientes sin usuario asignado. Por favor, vaya a la sección de clientes para reasignarlos.',
+              'warning', 
+              8000
+            );
+          }, 1000);
+        }
       }
       
       // Limpiar mensaje después de unos segundos
@@ -192,6 +259,17 @@ export function useUserManagement() {
         }
         return user;
       }));
+      
+      // Disparar evento para que otros componentes actualicen sus datos
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('userUpdated', 'true');
+        
+        // Utilizar el Event Service si está disponible
+        eventService.emit('userStatusChanged', { 
+          userId: userId,
+          isActive: activate
+        });
+      }
 
       await fetchUsers(); // Recargar todos los usuarios para asegurar sincronización
       const message = `Usuario ${activate ? 'activado' : 'desactivado'} correctamente`;
@@ -199,6 +277,17 @@ export function useUserManagement() {
       
       if (addNotification) {
         addNotification(message, 'success');
+        
+        // Si se desactivó el usuario, mostrar notificación sobre clientes
+        if (!activate) {
+          setTimeout(() => {
+            addNotification(
+              'Los clientes asignados a este usuario necesitarán ser reasignados.',
+              'info', 
+              6000
+            );
+          }, 1000);
+        }
       }
       
       // Limpiar mensaje después de unos segundos

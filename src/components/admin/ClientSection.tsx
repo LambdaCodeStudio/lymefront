@@ -62,6 +62,7 @@ import {
 
 import { useDashboard } from '@/hooks/useDashboard';
 import type { UserRole } from '@/types/users';
+import eventService from '@/services/EventService';
 
 // Tipo extendido para los usuarios con la estructura que viene del backend
 interface UserExtended {
@@ -108,7 +109,7 @@ interface UpdateClientData {
 const ClientsSection: React.FC = () => {
   // Acceder al contexto del dashboard
   const { selectedUserId } = useDashboard();
-  
+
   // Usar el hook de notificaciones
   const { addNotification } = useNotification();
 
@@ -128,6 +129,7 @@ const ClientsSection: React.FC = () => {
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [serviceFormData, setServiceFormData] = useState<{ nuevoNombre: string }>({ nuevoNombre: '' });
   const [deletingOperation, setDeletingOperation] = useState(false);
+  const [showAddingSectionMode, setShowAddingSectionMode] = useState(false);
 
   // Estado para el modal de confirmación de eliminación de clientes individuales
   const [showDeleteClientModal, setShowDeleteClientModal] = useState(false);
@@ -142,6 +144,8 @@ const ClientsSection: React.FC = () => {
     seccionDelServicio: '',
     userId: ''
   });
+
+  
 
   // Verificar disponibilidad del contexto de notificaciones
   useEffect(() => {
@@ -263,7 +267,7 @@ const ClientsSection: React.FC = () => {
     } catch (err) {
       const errorMsg = 'Error al cargar los clientes: ' + (err instanceof Error ? err.message : String(err));
       setError(errorMsg);
-      
+
       // Notificación para error de carga de clientes
       if (addNotification) {
         addNotification(errorMsg, 'error');
@@ -345,23 +349,23 @@ const ClientsSection: React.FC = () => {
       await fetchClients();
       setShowModal(false);
       resetForm();
-      
+
       const successMsg = formData.seccionDelServicio
         ? `Nueva sección "${formData.seccionDelServicio}" agregada al servicio "${formData.servicio}"`
         : 'Cliente creado correctamente';
-      
+
       setSuccessMessage(successMsg);
-      
+
       // Notificación de éxito
       if (addNotification) {
         addNotification(successMsg, 'success');
       }
-      
+
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err) {
       const errorMsg = 'Error al crear cliente: ' + (err instanceof Error ? err.message : String(err));
       setError(errorMsg);
-      
+
       // Notificación de error
       if (addNotification) {
         addNotification(errorMsg, 'error');
@@ -407,20 +411,20 @@ const ClientsSection: React.FC = () => {
       await fetchClients();
       setShowModal(false);
       resetForm();
-      
+
       const successMsg = 'Cliente actualizado correctamente';
       setSuccessMessage(successMsg);
-      
+
       // Notificación de éxito
       if (addNotification) {
         addNotification(successMsg, 'success');
       }
-      
+
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err) {
       const errorMsg = 'Error al actualizar cliente: ' + (err instanceof Error ? err.message : String(err));
       setError(errorMsg);
-      
+
       // Notificación de error
       if (addNotification) {
         addNotification(errorMsg, 'error');
@@ -469,21 +473,21 @@ const ClientsSection: React.FC = () => {
       }
 
       await fetchClients();
-      
+
       const successMsg = 'Cliente eliminado correctamente';
       setSuccessMessage(successMsg);
-      
+
       // Notificación de éxito
       if (addNotification) {
         addNotification(successMsg, 'success');
       }
-      
+
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err) {
       console.error('Error completo al eliminar cliente:', err);
       const errorMsg = 'Error al eliminar cliente: ' + (err instanceof Error ? err.message : String(err));
       setError(errorMsg);
-      
+
       // Notificación de error
       if (addNotification) {
         addNotification(errorMsg, 'error');
@@ -507,22 +511,24 @@ const ClientsSection: React.FC = () => {
   // Agregar nueva sección a un cliente existente 
   const handleAddSection = (client: Client) => {
     console.log(`Agregando nueva sección al servicio: ${client.servicio}`);
-    
+
     // Indicamos que es una nueva entidad (no es edición)
     setCurrentClient(null);
-    
+
+    // Activar el modo de agregar sección
+    setShowAddingSectionMode(true);
+
     // Preparar el formulario con datos del servicio padre
     setFormData({
       servicio: client.servicio,       // Mantener el mismo servicio (cliente padre)
       seccionDelServicio: '',          // Nueva sección (vacía para que el usuario la complete)
-      // Si hay un usuario seleccionado, lo usamos, sino tomamos el del cliente padre
-      userId: activeUserId !== "all" 
-        ? activeUserId 
-        : typeof client.userId === 'object' 
-          ? client.userId._id 
+      userId: activeUserId !== "all"
+        ? activeUserId
+        : typeof client.userId === 'object'
+          ? client.userId._id
           : client.userId
     });
-    
+
     // Abrir el modal para agregar sección
     setShowModal(true);
   };
@@ -590,20 +596,20 @@ const ClientsSection: React.FC = () => {
 
       await fetchClients();
       setShowServiceModal(false);
-      
+
       const successMsg = `Servicio "${currentService}" actualizado a "${serviceFormData.nuevoNombre}"`;
       setSuccessMessage(successMsg);
-      
+
       // Notificación de éxito
       if (addNotification) {
         addNotification(successMsg, 'success');
       }
-      
+
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err) {
       const errorMsg = 'Error al actualizar servicio: ' + (err instanceof Error ? err.message : String(err));
       setError(errorMsg);
-      
+
       // Notificación de error
       if (addNotification) {
         addNotification(errorMsg, 'error');
@@ -688,21 +694,21 @@ const ClientsSection: React.FC = () => {
       // Asegurarse de que la lista de clientes se actualiza
       await fetchClients();
       setShowDeleteServiceModal(false);
-      
+
       const successMsg = `Servicio "${currentService}" y todas sus secciones eliminados correctamente`;
       setSuccessMessage(successMsg);
-      
+
       // Notificación de éxito
       if (addNotification) {
         addNotification(successMsg, 'success');
       }
-      
+
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err) {
       console.error('Error completo al eliminar servicio:', err);
       const errorMsg = 'Error al eliminar servicio: ' + (err instanceof Error ? err.message : String(err));
       setError(errorMsg);
-      
+
       // Notificación de error
       if (addNotification) {
         addNotification(errorMsg, 'error');
@@ -736,6 +742,7 @@ const ClientsSection: React.FC = () => {
       userId: activeUserId !== "all" ? activeUserId : ''
     });
     setCurrentClient(null);
+    setShowAddingSectionMode(false);
   };
 
   // Obtener el identificador del usuario por su ID (email, usuario o nombre)
@@ -762,7 +769,7 @@ const ClientsSection: React.FC = () => {
         return creatorEmail; // Devuelve el email del localStorage
       }
     }
-    
+
     // Como fallback, mantenemos la lógica original
     if (typeof client.userId === 'object' && client.userId !== null) {
       if (client.userId.email) return client.userId.email;
@@ -770,11 +777,11 @@ const ClientsSection: React.FC = () => {
       if (client.userId.nombre && client.userId.apellido)
         return `${client.userId.nombre} ${client.userId.apellido}`;
     }
-    
+
     const user = users.find(u => u._id === client.userId);
     if (user?.email) return user.email;
     if (user?.usuario) return user.usuario;
-    
+
     return 'Correo no disponible';
   };
 
@@ -785,9 +792,9 @@ const ClientsSection: React.FC = () => {
       client.servicio.toLowerCase().includes(searchTerm.toLowerCase()) ||
       client.seccionDelServicio.toLowerCase().includes(searchTerm.toLowerCase());
 
-    // Filtro por usuario seleccionado
+    // Filtro por usuario seleccionado - CORREGIDO
     const matchesUser = activeUserId === "all" ||
-      (typeof client.userId === 'object'
+      (typeof client.userId === 'object' && client.userId !== null
         ? client.userId._id === activeUserId
         : client.userId === activeUserId);
 
@@ -806,7 +813,7 @@ const ClientsSection: React.FC = () => {
   // Modal automático para crear cliente si hay un usuario seleccionado y no hay clientes
   useEffect(() => {
     if (activeUserId !== "all" && !loading && clients.filter(c => {
-      return typeof c.userId === 'object'
+      return typeof c.userId === 'object' && c.userId !== null
         ? c.userId._id === activeUserId
         : c.userId === activeUserId;
     }).length === 0) {
@@ -814,7 +821,7 @@ const ClientsSection: React.FC = () => {
       console.log("Abriendo modal automáticamente para usuario:", activeUserId);
       resetForm();
       setShowModal(true);
-      
+
       // Notificación informativa
       if (addNotification) {
         addNotification(`No se encontraron clientes para el usuario seleccionado. Puede crear uno nuevo.`, 'info');
@@ -927,8 +934,8 @@ const ClientsSection: React.FC = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             className="flex-shrink-0"
             onClick={() => setIsMobileFilterOpen(!isMobileFilterOpen)}
           >
@@ -1052,7 +1059,7 @@ const ClientsSection: React.FC = () => {
                           <FileEdit className="w-4 h-4 mr-2 text-blue-600" />
                           Editar Servicio
                         </DropdownMenuItem>
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           className="text-red-600"
                           onClick={() => handleShowDeleteService(servicio)}
                         >
@@ -1063,7 +1070,7 @@ const ClientsSection: React.FC = () => {
                     </DropdownMenu>
                   </div>
                 </div>
-                
+
                 {expandedServices[servicio] && (
                   <div className="divide-y divide-gray-100">
                     {clientesDelServicio.map(client => (
@@ -1115,7 +1122,7 @@ const ClientsSection: React.FC = () => {
                             )}
                           </div>
                         </div>
-                        
+
                         <div className="flex gap-2">
                           <Button
                             variant="ghost"
@@ -1138,10 +1145,10 @@ const ClientsSection: React.FC = () => {
                     ))}
                   </div>
                 )}
-                
+
                 {!expandedServices[servicio] && clientesDelServicio.length > 0 && (
                   <div className="p-4 text-center text-gray-500 text-sm">
-                    <Button 
+                    <Button
                       variant="ghost"
                       onClick={() => toggleServiceExpansion(servicio)}
                       className="text-gray-500 hover:text-gray-700"
@@ -1179,7 +1186,7 @@ const ClientsSection: React.FC = () => {
                       ({clientesDelServicio.length})
                     </span>
                   </div>
-                  
+
                   <div className="flex gap-2">
                     {/* Botón móvil para agregar nueva sección */}
                     <Button
@@ -1191,7 +1198,7 @@ const ClientsSection: React.FC = () => {
                     >
                       <Plus className="w-4 h-4" />
                     </Button>
-                    
+
                     {/* Menú móvil para opciones del servicio */}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -1204,7 +1211,7 @@ const ClientsSection: React.FC = () => {
                           <FileEdit className="w-4 h-4 mr-2 text-blue-600" />
                           Editar Servicio
                         </DropdownMenuItem>
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           className="text-red-600"
                           onClick={() => handleShowDeleteService(servicio)}
                         >
@@ -1215,7 +1222,7 @@ const ClientsSection: React.FC = () => {
                     </DropdownMenu>
                   </div>
                 </div>
-                
+
                 {expandedServices[servicio] && (
                   <div className="grid grid-cols-1 gap-3">
                     {clientesDelServicio.map(client => (
@@ -1276,10 +1283,10 @@ const ClientsSection: React.FC = () => {
                     ))}
                   </div>
                 )}
-                
+
                 {!expandedServices[servicio] && clientesDelServicio.length > 0 && (
                   <div className="px-1 text-center text-gray-500 text-xs">
-                    <Button 
+                    <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => toggleServiceExpansion(servicio)}
@@ -1303,9 +1310,9 @@ const ClientsSection: React.FC = () => {
             <DialogTitle>
               {currentClient
                 ? 'Editar Cliente'
-                : formData.seccionDelServicio || !formData.servicio
-                  ? 'Nuevo Cliente'
-                  : 'Nueva Sección'}
+                : showAddingSectionMode
+                  ? 'Nueva Sección'
+                  : 'Nuevo Cliente'}
             </DialogTitle>
             {formData.servicio && !currentClient && (
               <DialogDescription>
@@ -1313,12 +1320,14 @@ const ClientsSection: React.FC = () => {
               </DialogDescription>
             )}
           </DialogHeader>
-          
+
           <form onSubmit={currentClient ? handleUpdateClient : handleCreateClient} className="space-y-4 py-2">
             <div>
               <Label htmlFor="servicio" className="text-sm">Servicio</Label>
               {/* Campo de servicio deshabilitado cuando es edición de sección o nueva sección */}
-              {(currentClient?.seccionDelServicio || (!currentClient && formData.servicio && !formData.seccionDelServicio)) ? (
+              {(currentClient?.seccionDelServicio ||
+                // Solo deshabilitar cuando estamos agregando una sección a un servicio existente
+                (!currentClient && formData.servicio && showAddingSectionMode)) ? (
                 <div className="mt-1 p-3 bg-gray-50 border border-gray-200 rounded-md flex items-center text-sm">
                   <Building className="text-gray-500 w-4 h-4 mr-2" />
                   <span>
@@ -1498,7 +1507,8 @@ const ClientsSection: React.FC = () => {
 
           <div className="bg-red-50 p-3 rounded-md border border-red-200 text-sm">
             <p>Se eliminarán <strong>{
-              clients.filter(c => c.servicio === currentService).length
+              currentService && Array.isArray(clients) ?
+                clients.filter(c => c && typeof c === 'object' && c.servicio === currentService).length : 0
             } secciones</strong> asociadas a este servicio.</p>
           </div>
 

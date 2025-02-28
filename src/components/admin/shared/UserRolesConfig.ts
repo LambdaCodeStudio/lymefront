@@ -57,13 +57,25 @@ export const ROLES_CONFIG: Record<RoleType, RoleConfig> = {
  * @returns Array de opciones de roles disponibles
  */
 export function getAvailableRoles(userRole: RoleType | null): RoleOption[] {
-  // Si no hay rol definido, solo permitir usuarios temporales
+  // Caso especial para administradores (asegurar siempre permisos correctos)
+  if (userRole === 'admin') {
+    console.log('Asignando roles para admin explícitamente');
+    return [
+      { value: 'supervisor', label: 'Supervisor' },
+      { value: 'basic', label: 'Básico' },
+      { value: 'temporal', label: 'Temporal' }
+    ];
+  }
+  
+  // Si no hay rol definido o no es válido, solo permitir usuarios temporales
   if (!userRole || !ROLES_CONFIG[userRole]) {
+    console.log('Rol no válido o indefinido, retornando solo temporal:', userRole);
     return [{ value: 'temporal', label: 'Temporal' }];
   }
   
   // Obtener lista de roles que puede crear según configuración
   const canCreate = ROLES_CONFIG[userRole].canCreate || [];
+  console.log(`Roles que puede crear ${userRole}:`, canCreate);
   
   // Convertir a formato de opciones
   return canCreate.map(role => ({

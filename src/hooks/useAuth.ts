@@ -29,6 +29,7 @@ export const useAuth = () => {
 
   const removeStoredToken = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('userRole'); // También eliminar el rol al cerrar sesión
   };
 
   // Verificar autenticación al iniciar
@@ -83,6 +84,12 @@ export const useAuth = () => {
 
       // Guardar token
       setStoredToken(response.token);
+      
+      // Guardar rol en localStorage
+      if (response.role) {
+        localStorage.setItem('userRole', response.role);
+        console.log('Rol guardado en localStorage:', response.role);
+      }
 
       // Si la respuesta no tiene user pero tiene role, creamos un user mínimo
       let userData: User;

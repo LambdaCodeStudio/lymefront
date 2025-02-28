@@ -1,0 +1,8 @@
+---
+import ShopLayout from '../layouts/ShopLayout.astro';
+import { CartWrapper } from '../components/shop/CartWrapper';
+---
+
+<ShopLayout title="Lyme Shop - Tu Carrito">
+  <CartWrapper client:load />
+</ShopLayout>
