@@ -169,17 +169,10 @@ export const ShopHome: React.FC = () => {
       <ShopNavbar />
       <div className="container mx-auto px-4 py-8">
         <div className="space-y-8">
-          {/* Vista de carga */}
-          {loading && (
-            <div className="flex flex-col items-center justify-center h-[70vh]">
-              <div className="w-16 h-16 border-4 border-t-[#7AA79C] border-[#DFEFE6] rounded-full animate-spin mb-4"></div>
-              <h3 className="text-xl font-medium text-[#DFEFE6]">Cargando productos...</h3>
-            </div>
-          )}
 
           {/* Vista de error */}
           {error && (
-            <Alert variant="destructive" className="bg-red-900/50 border border-red-700">
+            <Alert variant="destructive" className="bg-red-900/50 border border-red-500">
               <AlertCircle className="h-4 w-4 text-white" />
               <AlertDescription className="text-white">{error}</AlertDescription>
             </Alert>
@@ -196,9 +189,9 @@ export const ShopHome: React.FC = () => {
                   className="relative h-48 md:h-64 lg:h-80 flex items-center z-10 p-8"
                 >
                   {/* Fondo con gradiente */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-[#29696B] to-[#7AA79C] overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#00888A] to-[#50C3AD] overflow-hidden">
                     <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-5"></div>
-                    <div className="absolute -inset-[10px] bg-[#91BEAD]/20 blur-3xl"></div>
+                    <div className="absolute -inset-[10px] bg-[#80CFB0]/30 blur-3xl animate-pulse"></div>
                   </div>
                   
                   <div className="relative z-10 max-w-3xl">
@@ -208,7 +201,7 @@ export const ShopHome: React.FC = () => {
                       transition={{ delay: 0.2 }}
                       className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4 text-white"
                     >
-                      Bienvenido a <span className="text-[#DFEFE6]">LYME<span className="text-white">SHOP</span></span>
+                      Bienvenido a <span className="text-[#D4F5E6]">LYME<span className="text-white">SHOP</span></span>
                     </motion.h1>
                     <motion.p 
                       initial={{ y: 20, opacity: 0 }}
@@ -223,7 +216,7 @@ export const ShopHome: React.FC = () => {
                       animate={{ y: 0, opacity: 1 }}
                       transition={{ delay: 0.4 }}
                     >
-                      <Button className="bg-white hover:bg-[#DFEFE6] text-[#29696B] border-0 font-medium">
+                      <Button className="bg-white hover:bg-[#D4F5E6] text-[#00888A] border-0 font-medium">
                         Explorar productos
                         <ArrowRight className="ml-2 h-4 w-4" />
                       </Button>
@@ -236,11 +229,11 @@ export const ShopHome: React.FC = () => {
               <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
                 <div className="w-full md:w-auto flex-1 flex flex-col md:flex-row gap-4">
                   <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#8DB3BA]/60" />
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#75D0E0]" />
                     <Input
                       type="text"
                       placeholder="Buscar productos..."
-                      className="pl-10 bg-white/10 border-[#7AA79C] focus:border-[#91BEAD] text-white placeholder:text-[#DFEFE6]/60"
+                      className="pl-10 bg-white/10 border-[#50C3AD] focus:border-[#80CFB0] text-white placeholder:text-[#D4F5E6]/70"
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
@@ -252,10 +245,10 @@ export const ShopHome: React.FC = () => {
                     onValueChange={setSelectedCategory}
                     className="w-full md:w-auto"
                   >
-                    <TabsList className="bg-white/10 border border-[#7AA79C]">
-                      <TabsTrigger value="all" className="data-[state=active]:bg-[#29696B] data-[state=active]:text-white">Todos</TabsTrigger>
-                      <TabsTrigger value="limpieza" className="data-[state=active]:bg-[#29696B] data-[state=active]:text-white">Limpieza</TabsTrigger>
-                      <TabsTrigger value="mantenimiento" className="data-[state=active]:bg-[#29696B] data-[state=active]:text-white">Mantenimiento</TabsTrigger>
+                    <TabsList className="bg-white/10 border border-[#50C3AD]">
+                      <TabsTrigger value="all" className="data-[state=active]:bg-[#00888A] data-[state=active]:text-white">Todos</TabsTrigger>
+                      <TabsTrigger value="limpieza" className="data-[state=active]:bg-[#00888A] data-[state=active]:text-white">Limpieza</TabsTrigger>
+                      <TabsTrigger value="mantenimiento" className="data-[state=active]:bg-[#00888A] data-[state=active]:text-white">Mantenimiento</TabsTrigger>
                     </TabsList>
                   </Tabs>
                 </div>
@@ -266,8 +259,8 @@ export const ShopHome: React.FC = () => {
                     size="sm"
                     className={`${
                       showFavorites 
-                        ? "bg-[#7AA79C] hover:bg-[#29696B] text-white" 
-                        : "bg-white/10 hover:bg-white/20 border-[#7AA79C] text-white"
+                        ? "bg-[#50C3AD] hover:bg-[#00888A] text-white" 
+                        : "bg-white/10 hover:bg-white/20 border-[#50C3AD] text-white"
                     }`}
                     onClick={() => setShowFavorites(!showFavorites)}
                   >
@@ -280,14 +273,14 @@ export const ShopHome: React.FC = () => {
               {/* Categorías destacadas */}
               {!showFavorites && selectedCategory === 'all' && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                  <Card className="bg-gradient-to-br from-[#29696B] to-[#7AA79C] border-[#91BEAD] hover:shadow-lg transition-all cursor-pointer group overflow-hidden text-white">
+                  <Card className="bg-gradient-to-br from-[#00888A] to-[#50C3AD] border-[#80CFB0] hover:shadow-lg hover:shadow-[#00888A]/20 transition-all cursor-pointer group overflow-hidden text-white">
                     <CardContent className="p-6 flex items-center justify-between">
                       <div>
                         <h3 className="text-xl font-semibold mb-1">Limpieza</h3>
-                        <p className="text-[#DFEFE6] mb-4">Productos para mantener todo impecable</p>
+                        <p className="text-[#D4F5E6] mb-4">Productos para mantener todo impecable</p>
                         <Button 
                           size="sm" 
-                          className="bg-white hover:bg-[#DFEFE6] text-[#29696B]"
+                          className="bg-white hover:bg-[#D4F5E6] text-[#00888A]"
                           onClick={() => setSelectedCategory('limpieza')}
                         >
                           Ver productos
@@ -299,14 +292,14 @@ export const ShopHome: React.FC = () => {
                     </CardContent>
                   </Card>
                   
-                  <Card className="bg-gradient-to-br from-[#7AA79C] to-[#8DB3BA] border-[#91BEAD] hover:shadow-lg transition-all cursor-pointer group overflow-hidden text-white">
+                  <Card className="bg-gradient-to-br from-[#50C3AD] to-[#75D0E0] border-[#80CFB0] hover:shadow-lg hover:shadow-[#50C3AD]/20 transition-all cursor-pointer group overflow-hidden text-white">
                     <CardContent className="p-6 flex items-center justify-between">
                       <div>
                         <h3 className="text-xl font-semibold mb-1">Mantenimiento</h3>
-                        <p className="text-[#DFEFE6] mb-4">Todo para reparaciones y proyectos</p>
+                        <p className="text-[#D4F5E6] mb-4">Todo para reparaciones y proyectos</p>
                         <Button 
                           size="sm" 
-                          className="bg-white hover:bg-[#DFEFE6] text-[#29696B]"
+                          className="bg-white hover:bg-[#D4F5E6] text-[#00888A]"
                           onClick={() => setSelectedCategory('mantenimiento')}
                         >
                           Ver productos
@@ -318,14 +311,14 @@ export const ShopHome: React.FC = () => {
                     </CardContent>
                   </Card>
                   
-                  <Card className="bg-gradient-to-br from-[#8DB3BA] to-[#91BEAD] border-[#91BEAD] hover:shadow-lg transition-all cursor-pointer group overflow-hidden text-white">
+                  <Card className="bg-gradient-to-br from-[#75D0E0] to-[#80CFB0] border-[#80CFB0] hover:shadow-lg hover:shadow-[#75D0E0]/20 transition-all cursor-pointer group overflow-hidden text-white">
                     <CardContent className="p-6 flex items-center justify-between">
                       <div>
                         <h3 className="text-xl font-semibold mb-1">Ofertas</h3>
-                        <p className="text-[#DFEFE6] mb-4">Los mejores precios y descuentos</p>
+                        <p className="text-[#D4F5E6] mb-4">Los mejores precios y descuentos</p>
                         <Button 
                           size="sm" 
-                          className="bg-white hover:bg-[#DFEFE6] text-[#29696B]"
+                          className="bg-white hover:bg-[#D4F5E6] text-[#00888A]"
                         >
                           Ver ofertas
                         </Button>
@@ -342,11 +335,11 @@ export const ShopHome: React.FC = () => {
               <div>
                 {filteredProducts.length === 0 ? (
                   <div className="text-center py-20">
-                    <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-[#29696B]/30 mb-6">
-                      <Package className="h-10 w-10 text-[#DFEFE6]" />
+                    <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-[#00888A]/30 mb-6">
+                      <Package className="h-10 w-10 text-[#D4F5E6]" />
                     </div>
-                    <h2 className="text-xl md:text-2xl font-bold mb-2 text-[#DFEFE6]">No se encontraron productos</h2>
-                    <p className="text-[#8DB3BA] mb-6 max-w-lg mx-auto">
+                    <h2 className="text-xl md:text-2xl font-bold mb-2 text-[#D4F5E6]">No se encontraron productos</h2>
+                    <p className="text-[#75D0E0] mb-6 max-w-lg mx-auto">
                       {showFavorites 
                         ? "No tienes productos favoritos guardados. Explora nuestra tienda y agrega algunos." 
                         : "No hay productos que coincidan con tu búsqueda. Intenta con otros términos o categorías."}
@@ -357,14 +350,14 @@ export const ShopHome: React.FC = () => {
                         setSelectedCategory('all');
                         setShowFavorites(false);
                       }}
-                      className="bg-[#29696B] hover:bg-[#7AA79C] text-white"
+                      className="bg-[#00888A] hover:bg-[#50C3AD] text-white"
                     >
                       Ver todos los productos
                     </Button>
                   </div>
                 ) : (
                   <>
-                    <h2 className="text-2xl font-bold mb-6 flex items-center text-[#DFEFE6]">
+                    <h2 className="text-2xl font-bold mb-6 flex items-center text-[#D4F5E6]">
                       {showFavorites ? (
                         <>
                           <Heart className="w-5 h-5 mr-2 text-red-400 fill-red-400" />
@@ -373,16 +366,16 @@ export const ShopHome: React.FC = () => {
                       ) : selectedCategory !== 'all' ? (
                         <>
                           {selectedCategory === 'limpieza' ? (
-                            <Sparkles className="w-5 h-5 mr-2 text-[#DFEFE6]" />
+                            <Sparkles className="w-5 h-5 mr-2 text-[#D4F5E6]" />
                           ) : (
-                            <Package className="w-5 h-5 mr-2 text-[#DFEFE6]" />
+                            <Package className="w-5 h-5 mr-2 text-[#D4F5E6]" />
                           )}
                           Productos de {selectedCategory === 'limpieza' ? 'Limpieza' : 'Mantenimiento'}
                         </>
                       ) : (
                         <>Todos los Productos</>
                       )}
-                      <Badge variant="outline" className="ml-3 bg-white/10 text-[#DFEFE6] border-[#7AA79C]">
+                      <Badge variant="outline" className="ml-3 bg-white/10 text-[#D4F5E6] border-[#50C3AD]">
                         {filteredProducts.length} productos
                       </Badge>
                     </h2>

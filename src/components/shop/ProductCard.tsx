@@ -42,25 +42,25 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   // Determinar la clase de gradiente según la categoría
   const getGradientClass = () => {
     if (product.categoria === 'limpieza') {
-      return 'from-[#29696B]/70 to-[#7AA79C]/70';
+      return 'from-[#00888A]/70 to-[#50C3AD]/70';
     }
-    return 'from-[#7AA79C]/70 to-[#8DB3BA]/70';
+    return 'from-[#50C3AD]/70 to-[#75D0E0]/70';
   };
 
   // Determinar el color de borde según la categoría
   const getBorderClass = () => {
     if (product.categoria === 'limpieza') {
-      return 'border-[#29696B]';
+      return 'border-[#00888A]';
     }
-    return 'border-[#7AA79C]';
+    return 'border-[#50C3AD]';
   };
 
   // Determinar el color del botón según la categoría
   const getButtonClass = () => {
     if (product.categoria === 'limpieza') {
-      return 'bg-[#29696B] hover:bg-[#7AA79C]';
+      return 'bg-[#00888A] hover:bg-[#50C3AD]';
     }
-    return 'bg-[#7AA79C] hover:bg-[#29696B]';
+    return 'bg-[#50C3AD] hover:bg-[#00888A]';
   };
 
   return (
@@ -82,7 +82,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 className="object-cover h-full w-full"
               />
             ) : (
-              <div className="flex items-center justify-center h-full w-full text-[#DFEFE6]/50">
+              <div className="flex items-center justify-center h-full w-full text-[#D4F5E6]/50">
                 Sin imagen
               </div>
             )}
@@ -93,7 +93,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             variant="ghost"
             size="icon"
             className={`absolute top-4 right-4 bg-white/50 backdrop-blur-md hover:bg-white/70 rounded-full h-8 w-8 
-              ${isFavorite ? 'text-red-500' : 'text-[#29696B]/70'}`}
+              ${isFavorite ? 'text-red-500' : 'text-[#00888A]/70'}`}
             onClick={onToggleFavorite}
           >
             <Heart className={isFavorite ? 'fill-current' : ''} size={16} />
@@ -109,14 +109,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         </div>
         
         <CardContent className="flex-grow pt-4">
-          <Badge variant="outline" className="mb-2 text-xs border-[#8DB3BA] text-[#DFEFE6] bg-[#8DB3BA]/20">
+          <Badge variant="outline" className="mb-2 text-xs border-[#75D0E0] text-[#D4F5E6] bg-[#75D0E0]/20">
             {product.subCategoria}
           </Badge>
           
           <h3 className="font-medium text-lg mb-1 line-clamp-1 text-white">{product.nombre}</h3>
           
           {product.descripcion && (
-            <p className="text-sm text-[#DFEFE6]/80 line-clamp-2 mb-3">
+            <p className="text-sm text-[#D4F5E6]/80 line-clamp-2 mb-3">
               {product.descripcion}
             </p>
           )}

@@ -37,8 +37,8 @@ export const ShopNavbar: React.FC = () => {
       <header 
         className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
           scrolled 
-            ? 'bg-[#29696B] bg-opacity-95 backdrop-blur-lg shadow-lg py-2' 
-            : 'bg-gradient-to-r from-[#29696B]/90 to-[#7AA79C]/90 backdrop-blur-md py-4'
+            ? 'bg-[#00888A] bg-opacity-95 backdrop-blur-lg shadow-lg py-2' 
+            : 'bg-gradient-to-r from-[#00888A]/90 to-[#50C3AD]/90 backdrop-blur-md py-4'
         }`}
       >
         <div className="container mx-auto px-4">
@@ -47,7 +47,7 @@ export const ShopNavbar: React.FC = () => {
             <div className="flex items-center">
               <a href="/shop" className="flex items-center">
                 <span className="text-2xl font-bold text-white">
-                  LYME<span className="text-[#DFEFE6]">SHOP</span>
+                  LYME<span className="text-[#D4F5E6]">SHOP</span>
                 </span>
               </a>
             </div>
@@ -56,25 +56,25 @@ export const ShopNavbar: React.FC = () => {
             <nav className="hidden md:flex items-center space-x-8">
               <a 
                 href="/shop" 
-                className="text-white hover:text-[#DFEFE6] transition-colors text-sm font-medium uppercase tracking-wide"
+                className="text-white hover:text-[#D4F5E6] transition-colors text-sm font-medium uppercase tracking-wide"
               >
                 Inicio
               </a>
               <a 
                 href="/shop?category=limpieza" 
-                className="text-white hover:text-[#DFEFE6] transition-colors text-sm font-medium uppercase tracking-wide"
+                className="text-white hover:text-[#D4F5E6] transition-colors text-sm font-medium uppercase tracking-wide"
               >
                 Limpieza
               </a>
               <a 
                 href="/shop?category=mantenimiento" 
-                className="text-white hover:text-[#DFEFE6] transition-colors text-sm font-medium uppercase tracking-wide"
+                className="text-white hover:text-[#D4F5E6] transition-colors text-sm font-medium uppercase tracking-wide"
               >
                 Mantenimiento
               </a>
               <a 
                 href="/shop?view=favorites" 
-                className="text-white hover:text-[#DFEFE6] transition-colors text-sm font-medium uppercase tracking-wide"
+                className="text-white hover:text-[#D4F5E6] transition-colors text-sm font-medium uppercase tracking-wide"
               >
                 Favoritos
               </a>
@@ -84,7 +84,7 @@ export const ShopNavbar: React.FC = () => {
             <div className="flex items-center space-x-4">
               <button 
                 onClick={() => setSearchOpen(!searchOpen)}
-                className="text-white hover:text-[#DFEFE6] transition-colors"
+                className="text-white hover:text-[#D4F5E6] transition-colors"
                 aria-label="Buscar"
               >
                 <Search className="w-5 h-5" />
@@ -92,12 +92,12 @@ export const ShopNavbar: React.FC = () => {
 
               <a 
                 href="/cart" 
-                className="relative text-white hover:text-[#DFEFE6] transition-colors"
+                className="relative text-white hover:text-[#D4F5E6] transition-colors"
                 aria-label="Carrito"
               >
                 <ShoppingCart className="w-5 h-5" />
                 {cartItemCount > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-[#91BEAD] text-[#29696B] text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                  <span className="absolute -top-2 -right-2 bg-[#80CFB0] text-[#00888A] text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
                     {cartItemCount}
                   </span>
                 )}
@@ -136,19 +136,19 @@ export const ShopNavbar: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.2 }}
-            className="fixed top-[60px] left-0 right-0 bg-[#29696B] bg-opacity-95 backdrop-blur-lg z-40 p-4 border-b border-[#7AA79C]/50 shadow-lg"
+            className="fixed top-[60px] left-0 right-0 bg-[#00888A] bg-opacity-95 backdrop-blur-lg z-40 p-4 border-b border-[#50C3AD]/50 shadow-lg"
           >
             <div className="container mx-auto">
               <div className="flex items-center">
                 <Input 
                   type="text" 
                   placeholder="Buscar productos..." 
-                  className="w-full focus:ring-2 focus:ring-[#91BEAD] bg-white/10 border-[#7AA79C] text-white placeholder-white/60"
+                  className="w-full focus:ring-2 focus:ring-[#80CFB0] bg-white/10 border-[#50C3AD] text-white placeholder-white/60"
                   autoFocus
                 />
                 <Button 
                   size="sm" 
-                  className="ml-2 bg-[#DFEFE6] hover:bg-white text-[#29696B]"
+                  className="ml-2 bg-[#D4F5E6] hover:bg-white text-[#00888A]"
                 >
                   Buscar
                 </Button>
@@ -166,33 +166,33 @@ export const ShopNavbar: React.FC = () => {
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.3 }}
-            className="fixed inset-x-0 top-[60px] bg-[#29696B] bg-opacity-95 backdrop-blur-xl z-40 md:hidden border-b border-[#7AA79C]/50"
+            className="fixed inset-x-0 top-[60px] bg-[#00888A] bg-opacity-95 backdrop-blur-xl z-40 md:hidden border-b border-[#50C3AD]/50"
           >
             <div className="container mx-auto px-4 py-6 flex flex-col space-y-4">
               <a 
                 href="/shop" 
-                className="text-white hover:text-[#DFEFE6] transition-colors py-2 border-b border-[#7AA79C]/30 text-lg"
+                className="text-white hover:text-[#D4F5E6] transition-colors py-2 border-b border-[#50C3AD]/30 text-lg"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Inicio
               </a>
               <a 
                 href="/shop?category=limpieza" 
-                className="text-white hover:text-[#DFEFE6] transition-colors py-2 border-b border-[#7AA79C]/30 text-lg"
+                className="text-white hover:text-[#D4F5E6] transition-colors py-2 border-b border-[#50C3AD]/30 text-lg"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Limpieza
               </a>
               <a 
                 href="/shop?category=mantenimiento" 
-                className="text-white hover:text-[#DFEFE6] transition-colors py-2 border-b border-[#7AA79C]/30 text-lg"
+                className="text-white hover:text-[#D4F5E6] transition-colors py-2 border-b border-[#50C3AD]/30 text-lg"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Mantenimiento
               </a>
               <a 
                 href="/shop?view=favorites" 
-                className="text-white hover:text-[#DFEFE6] transition-colors py-2 border-b border-[#7AA79C]/30 text-lg"
+                className="text-white hover:text-[#D4F5E6] transition-colors py-2 border-b border-[#50C3AD]/30 text-lg"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Favoritos

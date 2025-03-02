@@ -593,14 +593,6 @@ const InventorySection: React.FC = () => {
         </Button>
       </div>
 
-      {/* Vista de Carga */}
-      {loading && (
-        <div className="flex justify-center items-center py-8 bg-white rounded-xl shadow-sm border border-[#91BEAD]/20 p-6">
-          <div className="w-8 h-8 border-4 border-[#8DB3BA] border-t-[#29696B] rounded-full animate-spin"></div>
-          <span className="ml-3 text-[#29696B]">Cargando productos...</span>
-        </div>
-      )}
-
       {/* Alerta para productos con stock bajo */}
       {!loading && products.some(p => p.stock > 0 && p.stock <= LOW_STOCK_THRESHOLD) && (
         <Alert className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg">

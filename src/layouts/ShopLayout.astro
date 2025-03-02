@@ -9,58 +9,54 @@ const { title = 'Lyme Shop - Productos de Calidad' } = Astro.props;
 ---
 
 <MainLayout title={title}>
-  <!-- Updated background with new color palette -->
-  <div class="min-h-screen bg-gradient-to-br from-[#29696B] via-[#7AA79C] to-[#29696B] text-white !important">
+  <!-- Updated background with vibrant color palette -->
+  <div class="min-h-screen bg-gradient-to-br from-[#00888A] via-[#50C3AD] to-[#00888A] text-white !important">
     <slot />
   </div>
 </MainLayout>
 
 <style is:global>
-  /* Force theme for all shop pages with new color palette */
+  /* Force theme for all shop pages with vibrant color palette */
   body {
-    background-color: #29696B !important; /* Dark teal as fallback */
+    background-color: #00888A !important; /* Vibrant teal as fallback */
     color: #ffffff !important;
   }
   
   /* Ensure all cards and UI elements have proper contrast */
   .card, .bg-white, .bg-gray-100, .bg-gray-200 {
-    background-color: rgba(145, 190, 173, 0.2) !important; /* #91BEAD with opacity */
-    border-color: rgba(223, 239, 230, 0.2) !important; /* #DFEFE6 with opacity */
+    background-color: rgba(80, 195, 173, 0.2) !important; /* #50C3AD with opacity */
+    border-color: rgba(212, 245, 230, 0.2) !important; /* #D4F5E6 with opacity */
   }
   
   /* Update text colors for better readability with new palette */
   .text-gray-700, .text-gray-800, .text-gray-900, .text-black {
-    color: #DFEFE6 !important; /* Light mint green */
+    color: #D4F5E6 !important; /* Vibrant mint green */
   }
   
   /* Additional styles for consistent theming */
   .btn-primary, .bg-primary {
-    background-color: #7AA79C !important; /* Teal green */
-    border-color: #91BEAD !important; /* Medium sage green */
+    background-color: #50C3AD !important; /* Vibrant teal green */
+    border-color: #80CFB0 !important; /* Vibrant sage green */
   }
   
   .text-primary {
-    color: #DFEFE6 !important; /* Light mint green */
+    color: #D4F5E6 !important; /* Vibrant mint green */
   }
   
   /* Ensure inputs and form elements match the theme */
   input, select, textarea {
-    background-color: rgba(223, 239, 230, 0.1) !important;
-    border-color: rgba(145, 190, 173, 0.4) !important;
-    color: #DFEFE6 !important;
+    background-color: rgba(212, 245, 230, 0.1) !important;
+    border-color: rgba(80, 195, 173, 0.4) !important;
+    color: #D4F5E6 !important;
   }
   
   input::placeholder, textarea::placeholder {
-    color: rgba(223, 239, 230, 0.5) !important;
+    color: rgba(212, 245, 230, 0.6) !important;
   }
   
   /* Button styling */
   button, .button {
-    background-color: #29696B !important;
     color: white !important;
   }
-  
-  button:hover, .button:hover {
-    background-color: #7AA79C !important;
-  }
+
 </style>
