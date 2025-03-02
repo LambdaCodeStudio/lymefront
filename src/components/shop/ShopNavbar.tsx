@@ -47,7 +47,7 @@ export const ShopNavbar: React.FC = () => {
             <div className="flex items-center">
               <a href="/shop" className="flex items-center">
                 <span className="text-2xl font-bold text-white">
-                  LYME<span className="text-[#D4F5E6]">SHOP</span>
+                  LYME<span className="text-[#D4F5E6]"> S.A</span>
                 </span>
               </a>
             </div>

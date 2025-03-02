@@ -1,10 +1,12 @@
 ---
 import ShopLayout from '../layouts/ShopLayout.astro';
 import { CartWrapper } from '../components/shop/CartWrapper';
+import { Footer } from '../components/common/Footer'
 ---
 
 <ShopLayout title="Lyme Shop - Tu Carrito">
   <CartWrapper client:load />
+  <Footer client:load />
 </ShopLayout>
 
 <style>

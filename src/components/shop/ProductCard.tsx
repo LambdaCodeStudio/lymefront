@@ -92,7 +92,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           <Button
             variant="ghost"
             size="icon"
-            className={`absolute top-4 right-4 bg-white/50 backdrop-blur-md hover:bg-white/70 rounded-full h-8 w-8 
+            className={`absolute top-4 right-4 bg-white/50 backdrop-blur-md hover:bg-red/70 rounded-full h-8 w-8 
               ${isFavorite ? 'text-red-500' : 'text-[#00888A]/70'}`}
             onClick={onToggleFavorite}
           >

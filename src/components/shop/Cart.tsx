@@ -347,13 +347,6 @@ export const Cart: React.FC = () => {
                     <Trash2 className="mr-2 h-4 w-4" />
                     Vaciar carrito
                   </Button>
-                  
-                  <Button 
-                    onClick={() => setCheckoutStep(2)}
-                    className="bg-[#00888A] hover:bg-[#50C3AD] text-white shadow-md shadow-[#00888A]/20"
-                  >
-                    Continuar
-                  </Button>
                 </div>
               )}
               
@@ -419,9 +412,9 @@ export const Cart: React.FC = () => {
                     {checkoutStep === 1 ? (
                       <Button 
                         onClick={() => setCheckoutStep(2)}
-                        className="w-full bg-[#D4F5E6] hover:bg-white text-[#00888A] font-medium shadow-md shadow-[#00888A]/10"
-                      >
-                        Proceder al pago
+                        className="bg-[#00888A] hover:bg-[#50C3AD] text-white shadow-md shadow-[#00888A]/20"
+                  >
+                        Proceder a confirmar la orden
                       </Button>
                     ) : (
                       <div className="w-full text-center text-sm text-[#D4F5E6]/90">
