@@ -91,24 +91,63 @@ const AdminDashboard: React.FC = () => {
 
   // Si está cargando o no está autenticado, mostrar un mensaje
   if (auth.loading) {
-    return <div className="flex justify-center items-center min-h-screen">Cargando...</div>;
+    return (
+      <div className="flex justify-center items-center min-h-screen bg-[#DFEFE6]">
+        <div className="bg-white p-8 rounded-xl shadow-lg">
+          <div className="flex items-center space-x-3">
+            <div className="w-4 h-4 rounded-full bg-[#29696B] animate-pulse"></div>
+            <div className="w-4 h-4 rounded-full bg-[#7AA79C] animate-pulse delay-300"></div>
+            <div className="w-4 h-4 rounded-full bg-[#8DB3BA] animate-pulse delay-500"></div>
+            <span className="text-[#29696B] font-medium ml-2">Cargando...</span>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (!auth.isAuthenticated) {
-    return <div className="flex justify-center items-center min-h-screen">No autorizado</div>;
+    return (
+      <div className="flex justify-center items-center min-h-screen bg-[#DFEFE6]">
+        <div className="bg-white p-8 rounded-xl shadow-lg text-[#29696B] font-medium">
+          No autorizado
+        </div>
+      </div>
+    );
   }
 
   return (
     <InventoryProvider>
       <DashboardContext.Provider value={dashboardState}>
         <NotificationProvider>
-          <div className="min-h-screen bg-gray-50 py-6">
-            <div className="max-w-7xl mx-auto px-4">
-              <h1 className="text-2xl font-bold text-gray-900 mb-6 transform transition-all duration-300 ease-out hover:translate-x-2">
-                Panel de Administración
-              </h1>
+          <div className="min-h-screen bg-[#DFEFE6] py-8">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6">
+              <div className="flex items-center justify-between mb-8">
+                <h1 className="text-3xl font-bold text-[#29696B] transition-all duration-300 ease-out hover:translate-x-2">
+                  Panel de Administración
+                </h1>
+                <div className="hidden sm:flex items-center space-x-1">
+                  {sections.map(section => (
+                    <button
+                      key={`nav-${section.id}`}
+                      onClick={() => changeSection(
+                        currentSection === section.id ? null : section.id
+                      )}
+                      className={`px-4 py-2 rounded-lg flex items-center transition-all ${
+                        currentSection === section.id
+                          ? 'bg-[#29696B] text-white'
+                          : 'bg-white text-[#29696B] hover:bg-[#91BEAD]/20'
+                      }`}
+                    >
+                      <section.icon className={`w-4 h-4 mr-2 ${
+                        currentSection === section.id ? 'text-white' : 'text-[#7AA79C]'
+                      }`} />
+                      <span className="text-sm font-medium">{section.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
               
-              <div className="bg-white rounded-lg shadow-md transition-all duration-300 ease-in-out hover:shadow-lg">
+              <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-[#91BEAD]/10">
                 {sections.map(section => (
                   <DashboardSection 
                     key={section.id}

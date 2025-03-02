@@ -1,12 +1,8 @@
 ---
-import AuthLayout from '../layouts/AuthLayout.astro';
+import Layout from '../layouts/Layout.astro';
 import { LoginForm } from '../components/auth/LoginForm';
 ---
 
-<AuthLayout title="Iniciar sesión">
-  <main class="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-    <div class="max-w-md w-full space-y-8">
-      <LoginForm client:load />
-    </div>
-  </main>
-</AuthLayout>
+<Layout title="Iniciar sesión | Lyme">
+  <LoginForm client:load />
+</Layout>

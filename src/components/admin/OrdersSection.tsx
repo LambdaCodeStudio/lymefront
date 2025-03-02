@@ -147,7 +147,7 @@ const ProductDetail = ({ item, cachedProducts, products, getProductDetails }) =>
         }
 
         // Si el producto está en la lista de productos, usar esa información
-        const localProduct = products.find(p => p._id === productId);
+        const localProduct = products.find((p: { _id: any; }) => p._id === productId);
         if (localProduct) {
           setProductName(localProduct.nombre);
           setProductPrice(localProduct.precio);
@@ -180,20 +180,20 @@ const ProductDetail = ({ item, cachedProducts, products, getProductDetails }) =>
   if (isLoading) {
     return (
       <>
-        <td className="px-4 py-2 text-sm">Cargando...</td>
-        <td className="px-4 py-2 text-sm">{item.cantidad}</td>
-        <td className="px-4 py-2 text-sm">$0.00</td>
-        <td className="px-4 py-2 text-sm font-medium">$0.00</td>
+        <td className="px-4 py-2 text-sm text-[#7AA79C]">Cargando...</td>
+        <td className="px-4 py-2 text-sm text-[#7AA79C]">{item.cantidad}</td>
+        <td className="px-4 py-2 text-sm text-[#7AA79C]">$0.00</td>
+        <td className="px-4 py-2 text-sm font-medium text-[#7AA79C]">$0.00</td>
       </>
     );
   }
 
   return (
     <>
-      <td className="px-4 py-2 text-sm">{productName}</td>
-      <td className="px-4 py-2 text-sm">{item.cantidad}</td>
-      <td className="px-4 py-2 text-sm">${productPrice.toFixed(2)}</td>
-      <td className="px-4 py-2 text-sm font-medium">
+      <td className="px-4 py-2 text-sm text-[#29696B]">{productName}</td>
+      <td className="px-4 py-2 text-sm text-[#7AA79C]">{item.cantidad}</td>
+      <td className="px-4 py-2 text-sm text-[#7AA79C]">${productPrice.toFixed(2)}</td>
+      <td className="px-4 py-2 text-sm font-medium text-[#29696B]">
         ${(productPrice * item.cantidad).toFixed(2)}
       </td>
     </>
@@ -241,7 +241,7 @@ const ProductDetailCard = ({ item, cachedProducts, products, getProductDetails }
         }
 
         // Si el producto está en la lista de productos, usar esa información
-        const localProduct = products.find(p => p._id === productId);
+        const localProduct = products.find((p: { _id: any; }) => p._id === productId);
         if (localProduct) {
           setProductName(localProduct.nombre);
           setProductPrice(localProduct.precio);
@@ -272,23 +272,23 @@ const ProductDetailCard = ({ item, cachedProducts, products, getProductDetails }
 
   if (isLoading) {
     return (
-      <div className="py-2 flex justify-between items-center border-b">
+      <div className="py-2 flex justify-between items-center border-b border-[#91BEAD]/20">
         <div>
-          <div className="font-medium">Cargando...</div>
-          <div className="text-xs text-gray-500">Cantidad: {item.cantidad}</div>
+          <div className="font-medium text-[#7AA79C]">Cargando...</div>
+          <div className="text-xs text-[#91BEAD]">Cantidad: {item.cantidad}</div>
         </div>
-        <div className="text-sm font-medium">$0.00</div>
+        <div className="text-sm font-medium text-[#7AA79C]">$0.00</div>
       </div>
     );
   }
 
   return (
-    <div className="py-2 flex justify-between items-center border-b">
+    <div className="py-2 flex justify-between items-center border-b border-[#91BEAD]/20">
       <div>
-        <div className="font-medium">{productName}</div>
-        <div className="text-xs text-gray-500">Cantidad: {item.cantidad} x ${productPrice.toFixed(2)}</div>
+        <div className="font-medium text-[#29696B]">{productName}</div>
+        <div className="text-xs text-[#7AA79C]">Cantidad: {item.cantidad} x ${productPrice.toFixed(2)}</div>
       </div>
-      <div className="text-sm font-medium">${(productPrice * item.cantidad).toFixed(2)}</div>
+      <div className="text-sm font-medium text-[#29696B]">${(productPrice * item.cantidad).toFixed(2)}</div>
     </div>
   );
 };
@@ -317,7 +317,7 @@ const OrderTotalCalculator = ({ order, cachedProducts, products, getProductDetai
       }
       
       // Crear un array de promesas para cargar todos los productos no cacheados
-      const productPromises = order.productos.map(async (item) => {
+      const productPromises = order.productos.map(async (item: { productoId: { _id: any; }; precio: any; cantidad: any; }) => {
         if (!item) return null;
         
         // Obtener el ID del producto de manera segura
@@ -348,7 +348,7 @@ const OrderTotalCalculator = ({ order, cachedProducts, products, getProductDetai
         }
         
         // Si el producto está en la lista de productos, usamos su precio
-        const localProduct = products.find(p => p._id === productId);
+        const localProduct = products.find((p: { _id: any; }) => p._id === productId);
         if (localProduct && typeof localProduct.precio === 'number') {
           return {
             id: productId,
@@ -396,10 +396,10 @@ const OrderTotalCalculator = ({ order, cachedProducts, products, getProductDetai
   }, [order, cachedProducts, products, getProductDetails]);
   
   if (isLoading) {
-    return <span>Calculando...</span>;
+    return <span className="text-[#7AA79C]">Calculando...</span>;
   }
   
-  return <span>${total.toFixed(2)}</span>;
+  return <span className="text-[#29696B]">${total.toFixed(2)}</span>;
 };
 
 // Componente principal
@@ -1486,37 +1486,37 @@ const OrdersSection = () => {
   if (loading && orders.length === 0) {
     return (
       <div className="flex items-center justify-center p-8">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#29696B]" />
       </div>
     );
   }
 
   return (
-    <div className="p-4 md:p-6">
+    <div className="p-4 md:p-6 bg-[#DFEFE6]/30">
       {/* Alertas */}
       {error && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+        <Alert className="mb-4 bg-red-50 border border-red-200 text-red-800 rounded-lg">
+          <AlertCircle className="h-4 w-4 text-red-600" />
+          <AlertDescription className="ml-2">{error}</AlertDescription>
         </Alert>
       )}
 
       {successMessage && (
-        <Alert variant="default" className="mb-4 bg-green-50 border-green-200">
-          <Check className="h-4 w-4 text-green-500" />
-          <AlertDescription>{successMessage}</AlertDescription>
+        <Alert className="mb-4 bg-[#DFEFE6] border-[#91BEAD] text-[#29696B] rounded-lg">
+          <Check className="h-4 w-4 text-[#29696B]" />
+          <AlertDescription className="ml-2">{successMessage}</AlertDescription>
         </Alert>
       )}
 
       {/* Barra de filtros y acciones para escritorio */}
-      <div className="mb-6 space-y-4 hidden md:block">
+      <div className="mb-6 space-y-4 hidden md:block bg-white p-4 rounded-xl shadow-sm border border-[#91BEAD]/20">
         <div className="flex flex-wrap gap-4 items-center justify-between">
           <div className="relative flex-1 min-w-[280px]">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
             <Input
               type="text"
               placeholder="Buscar pedidos..."
-              className="pl-10"
+              className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -1527,6 +1527,7 @@ const OrdersSection = () => {
               resetOrderForm();
               setShowCreateModal(true);
             }}
+            className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
           >
             <ShoppingCart className="w-4 h-4 mr-2" />
             Nuevo Pedido
@@ -1535,28 +1536,29 @@ const OrdersSection = () => {
 
         <div className="flex flex-wrap gap-4 items-end">
           <div>
-            <Label htmlFor="fechaInicio">Fecha Inicio</Label>
+            <Label htmlFor="fechaInicio" className="text-[#29696B]">Fecha Inicio</Label>
             <Input
               id="fechaInicio"
               type="date"
               value={dateFilter.fechaInicio}
               onChange={(e) => setDateFilter({ ...dateFilter, fechaInicio: e.target.value })}
-              className="w-full"
+              className="w-full border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
             />
           </div>
           <div>
-            <Label htmlFor="fechaFin">Fecha Fin</Label>
+            <Label htmlFor="fechaFin" className="text-[#29696B]">Fecha Fin</Label>
             <Input
               id="fechaFin"
               type="date"
               value={dateFilter.fechaFin}
               onChange={(e) => setDateFilter({ ...dateFilter, fechaFin: e.target.value })}
-              className="w-full"
+              className="w-full border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
             />
           </div>
           <Button
             variant="outline"
             onClick={fetchOrdersByDate}
+            className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50"
           >
             <Filter className="w-4 h-4 mr-2" />
             Filtrar por Fecha
@@ -1565,6 +1567,7 @@ const OrdersSection = () => {
             <Button
               variant="ghost"
               onClick={clearAllFilters}
+              className="text-[#7AA79C] hover:text-[#29696B] hover:bg-[#DFEFE6]/30"
             >
               Limpiar filtros
             </Button>
@@ -1574,13 +1577,13 @@ const OrdersSection = () => {
 
       {/* Barra de filtros y acciones para móvil */}
       <div className="mb-6 space-y-4 md:hidden">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 bg-white p-3 rounded-xl shadow-sm border border-[#91BEAD]/20">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
             <Input
               type="text"
               placeholder="Buscar pedidos..."
-              className="pl-10"
+              className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -1589,7 +1592,7 @@ const OrdersSection = () => {
             variant="outline"
             size="icon"
             onClick={() => setShowMobileFilters(!showMobileFilters)}
-            className="flex-shrink-0"
+            className="flex-shrink-0 border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50"
           >
             <Filter className="w-4 h-4" />
           </Button>
@@ -1599,34 +1602,34 @@ const OrdersSection = () => {
               resetOrderForm();
               setShowCreateModal(true);
             }}
-            className="flex-shrink-0"
+            className="flex-shrink-0 bg-[#29696B] hover:bg-[#29696B]/90 text-white"
           >
             <Plus className="w-4 h-4" />
           </Button>
         </div>
 
         {showMobileFilters && (
-          <div className="p-4 bg-gray-50 rounded-lg border space-y-4">
-            <h3 className="font-medium text-sm">Filtrar por fecha</h3>
+          <div className="p-4 bg-[#DFEFE6]/30 rounded-lg border border-[#91BEAD]/20 space-y-4">
+            <h3 className="font-medium text-sm text-[#29696B]">Filtrar por fecha</h3>
             <div className="space-y-2">
               <div>
-                <Label htmlFor="mFechaInicio" className="text-xs">Fecha Inicio</Label>
+                <Label htmlFor="mFechaInicio" className="text-xs text-[#29696B]">Fecha Inicio</Label>
                 <Input
                   id="mFechaInicio"
                   type="date"
                   value={dateFilter.fechaInicio}
                   onChange={(e) => setDateFilter({ ...dateFilter, fechaInicio: e.target.value })}
-                  className="w-full text-sm"
+                  className="w-full text-sm border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
                 />
               </div>
               <div>
-                <Label htmlFor="mFechaFin" className="text-xs">Fecha Fin</Label>
+                <Label htmlFor="mFechaFin" className="text-xs text-[#29696B]">Fecha Fin</Label>
                 <Input
                   id="mFechaFin"
                   type="date"
                   value={dateFilter.fechaFin}
                   onChange={(e) => setDateFilter({ ...dateFilter, fechaFin: e.target.value })}
-                  className="w-full text-sm"
+                  className="w-full text-sm border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
                 />
               </div>
             </div>
@@ -1635,14 +1638,14 @@ const OrdersSection = () => {
                 variant="outline"
                 size="sm"
                 onClick={clearAllFilters}
-                className="text-xs"
+                className="text-xs border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50"
               >
                 Limpiar
               </Button>
               <Button
                 size="sm"
                 onClick={fetchOrdersByDate}
-                className="text-xs"
+                className="text-xs bg-[#29696B] hover:bg-[#29696B]/90 text-white"
               >
                 Aplicar Filtros
               </Button>
@@ -1651,7 +1654,7 @@ const OrdersSection = () => {
         )}
 
         {(dateFilter.fechaInicio || dateFilter.fechaFin) && (
-          <div className="px-3 py-2 bg-blue-50 rounded-md text-xs text-blue-600 flex items-center justify-between">
+          <div className="px-3 py-2 bg-[#DFEFE6]/50 rounded-md text-xs text-[#29696B] flex items-center justify-between border border-[#91BEAD]/20">
             <div>
               <CalendarRange className="w-3 h-3 inline mr-1" />
               <span>
@@ -1664,7 +1667,7 @@ const OrdersSection = () => {
               variant="ghost"
               size="sm"
               onClick={clearAllFilters}
-              className="h-6 text-xs px-2"
+              className="h-6 text-xs px-2 text-[#7AA79C] hover:text-[#29696B] hover:bg-[#DFEFE6]/30"
             >
               <X className="w-3 h-3" />
             </Button>
@@ -1674,55 +1677,60 @@ const OrdersSection = () => {
 
       {/* Sin resultados */}
       {filteredOrders.length === 0 ? (
-        <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
-          No se encontraron pedidos
-          {searchTerm && ` que coincidan con "${searchTerm}"`}
-          {(dateFilter.fechaInicio || dateFilter.fechaFin) && " en el rango de fechas seleccionado"}
+        <div className="bg-white rounded-xl shadow-sm p-8 text-center text-[#7AA79C] border border-[#91BEAD]/20">
+          <div className="inline-flex items-center justify-center w-12 h-12 bg-[#DFEFE6] rounded-full mb-4">
+            <ShoppingCart className="w-6 h-6 text-[#29696B]" />
+          </div>
+          <p>
+            No se encontraron pedidos
+            {searchTerm && ` que coincidan con "${searchTerm}"`}
+            {(dateFilter.fechaInicio || dateFilter.fechaFin) && " en el rango de fechas seleccionado"}
+          </p>
         </div>
       ) : (
         <>
           {/* Tabla de pedidos para pantallas medianas y grandes */}
-          <div className="bg-white rounded-lg shadow overflow-hidden hidden md:block">
+          <div className="bg-white rounded-xl shadow-sm overflow-hidden hidden md:block border border-[#91BEAD]/20">
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-gray-50">
+                <thead className="bg-[#DFEFE6]/30">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
                       Fecha
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
                       Cliente
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
                       Sección
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
                       Usuario
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
                       Productos
                     </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-right text-xs font-medium text-[#29696B] uppercase tracking-wider">
                       Acciones
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-[#91BEAD]/20">
                   {filteredOrders.map((order) => (
                     <React.Fragment key={order._id}>
-                      <tr className="hover:bg-gray-50">
+                      <tr className="hover:bg-[#DFEFE6]/10 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">
+                          <div className="text-sm text-[#29696B]">
                             {new Date(order.fecha).toLocaleDateString()}
                           </div>
-                          <div className="text-xs text-gray-500">
+                          <div className="text-xs text-[#7AA79C]">
                             {new Date(order.fecha).toLocaleTimeString()}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
-                            <Building className="w-4 h-4 text-gray-400 mr-2" />
-                            <div className="text-sm font-medium text-gray-900">
+                            <Building className="w-4 h-4 text-[#7AA79C] mr-2" />
+                            <div className="text-sm font-medium text-[#29696B]">
                               {order.servicio}
                             </div>
                           </div>
@@ -1730,29 +1738,30 @@ const OrdersSection = () => {
                         <td className="px-6 py-4 whitespace-nowrap">
                           {order.seccionDelServicio ? (
                             <div className="flex items-center">
-                              <MapPin className="w-4 h-4 text-gray-400 mr-2" />
-                              <div className="text-sm text-gray-900">
+                              <MapPin className="w-4 h-4 text-[#7AA79C] mr-2" />
+                              <div className="text-sm text-[#29696B]">
                                 {order.seccionDelServicio}
                               </div>
                             </div>
                           ) : (
-                            <span className="text-xs text-gray-500">Sin sección</span>
+                            <span className="text-xs text-[#7AA79C]">Sin sección</span>
                           )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">
+                          <div className="text-sm text-[#29696B]">
                             {getUserEmail(order.userId)}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-2">
-                            <Badge variant="secondary">
+                            <Badge variant="outline" className="border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/30">
                               {order.productos.length} producto{order.productos.length !== 1 ? 's' : ''}
                             </Badge>
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => toggleOrderDetails(order._id)}
+                              className="text-[#7AA79C] hover:text-[#29696B] hover:bg-[#DFEFE6]/30"
                             >
                               <Eye className="w-4 h-4" />
                             </Button>
@@ -1764,15 +1773,17 @@ const OrdersSection = () => {
                               variant="ghost"
                               size="sm"
                               onClick={() => handleEditOrder(order)}
+                              className="text-[#29696B] hover:bg-[#DFEFE6]/30"
                             >
-                              <FileEdit className="w-4 h-4 text-blue-600" />
+                              <FileEdit className="w-4 h-4" />
                             </Button>
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => handleDeleteOrder(order._id)}
+                              className="text-red-600 hover:bg-red-50"
                             >
-                              <Trash2 className="w-4 h-4 text-red-600" />
+                              <Trash2 className="w-4 h-4" />
                             </Button>
                           </div>
                         </td>
@@ -1781,22 +1792,22 @@ const OrdersSection = () => {
                       {/* Detalles del pedido (expandible) */}
                       {orderDetailsOpen === order._id && (
                         <tr>
-                          <td colSpan={6} className="px-6 py-4 bg-gray-50">
+                          <td colSpan={6} className="px-6 py-4 bg-[#DFEFE6]/20">
                             <div className="space-y-3">
-                              <div className="font-medium text-gray-900">Detalles del Pedido</div>
+                              <div className="font-medium text-[#29696B]">Detalles del Pedido</div>
                               <div className="overflow-x-auto">
-                                <table className="min-w-full divide-y divide-gray-200">
-                                  <thead className="bg-gray-100">
+                                <table className="min-w-full divide-y divide-[#91BEAD]/20">
+                                  <thead className="bg-[#DFEFE6]/50">
                                     <tr>
-                                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Producto</th>
-                                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Cantidad</th>
-                                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Precio</th>
-                                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Total</th>
+                                      <th className="px-4 py-2 text-left text-xs font-medium text-[#29696B]">Producto</th>
+                                      <th className="px-4 py-2 text-left text-xs font-medium text-[#29696B]">Cantidad</th>
+                                      <th className="px-4 py-2 text-left text-xs font-medium text-[#29696B]">Precio</th>
+                                      <th className="px-4 py-2 text-left text-xs font-medium text-[#29696B]">Total</th>
                                     </tr>
                                   </thead>
-                                  <tbody className="divide-y divide-gray-200">
+                                  <tbody className="divide-y divide-[#91BEAD]/20">
                                     {order.productos.map((item, index) => (
-                                      <tr key={index} className="hover:bg-gray-100">
+                                      <tr key={index} className="hover:bg-[#DFEFE6]/20">
                                         <ProductDetail 
                                           item={item} 
                                           cachedProducts={cachedProducts} 
@@ -1807,9 +1818,9 @@ const OrdersSection = () => {
                                     ))}
 
                                     {/* Total */}
-                                    <tr className="bg-blue-50">
-                                      <td colSpan={3} className="px-4 py-2 text-right font-medium">Total del Pedido:</td>
-                                      <td className="px-4 py-2 font-bold">
+                                    <tr className="bg-[#DFEFE6]/40">
+                                      <td colSpan={3} className="px-4 py-2 text-right font-medium text-[#29696B]">Total del Pedido:</td>
+                                      <td className="px-4 py-2 font-bold text-[#29696B]">
                                         <OrderTotalCalculator 
                                           order={order} 
                                           cachedProducts={cachedProducts} 
@@ -1835,22 +1846,22 @@ const OrdersSection = () => {
           {/* Vista de tarjetas para móviles */}
           <div className="space-y-4 md:hidden">
             {filteredOrders.map((order) => (
-              <Card key={order._id} className="overflow-hidden shadow-sm">
-                <CardHeader className="pb-2">
+              <Card key={order._id} className="overflow-hidden shadow-sm border border-[#91BEAD]/20">
+                <CardHeader className="pb-2 bg-[#DFEFE6]/20">
                   <div className="flex justify-between items-start">
                     <div>
-                      <CardTitle className="text-sm font-medium flex items-center">
-                        <Building className="w-4 h-4 text-gray-500 mr-1" />
+                      <CardTitle className="text-sm font-medium flex items-center text-[#29696B]">
+                        <Building className="w-4 h-4 text-[#7AA79C] mr-1" />
                         {order.servicio}
                       </CardTitle>
                       {order.seccionDelServicio && (
-                        <div className="text-xs text-gray-500 flex items-center mt-1">
+                        <div className="text-xs text-[#7AA79C] flex items-center mt-1">
                           <MapPin className="w-3 h-3 mr-1" />
                           {order.seccionDelServicio}
                         </div>
                       )}
                     </div>
-                    <Badge variant="outline" className="text-xs">
+                    <Badge variant="outline" className="text-xs border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/20">
                       {new Date(order.fecha).toLocaleDateString()}
                     </Badge>
                   </div>
@@ -1858,12 +1869,12 @@ const OrdersSection = () => {
                 <CardContent className="py-2">
                   <div className="text-xs space-y-1">
                     <div className="flex items-center">
-                      <User className="w-3 h-3 text-gray-500 mr-1" />
-                      <span className="text-gray-600">{getUserEmail(order.userId)}</span>
+                      <User className="w-3 h-3 text-[#7AA79C] mr-1" />
+                      <span className="text-[#29696B]">{getUserEmail(order.userId)}</span>
                     </div>
                     <div className="flex items-center">
-                      <ShoppingCart className="w-3 h-3 text-gray-500 mr-1" />
-                      <span className="text-gray-600">{order.productos.length} productos</span>
+                      <ShoppingCart className="w-3 h-3 text-[#7AA79C] mr-1" />
+                      <span className="text-[#29696B]">{order.productos.length} productos</span>
                     </div>
                   </div>
 
@@ -1877,13 +1888,13 @@ const OrdersSection = () => {
                     <AccordionItem value="details" className="border-0">
                       <AccordionTrigger
                         onClick={() => toggleMobileOrderDetails(order._id)}
-                        className="py-1 text-xs font-medium text-blue-600"
+                        className="py-1 text-xs font-medium text-[#29696B]"
                       >
                         Ver detalles
                       </AccordionTrigger>
                       <AccordionContent>
                         <div className="text-xs pt-2 pb-1">
-                          <div className="font-medium mb-2">Productos:</div>
+                          <div className="font-medium mb-2 text-[#29696B]">Productos:</div>
                           <div className="space-y-1">
                             {order.productos.map((item, index) => (
                               <ProductDetailCard
@@ -1896,8 +1907,8 @@ const OrdersSection = () => {
                             ))}
                           </div>
                           <div className="flex justify-between items-center pt-2 font-medium text-sm">
-                            <span>Total:</span>
-                            <div className="flex items-center text-blue-700">
+                            <span className="text-[#29696B]">Total:</span>
+                            <div className="flex items-center text-[#29696B]">
                               <DollarSign className="w-3 h-3 mr-1" />
                               <OrderTotalCalculator
                                 order={order}
@@ -1912,22 +1923,22 @@ const OrdersSection = () => {
                     </AccordionItem>
                   </Accordion>
                 </CardContent>
-                <CardFooter className="py-2 px-4 bg-gray-50 flex justify-end gap-2">
+                <CardFooter className="py-2 px-4 bg-[#DFEFE6]/10 flex justify-end gap-2 border-t border-[#91BEAD]/20">
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 px-2"
+                    className="h-8 px-2 text-[#29696B] hover:bg-[#DFEFE6]/30"
                     onClick={() => handleEditOrder(order)}
                   >
-                    <FileEdit className="w-4 h-4 text-blue-600" />
+                    <FileEdit className="w-4 h-4" />
                   </Button>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 px-2"
+                    className="h-8 px-2 text-red-600 hover:bg-red-50"
                     onClick={() => handleDeleteOrder(order._id)}
                   >
-                    <Trash2 className="w-4 h-4 text-red-600" />
+                    <Trash2 className="w-4 h-4" />
                   </Button>
                 </CardFooter>
               </Card>
@@ -1938,9 +1949,9 @@ const OrdersSection = () => {
 
       {/* Modal de Crear/Editar Pedido */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto bg-white border border-[#91BEAD]/20">
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className="text-[#29696B]">
               {currentOrder ? 'Editar Pedido' : 'Nuevo Pedido'}
             </DialogTitle>
           </DialogHeader>
@@ -1948,13 +1959,13 @@ const OrdersSection = () => {
           <div className="py-4 space-y-6">
             {/* Sección de Cliente */}
             <div>
-              <h2 className="text-lg font-medium mb-4 flex items-center">
-                <Building className="w-5 h-5 mr-2 text-gray-500" />
+              <h2 className="text-lg font-medium mb-4 flex items-center text-[#29696B]">
+                <Building className="w-5 h-5 mr-2 text-[#7AA79C]" />
                 Selección de Cliente
               </h2>
 
               {clients.length === 0 ? (
-                <Alert>
+                <Alert className="bg-[#DFEFE6]/30 border border-[#91BEAD] text-[#29696B]">
                   <AlertDescription>
                     No tiene clientes asignados o no se pudieron cargar. Contacte a un administrador para que le asigne clientes.
                   </AlertDescription>
@@ -1962,7 +1973,7 @@ const OrdersSection = () => {
               ) : (
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="cliente">Cliente</Label>
+                    <Label htmlFor="cliente" className="text-[#29696B]">Cliente</Label>
                     <Select
                       value={
                         clients.find(c => c.servicio === orderForm.servicio)?._id ||
@@ -1970,7 +1981,7 @@ const OrdersSection = () => {
                       }
                       onValueChange={handleClientChange}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
                         <SelectValue placeholder="Seleccionar cliente" />
                       </SelectTrigger>
                       <SelectContent>
@@ -1988,9 +1999,9 @@ const OrdersSection = () => {
                   </div>
 
                   {orderForm.seccionDelServicio && (
-                    <div className="flex items-center p-3 bg-gray-50 rounded-md">
-                      <MapPin className="w-4 h-4 text-gray-500 mr-2" />
-                      <span>Sección: {orderForm.seccionDelServicio || 'Principal'}</span>
+                    <div className="flex items-center p-3 bg-[#DFEFE6]/30 rounded-md border border-[#91BEAD]/30">
+                      <MapPin className="w-4 h-4 text-[#7AA79C] mr-2" />
+                      <span className="text-[#29696B]">Sección: {orderForm.seccionDelServicio || 'Principal'}</span>
                     </div>
                   )}
                 </div>
@@ -1999,18 +2010,18 @@ const OrdersSection = () => {
 
             {/* Estado del formulario para debug */}
             {orderForm.servicio && (
-              <div className="p-3 bg-gray-50 rounded-md text-xs text-gray-600">
-                <div><strong>Cliente:</strong> {orderForm.servicio}</div>
-                <div><strong>Sección:</strong> {orderForm.seccionDelServicio || "No especificada"}</div>
-                <div><strong>Usuario:</strong> {orderForm.userId || "No asignado"}</div>
+              <div className="p-3 bg-[#DFEFE6]/20 rounded-md text-xs text-[#7AA79C] border border-[#91BEAD]/30">
+                <div><strong className="text-[#29696B]">Cliente:</strong> {orderForm.servicio}</div>
+                <div><strong className="text-[#29696B]">Sección:</strong> {orderForm.seccionDelServicio || "No especificada"}</div>
+                <div><strong className="text-[#29696B]">Usuario:</strong> {orderForm.userId || "No asignado"}</div>
               </div>
             )}
 
             {/* Productos del Pedido */}
             <div>
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-medium flex items-center">
-                  <ShoppingCart className="w-5 h-5 mr-2 text-gray-500" />
+                <h2 className="text-lg font-medium flex items-center text-[#29696B]">
+                  <ShoppingCart className="w-5 h-5 mr-2 text-[#7AA79C]" />
                   Productos
                 </h2>
 
@@ -2021,6 +2032,7 @@ const OrdersSection = () => {
                     console.log("Productos disponibles:", products.length);
                   }}
                   disabled={!orderForm.servicio || products.length === 0}
+                  className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30 disabled:bg-gray-100 disabled:text-gray-400"
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   Agregar Producto
@@ -2028,7 +2040,7 @@ const OrdersSection = () => {
               </div>
 
               {orderForm.productos.length === 0 ? (
-                <div className="text-center py-8 text-gray-500 border border-dashed rounded-md">
+                <div className="text-center py-8 text-[#7AA79C] border border-dashed border-[#91BEAD]/40 rounded-md bg-[#DFEFE6]/10">
                   No hay productos en el pedido
                 </div>
               ) : (
@@ -2039,24 +2051,25 @@ const OrdersSection = () => {
                     return (
                       <div
                         key={index}
-                        className="flex justify-between items-center p-3 bg-gray-50 rounded-md"
+                        className="flex justify-between items-center p-3 bg-[#DFEFE6]/20 rounded-md border border-[#91BEAD]/30"
                       >
                         <div>
-                          <div className="font-medium">{item.nombre || product?.nombre || getProductName(productId)}</div>
-                          <div className="text-sm text-gray-500">
+                          <div className="font-medium text-[#29696B]">{item.nombre || product?.nombre || getProductName(productId)}</div>
+                          <div className="text-sm text-[#7AA79C]">
                             Cantidad: {item.cantidad} x ${item.precio || product?.precio || getProductPrice(productId)}
                           </div>
                         </div>
                         <div className="flex items-center gap-4">
-                          <div className="font-medium">
+                          <div className="font-medium text-[#29696B]">
                             ${((item.precio || product?.precio || getProductPrice(productId) || 0) * item.cantidad).toFixed(2)}
                           </div>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleRemoveProduct(index)}
+                            className="text-red-500 hover:bg-red-50 hover:text-red-600"
                           >
-                            <X className="w-4 h-4 text-red-500" />
+                            <X className="w-4 h-4" />
                           </Button>
                         </div>
                       </div>
@@ -2064,9 +2077,9 @@ const OrdersSection = () => {
                   })}
 
                   {/* Total */}
-                  <div className="flex justify-between items-center p-3 bg-blue-50 rounded-md mt-4">
-                    <div className="font-medium">Total</div>
-                    <div className="font-bold text-lg">${calculateTotal(orderForm.productos).toFixed(2)}</div>
+                  <div className="flex justify-between items-center p-3 bg-[#DFEFE6]/40 rounded-md mt-4 border border-[#91BEAD]/30">
+                    <div className="font-medium text-[#29696B]">Total</div>
+                    <div className="font-bold text-lg text-[#29696B]">${calculateTotal(orderForm.productos).toFixed(2)}</div>
                   </div>
                 </div>
               )}
@@ -2080,12 +2093,14 @@ const OrdersSection = () => {
                 setShowCreateModal(false);
                 resetOrderForm();
               }}
+              className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
             >
               Cancelar
             </Button>
             <Button
               onClick={currentOrder ? handleUpdateOrder : handleCreateOrder}
               disabled={loading || orderForm.productos.length === 0 || !orderForm.servicio}
+              className="bg-[#29696B] hover:bg-[#29696B]/90 text-white disabled:bg-[#8DB3BA] disabled:text-white/70"
             >
               {loading ? (
                 <span className="flex items-center gap-2">
@@ -2100,13 +2115,13 @@ const OrdersSection = () => {
 
       {/* Modal para seleccionar sección */}
       <Dialog open={showSectionModal} onOpenChange={setShowSectionModal}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md bg-white border border-[#91BEAD]/20">
           <DialogHeader>
-            <DialogTitle>Seleccionar Sección</DialogTitle>
+            <DialogTitle className="text-[#29696B]">Seleccionar Sección</DialogTitle>
           </DialogHeader>
 
           <div className="py-4">
-            <p className="text-sm text-gray-500 mb-4">
+            <p className="text-sm text-[#7AA79C] mb-4">
               Seleccione la sección para este pedido:
             </p>
 
@@ -2115,12 +2130,12 @@ const OrdersSection = () => {
                 clientSections[orderForm.servicio]?.map((client) => (
                   <div
                     key={client._id}
-                    className="p-3 border rounded-md hover:bg-gray-50 cursor-pointer"
+                    className="p-3 border border-[#91BEAD] rounded-md hover:bg-[#DFEFE6]/30 cursor-pointer transition-colors"
                     onClick={() => handleSectionSelect(client.seccionDelServicio || "")}
                   >
                     <div className="flex items-center">
-                      <MapPin className="w-4 h-4 text-gray-500 mr-2" />
-                      <span>{client.seccionDelServicio || 'Principal'}</span>
+                      <MapPin className="w-4 h-4 text-[#7AA79C] mr-2" />
+                      <span className="text-[#29696B]">{client.seccionDelServicio || 'Principal'}</span>
                     </div>
                   </div>
                 ))}
@@ -2131,6 +2146,7 @@ const OrdersSection = () => {
             <Button
               variant="outline"
               onClick={() => setShowSectionModal(false)}
+              className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
             >
               Cancelar
             </Button>
@@ -2140,19 +2156,19 @@ const OrdersSection = () => {
 
       {/* Modal para agregar producto */}
       <Dialog open={showProductModal} onOpenChange={setShowProductModal}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md bg-white border border-[#91BEAD]/20">
           <DialogHeader>
-            <DialogTitle>Agregar Producto</DialogTitle>
+            <DialogTitle className="text-[#29696B]">Agregar Producto</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
             <div>
-              <Label htmlFor="producto">Producto</Label>
+              <Label htmlFor="producto" className="text-[#29696B]">Producto</Label>
               <Select
                 value={selectedProduct}
                 onValueChange={setSelectedProduct}
               >
-                <SelectTrigger>
+                <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
                   <SelectValue placeholder="Seleccionar producto" />
                 </SelectTrigger>
                 <SelectContent>
@@ -2167,18 +2183,19 @@ const OrdersSection = () => {
             </div>
 
             <div>
-              <Label htmlFor="cantidad">Cantidad</Label>
+              <Label htmlFor="cantidad" className="text-[#29696B]">Cantidad</Label>
               <Input
                 id="cantidad"
                 type="number"
                 min="1"
                 value={productQuantity}
                 onChange={(e) => setProductQuantity(parseInt(e.target.value) || 1)}
+                className="border-[#91BEAD] focus:ring-[#29696B]/20 focus:border-[#29696B]"
               />
             </div>
 
             {/* Información de productos disponibles */}
-            <div className="text-xs text-gray-500">
+            <div className="text-xs text-[#7AA79C]">
               Productos disponibles: {products.length}
             </div>
           </div>
@@ -2187,10 +2204,14 @@ const OrdersSection = () => {
             <Button
               variant="outline"
               onClick={() => setShowProductModal(false)}
+              className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
             >
               Cancelar
             </Button>
-            <Button onClick={handleAddProduct}>
+            <Button 
+              onClick={handleAddProduct}
+              className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
+            >
               Agregar
             </Button>
           </DialogFooter>

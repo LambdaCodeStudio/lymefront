@@ -105,6 +105,16 @@ const DownloadsManagement: React.FC = () => {
     fechaFin: '',
   });
   
+  // Estado temporal para formulario de filtros
+  const [tempFilterOptions, setTempFilterOptions] = useState<FilterOptions>({
+    servicio: '',
+    fechaInicio: '',
+    fechaFin: '',
+  });
+  
+  // Estado para controlar el diálogo de filtros
+  const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
+  
   // Estado compartido
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -240,6 +250,13 @@ const DownloadsManagement: React.FC = () => {
           
           setAllPedidos(pedidosConTotal);
           setFilteredPedidos(pedidosConTotal);
+          
+          // Inicializar las opciones de filtro temporales
+          setTempFilterOptions({
+            servicio: '',
+            fechaInicio: '',
+            fechaFin: '',
+          });
         } else {
           // Si la respuesta no es un array, inicializar con array vacío
           console.error('❌ Respuesta de pedidos inválida:', response.data);
@@ -258,40 +275,56 @@ const DownloadsManagement: React.FC = () => {
     fetchAllPedidos();
   }, []);
   
-  // Aplicar filtros a pedidos
-  useEffect(() => {
-    const applyFilters = () => {
-      let filtered = [...allPedidos];
-      
-      // Filtrar por servicio
-      if (filterOptions.servicio) {
-        filtered = filtered.filter(pedido => 
-          pedido.servicio === filterOptions.servicio
-        );
-      }
-      
-      // Filtrar por fecha inicio
-      if (filterOptions.fechaInicio) {
-        const fechaInicio = new Date(filterOptions.fechaInicio);
-        filtered = filtered.filter(pedido => 
-          new Date(pedido.fecha) >= fechaInicio
-        );
-      }
-      
-      // Filtrar por fecha fin
-      if (filterOptions.fechaFin) {
-        const fechaFin = new Date(filterOptions.fechaFin);
-        fechaFin.setHours(23, 59, 59);
-        filtered = filtered.filter(pedido => 
-          new Date(pedido.fecha) <= fechaFin
-        );
-      }
-      
-      setFilteredPedidos(filtered);
-    };
+  // Función para aplicar filtros manualmente
+  const applyFilters = () => {
+    let filtered = [...allPedidos];
     
+    // Filtrar por servicio
+    if (filterOptions.servicio) {
+      filtered = filtered.filter(pedido => 
+        pedido.servicio === filterOptions.servicio
+      );
+    }
+    
+    // Filtrar por fecha inicio
+    if (filterOptions.fechaInicio) {
+      const fechaInicio = new Date(filterOptions.fechaInicio);
+      filtered = filtered.filter(pedido => {
+        const fechaPedido = new Date(pedido.fecha);
+        return fechaPedido >= fechaInicio;
+      });
+    }
+    
+    // Filtrar por fecha fin
+    if (filterOptions.fechaFin) {
+      const fechaFin = new Date(filterOptions.fechaFin);
+      fechaFin.setHours(23, 59, 59);
+      filtered = filtered.filter(pedido => {
+        const fechaPedido = new Date(pedido.fecha);
+        return fechaPedido <= fechaFin;
+      });
+    }
+    
+    console.log("Aplicando filtros:", filterOptions);
+    console.log("Pedidos filtrados:", filtered.length);
+    
+    setFilteredPedidos(filtered);
+  };
+  
+  // Reaccionar a cambios en filterOptions
+  useEffect(() => {
     applyFilters();
-  }, [filterOptions, allPedidos]);
+  }, [filterOptions]);
+  
+  // Manejar confirmación de filtros
+  const handleApplyFilters = () => {
+    // Aplicar los filtros temporales
+    setFilterOptions(tempFilterOptions);
+    // Cerrar el diálogo
+    setIsFilterDialogOpen(false);
+    
+    console.log("Filtros aplicados:", tempFilterOptions);
+  };
 
   // Función para descargar Excel
   const handleExcelDownload = async () => {
@@ -372,11 +405,13 @@ const DownloadsManagement: React.FC = () => {
 
   // Función para restablecer filtros
   const resetFilters = () => {
-    setFilterOptions({
+    const emptyFilters = {
       servicio: '',
       fechaInicio: '',
       fechaFin: '',
-    });
+    };
+    setTempFilterOptions(emptyFilters);
+    setFilterOptions(emptyFilters);
   };
 
   const formatDate = (date: Date) => date.toISOString().split('T')[0];
@@ -442,17 +477,17 @@ const DownloadsManagement: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 bg-[#DFEFE6]/20 p-4 md:p-6 rounded-xl">
       {/* Alertas */}
       {error && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertDescription>{error}</AlertDescription>
+        <Alert className="mb-4 bg-red-50 border border-red-200 text-red-800 rounded-lg">
+          <AlertDescription className="text-red-700">{error}</AlertDescription>
         </Alert>
       )}
       
       {successMessage && (
-        <Alert variant="default" className="mb-4 bg-green-50 border-green-200">
-          <AlertDescription className="text-green-700">{successMessage}</AlertDescription>
+        <Alert className="mb-4 bg-[#DFEFE6] border border-[#91BEAD] text-[#29696B] rounded-lg">
+          <AlertDescription className="text-[#29696B]">{successMessage}</AlertDescription>
         </Alert>
       )}
       
@@ -463,41 +498,59 @@ const DownloadsManagement: React.FC = () => {
             variant="outline" 
             size="sm" 
             onClick={checkClientsEmpty}
-            className="text-xs"
+            className="text-xs border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/40"
           >
             Diagnosticar Clientes
           </Button>
-          <div className="text-xs text-gray-500 mt-1">
+          <div className="text-xs text-[#7AA79C] mt-1">
             {`Clientes cargados: ${clientes.length}, Filtrados: ${filteredClientes.length}`}
+          </div>
+          <div className="text-xs text-[#7AA79C] mt-1">
+            {`Estado de filtros: Servicio=${filterOptions.servicio}, Desde=${filterOptions.fechaInicio}, Hasta=${filterOptions.fechaFin}`}
           </div>
         </div>
       )}
 
       <Tabs defaultValue="excel" className="w-full">
-        <TabsList className="grid grid-cols-3 mb-4">
-          <TabsTrigger value="excel">Reportes Excel</TabsTrigger>
-          <TabsTrigger value="remitos">Remitos por Cliente</TabsTrigger>
-          <TabsTrigger value="tabla">Tabla de Pedidos</TabsTrigger>
+        <TabsList className="grid grid-cols-3 mb-4 bg-[#DFEFE6]/50 p-1">
+          <TabsTrigger 
+            value="excel" 
+            className="data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
+          >
+            Reportes Excel
+          </TabsTrigger>
+          <TabsTrigger 
+            value="remitos" 
+            className="data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
+          >
+            Remitos por Cliente
+          </TabsTrigger>
+          <TabsTrigger 
+            value="tabla" 
+            className="data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
+          >
+            Tabla de Pedidos
+          </TabsTrigger>
         </TabsList>
         
         {/* Pestaña de Excel */}
         <TabsContent value="excel">
-          <Card>
-            <CardHeader>
+          <Card className="border border-[#91BEAD]/20 shadow-sm">
+            <CardHeader className="bg-[#DFEFE6]/20 border-b border-[#91BEAD]/20">
               <div className="flex items-center justify-between">
-                <CardTitle>Exportar a Excel</CardTitle>
-                <FileSpreadsheet className="w-6 h-6 text-gray-500" />
+                <CardTitle className="text-[#29696B]">Exportar a Excel</CardTitle>
+                <FileSpreadsheet className="w-6 h-6 text-[#7AA79C]" />
               </div>
-              <CardDescription>
+              <CardDescription className="text-[#7AA79C]">
                 Exporta los datos del período seleccionado a una planilla de Excel
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="date-from">Desde</Label>
+                  <Label htmlFor="date-from" className="text-[#29696B]">Desde</Label>
                   <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-5 h-5" />
                     <Input
                       id="date-from"
                       type="date"
@@ -506,15 +559,15 @@ const DownloadsManagement: React.FC = () => {
                         ...dateRange,
                         from: e.target.value ? new Date(e.target.value) : undefined
                       })}
-                      className="pl-10"
+                      className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
                     />
                   </div>
                 </div>
                 
                 <div className="grid gap-2">
-                  <Label htmlFor="date-to">Hasta</Label>
+                  <Label htmlFor="date-to" className="text-[#29696B]">Hasta</Label>
                   <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-5 h-5" />
                     <Input
                       id="date-to"
                       type="date"
@@ -523,17 +576,17 @@ const DownloadsManagement: React.FC = () => {
                         ...dateRange,
                         to: e.target.value ? new Date(e.target.value) : undefined
                       })}
-                      className="pl-10"
+                      className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
                     />
                   </div>
                 </div>
               </div>
             </CardContent>
-            <CardFooter>
+            <CardFooter className="bg-[#DFEFE6]/10 border-t border-[#91BEAD]/20">
               <Button
                 onClick={handleExcelDownload}
                 disabled={isLoading || !dateRange.from || !dateRange.to}
-                className="w-full"
+                className="w-full bg-[#29696B] hover:bg-[#29696B]/90 text-white"
               >
                 {isLoading ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
@@ -550,28 +603,28 @@ const DownloadsManagement: React.FC = () => {
         
         {/* Pestaña de Remitos */}
         <TabsContent value="remitos">
-          <Card>
-            <CardHeader>
+          <Card className="border border-[#91BEAD]/20 shadow-sm">
+            <CardHeader className="bg-[#DFEFE6]/20 border-b border-[#91BEAD]/20">
               <div className="flex items-center justify-between">
-                <CardTitle>Descargar Remito</CardTitle>
-                <FileText className="w-6 h-6 text-gray-500" />
+                <CardTitle className="text-[#29696B]">Descargar Remito</CardTitle>
+                <FileText className="w-6 h-6 text-[#7AA79C]" />
               </div>
-              <CardDescription>
+              <CardDescription className="text-[#7AA79C]">
                 Descarga el remito de un pedido específico
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pt-6">
               {/* Buscador de clientes */}
               <div className="space-y-2">
-                <Label>Buscar Cliente</Label>
+                <Label className="text-[#29696B]">Buscar Cliente</Label>
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-5 h-5" />
                   <Input
                     type="text"
                     placeholder="Buscar por nombre..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
+                    className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
                   />
                 </div>
               </div>
@@ -590,9 +643,9 @@ const DownloadsManagement: React.FC = () => {
 
               {/* Selector de cliente */}
               <div className="space-y-2">
-                <Label>Seleccionar Cliente</Label>
+                <Label className="text-[#29696B]">Seleccionar Cliente</Label>
                 <Select value={selectedCliente} onValueChange={setSelectedCliente}>
-                  <SelectTrigger>
+                  <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
                     <SelectValue placeholder="Selecciona un cliente" />
                   </SelectTrigger>
                   <SelectContent>
@@ -614,9 +667,9 @@ const DownloadsManagement: React.FC = () => {
               {/* Selector de pedido */}
               {selectedCliente && (
                 <div className="space-y-2">
-                  <Label>Seleccionar Pedido</Label>
+                  <Label className="text-[#29696B]">Seleccionar Pedido</Label>
                   <Select value={selectedPedido} onValueChange={setSelectedPedido}>
-                    <SelectTrigger>
+                    <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
                       <SelectValue placeholder="Selecciona un pedido" />
                     </SelectTrigger>
                     <SelectContent>
@@ -638,11 +691,11 @@ const DownloadsManagement: React.FC = () => {
                 </div>
               )}
             </CardContent>
-            <CardFooter>
+            <CardFooter className="bg-[#DFEFE6]/10 border-t border-[#91BEAD]/20">
               <Button
                 onClick={() => handleRemitoDownload()}
                 disabled={isLoading || !selectedCliente || !selectedPedido}
-                className="w-full"
+                className="w-full bg-[#29696B] hover:bg-[#29696B]/90 text-white disabled:bg-[#8DB3BA] disabled:text-white/70"
               >
                 {isLoading ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
@@ -659,40 +712,51 @@ const DownloadsManagement: React.FC = () => {
         
         {/* Pestaña de Tabla de Pedidos */}
         <TabsContent value="tabla">
-          <Card>
-            <CardHeader>
+          <Card className="border border-[#91BEAD]/20 shadow-sm">
+            <CardHeader className="bg-[#DFEFE6]/20 border-b border-[#91BEAD]/20">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                  <CardTitle>Todos los Pedidos</CardTitle>
-                  <CardDescription>
+                  <CardTitle className="text-[#29696B]">Todos los Pedidos</CardTitle>
+                  <CardDescription className="text-[#7AA79C]">
                     Visualiza y descarga remitos de cualquier pedido
                   </CardDescription>
                 </div>
                 
                 {/* Filtros */}
-                <Dialog>
+                <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
                   <DialogTrigger asChild>
-                    <Button variant="outline" className="flex items-center gap-2">
+                    <Button 
+                      variant="outline" 
+                      className="flex items-center gap-2 border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/40"
+                    >
                       <SlidersHorizontal className="w-4 h-4" />
                       Filtros
+                      {(filterOptions.servicio || filterOptions.fechaInicio || filterOptions.fechaFin) && (
+                        <Badge className="ml-1 bg-[#29696B] text-white">
+                          Activos
+                        </Badge>
+                      )}
                     </Button>
                   </DialogTrigger>
-                  <DialogContent>
+                  <DialogContent className="bg-white border border-[#91BEAD]/20">
                     <DialogHeader>
-                      <DialogTitle>Filtrar Pedidos</DialogTitle>
-                      <DialogDescription>
+                      <DialogTitle className="text-[#29696B]">Filtrar Pedidos</DialogTitle>
+                      <DialogDescription className="text-[#7AA79C]">
                         Ajusta los filtros para encontrar pedidos específicos
                       </DialogDescription>
                     </DialogHeader>
                     
                     <div className="space-y-4 py-4">
                       <div className="space-y-2">
-                        <Label htmlFor="servicio-filter">Servicio</Label>
+                        <Label htmlFor="servicio-filter" className="text-[#29696B]">Servicio</Label>
                         <Select 
-                          value={filterOptions.servicio} 
-                          onValueChange={(value) => setFilterOptions({...filterOptions, servicio: value})}
+                          value={tempFilterOptions.servicio} 
+                          onValueChange={(value) => setTempFilterOptions({...tempFilterOptions, servicio: value})}
                         >
-                          <SelectTrigger id="servicio-filter">
+                          <SelectTrigger 
+                            id="servicio-filter" 
+                            className="border-[#91BEAD] focus:ring-[#29696B]/20"
+                          >
                             <SelectValue placeholder="Todos los servicios" />
                           </SelectTrigger>
                           <SelectContent>
@@ -708,48 +772,100 @@ const DownloadsManagement: React.FC = () => {
                       
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label htmlFor="fecha-inicio-filter">Desde</Label>
+                          <Label htmlFor="fecha-inicio-filter" className="text-[#29696B]">Desde</Label>
                           <Input
                             id="fecha-inicio-filter"
                             type="date"
-                            value={filterOptions.fechaInicio}
-                            onChange={(e) => setFilterOptions({...filterOptions, fechaInicio: e.target.value})}
+                            value={tempFilterOptions.fechaInicio}
+                            onChange={(e) => setTempFilterOptions({...tempFilterOptions, fechaInicio: e.target.value})}
+                            className="border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
                           />
                         </div>
                         
                         <div className="space-y-2">
-                          <Label htmlFor="fecha-fin-filter">Hasta</Label>
+                          <Label htmlFor="fecha-fin-filter" className="text-[#29696B]">Hasta</Label>
                           <Input
                             id="fecha-fin-filter"
                             type="date"
-                            value={filterOptions.fechaFin}
-                            onChange={(e) => setFilterOptions({...filterOptions, fechaFin: e.target.value})}
+                            value={tempFilterOptions.fechaFin}
+                            onChange={(e) => setTempFilterOptions({...tempFilterOptions, fechaFin: e.target.value})}
+                            className="border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
                           />
                         </div>
                       </div>
                     </div>
                     
                     <div className="flex justify-between">
-                      <Button variant="outline" onClick={resetFilters}>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => {
+                          setTempFilterOptions({
+                            servicio: '',
+                            fechaInicio: '',
+                            fechaFin: '',
+                          });
+                        }}
+                        className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/40"
+                      >
                         Restablecer
                       </Button>
-                      <Button type="submit">Aplicar filtros</Button>
+                      <Button
+                        type="button"
+                        onClick={handleApplyFilters}
+                        className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
+                      >
+                        Aplicar filtros
+                      </Button>
                     </div>
                   </DialogContent>
                 </Dialog>
               </div>
+              
+              {/* Barra de filtros activos */}
+              {(filterOptions.servicio || filterOptions.fechaInicio || filterOptions.fechaFin) && (
+                <div className="flex flex-wrap items-center gap-2 mt-2 p-2 bg-[#DFEFE6]/30 rounded-md border border-[#91BEAD]/20">
+                  <span className="text-xs text-[#29696B] font-medium">Filtros activos:</span>
+                  
+                  {filterOptions.servicio && (
+                    <Badge variant="outline" className="bg-[#DFEFE6]/40 border-[#91BEAD] text-[#29696B]">
+                      Servicio: {filterOptions.servicio}
+                    </Badge>
+                  )}
+                  
+                  {filterOptions.fechaInicio && (
+                    <Badge variant="outline" className="bg-[#DFEFE6]/40 border-[#91BEAD] text-[#29696B]">
+                      Desde: {new Date(filterOptions.fechaInicio).toLocaleDateString()}
+                    </Badge>
+                  )}
+                  
+                  {filterOptions.fechaFin && (
+                    <Badge variant="outline" className="bg-[#DFEFE6]/40 border-[#91BEAD] text-[#29696B]">
+                      Hasta: {new Date(filterOptions.fechaFin).toLocaleDateString()}
+                    </Badge>
+                  )}
+                  
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={resetFilters} 
+                    className="ml-auto text-xs h-7 px-2 text-[#29696B]"
+                  >
+                    Limpiar filtros
+                  </Button>
+                </div>
+              )}
             </CardHeader>
-            <CardContent>
-              <div className="rounded-md border">
+            <CardContent className="p-0">
+              <div className="rounded-md border border-[#91BEAD]/20">
                 <Table>
-                  <TableHeader>
+                  <TableHeader className="bg-[#DFEFE6]/30">
                     <TableRow>
-                      <TableHead>Nº</TableHead>
-                      <TableHead>Fecha</TableHead>
-                      <TableHead>Servicio</TableHead>
-                      <TableHead className="hidden md:table-cell">Sección</TableHead>
-                      <TableHead className="text-right">Productos</TableHead>
-                      <TableHead className="text-right">Acciones</TableHead>
+                      <TableHead className="text-[#29696B]">Nº</TableHead>
+                      <TableHead className="text-[#29696B]">Fecha</TableHead>
+                      <TableHead className="text-[#29696B]">Servicio</TableHead>
+                      <TableHead className="hidden md:table-cell text-[#29696B]">Sección</TableHead>
+                      <TableHead className="text-right text-[#29696B]">Productos</TableHead>
+                      <TableHead className="text-right text-[#29696B]">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -759,27 +875,34 @@ const DownloadsManagement: React.FC = () => {
                         <TableRow key={index}>
                           {Array.from({ length: 6 }).map((_, cellIndex) => (
                             <TableCell key={cellIndex}>
-                              <Skeleton className="h-6 w-full" />
+                              <Skeleton className="h-6 w-full bg-[#DFEFE6]/40" />
                             </TableCell>
                           ))}
                         </TableRow>
                       ))
                     ) : filteredPedidos.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-10 text-gray-500">
+                        <TableCell colSpan={6} className="text-center py-10 text-[#7AA79C]">
                           No se encontraron pedidos con los filtros seleccionados
                         </TableCell>
                       </TableRow>
                     ) : (
                       filteredPedidos.map((pedido) => (
-                        <TableRow key={pedido._id}>
-                          <TableCell>{pedido.numero || 'S/N'}</TableCell>
-                          <TableCell>{formatDisplayDate(pedido.fecha)}</TableCell>
+                        <TableRow 
+                          key={pedido._id} 
+                          className="hover:bg-[#DFEFE6]/10 transition-colors"
+                        >
+                          <TableCell className="text-[#29696B] font-medium">{pedido.numero || 'S/N'}</TableCell>
+                          <TableCell className="text-[#7AA79C]">{formatDisplayDate(pedido.fecha)}</TableCell>
                           <TableCell>
-                            <Badge variant="outline">{pedido.servicio || 'N/A'}</Badge>
+                            <Badge variant="outline" className="border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/20">
+                              {pedido.servicio || 'N/A'}
+                            </Badge>
                           </TableCell>
-                          <TableCell className="hidden md:table-cell">{pedido.seccionDelServicio || '-'}</TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="hidden md:table-cell text-[#7AA79C]">
+                            {pedido.seccionDelServicio || '-'}
+                          </TableCell>
+                          <TableCell className="text-right text-[#29696B] font-medium">
                             {pedido.productos?.length || 0}
                           </TableCell>
                           <TableCell className="text-right">
@@ -788,6 +911,7 @@ const DownloadsManagement: React.FC = () => {
                               size="sm"
                               onClick={() => handleRemitoDownload(pedido._id)}
                               disabled={isLoading}
+                              className="text-[#29696B] hover:bg-[#DFEFE6]/30"
                             >
                               {isLoading ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -803,8 +927,8 @@ const DownloadsManagement: React.FC = () => {
                 </Table>
               </div>
             </CardContent>
-            <CardFooter className="flex justify-between">
-              <div className="text-sm text-muted-foreground">
+            <CardFooter className="bg-[#DFEFE6]/10 border-t border-[#91BEAD]/20 justify-between">
+              <div className="text-sm text-[#7AA79C]">
                 Mostrando {filteredPedidos.length} de {allPedidos.length} pedidos
               </div>
             </CardFooter>

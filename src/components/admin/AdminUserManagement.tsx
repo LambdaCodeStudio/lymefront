@@ -6,7 +6,9 @@ import React from 'react';
 import {
   Plus,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  Search,
+  Filter
 } from 'lucide-react';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -60,14 +62,14 @@ const UserManagementContent: React.FC = () => {
       
       {/* Alertas solo para errores críticos */}
       {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+        <Alert className="bg-red-50 border border-red-200 text-red-800 rounded-lg">
+          <AlertCircle className="h-4 w-4 text-red-600" />
+          <AlertDescription className="ml-2">{error}</AlertDescription>
         </Alert>
       )}
 
       {/* Barra de Herramientas */}
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-[#91BEAD]/20">
         <UserFilters 
           searchTerm={searchTerm}
           setSearchTerm={setSearchTerm}
@@ -75,10 +77,13 @@ const UserManagementContent: React.FC = () => {
           setShowInactiveUsers={setShowInactiveUsers}
         />
         
-        <Button onClick={() => {
-          resetForm();
-          setShowModal(true);
-        }}>
+        <Button 
+          onClick={() => {
+            resetForm();
+            setShowModal(true);
+          }}
+          className="bg-[#29696B] hover:bg-[#29696B]/90 text-white px-4 py-2 rounded-lg transition-colors duration-200 flex items-center justify-center"
+        >
           <Plus className="w-4 h-4 mr-2" />
           <span className="hidden sm:inline">Nuevo Usuario</span>
           <span className="sm:hidden">Nuevo</span>
@@ -87,21 +92,24 @@ const UserManagementContent: React.FC = () => {
 
       {/* Vista de Carga */}
       {loading && users.length === 0 && (
-        <div className="flex justify-center items-center py-8">
-          <div className="w-8 h-8 border-4 border-blue-300 border-t-blue-600 rounded-full animate-spin"></div>
-          <span className="ml-2 text-gray-600">Cargando usuarios...</span>
+        <div className="flex justify-center items-center py-8 bg-white rounded-xl shadow-sm border border-[#91BEAD]/20 p-6">
+          <div className="w-8 h-8 border-4 border-[#8DB3BA] border-t-[#29696B] rounded-full animate-spin"></div>
+          <span className="ml-3 text-[#29696B]">Cargando usuarios...</span>
         </div>
       )}
 
       {/* Mensaje cuando no hay usuarios */}
       {!loading && filteredUsers.length === 0 && (
-        <div className="bg-white rounded-lg shadow p-8 text-center">
-          <p className="text-gray-500">No se encontraron usuarios que coincidan con la búsqueda</p>
+        <div className="bg-white rounded-xl shadow-sm p-8 text-center border border-[#91BEAD]/20">
+          <div className="inline-flex items-center justify-center w-12 h-12 bg-[#DFEFE6] rounded-full mb-4">
+            <Search className="w-6 h-6 text-[#29696B]" />
+          </div>
+          <p className="text-[#7AA79C] font-medium">No se encontraron usuarios que coincidan con la búsqueda</p>
         </div>
       )}
 
       {/* Tabla para pantallas medianas y grandes */}
-      <div className="hidden md:block bg-white rounded-lg shadow overflow-hidden">
+      <div className="hidden md:block bg-white rounded-xl shadow-sm overflow-hidden border border-[#91BEAD]/20">
         {!loading && filteredUsers.length > 0 && (
           <UserTable 
             users={filteredUsers}

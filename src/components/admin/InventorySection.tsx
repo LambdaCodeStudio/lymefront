@@ -46,6 +46,66 @@ import { useNotification } from '@/context/NotificationContext';
 // Importar el observable
 import { inventoryObservable, getAuthToken } from '@/utils/inventoryUtils';
 
+// Componente para input de stock con límite máximo
+const ProductStockInput: React.FC<{
+  value: string;
+  onChange: (value: string) => void;
+  id?: string;
+  required?: boolean;
+  maxStock?: number;
+}> = ({
+  value,
+  onChange,
+  id = "stock",
+  required = true,
+  maxStock = 999999999 // Límite máximo de stock (9 dígitos)
+}) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const inputValue = e.target.value;
+    
+    // Permitir campo vacío para que el usuario pueda borrar el input
+    if (inputValue === '') {
+      onChange('');
+      return;
+    }
+    
+    // Convertir a número y verificar que sea un entero positivo
+    const numValue = parseInt(inputValue, 10);
+    
+    // Verificar que sea un número válido
+    if (isNaN(numValue)) {
+      return;
+    }
+    
+    // Limitar al valor máximo
+    if (numValue > maxStock) {
+      onChange(maxStock.toString());
+    } else if (numValue < 0) {
+      onChange('0');
+    } else {
+      onChange(numValue.toString());
+    }
+  };
+
+  return (
+    <div className="relative">
+      <Input
+        id={id}
+        type="number"
+        min="0"
+        max={maxStock}
+        value={value}
+        onChange={handleChange}
+        required={required}
+        className="mt-1"
+      />
+      <p className="mt-1 text-xs text-[#7AA79C]">
+        Máximo: {maxStock.toLocaleString()}
+      </p>
+    </div>
+  );
+};
+
 // Extendemos la interfaz Product para incluir campos de imagen
 interface ProductExtended extends Product {
   imagen?: string | Buffer | null;
@@ -127,13 +187,6 @@ const InventorySection: React.FC = () => {
   useEffect(() => {
     console.log("Estado actual del formulario:", formData);
   }, [formData]);
-
-  // Depuración específica para categorías
-  useEffect(() => {
-    console.log("Categoría actual:", formData.categoria);
-    console.log("Subcategoría actual:", formData.subCategoria);
-    console.log("Subcategorías disponibles:", subCategorias[formData.categoria] || 'No hay subcategorías');
-  }, [formData.categoria, formData.subCategoria]);
 
   // Verificar productos con stock bajo y enviar notificación
   useEffect(() => {
@@ -445,7 +498,7 @@ const InventorySection: React.FC = () => {
       );
     } else {
       return (
-        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-[#DFEFE6] text-[#29696B]">
           {stock} unidades
         </span>
       );
@@ -469,33 +522,33 @@ const InventorySection: React.FC = () => {
   });
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-4 md:p-6 space-y-6 bg-[#DFEFE6]/30">
       {/* Alertas */}
       {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+        <Alert className="bg-red-50 border border-red-200 text-red-800 rounded-lg">
+          <AlertCircle className="h-4 w-4 text-red-600" />
+          <AlertDescription className="ml-2">{error}</AlertDescription>
         </Alert>
       )}
       
       {successMessage && (
-        <Alert variant="default" className="bg-green-50 border-green-200">
-          <CheckCircle className="h-4 w-4 text-green-500" />
-          <AlertDescription>{successMessage}</AlertDescription>
+        <Alert className="bg-[#DFEFE6] border border-[#91BEAD] text-[#29696B] rounded-lg">
+          <CheckCircle className="h-4 w-4 text-[#29696B]" />
+          <AlertDescription className="ml-2">{successMessage}</AlertDescription>
         </Alert>
       )}
 
       {/* Barra de herramientas */}
-      <div className="flex flex-col md:flex-row justify-between items-start gap-4">
+      <div className="flex flex-col md:flex-row justify-between items-start gap-4 bg-white rounded-xl shadow-sm p-4 border border-[#91BEAD]/20">
         <div className="w-full md:w-64">
           <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
             <Input
               type="text"
               placeholder="Buscar productos..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
+              className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
             />
           </div>
           
@@ -505,10 +558,25 @@ const InventorySection: React.FC = () => {
             onValueChange={setSelectedCategory}
             className="w-full"
           >
-            <TabsList className="w-full mb-2 flex flex-wrap h-auto">
-              <TabsTrigger value="all" className="flex-1">Todos</TabsTrigger>
-              <TabsTrigger value="limpieza" className="flex-1">Limpieza</TabsTrigger>
-              <TabsTrigger value="mantenimiento" className="flex-1">Mantenimiento</TabsTrigger>
+            <TabsList className="w-full mb-2 flex flex-wrap h-auto bg-[#DFEFE6]/50">
+              <TabsTrigger 
+                value="all" 
+                className="flex-1 data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
+              >
+                Todos
+              </TabsTrigger>
+              <TabsTrigger 
+                value="limpieza" 
+                className="flex-1 data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
+              >
+                Limpieza
+              </TabsTrigger>
+              <TabsTrigger 
+                value="mantenimiento" 
+                className="flex-1 data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
+              >
+                Mantenimiento
+              </TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
@@ -518,7 +586,7 @@ const InventorySection: React.FC = () => {
             resetForm();
             setShowModal(true);
           }}
-          className="w-full md:w-auto"
+          className="w-full md:w-auto bg-[#29696B] hover:bg-[#29696B]/90 text-white"
         >
           <Plus className="w-4 h-4 mr-2" />
           Nuevo Producto
@@ -527,17 +595,17 @@ const InventorySection: React.FC = () => {
 
       {/* Vista de Carga */}
       {loading && (
-        <div className="flex justify-center items-center py-8">
-          <div className="w-8 h-8 border-4 border-blue-300 border-t-blue-600 rounded-full animate-spin"></div>
-          <span className="ml-2 text-gray-600">Cargando productos...</span>
+        <div className="flex justify-center items-center py-8 bg-white rounded-xl shadow-sm border border-[#91BEAD]/20 p-6">
+          <div className="w-8 h-8 border-4 border-[#8DB3BA] border-t-[#29696B] rounded-full animate-spin"></div>
+          <span className="ml-3 text-[#29696B]">Cargando productos...</span>
         </div>
       )}
 
       {/* Alerta para productos con stock bajo */}
       {!loading && products.some(p => p.stock > 0 && p.stock <= LOW_STOCK_THRESHOLD) && (
-        <Alert variant="warning" className="bg-yellow-50 border-yellow-200">
+        <Alert className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg">
           <AlertTriangle className="h-4 w-4 text-yellow-500" />
-          <AlertDescription>
+          <AlertDescription className="ml-2">
             Hay productos con stock bajo. Por favor, revise el inventario.
           </AlertDescription>
         </Alert>
@@ -545,43 +613,46 @@ const InventorySection: React.FC = () => {
 
       {/* Mensaje cuando no hay productos */}
       {!loading && filteredProducts.length === 0 && (
-        <div className="bg-white rounded-lg shadow p-8 text-center">
-          <p className="text-gray-500">No se encontraron productos que coincidan con la búsqueda</p>
+        <div className="bg-white rounded-xl shadow-sm p-8 text-center border border-[#91BEAD]/20">
+          <div className="inline-flex items-center justify-center w-12 h-12 bg-[#DFEFE6] rounded-full mb-4">
+            <Search className="w-6 h-6 text-[#29696B]" />
+          </div>
+          <p className="text-[#7AA79C]">No se encontraron productos que coincidan con la búsqueda</p>
         </div>
       )}
 
       {/* Tabla para pantallas medianas y grandes */}
-      <div className="hidden md:block bg-white rounded-lg shadow">
+      <div className="hidden md:block bg-white rounded-xl shadow-sm overflow-hidden border border-[#91BEAD]/20">
         {!loading && filteredProducts.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b">
+              <thead className="bg-[#DFEFE6]/50 border-b border-[#91BEAD]/20">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
                     Nombre
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
                     Categoría
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
                     Precio
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
                     Stock
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
                     Vendidos
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-right text-xs font-medium text-[#29696B] uppercase tracking-wider">
                     Acciones
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-white divide-y divide-[#91BEAD]/20">
                 {filteredProducts.map((product) => (
                   <tr 
                     key={product._id} 
-                    className={`hover:bg-gray-50 ${
+                    className={`hover:bg-[#DFEFE6]/20 transition-colors ${
                       product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD 
                         ? 'bg-yellow-50 hover:bg-yellow-100' 
                         : product.stock <= 0 
@@ -594,35 +665,37 @@ const InventorySection: React.FC = () => {
                         {product.imagen && (
                           <div className="flex-shrink-0 h-10 w-10 mr-3">
                             <img 
-                              className="h-10 w-10 rounded-full object-cover" 
+                              className="h-10 w-10 rounded-full object-cover border border-[#91BEAD]/30" 
                               src={`data:image/jpeg;base64,${product.imagen}`} 
                               alt={product.nombre} 
                             />
                           </div>
                         )}
                         <div>
-                          <div className="text-sm font-medium text-gray-900">
+                          <div className="text-sm font-medium text-[#29696B]">
                             {product.nombre}
                           </div>
                           {product.descripcion && (
-                            <div className="text-sm text-gray-500 truncate max-w-xs">
+                            <div className="text-sm text-[#7AA79C] truncate max-w-xs">
                               {product.descripcion}
                             </div>
                           )}
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                      <Badge variant="outline" className="capitalize">{product.categoria}</Badge>
-                      <div className="text-xs mt-1 capitalize">{product.subCategoria}</div>
+                    <td className="px-6 py-4 text-sm text-[#7AA79C]">
+                      <Badge variant="outline" className="capitalize border-[#91BEAD] text-[#29696B]">
+                        {product.categoria}
+                      </Badge>
+                      <div className="text-xs mt-1 capitalize text-[#7AA79C]">{product.subCategoria}</div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
+                    <td className="px-6 py-4 text-sm font-medium text-[#29696B]">
                       ${product.precio.toFixed(2)}
                     </td>
                     <td className="px-6 py-4">
                       {renderStockIndicator(product.stock)}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
+                    <td className="px-6 py-4 text-sm text-[#7AA79C]">
                       {product.vendidos || 0}
                     </td>
                     <td className="px-6 py-4 text-right text-sm font-medium">
@@ -631,7 +704,7 @@ const InventorySection: React.FC = () => {
                           variant="ghost"
                           size="sm"
                           onClick={() => handleEdit(product)}
-                          className="text-blue-600 hover:text-blue-800"
+                          className="text-[#29696B] hover:text-[#29696B] hover:bg-[#DFEFE6]"
                         >
                           <Edit className="w-4 h-4" />
                         </Button>
@@ -639,7 +712,7 @@ const InventorySection: React.FC = () => {
                           variant="ghost"
                           size="sm"
                           onClick={() => handleDelete(product._id)}
-                          className="text-red-600 hover:text-red-800"
+                          className="text-red-600 hover:text-red-800 hover:bg-red-50"
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -658,18 +731,20 @@ const InventorySection: React.FC = () => {
         {!loading && filteredProducts.map(product => (
           <Card 
             key={product._id} 
-            className={`overflow-hidden ${
+            className={`overflow-hidden shadow-sm border ${
               product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD 
                 ? 'border-yellow-300 bg-yellow-50' 
                 : product.stock <= 0 
                   ? 'border-red-300 bg-red-50'
-                  : ''
+                  : 'border-[#91BEAD]/20 bg-white'
             }`}
           >
             <CardHeader className="p-4 pb-2">
               <div className="flex justify-between items-center">
-                <CardTitle className="text-base truncate mr-2">{product.nombre}</CardTitle>
-                <Badge variant="outline" className="capitalize text-xs">{product.categoria}</Badge>
+                <CardTitle className="text-base truncate mr-2 text-[#29696B]">{product.nombre}</CardTitle>
+                <Badge variant="outline" className="capitalize text-xs border-[#91BEAD] text-[#29696B]">
+                  {product.categoria}
+                </Badge>
               </div>
             </CardHeader>
             <CardContent className="p-4 pt-2 pb-3">
@@ -677,7 +752,7 @@ const InventorySection: React.FC = () => {
                 {product.imagen && (
                   <div className="flex-shrink-0 h-16 w-16">
                     <img 
-                      className="h-16 w-16 rounded-md object-cover" 
+                      className="h-16 w-16 rounded-md object-cover border border-[#91BEAD]/30" 
                       src={`data:image/jpeg;base64,${product.imagen}`} 
                       alt={product.nombre} 
                     />
@@ -685,23 +760,23 @@ const InventorySection: React.FC = () => {
                 )}
                 <div className="flex-1 min-w-0">
                   {product.descripcion && (
-                    <p className="text-sm text-gray-600 line-clamp-2 mb-2">
+                    <p className="text-sm text-[#7AA79C] line-clamp-2 mb-2">
                       {product.descripcion}
                     </p>
                   )}
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div className="flex items-center">
-                      <DollarSign className="w-4 h-4 text-gray-400 mr-1" />
-                      <span className="font-medium">${product.precio.toFixed(2)}</span>
+                      <DollarSign className="w-4 h-4 text-[#91BEAD] mr-1" />
+                      <span className="font-medium text-[#29696B]">${product.precio.toFixed(2)}</span>
                     </div>
                     <div className="flex items-center">
-                      <PackageOpen className="w-4 h-4 text-gray-400 mr-1" />
+                      <PackageOpen className="w-4 h-4 text-[#91BEAD] mr-1" />
                       <span className={`font-medium ${
                         product.stock <= 0 
                           ? 'text-red-600' 
                           : product.stock <= LOW_STOCK_THRESHOLD
                             ? 'text-yellow-600 flex items-center gap-1'
-                            : 'text-green-600'
+                            : 'text-[#29696B]'
                       }`}>
                         {product.stock <= LOW_STOCK_THRESHOLD && product.stock > 0 && (
                           <AlertTriangle className="w-3 h-3 text-yellow-500 animate-pulse" />
@@ -710,19 +785,19 @@ const InventorySection: React.FC = () => {
                       </span>
                     </div>
                   </div>
-                  <div className="mt-2 text-xs text-gray-500">
+                  <div className="mt-2 text-xs text-[#7AA79C]">
                     <span className="block">Subcategoría: <span className="capitalize">{product.subCategoria}</span></span>
                     <span className="block">Vendidos: {product.vendidos || 0}</span>
                   </div>
                 </div>
               </div>
             </CardContent>
-            <CardFooter className="p-2 flex justify-end gap-2 bg-gray-50">
+            <CardFooter className="p-2 flex justify-end gap-2 bg-[#DFEFE6]/20 border-t border-[#91BEAD]/10">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => handleEdit(product)}
-                className="text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+                className="text-[#29696B] hover:bg-[#DFEFE6]"
               >
                 <Edit className="w-4 h-4" />
               </Button>
@@ -741,9 +816,9 @@ const InventorySection: React.FC = () => {
 
       {/* Modal de Producto */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-auto">
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-auto bg-white border border-[#91BEAD]/20">
           <DialogHeader className="sticky top-0 bg-white pt-4 pb-2 z-10">
-            <DialogTitle>
+            <DialogTitle className="text-[#29696B]">
               {editingProduct ? 'Editar Producto' : 'Nuevo Producto'}
             </DialogTitle>
           </DialogHeader>
@@ -751,38 +826,38 @@ const InventorySection: React.FC = () => {
           <form onSubmit={handleSubmit} className="space-y-4 py-2">
             <div className="grid gap-3">
               <div>
-                <Label htmlFor="nombre" className="text-sm">Nombre</Label>
+                <Label htmlFor="nombre" className="text-sm text-[#29696B]">Nombre</Label>
                 <Input
                   id="nombre"
                   value={formData.nombre}
                   onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
                   required
-                  className="mt-1"
+                  className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
                 />
               </div>
 
               <div>
-                <Label htmlFor="descripcion" className="text-sm">Descripción</Label>
+                <Label htmlFor="descripcion" className="text-sm text-[#29696B]">Descripción</Label>
                 <Textarea
                   id="descripcion"
                   value={formData.descripcion}
                   onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
                   rows={2}
-                  className="mt-1"
+                  className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label htmlFor="categoria" className="text-sm">Categoría</Label>
+                  <Label htmlFor="categoria" className="text-sm text-[#29696B]">Categoría</Label>
                   <Select
                     value={formData.categoria}
                     onValueChange={handleCategoryChange}
                   >
-                    <SelectTrigger id="categoria" className="mt-1">
+                    <SelectTrigger id="categoria" className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
                       <SelectValue placeholder="Seleccionar categoría" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="border-[#91BEAD]">
                       <SelectItem value="limpieza">Limpieza</SelectItem>
                       <SelectItem value="mantenimiento">Mantenimiento</SelectItem>
                     </SelectContent>
@@ -790,15 +865,15 @@ const InventorySection: React.FC = () => {
                 </div>
 
                 <div>
-                  <Label htmlFor="subCategoria" className="text-sm">Subcategoría</Label>
+                  <Label htmlFor="subCategoria" className="text-sm text-[#29696B]">Subcategoría</Label>
                   <Select
                     value={formData.subCategoria}
                     onValueChange={(value) => setFormData({ ...formData, subCategoria: value })}
                   >
-                    <SelectTrigger id="subCategoria" className="mt-1">
+                    <SelectTrigger id="subCategoria" className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
                       <SelectValue placeholder="Seleccionar subcategoría" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="border-[#91BEAD]">
                       {subCategorias[formData.categoria]?.map((sub) => (
                         <SelectItem key={sub.value} value={sub.value}>
                           {sub.label}
@@ -811,7 +886,7 @@ const InventorySection: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label htmlFor="precio" className="text-sm">Precio</Label>
+                  <Label htmlFor="precio" className="text-sm text-[#29696B]">Precio</Label>
                   <Input
                     id="precio"
                     type="number"
@@ -820,39 +895,37 @@ const InventorySection: React.FC = () => {
                     value={formData.precio}
                     onChange={(e) => setFormData({ ...formData, precio: e.target.value })}
                     required
-                    className="mt-1"
+                    className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
                   />
                 </div>
 
                 <div>
-                  <Label htmlFor="stock" className="text-sm">Stock</Label>
-                  <Input
+                  <Label htmlFor="stock" className="text-sm text-[#29696B]">Stock</Label>
+                  <ProductStockInput
                     id="stock"
-                    type="number"
-                    min="0"
                     value={formData.stock}
-                    onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
+                    onChange={(value) => setFormData({ ...formData, stock: value })}
                     required
-                    className="mt-1"
+                    maxStock={999999999}
                   />
                 </div>
               </div>
 
               <div>
-                <Label htmlFor="proovedorInfo" className="text-sm">Información del Proveedor</Label>
+                <Label htmlFor="proovedorInfo" className="text-sm text-[#29696B]">Información del Proveedor</Label>
                 <Input
                   id="proovedorInfo"
                   value={formData.proovedorInfo}
                   onChange={(e) => setFormData({ ...formData, proovedorInfo: e.target.value })}
-                  className="mt-1"
+                  className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
                 />
               </div>
 
               <div>
-                <Label htmlFor="imagen" className="text-sm">Imagen del Producto</Label>
+                <Label htmlFor="imagen" className="text-sm text-[#29696B]">Imagen del Producto</Label>
                 <div className="mt-1 flex flex-col space-y-2">
                   {formData.imagen ? (
-                    <div className="relative w-full h-32 bg-gray-100 rounded-md overflow-hidden">
+                    <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
                       <img 
                         src={formData.imagen} 
                         alt="Vista previa" 
@@ -863,17 +936,17 @@ const InventorySection: React.FC = () => {
                         variant="destructive"
                         size="sm"
                         onClick={handleRemoveImage}
-                        className="absolute top-2 right-2 h-8 w-8 p-0"
+                        className="absolute top-2 right-2 h-8 w-8 p-0 bg-red-500 hover:bg-red-600"
                       >
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
                   ) : (
                     <div className="flex items-center justify-center w-full">
-                      <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-gray-300 border-dashed rounded-md cursor-pointer bg-gray-50 hover:bg-gray-100">
+                      <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#91BEAD]/30 border-dashed rounded-md cursor-pointer bg-[#DFEFE6]/20 hover:bg-[#DFEFE6]/40 transition-colors">
                         <div className="flex flex-col items-center justify-center pt-3 pb-4">
-                          <Image className="w-8 h-8 text-gray-400 mb-1" />
-                          <p className="text-xs text-gray-500">
+                          <Image className="w-8 h-8 text-[#7AA79C] mb-1" />
+                          <p className="text-xs text-[#7AA79C]">
                             Haz clic para subir una imagen
                           </p>
                         </div>
@@ -899,10 +972,14 @@ const InventorySection: React.FC = () => {
                   setShowModal(false);
                   resetForm();
                 }}
+                className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
               >
                 Cancelar
               </Button>
-              <Button type="submit">
+              <Button 
+                type="submit"
+                className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
+              >
                 {editingProduct ? 'Guardar Cambios' : 'Crear Producto'}
               </Button>
             </DialogFooter>

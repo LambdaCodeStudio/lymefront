@@ -832,47 +832,47 @@ const ClientsSection: React.FC = () => {
   if (loading && clients.length === 0) {
     return (
       <div className="flex items-center justify-center p-8">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#29696B]" />
       </div>
     );
   }
 
   return (
-    <div className="p-4 md:p-6">
+    <div className="p-4 md:p-6 bg-[#DFEFE6]/30">
       {/* Alertas */}
       {error && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+        <Alert className="mb-4 bg-red-50 border border-red-200 text-red-800 rounded-lg">
+          <AlertCircle className="h-4 w-4 text-red-600" />
+          <AlertDescription className="ml-2">{error}</AlertDescription>
         </Alert>
       )}
 
       {successMessage && (
-        <Alert variant="default" className="mb-4 bg-green-50 border-green-200">
-          <Check className="h-4 w-4 text-green-500" />
-          <AlertDescription>{successMessage}</AlertDescription>
+        <Alert className="mb-4 bg-[#DFEFE6] border border-[#91BEAD] text-[#29696B] rounded-lg">
+          <Check className="h-4 w-4 text-[#29696B]" />
+          <AlertDescription className="ml-2">{successMessage}</AlertDescription>
         </Alert>
       )}
 
       {/* Usuario actualmente seleccionado */}
       {activeUserId !== "all" && (
-        <Alert variant="default" className="mb-4 bg-blue-50 border-blue-200">
-          <UserPlus className="h-4 w-4 text-blue-500" />
-          <AlertDescription>
+        <Alert className="mb-4 bg-[#DFEFE6]/50 border border-[#91BEAD]/50 text-[#29696B] rounded-lg">
+          <UserPlus className="h-4 w-4 text-[#29696B]" />
+          <AlertDescription className="ml-2">
             Gestionando clientes para el usuario: <strong>{getUserIdentifierById(activeUserId)}</strong>
           </AlertDescription>
         </Alert>
       )}
 
       {/* Barra de herramientas para pantallas medianas y grandes */}
-      <div className="hidden md:grid md:grid-cols-3 gap-4 mb-6">
+      <div className="hidden md:grid md:grid-cols-3 gap-4 mb-6 bg-white p-4 rounded-xl shadow-sm border border-[#91BEAD]/20">
         {/* Buscador */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C]" />
           <Input
             type="text"
             placeholder="Buscar clientes..."
-            className="pl-10"
+            className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -884,7 +884,7 @@ const ClientsSection: React.FC = () => {
             value={activeUserId}
             onValueChange={setActiveUserId}
           >
-            <SelectTrigger>
+            <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
               <SelectValue placeholder="Filtrar por usuario" />
             </SelectTrigger>
             <SelectContent>
@@ -904,6 +904,7 @@ const ClientsSection: React.FC = () => {
             <Button
               variant="outline"
               onClick={() => expandAllServices(Object.keys(groupedClients))}
+              className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50 hover:text-[#29696B]"
             >
               <ChevronDown className="w-4 h-4 mr-2" />
               Expandir Todo
@@ -914,6 +915,7 @@ const ClientsSection: React.FC = () => {
               resetForm();
               setShowModal(true);
             }}
+            className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
           >
             <UserPlus className="w-4 h-4 mr-2" />
             Nuevo Cliente
@@ -922,27 +924,27 @@ const ClientsSection: React.FC = () => {
       </div>
 
       {/* Barra de herramientas para móviles */}
-      <div className="md:hidden mb-6 space-y-3">
+      <div className="md:hidden mb-6 space-y-3 bg-white p-4 rounded-xl shadow-sm border border-[#91BEAD]/20">
         <div className="flex gap-2 items-center">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
             <Input
               type="text"
               placeholder="Buscar clientes..."
-              className="pl-10"
+              className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
           <Button
             variant="outline"
-            className="flex-shrink-0"
+            className="flex-shrink-0 border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50"
             onClick={() => setIsMobileFilterOpen(!isMobileFilterOpen)}
           >
             <Filter className="w-4 h-4" />
           </Button>
           <Button
-            className="flex-shrink-0"
+            className="flex-shrink-0 bg-[#29696B] hover:bg-[#29696B]/90 text-white"
             onClick={() => {
               resetForm();
               setShowModal(true);
@@ -954,8 +956,8 @@ const ClientsSection: React.FC = () => {
         </div>
 
         {isMobileFilterOpen && (
-          <div className="p-3 bg-gray-50 rounded-md border">
-            <Label htmlFor="mobileUserFilter" className="text-sm font-medium mb-1 block">
+          <div className="p-3 bg-[#DFEFE6]/30 rounded-md border border-[#91BEAD]/30">
+            <Label htmlFor="mobileUserFilter" className="text-sm font-medium mb-1 block text-[#29696B]">
               Filtrar por usuario
             </Label>
             <Select
@@ -965,7 +967,7 @@ const ClientsSection: React.FC = () => {
                 setIsMobileFilterOpen(false);
               }}
             >
-              <SelectTrigger id="mobileUserFilter">
+              <SelectTrigger id="mobileUserFilter" className="border-[#91BEAD] focus:ring-[#29696B]/20">
                 <SelectValue placeholder="Seleccionar usuario" />
               </SelectTrigger>
               <SelectContent>
@@ -984,6 +986,7 @@ const ClientsSection: React.FC = () => {
                   variant="outline"
                   size="sm"
                   onClick={() => expandAllServices(Object.keys(groupedClients))}
+                  className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50"
                 >
                   <ChevronDown className="w-3 h-3 mr-1" />
                   Expandir Todo
@@ -992,6 +995,7 @@ const ClientsSection: React.FC = () => {
                   variant="outline"
                   size="sm"
                   onClick={collapseAllServices}
+                  className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50"
                 >
                   <ChevronUp className="w-3 h-3 mr-1" />
                   Contraer Todo
@@ -1004,34 +1008,39 @@ const ClientsSection: React.FC = () => {
 
       {/* Mensaje cuando no hay clientes */}
       {Object.keys(groupedClients).length === 0 ? (
-        <div className="bg-white rounded-lg shadow p-6 text-center text-gray-500">
-          No se encontraron clientes
-          {activeUserId !== "all" && " para el usuario seleccionado"}
-          {searchTerm && ` que coincidan con "${searchTerm}"`}
+        <div className="bg-white rounded-xl shadow-sm p-8 text-center text-[#7AA79C] border border-[#91BEAD]/20">
+          <div className="inline-flex items-center justify-center w-12 h-12 bg-[#DFEFE6] rounded-full mb-4">
+            <Users className="w-6 h-6 text-[#29696B]" />
+          </div>
+          <p>
+            No se encontraron clientes
+            {activeUserId !== "all" && " para el usuario seleccionado"}
+            {searchTerm && ` que coincidan con "${searchTerm}"`}
+          </p>
         </div>
       ) : (
         <div className="space-y-6">
           {/* Vista para pantallas medianas y grandes */}
           <div className="hidden md:block space-y-6">
             {Object.entries(groupedClients).map(([servicio, clientesDelServicio]) => (
-              <div key={servicio} className="bg-white rounded-lg shadow overflow-hidden">
-                <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
+              <div key={servicio} className="bg-white rounded-xl shadow-sm overflow-hidden border border-[#91BEAD]/20">
+                <div className="p-4 bg-[#DFEFE6]/30 border-b border-[#91BEAD]/20 flex justify-between items-center">
                   <div className="flex items-center">
-                    <Building className="w-5 h-5 text-gray-500 mr-2" />
-                    <h3 className="text-lg font-medium">{servicio}</h3>
+                    <Building className="w-5 h-5 text-[#29696B] mr-2" />
+                    <h3 className="text-lg font-medium text-[#29696B]">{servicio}</h3>
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="ml-2 h-8 w-8 p-0"
+                      className="ml-2 h-8 w-8 p-0 text-[#7AA79C] hover:bg-[#DFEFE6]/50 hover:text-[#29696B]"
                       onClick={() => toggleServiceExpansion(servicio)}
                     >
                       {expandedServices[servicio] ? (
-                        <ChevronUp className="w-4 h-4 text-gray-500" />
+                        <ChevronUp className="w-4 h-4" />
                       ) : (
-                        <ChevronDown className="w-4 h-4 text-gray-500" />
+                        <ChevronDown className="w-4 h-4" />
                       )}
                     </Button>
-                    <span className="text-xs text-gray-500 ml-2">
+                    <span className="text-xs text-[#7AA79C] ml-2">
                       {clientesDelServicio.length} {clientesDelServicio.length === 1 ? 'sección' : 'secciones'}
                     </span>
                   </div>
@@ -1042,6 +1051,7 @@ const ClientsSection: React.FC = () => {
                       variant="outline"
                       size="sm"
                       onClick={() => handleAddSection(clientesDelServicio[0])}
+                      className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50"
                     >
                       <Plus className="w-4 h-4 mr-1" />
                       Agregar Sección
@@ -1050,13 +1060,13 @@ const ClientsSection: React.FC = () => {
                     {/* Menú desplegable para opciones del servicio */}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm">
+                        <Button variant="ghost" size="sm" className="text-[#7AA79C] hover:bg-[#DFEFE6]/50 hover:text-[#29696B]">
                           <Settings className="w-4 h-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => handleEditService(servicio)}>
-                          <FileEdit className="w-4 h-4 mr-2 text-blue-600" />
+                          <FileEdit className="w-4 h-4 mr-2 text-[#29696B]" />
                           Editar Servicio
                         </DropdownMenuItem>
                         <DropdownMenuItem
@@ -1072,20 +1082,20 @@ const ClientsSection: React.FC = () => {
                 </div>
 
                 {expandedServices[servicio] && (
-                  <div className="divide-y divide-gray-100">
+                  <div className="divide-y divide-[#91BEAD]/10">
                     {clientesDelServicio.map(client => (
-                      <div key={client._id} className="p-4 hover:bg-gray-50 flex justify-between items-center">
+                      <div key={client._id} className="p-4 hover:bg-[#DFEFE6]/10 flex justify-between items-center transition-colors">
                         <div>
                           <div className="flex items-start gap-2">
                             {client.seccionDelServicio ? (
                               <>
-                                <MapPin className="w-4 h-4 text-gray-400 mt-1" />
+                                <MapPin className="w-4 h-4 text-[#7AA79C] mt-1" />
                                 <div>
-                                  <span className="font-medium">{client.seccionDelServicio}</span>
-                                  <div className="text-sm text-gray-500">
+                                  <span className="font-medium text-[#29696B]">{client.seccionDelServicio}</span>
+                                  <div className="text-sm text-[#7AA79C]">
                                     <div className="flex items-center">
                                       <Users className="w-3 h-3 mr-1 inline" />
-                                      Usuario Asignado: <strong className="ml-1">{
+                                      Usuario Asignado: <strong className="ml-1 text-[#29696B]">{
                                         typeof client.userId === 'object' && client.userId.email
                                           ? client.userId.email
                                           : typeof client.userId === 'string'
@@ -1096,16 +1106,16 @@ const ClientsSection: React.FC = () => {
                                     {/* Mostrar información del creador */}
                                     <div className="flex items-center mt-1">
                                       <Mail className="w-3 h-3 mr-1 inline" />
-                                      Creado por:  {getCreatorEmail(client)}
+                                      Creado por: <span className="text-[#29696B] ml-1">{getCreatorEmail(client)}</span>
                                     </div>
                                   </div>
                                 </div>
                               </>
                             ) : (
-                              <div className="text-sm text-gray-600">
+                              <div className="text-sm text-[#7AA79C]">
                                 <div className="flex items-center">
                                   <Users className="w-3 h-3 mr-1 inline" />
-                                  Usuario Asignado: <strong className="ml-1">{
+                                  Usuario Asignado: <strong className="ml-1 text-[#29696B]">{
                                     typeof client.userId === 'object' && client.userId.email
                                       ? client.userId.email
                                       : typeof client.userId === 'string'
@@ -1116,7 +1126,7 @@ const ClientsSection: React.FC = () => {
                                 {/* Mostrar información del creador */}
                                 <div className="flex items-center mt-1">
                                   <Mail className="w-3 h-3 mr-1 inline" />
-                                  Creado por: {getCreatorEmail(client)}
+                                  Creado por: <span className="text-[#29696B] ml-1">{getCreatorEmail(client)}</span>
                                 </div>
                               </div>
                             )}
@@ -1129,16 +1139,18 @@ const ClientsSection: React.FC = () => {
                             size="sm"
                             onClick={() => handleEditClient(client)}
                             disabled={deletingOperation}
+                            className="text-[#29696B] hover:bg-[#DFEFE6]/50"
                           >
-                            <FileEdit className="w-4 h-4 text-blue-600" />
+                            <FileEdit className="w-4 h-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => confirmDeleteClient(client._id)}
                             disabled={deletingOperation}
+                            className="text-red-600 hover:bg-red-50"
                           >
-                            <Trash2 className="w-4 h-4 text-red-600" />
+                            <Trash2 className="w-4 h-4" />
                           </Button>
                         </div>
                       </div>
@@ -1147,11 +1159,11 @@ const ClientsSection: React.FC = () => {
                 )}
 
                 {!expandedServices[servicio] && clientesDelServicio.length > 0 && (
-                  <div className="p-4 text-center text-gray-500 text-sm">
+                  <div className="p-4 text-center text-[#7AA79C] text-sm">
                     <Button
                       variant="ghost"
                       onClick={() => toggleServiceExpansion(servicio)}
-                      className="text-gray-500 hover:text-gray-700"
+                      className="text-[#7AA79C] hover:text-[#29696B] hover:bg-[#DFEFE6]/30"
                     >
                       <ChevronDown className="w-4 h-4 mr-2" />
                       Mostrar {clientesDelServicio.length} {clientesDelServicio.length === 1 ? 'sección' : 'secciones'}
@@ -1166,23 +1178,23 @@ const ClientsSection: React.FC = () => {
           <div className="md:hidden space-y-6">
             {Object.entries(groupedClients).map(([servicio, clientesDelServicio]) => (
               <div key={servicio} className="space-y-3">
-                <div className="flex justify-between items-center px-1">
+                <div className="flex justify-between items-center px-1 bg-white p-3 rounded-lg shadow-sm border border-[#91BEAD]/20">
                   <div className="flex items-center">
-                    <Building className="w-4 h-4 text-gray-500 mr-2" />
-                    <h3 className="text-base font-semibold">{servicio}</h3>
+                    <Building className="w-4 h-4 text-[#29696B] mr-2" />
+                    <h3 className="text-base font-semibold text-[#29696B]">{servicio}</h3>
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="ml-1 h-6 w-6 p-0"
+                      className="ml-1 h-6 w-6 p-0 text-[#7AA79C]"
                       onClick={() => toggleServiceExpansion(servicio)}
                     >
                       {expandedServices[servicio] ? (
-                        <ChevronUp className="w-3 h-3 text-gray-500" />
+                        <ChevronUp className="w-3 h-3" />
                       ) : (
-                        <ChevronDown className="w-3 h-3 text-gray-500" />
+                        <ChevronDown className="w-3 h-3" />
                       )}
                     </Button>
-                    <span className="text-xs text-gray-500 ml-1">
+                    <span className="text-xs text-[#7AA79C] ml-1">
                       ({clientesDelServicio.length})
                     </span>
                   </div>
@@ -1193,7 +1205,7 @@ const ClientsSection: React.FC = () => {
                       variant="ghost"
                       size="sm"
                       onClick={() => handleAddSection(clientesDelServicio[0])}
-                      className="h-8 w-8 p-0"
+                      className="h-8 w-8 p-0 text-[#29696B] hover:bg-[#DFEFE6]/50"
                       disabled={deletingOperation}
                     >
                       <Plus className="w-4 h-4" />
@@ -1202,13 +1214,13 @@ const ClientsSection: React.FC = () => {
                     {/* Menú móvil para opciones del servicio */}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" disabled={deletingOperation}>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-[#7AA79C]" disabled={deletingOperation}>
                           <Settings className="w-4 h-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => handleEditService(servicio)}>
-                          <FileEdit className="w-4 h-4 mr-2 text-blue-600" />
+                          <FileEdit className="w-4 h-4 mr-2 text-[#29696B]" />
                           Editar Servicio
                         </DropdownMenuItem>
                         <DropdownMenuItem
@@ -1226,25 +1238,25 @@ const ClientsSection: React.FC = () => {
                 {expandedServices[servicio] && (
                   <div className="grid grid-cols-1 gap-3">
                     {clientesDelServicio.map(client => (
-                      <Card key={client._id} className="overflow-hidden">
-                        <CardHeader className="p-4 pb-2">
+                      <Card key={client._id} className="overflow-hidden border border-[#91BEAD]/20 shadow-sm">
+                        <CardHeader className="p-4 pb-2 bg-[#DFEFE6]/20">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center">
-                              <MapPin className="w-4 h-4 text-gray-500 mr-2" />
-                              <CardTitle className="text-base">
+                              <MapPin className="w-4 h-4 text-[#29696B] mr-2" />
+                              <CardTitle className="text-base text-[#29696B]">
                                 {client.seccionDelServicio || "Sin sección específica"}
                               </CardTitle>
                             </div>
-                            <Badge variant="outline" className="text-xs">
+                            <Badge variant="outline" className="text-xs border-[#91BEAD] text-[#29696B]">
                               {servicio}
                             </Badge>
                           </div>
                         </CardHeader>
                         <CardContent className="p-4 pt-2 pb-2">
-                          <div className="flex flex-col gap-1 mt-1 text-sm text-gray-600">
+                          <div className="flex flex-col gap-1 mt-1 text-sm text-[#7AA79C]">
                             <div className="flex items-center">
                               <Users className="w-3 h-3 mr-1" />
-                              <span>Usuario Asignado: <strong>{
+                              <span>Usuario Asignado: <strong className="text-[#29696B]">{
                                 typeof client.userId === 'object' && client.userId.email
                                   ? client.userId.email
                                   : typeof client.userId === 'string'
@@ -1255,28 +1267,28 @@ const ClientsSection: React.FC = () => {
                             {/* Mostrar información del creador en móvil */}
                             <div className="flex items-center">
                               <Mail className="w-3 h-3 mr-1" />
-                              <span>Creado por: {getCreatorEmail(client)}</span>
+                              <span>Creado por: <span className="text-[#29696B]">{getCreatorEmail(client)}</span></span>
                             </div>
                           </div>
                         </CardContent>
-                        <CardFooter className="p-2 flex justify-end gap-2 bg-gray-50">
+                        <CardFooter className="p-2 flex justify-end gap-2 bg-[#DFEFE6]/10">
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleEditClient(client)}
-                            className="h-8 w-8 p-0"
+                            className="h-8 w-8 p-0 text-[#29696B] hover:bg-[#DFEFE6]/30"
                             disabled={deletingOperation}
                           >
-                            <FileEdit className="w-4 h-4 text-blue-600" />
+                            <FileEdit className="w-4 h-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => confirmDeleteClient(client._id)}
-                            className="h-8 w-8 p-0"
+                            className="h-8 w-8 p-0 text-red-600 hover:bg-red-50"
                             disabled={deletingOperation}
                           >
-                            <Trash2 className="w-4 h-4 text-red-600" />
+                            <Trash2 className="w-4 h-4" />
                           </Button>
                         </CardFooter>
                       </Card>
@@ -1285,12 +1297,12 @@ const ClientsSection: React.FC = () => {
                 )}
 
                 {!expandedServices[servicio] && clientesDelServicio.length > 0 && (
-                  <div className="px-1 text-center text-gray-500 text-xs">
+                  <div className="px-1 text-center text-[#7AA79C] text-xs">
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => toggleServiceExpansion(servicio)}
-                      className="text-gray-500 hover:text-gray-700 text-xs p-2"
+                      className="text-[#7AA79C] hover:text-[#29696B] hover:bg-[#DFEFE6]/30 text-xs p-2"
                     >
                       <ChevronDown className="w-3 h-3 mr-1" />
                       Mostrar {clientesDelServicio.length} {clientesDelServicio.length === 1 ? 'sección' : 'secciones'}
@@ -1305,9 +1317,9 @@ const ClientsSection: React.FC = () => {
 
       {/* Modal de Cliente */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-auto">
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-auto bg-white border border-[#91BEAD]/20">
           <DialogHeader className="sticky top-0 bg-white pt-4 pb-2 z-10">
-            <DialogTitle>
+            <DialogTitle className="text-[#29696B]">
               {currentClient
                 ? 'Editar Cliente'
                 : showAddingSectionMode
@@ -1315,23 +1327,23 @@ const ClientsSection: React.FC = () => {
                   : 'Nuevo Cliente'}
             </DialogTitle>
             {formData.servicio && !currentClient && (
-              <DialogDescription>
-                Agregando nueva sección al servicio: <strong>{formData.servicio}</strong>
+              <DialogDescription className="text-[#7AA79C]">
+                Agregando nueva sección al servicio: <strong className="text-[#29696B]">{formData.servicio}</strong>
               </DialogDescription>
             )}
           </DialogHeader>
 
           <form onSubmit={currentClient ? handleUpdateClient : handleCreateClient} className="space-y-4 py-2">
             <div>
-              <Label htmlFor="servicio" className="text-sm">Servicio</Label>
+              <Label htmlFor="servicio" className="text-sm text-[#29696B]">Servicio</Label>
               {/* Campo de servicio deshabilitado cuando es edición de sección o nueva sección */}
               {(currentClient?.seccionDelServicio ||
                 // Solo deshabilitar cuando estamos agregando una sección a un servicio existente
                 (!currentClient && formData.servicio && showAddingSectionMode)) ? (
-                <div className="mt-1 p-3 bg-gray-50 border border-gray-200 rounded-md flex items-center text-sm">
-                  <Building className="text-gray-500 w-4 h-4 mr-2" />
-                  <span>
-                    Servicio: <strong>{formData.servicio}</strong>
+                <div className="mt-1 p-3 bg-[#DFEFE6]/20 border border-[#91BEAD]/30 rounded-md flex items-center text-sm">
+                  <Building className="text-[#29696B] w-4 h-4 mr-2" />
+                  <span className="text-[#7AA79C]">
+                    Servicio: <strong className="text-[#29696B]">{formData.servicio}</strong>
                   </span>
                 </div>
               ) : (
@@ -1341,18 +1353,18 @@ const ClientsSection: React.FC = () => {
                   value={formData.servicio}
                   onChange={(e) => setFormData({ ...formData, servicio: e.target.value })}
                   required
-                  className="mt-1"
+                  className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
                 />
               )}
               {(currentClient?.seccionDelServicio || (!currentClient && formData.servicio)) && (
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-[#7AA79C] mt-1">
                   El nombre del servicio padre no se puede modificar cuando se edita o añade una sección
                 </p>
               )}
             </div>
 
             <div>
-              <Label htmlFor="seccionDelServicio" className="text-sm">
+              <Label htmlFor="seccionDelServicio" className="text-sm text-[#29696B]">
                 {(currentClient?.seccionDelServicio || (!currentClient && formData.servicio))
                   ? "Nombre de la Sección"
                   : "Sección del Servicio (opcional)"}
@@ -1366,23 +1378,23 @@ const ClientsSection: React.FC = () => {
                 }
                 value={formData.seccionDelServicio}
                 onChange={(e) => setFormData({ ...formData, seccionDelServicio: e.target.value })}
-                className="mt-1"
+                className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
                 required={!currentClient && formData.servicio ? true : false}
               />
               {!(currentClient?.seccionDelServicio || (!currentClient && formData.servicio)) && (
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-[#7AA79C] mt-1">
                   Deje en blanco si no aplica una sección específica
                 </p>
               )}
             </div>
 
             <div>
-              <Label htmlFor="userId" className="text-sm">Usuario Asignado</Label>
+              <Label htmlFor="userId" className="text-sm text-[#29696B]">Usuario Asignado</Label>
               {activeUserId !== "all" ? (
-                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md flex items-center text-sm">
-                  <Users className="text-blue-500 w-4 h-4 mr-2" />
-                  <span>
-                    Usuario Asignado: <strong>{getUserIdentifierById(activeUserId)}</strong>
+                <div className="mt-3 p-3 bg-[#DFEFE6]/20 border border-[#91BEAD]/30 rounded-md flex items-center text-sm">
+                  <Users className="text-[#29696B] w-4 h-4 mr-2" />
+                  <span className="text-[#7AA79C]">
+                    Usuario Asignado: <strong className="text-[#29696B]">{getUserIdentifierById(activeUserId)}</strong>
                   </span>
                 </div>
               ) : (
@@ -1391,7 +1403,7 @@ const ClientsSection: React.FC = () => {
                     value={formData.userId}
                     onValueChange={(value) => setFormData({ ...formData, userId: value })}
                   >
-                    <SelectTrigger className="mt-1">
+                    <SelectTrigger className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
                       <SelectValue placeholder="Seleccionar usuario" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1405,7 +1417,7 @@ const ClientsSection: React.FC = () => {
 
                   {/* Añadir muestra del correo del usuario seleccionado */}
                   {formData.userId && (
-                    <div className="mt-2 text-sm text-blue-600 flex items-center">
+                    <div className="mt-2 text-sm text-[#29696B] flex items-center">
                       <Mail className="w-3 h-3 mr-1" />
                       Usuario Asignado: <strong className="ml-1">{getUserIdentifierById(formData.userId)}</strong>
                     </div>
@@ -1422,12 +1434,14 @@ const ClientsSection: React.FC = () => {
                   setShowModal(false);
                   resetForm();
                 }}
+                className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
               >
                 Cancelar
               </Button>
               <Button
                 type="submit"
                 disabled={loading || deletingOperation}
+                className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
               >
                 {loading || deletingOperation ? (
                   <span className="flex items-center gap-2">
@@ -1447,24 +1461,24 @@ const ClientsSection: React.FC = () => {
 
       {/* Modal de Editar Servicio */}
       <Dialog open={showServiceModal} onOpenChange={setShowServiceModal}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md bg-white border border-[#91BEAD]/20">
           <DialogHeader>
-            <DialogTitle>Editar Servicio</DialogTitle>
-            <DialogDescription>
-              Cambiar el nombre del servicio "{currentService}". Esta acción actualizará todas las secciones asociadas.
+            <DialogTitle className="text-[#29696B]">Editar Servicio</DialogTitle>
+            <DialogDescription className="text-[#7AA79C]">
+              Cambiar el nombre del servicio "<span className="text-[#29696B]">{currentService}</span>". Esta acción actualizará todas las secciones asociadas.
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleUpdateService} className="space-y-4 py-2">
             <div>
-              <Label htmlFor="nuevoNombre" className="text-sm">Nuevo Nombre del Servicio</Label>
+              <Label htmlFor="nuevoNombre" className="text-sm text-[#29696B]">Nuevo Nombre del Servicio</Label>
               <Input
                 id="nuevoNombre"
                 placeholder="Ingrese el nuevo nombre del servicio"
                 value={serviceFormData.nuevoNombre}
                 onChange={(e) => setServiceFormData({ nuevoNombre: e.target.value })}
                 required
-                className="mt-1"
+                className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
               />
             </div>
 
@@ -1473,12 +1487,14 @@ const ClientsSection: React.FC = () => {
                 type="button"
                 variant="outline"
                 onClick={() => setShowServiceModal(false)}
+                className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
               >
                 Cancelar
               </Button>
               <Button
                 type="submit"
                 disabled={deletingOperation}
+                className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
               >
                 {deletingOperation ? (
                   <span className="flex items-center gap-2">
@@ -1494,14 +1510,14 @@ const ClientsSection: React.FC = () => {
 
       {/* Modal de Confirmación para Eliminar Servicio */}
       <Dialog open={showDeleteServiceModal} onOpenChange={(open) => !deletingOperation && setShowDeleteServiceModal(open)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md bg-white border border-[#91BEAD]/20">
           <DialogHeader>
             <DialogTitle className="text-red-600 flex items-center gap-2">
               <AlertTriangle className="h-5 w-5" />
               Eliminar Servicio Completo
             </DialogTitle>
-            <DialogDescription>
-              ¿Está seguro de eliminar el servicio "{currentService}" y todas sus secciones? Esta acción no se puede deshacer.
+            <DialogDescription className="text-[#7AA79C]">
+              ¿Está seguro de eliminar el servicio "<span className="text-[#29696B]">{currentService}</span>" y todas sus secciones? Esta acción no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
 
@@ -1518,6 +1534,7 @@ const ClientsSection: React.FC = () => {
               variant="outline"
               onClick={() => setShowDeleteServiceModal(false)}
               disabled={deletingOperation}
+              className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
             >
               Cancelar
             </Button>
@@ -1526,6 +1543,7 @@ const ClientsSection: React.FC = () => {
               variant="destructive"
               onClick={handleDeleteService}
               disabled={deletingOperation}
+              className="bg-red-600 hover:bg-red-700"
             >
               {deletingOperation ? (
                 <span className="flex items-center gap-2">
@@ -1540,13 +1558,13 @@ const ClientsSection: React.FC = () => {
 
       {/* Modal de Confirmación para Eliminar Cliente individual */}
       <Dialog open={showDeleteClientModal} onOpenChange={(open) => !deletingOperation && setShowDeleteClientModal(open)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md bg-white border border-[#91BEAD]/20">
           <DialogHeader>
             <DialogTitle className="text-red-600 flex items-center gap-2">
               <AlertTriangle className="h-5 w-5" />
               Eliminar Cliente
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-[#7AA79C]">
               ¿Está seguro de eliminar este cliente? Esta acción no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
@@ -1567,6 +1585,7 @@ const ClientsSection: React.FC = () => {
               variant="outline"
               onClick={() => setShowDeleteClientModal(false)}
               disabled={deletingOperation}
+              className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
             >
               Cancelar
             </Button>
@@ -1575,6 +1594,7 @@ const ClientsSection: React.FC = () => {
               variant="destructive"
               onClick={executeDeleteClient}
               disabled={deletingOperation}
+              className="bg-red-600 hover:bg-red-700"
             >
               {deletingOperation ? (
                 <span className="flex items-center gap-2">
