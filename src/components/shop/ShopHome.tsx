@@ -201,7 +201,7 @@ export const ShopHome: React.FC = () => {
                       transition={{ delay: 0.2 }}
                       className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4 text-white"
                     >
-                      Bienvenido a <span className="text-[#D4F5E6]">LYME<span className="text-white">SHOP</span></span>
+                      Bienvenido a la tienda de <span className="text-[#D4F5E6]">Lyme</span>
                     </motion.h1>
                     <motion.p 
                       initial={{ y: 20, opacity: 0 }}

@@ -4,7 +4,7 @@ import { Navbar } from '../components/common/Navbar';
 import AdminDashboard from '../components/admin/AdminDashboard';
 import '@/styles/global.css'
 import '../styles/notifications.css'
-console.log("Loaded admin.astro with notifications styling")
+import { Footer } from '../components/common/Footer'
 
 ---
 
@@ -13,4 +13,5 @@ console.log("Loaded admin.astro with notifications styling")
 <AuthLayout title="Panel de Administrador">
   <Navbar client:load />
   <AdminDashboard client:load />
+  <Footer client:load />
 </AuthLayout>

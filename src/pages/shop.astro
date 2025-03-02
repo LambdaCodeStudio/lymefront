@@ -1,10 +1,12 @@
 ---
 import ShopLayout from '../layouts/ShopLayout.astro';
 import { ShopWrapper } from '../components/shop/ShopWrapper';
+import { Footer } from '../components/common/Footer'
 ---
 
 <ShopLayout title="Lyme Shop - Productos de Calidad">
   <ShopWrapper client:load />
+  <Footer client:load />
 </ShopLayout>
 
 <style>
