@@ -1,8 +1,41 @@
----
-import AuthLayout from '../layouts/AuthLayout.astro';
-import UnauthorizedPage from '../components/auth/UnauthorizedPage';
----
-
-<AuthLayout title="Acceso No Autorizado">
-  <UnauthorizedPage client:only="react" />
+---
+import AuthLayout from '../layouts/AuthLayout.astro';
+import UnauthorizedPage from '../components/auth/UnauthorizedPage';
+---
+
+<AuthLayout title="Acceso No Autorizado">
+  <UnauthorizedPage client:only="react" />
 </AuthLayout>
+
+<style>
+  /* Add complementary styles for unauthorized page */
+  :global(body) {
+    background: linear-gradient(to bottom, #29696B, #7AA79C) !important;
+  }
+  
+  :global(.unauthorized-icon) {
+    color: #29696B !important;
+  }
+  
+  :global(.unauthorized-card) {
+    border-color: #91BEAD !important;
+    box-shadow: 0 10px 25px rgba(41, 105, 107, 0.2) !important;
+  }
+  
+  :global(.login-button) {
+    background-color: #29696B !important;
+  }
+  
+  :global(.login-button:hover) {
+    background-color: #7AA79C !important;
+  }
+  
+  :global(.back-button) {
+    color: #29696B !important;
+    border-color: #91BEAD !important;
+  }
+  
+  :global(.back-button:hover) {
+    background-color: #DFEFE6 !important;
+  }
+</style>

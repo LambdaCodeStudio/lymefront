@@ -4,6 +4,17 @@ import { useAuth } from '@/hooks/useAuth';
 import type { User } from '@/types/users';
 import LoadingScreen from '@/components/ui/loading-screen';
 
+// Custom themed loading overlay
+const ThemedLoadingScreen = () => (
+  <LoadingScreen 
+    // The loading screen component should accept these props to be themeable
+    // If it doesn't, you may need to modify it separately
+    bgColor="bg-[#29696B]/95"
+    spinnerColor="border-t-[#DFEFE6]"
+    textColor="text-[#DFEFE6]"
+  />
+);
+
 // Tipo para el contexto de autenticación
 interface AuthContextType {
   user: User | null;
@@ -39,7 +50,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   
   return (
     <AuthContext.Provider value={auth}>
-      {auth.loading ? <LoadingScreen /> : children}
+      {auth.loading ? <ThemedLoadingScreen /> : children}
     </AuthContext.Provider>
   );
 };
@@ -52,7 +63,7 @@ interface ProtectedRouteProps {
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ 
   children, 
-  fallback = <LoadingScreen /> 
+  fallback = <ThemedLoadingScreen /> 
 }) => {
   // Verificar que estamos en el cliente
   if (typeof window === 'undefined') {
@@ -63,7 +74,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     const { isAuthenticated, loading } = useAuthContext();
     
     if (loading) {
-      return <LoadingScreen />;
+      return <ThemedLoadingScreen />;
     }
     
     if (!isAuthenticated) {
@@ -90,7 +101,7 @@ interface RoleProtectedRouteProps {
 export const RoleProtectedRoute: React.FC<RoleProtectedRouteProps> = ({ 
   children, 
   roles,
-  fallback = <LoadingScreen /> 
+  fallback = <ThemedLoadingScreen /> 
 }) => {
   // Verificar que estamos en el cliente
   if (typeof window === 'undefined') {
@@ -101,7 +112,7 @@ export const RoleProtectedRoute: React.FC<RoleProtectedRouteProps> = ({
     const { hasRole, loading } = useAuthContext();
     
     if (loading) {
-      return <LoadingScreen />;
+      return <ThemedLoadingScreen />;
     }
     
     if (!hasRole(roles)) {

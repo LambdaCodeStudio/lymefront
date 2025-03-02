@@ -6,3 +6,24 @@ import { CartWrapper } from '../components/shop/CartWrapper';
 <ShopLayout title="Lyme Shop - Tu Carrito">
   <CartWrapper client:load />
 </ShopLayout>
+
+<style>
+  /* Additional cart-specific styling */
+  :global(.cart-item) {
+    border-color: rgba(145, 190, 173, 0.3) !important;
+  }
+  
+  :global(.checkout-button) {
+    background-color: #29696B !important;
+    color: white !important;
+  }
+  
+  :global(.checkout-button:hover) {
+    background-color: #7AA79C !important;
+  }
+  
+  :global(.cart-summary) {
+    background-color: rgba(41, 105, 107, 0.2) !important;
+    border: 1px solid rgba(145, 190, 173, 0.3) !important;
+  }
+</style>
