@@ -15,12 +15,11 @@ interface ProductImageProps {
   checkExistence?: boolean;
   placeholderText?: string;
   retryOnError?: boolean;
-  useBase64?: boolean; // Nueva propiedad para elegir el formato
+  useBase64?: boolean; // Nueva propiedad para configurar el modo de imagen
 }
 
 /**
  * Componente para mostrar imágenes de productos con estados de carga y error
- * Añadido soporte para cargar imágenes en formato base64
  */
 const ProductImage: React.FC<ProductImageProps> = ({
   productId,
@@ -34,13 +33,14 @@ const ProductImage: React.FC<ProductImageProps> = ({
   checkExistence = true,
   placeholderText = "Sin imagen",
   retryOnError = true,
-  useBase64 = false // Por defecto usamos el método binario
+  useBase64 = false // Por defecto, usar el método tradicional
 }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [imageExists, setImageExists] = useState<boolean | null>(null);
   const [retryCount, setRetryCount] = useState(0);
-  const [imageData, setImageData] = useState<string>(''); // Para base64 o URL
+  const [imageUrl, setImageUrl] = useState<string>('');
+  const [imageBase64, setImageBase64] = useState<string | null>(null); // Estado para almacenar la imagen en base64
   
   // Función para cargar la imagen
   const loadImage = useCallback(async () => {
@@ -54,43 +54,47 @@ const ProductImage: React.FC<ProductImageProps> = ({
     setError(false);
     
     try {
+      // Verificar existencia si es necesario
+      if (checkExistence) {
+        const exists = await imageService.checkImageExists(productId);
+        setImageExists(exists);
+        
+        if (!exists) {
+          setError(true);
+          setLoading(false);
+          return;
+        }
+      }
+      
+      // Si usamos base64, cargar la imagen en este formato
       if (useBase64) {
-        // Método Base64
         try {
           const base64Data = await imageService.getImageBase64(productId);
-          setImageData(base64Data);
-          setImageExists(true);
-          // El estado de loading cambiará cuando la imagen se procese
-        } catch (error) {
-          console.error('Error obteniendo imagen base64:', error);
-          setError(true);
-          setImageExists(false);
-          setLoading(false);
-        }
-      } else {
-        // Método URL (original)
-        if (checkExistence) {
-          const exists = await imageService.checkImageExists(productId);
-          setImageExists(exists);
-          
-          if (!exists) {
-            setError(true);
+          if (base64Data) {
+            setImageBase64(base64Data);
             setLoading(false);
             return;
+          } else {
+            // Si no se pudo obtener la imagen en base64, intentar con URL normal
+            console.log(`No se pudo obtener imagen base64 para ${productId}, usando URL normal`);
           }
+        } catch (error) {
+          console.error('Error al cargar imagen base64:', error);
+          // Fallback a URL normal
         }
-        
-        // Generar URL con timestamp único para evitar problemas de caché
-        const url = imageService.getImageUrl(productId, { 
-          width, 
-          height, 
-          quality,
-          timestamp: true
-        });
-        
-        setImageData(url);
-        // El estado de loading cambiará cuando la imagen se cargue o falle
       }
+      
+      // Si no usamos base64 o hubo un error al cargarla, usar URL normal
+      const url = imageService.getImageUrl(productId, { 
+        width, 
+        height, 
+        quality,
+        timestamp: true
+      });
+      
+      setImageUrl(url);
+      
+      // El estado de loading cambiará cuando la imagen se cargue o falle
     } catch (err) {
       console.error('Error al cargar imagen:', err);
       setError(true);
@@ -101,7 +105,7 @@ const ProductImage: React.FC<ProductImageProps> = ({
   // Iniciar carga de imagen
   useEffect(() => {
     loadImage();
-  }, [loadImage, productId, retryCount]);
+  }, [loadImage, productId, retryCount, useBase64]);
 
   // Manejadores de eventos
   const handleLoad = () => {
@@ -142,10 +146,27 @@ const ProductImage: React.FC<ProductImageProps> = ({
         </div>
       )}
       
-      {/* Imagen */}
-      {!error && imageData && (
+      {/* Imagen en formato base64 */}
+      {!error && imageBase64 && (
         <img 
-          src={imageData}
+          src={`data:image/jpeg;base64,${imageBase64}`}
+          alt={alt}
+          className={`${className} ${loading ? 'opacity-0' : 'opacity-100 transition-opacity duration-300'}`}
+          onLoad={handleLoad}
+          onError={handleError}
+          loading="lazy"
+          style={{ 
+            width: width ? `${width}px` : 'auto', 
+            height: height ? `${height}px` : 'auto',
+            objectFit: 'cover' 
+          }}
+        />
+      )}
+      
+      {/* Imagen URL normal */}
+      {!error && !imageBase64 && imageUrl && (
+        <img 
+          src={imageUrl}
           alt={alt}
           className={`${className} ${loading ? 'opacity-0' : 'opacity-100 transition-opacity duration-300'}`}
           onLoad={handleLoad}

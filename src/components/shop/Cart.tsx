@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useCartContext } from '@/providers/CartProvider';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -9,7 +9,15 @@ import {
   ArrowLeft,
   Check,
   CreditCard,
-  Loader2
+  Loader2,
+  Building,
+  MapPin,
+  AlertCircle,
+  AlertTriangle,
+  Download,
+  Clock,
+  Image as ImageIcon,
+  PackageOpen
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,19 +27,259 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ShopNavbar } from './ShopNavbar';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
+// Import ProductImage component for better image handling
+import ProductImage from '@/components/admin/components/ProductImage';
+
+// Simple image component with error handling using React state
+const CartItemImage = ({ item }) => {
+  const [imageError, setImageError] = useState(false);
+  
+  if (imageError || !item.image) {
+    return (
+      <ProductImage 
+        productId={item.id}
+        alt={item.name}
+        width={80}
+        height={80}
+        quality={70}
+        className="w-full h-full object-cover"
+        containerClassName="w-full h-full"
+        fallbackClassName="w-full h-full flex items-center justify-center"
+        placeholderText=""
+        useBase64={true}
+      />
+    );
+  }
+  
+  return (
+    <img 
+      src={`data:image/jpeg;base64,${item.image}`}
+      alt={item.name}
+      className="w-full h-full object-cover"
+      onError={() => {
+        console.log(`Image error for item: ${item.id}`);
+        setImageError(true);
+      }}
+    />
+  );
+};
+
+// Manejamos el caso cuando useNotification no está disponible
+const useNotificationSafe = () => {
+  try {
+    // Importación dinámica para evitar errores si no está disponible
+    const { useNotification } = require('@/context/NotificationContext');
+    return useNotification();
+  } catch (error) {
+    // Fallback cuando no está disponible
+    return {
+      addNotification: (message: string, type: string) => {
+        console.log(`Notification (${type}): ${message}`);
+      }
+    };
+  }
+};
+
+// Interfaces para los clientes
+interface Cliente {
+  _id: string;
+  servicio: string;
+  seccionDelServicio: string;
+  userId: string | {
+    _id: string;
+    email?: string;
+    usuario?: string;
+    nombre?: string;
+    apellido?: string;
+  };
+}
 
 export const Cart: React.FC = () => {
   const { items, removeItem, updateQuantity, clearCart, totalItems, totalPrice } = useCartContext();
+  const { addNotification } = useNotificationSafe(); // Usando versión segura
   const [checkoutStep, setCheckoutStep] = useState<number>(1);
   const [processingOrder, setProcessingOrder] = useState<boolean>(false);
   const [orderComplete, setOrderComplete] = useState<boolean>(false);
   const [orderError, setOrderError] = useState<string | null>(null);
+  const [createdOrderId, setCreatedOrderId] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState<number>(30);
+  const [isDownloadingRemito, setIsDownloadingRemito] = useState<boolean>(false);
+  
+  // Estados para clientes
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [clientesAgrupados, setClientesAgrupados] = useState<Record<string, Cliente[]>>({});
+  const [clienteSeleccionado, setClienteSeleccionado] = useState<string | null>(null);
+  const [cargandoClientes, setCargandoClientes] = useState<boolean>(false);
+  const [errorClientes, setErrorClientes] = useState<string | null>(null);
   
   // Estado para formulario de checkout
   const [orderForm, setOrderForm] = useState({
     notes: '',
     deliveryDate: '',
+    servicio: '',
+    seccionDelServicio: ''
   });
+  
+  // Obtener clientes del usuario al cargar el componente
+  useEffect(() => {
+    fetchClientes();
+  }, []);
+
+  // Contador para redirección automática tras completar pedido
+  useEffect(() => {
+    if (orderComplete) {
+      const timer = setInterval(() => {
+        setCountdown(prevCount => {
+          if (prevCount <= 1) {
+            clearInterval(timer);
+            window.location.href = '/shop';
+            return 0;
+          }
+          return prevCount - 1;
+        });
+      }, 1000);
+      
+      return () => clearInterval(timer);
+    }
+  }, [orderComplete]);
+
+  // Función para obtener los clientes del usuario actual
+  const fetchClientes = async () => {
+    try {
+      setCargandoClientes(true);
+      setErrorClientes(null);
+      
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No hay token de autenticación. Por favor, inicie sesión nuevamente.');
+      }
+      
+      // Primero, obtener información del usuario actual
+      const userResponse = await fetch('http://localhost:4000/api/auth/me', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (!userResponse.ok) {
+        throw new Error('Error al obtener información del usuario');
+      }
+      
+      const userData = await userResponse.json();
+      const userId = userData._id || userData.id;
+      
+      if (!userId) {
+        throw new Error('No se pudo determinar el ID del usuario actual');
+      }
+      
+      // Obtener clientes asociados al usuario actual
+      const response = await fetch(`http://localhost:4000/api/cliente/user/${userId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Error al cargar clientes: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      setClientes(data);
+      
+      // Agrupar clientes por servicio para una mejor organización
+      const agrupados = data.reduce((acc: Record<string, Cliente[]>, cliente: Cliente) => {
+        if (!acc[cliente.servicio]) {
+          acc[cliente.servicio] = [];
+        }
+        acc[cliente.servicio].push(cliente);
+        return acc;
+      }, {});
+      
+      setClientesAgrupados(agrupados);
+      
+      // Si hay al menos un cliente, seleccionarlo por defecto
+      if (data.length > 0) {
+        setClienteSeleccionado(data[0]._id);
+        setOrderForm(prev => ({
+          ...prev,
+          servicio: data[0].servicio,
+          seccionDelServicio: data[0].seccionDelServicio
+        }));
+      }
+      
+    } catch (error) {
+      console.error('Error al cargar clientes:', error);
+      setErrorClientes(error instanceof Error ? error.message : 'Error al cargar clientes');
+    } finally {
+      setCargandoClientes(false);
+    }
+  };
+
+  // Función para descargar el remito del pedido creado
+  const handleRemitoDownload = async () => {
+    if (!createdOrderId) {
+      console.log('No se puede descargar el remito: ID de pedido no disponible');
+      return;
+    }
+    
+    try {
+      setIsDownloadingRemito(true);
+
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
+      
+      console.log(`Iniciando descarga de remito para pedido: ${createdOrderId}`);
+      
+      // Realizar la solicitud con un timeout adecuado
+      const response = await fetch(`http://localhost:4000/api/downloads/remito/${createdOrderId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        method: 'GET'
+      });
+      
+      // Verificar si la respuesta es válida
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Error ${response.status}: ${errorText}`);
+      }
+      
+      // Convertir la respuesta a blob
+      const blob = await response.blob();
+      
+      // Verificar que el blob no esté vacío
+      if (!blob || blob.size === 0) {
+        throw new Error('La respuesta del servidor está vacía');
+      }
+      
+      // Crear URL y descargar
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `remito_${createdOrderId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      
+      // Limpiar
+      setTimeout(() => {
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }, 100);
+      
+      console.log('Remito descargado correctamente');
+    } catch (error) {
+      console.error('Error al descargar remito:', error);
+    } finally {
+      setIsDownloadingRemito(false);
+    }
+  };
   
   // Actualizar cantidad con validación
   const handleQuantityChange = (id: string, newQuantity: number) => {
@@ -41,9 +289,28 @@ export const Cart: React.FC = () => {
     updateQuantity(id, newQuantity);
   };
   
+  // Manejar cambio de cliente seleccionado
+  const handleClienteChange = (clienteId: string) => {
+    setClienteSeleccionado(clienteId);
+    
+    // Encontrar el cliente seleccionado y actualizar el formulario
+    const clienteSeleccionadoObj = clientes.find(c => c._id === clienteId);
+    if (clienteSeleccionadoObj) {
+      setOrderForm(prev => ({
+        ...prev,
+        servicio: clienteSeleccionadoObj.servicio,
+        seccionDelServicio: clienteSeleccionadoObj.seccionDelServicio
+      }));
+    }
+  };
+  
   // Procesamiento real de pedido
   const processOrder = async () => {
     if (items.length === 0) return;
+    if (!clienteSeleccionado && clientes.length > 0) {
+      setOrderError('Por favor, seleccione un cliente para el pedido');
+      return;
+    }
     
     setProcessingOrder(true);
     setOrderError(null);
@@ -75,11 +342,14 @@ export const Cart: React.FC = () => {
         precio: item.price
       }));
       
+      // Encontrar el cliente seleccionado
+      const clienteObj = clientes.find(c => c._id === clienteSeleccionado);
+      
       // Crear objeto de pedido
       const orderData = {
         userId: userId,
-        servicio: "Compra Online",
-        seccionDelServicio: "Tienda Web",
+        servicio: clienteObj ? clienteObj.servicio : orderForm.servicio || "Sin especificar",
+        seccionDelServicio: clienteObj ? clienteObj.seccionDelServicio : orderForm.seccionDelServicio || "Sin especificar",
         detalle: orderForm.notes || "Pedido creado desde la tienda web",
         productos: productsData
       };
@@ -100,6 +370,10 @@ export const Cart: React.FC = () => {
         const errorData = await response.json();
         throw new Error(errorData.mensaje || `Error al crear el pedido (status: ${response.status})`);
       }
+
+      // Obtener datos del pedido creado para guardar el ID
+      const pedidoCreado = await response.json();
+      setCreatedOrderId(pedidoCreado._id);
       
       // Pedido creado correctamente
       setOrderComplete(true);
@@ -160,12 +434,38 @@ export const Cart: React.FC = () => {
               <p className="text-[#75D0E0] mb-6">
                 Hemos recibido tu solicitud. El equipo de administración revisará tu pedido y te contactará pronto.
               </p>
-              <Button 
-                className="bg-[#00888A] hover:bg-[#50C3AD] text-white shadow-md shadow-[#00888A]/20"
-                onClick={() => window.location.href = '/shop'}
-              >
-                Volver a la tienda
-              </Button>
+              
+              {/* Botones de acción */}
+              <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 justify-center mb-6">
+                <Button 
+                  className="bg-[#00888A] hover:bg-[#50C3AD] text-white shadow-md shadow-[#00888A]/20"
+                  onClick={handleRemitoDownload}
+                  disabled={isDownloadingRemito}
+                >
+                  {isDownloadingRemito ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4 mr-2" />
+                  )}
+                  Descargar Remito
+                </Button>
+                
+                <Button 
+                  variant="outline"
+                  className="border-[#80CFB0] text-[#D4F5E6] hover:bg-[#00888A]/20"
+                  onClick={() => window.location.href = '/shop'}
+                >
+                  Volver a la tienda
+                </Button>
+              </div>
+              
+              {/* Contador */}
+              <div className="bg-white/10 border border-[#80CFB0]/50 rounded-lg p-3 inline-flex items-center">
+                <Clock className="h-4 w-4 mr-2 text-[#D4F5E6]" />
+                <span className="text-[#D4F5E6]">
+                  Volviendo a la tienda en <span className="font-bold">{countdown}</span> segundos
+                </span>
+              </div>
             </motion.div>
           </div>
         </div>
@@ -198,19 +498,9 @@ export const Cart: React.FC = () => {
                         className="bg-gradient-to-r from-[#00888A]/40 to-[#50C3AD]/40 backdrop-blur-sm border border-[#80CFB0] rounded-lg overflow-hidden shadow-md"
                       >
                         <div className="p-4 flex gap-4">
-                          {/* Imagen del producto */}
+                          {/* Imagen del producto - MEJORADO CON CARTITEMIMAGE */}
                           <div className="w-20 h-20 bg-white/10 rounded-md overflow-hidden flex-shrink-0 border border-[#80CFB0]/30">
-                            {item.image ? (
-                              <img 
-                                src={`data:image/jpeg;base64,${item.image}`}
-                                alt={item.name}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center bg-white/5 text-[#D4F5E6]/40">
-                                Sin imagen
-                              </div>
-                            )}
+                            <CartItemImage item={item} />
                           </div>
                           
                           {/* Información del producto */}
@@ -277,6 +567,142 @@ export const Cart: React.FC = () => {
                     animate={{ opacity: 1 }}
                     className="space-y-6"
                   >
+                    {/* Selector de clientes */}
+                    <Card className="bg-gradient-to-r from-[#00888A]/40 to-[#50C3AD]/40 backdrop-blur-sm border-[#80CFB0] shadow-md">
+                      <CardHeader className="border-b border-[#80CFB0]/50">
+                        <CardTitle className="text-[#D4F5E6]">Seleccionar Cliente</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4 pt-6">
+                        {cargandoClientes ? (
+                          <div className="py-3 flex justify-center">
+                            <Loader2 className="h-6 w-6 animate-spin text-[#D4F5E6]" />
+                          </div>
+                        ) : errorClientes ? (
+                          <Alert className="bg-red-900/30 border-red-400">
+                            <AlertCircle className="h-4 w-4 text-red-400" />
+                            <AlertDescription className="ml-2 text-red-100">
+                              {errorClientes}
+                            </AlertDescription>
+                          </Alert>
+                        ) : clientes.length === 0 ? (
+                          <div>
+                            <Alert className="bg-yellow-100 border-2 border-yellow-400 mb-4">
+                              <AlertCircle className="h-4 w-4 text-yellow-700" />
+                              <AlertDescription className="ml-2 text-yellow-800 font-medium">
+                                No tienes clientes asignados. Por favor, contacta con administración.
+                              </AlertDescription>
+                            </Alert>
+                            
+                            <div className="space-y-3">
+                              <div>
+                                <Label htmlFor="customServicio" className="text-white font-medium">Servicio</Label>
+                                <Input
+                                  id="customServicio"
+                                  placeholder="Introduce el nombre del servicio"
+                                  className="bg-white border-2 border-[#50C3AD] mt-1 text-black font-medium"
+                                  value={orderForm.servicio}
+                                  onChange={(e) => setOrderForm({...orderForm, servicio: e.target.value})}
+                                  required
+                                />
+                              </div>
+                              
+                              <div>
+                                <Label htmlFor="customSeccion" className="text-white font-medium">Sección del Servicio (opcional)</Label>
+                                <Input
+                                  id="customSeccion"
+                                  placeholder="Introduce la sección si aplica"
+                                  className="bg-white border-2 border-[#50C3AD] mt-1 text-black font-medium"
+                                  value={orderForm.seccionDelServicio}
+                                  onChange={(e) => setOrderForm({...orderForm, seccionDelServicio: e.target.value})}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <Label htmlFor="clienteSelector" className="text-white font-medium flex items-center">
+                              Cliente Asociado
+                              {cargandoClientes && <Loader2 className="ml-2 h-3 w-3 animate-spin text-white/70" />}
+                            </Label>
+                            
+                            <div className="relative mt-1">
+                              <Select 
+                                value={clienteSeleccionado || ""} 
+                                onValueChange={handleClienteChange}
+                                disabled={cargandoClientes}
+                              >
+                                <SelectTrigger 
+                                  className="w-full bg-white/10 border-2 border-[#50C3AD] rounded-md text-white"
+                                >
+                                  <SelectValue placeholder="Selecciona un cliente" />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-80 overflow-y-auto bg-[#00888A] border-[#50C3AD]">
+                                  {Object.entries(clientesAgrupados).map(([servicio, clientesServicio]) => (
+                                    <div key={servicio} className="px-1 py-1">
+                                      {/* Encabezado de grupo de servicio */}
+                                      <div className="flex items-center px-2 py-1.5 text-xs uppercase tracking-wider font-semibold bg-[#50C3AD]/30 text-[#D4F5E6] rounded mb-1">
+                                        <Building className="h-3 w-3 mr-2" />
+                                        {servicio}
+                                      </div>
+                                      
+                                      {/* Secciones del servicio */}
+                                      <div className="pl-2">
+                                        {clientesServicio.map(cliente => (
+                                          <SelectItem 
+                                            key={cliente._id} 
+                                            value={cliente._id}
+                                            className="focus:bg-[#50C3AD]/50 data-[state=checked]:bg-[#50C3AD] data-[state=checked]:text-white"
+                                          >
+                                            <div className="flex items-center">
+                                              {cliente.seccionDelServicio ? (
+                                                <>
+                                                  <MapPin className="h-3 w-3 mr-2 text-[#D4F5E6]/70" />
+                                                  <span>{cliente.seccionDelServicio}</span>
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <Check className="h-3 w-3 mr-2 text-[#D4F5E6]/70" />
+                                                  <span>Principal</span>
+                                                </>
+                                              )}
+                                            </div>
+                                          </SelectItem>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            
+                            {/* Información del cliente seleccionado */}
+                            {clienteSeleccionado && !cargandoClientes && (
+                              <motion.div 
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="mt-4 p-3 rounded-md bg-white/10 border border-[#50C3AD]/50 backdrop-blur-sm"
+                              >
+                                <div className="text-sm text-[#D4F5E6]">
+                                  <p className="flex items-center">
+                                    <Building className="w-4 h-4 mr-2 text-[#50C3AD]" />
+                                    <span className="font-medium">Servicio:</span>
+                                    <span className="ml-1">{orderForm.servicio}</span>
+                                  </p>
+                                  {orderForm.seccionDelServicio && (
+                                    <p className="flex items-center mt-1">
+                                      <MapPin className="w-4 h-4 mr-2 text-[#50C3AD]" />
+                                      <span className="font-medium">Sección:</span>
+                                      <span className="ml-1">{orderForm.seccionDelServicio}</span>
+                                    </p>
+                                  )}
+                                </div>
+                              </motion.div>
+                            )}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                    
                     <Card className="bg-gradient-to-r from-[#00888A]/40 to-[#50C3AD]/40 backdrop-blur-sm border-[#80CFB0] shadow-md">
                       <CardHeader className="border-b border-[#80CFB0]/50">
                         <CardTitle className="text-[#D4F5E6]">Información del pedido</CardTitle>
@@ -329,8 +755,9 @@ export const Cart: React.FC = () => {
                     </Card>
                     
                     {orderError && (
-                      <Alert variant="destructive" className="bg-red-900/50 border-red-500 shadow-md">
-                        <AlertDescription className="text-white">{orderError}</AlertDescription>
+                      <Alert className="bg-red-100 border-2 border-red-500 shadow-md">
+                        <AlertCircle className="h-5 w-5 text-red-600" />
+                        <AlertDescription className="ml-2 text-red-800 font-medium">{orderError}</AlertDescription>
                       </Alert>
                     )}
                   </motion.div>
@@ -412,7 +839,7 @@ export const Cart: React.FC = () => {
                     {checkoutStep === 1 ? (
                       <Button 
                         onClick={() => setCheckoutStep(2)}
-                        className="bg-[#00888A] hover:bg-[#50C3AD] text-white shadow-md shadow-[#00888A]/20"
+                        className="w-full bg-[#00888A] hover:bg-[#50C3AD] text-white shadow-md shadow-[#00888A]/20"
                       >
                         Proceder a confirmar la orden
                       </Button>

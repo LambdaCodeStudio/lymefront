@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAuth } from '../../hooks/useAuth';
-import { LogOut } from 'lucide-react';
+import { LogOut, ShoppingBag } from 'lucide-react';
 
 export const Navbar = () => {
   const { logout } = useAuth();
@@ -16,7 +16,13 @@ export const Navbar = () => {
             </a>
           </div>
           
-          <div className="flex items-center">
+          <div className="flex items-center space-x-2">
+          <a href="/shop"
+              className="px-4 py-2 text-sm font-medium text-[#D4F5E6] hover:text-white bg-white/20 hover:bg-white/30 rounded-md transition-all flex items-center gap-2 group"
+            >
+              <ShoppingBag className="h-4 w-4 group-hover:-translate-y-0.5 transition-transform" />
+              <span className="hidden sm:inline">Tienda</span>
+            </a>
             <button
               onClick={logout}
               className="ml-4 px-4 py-2 text-sm font-medium text-[#D4F5E6] hover:text-white bg-white/10 hover:bg-white/20 rounded-md transition-all flex items-center gap-2 group"

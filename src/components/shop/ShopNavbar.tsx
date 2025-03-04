@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, User, Menu, X, LogOut, Search } from 'lucide-react';
+import { ShoppingCart, User, Menu, X, LogOut, Search, Settings, ClipboardList } from 'lucide-react';
 import { useAuthContext } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,6 +18,15 @@ export const ShopNavbar: React.FC = () => {
   const [scrolled, setScrolled] = useState(false);
   const [cartItemCount, setCartItemCount] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  // Get user role from localStorage
+  useEffect(() => {
+    const role = localStorage.getItem('userRole');
+    setUserRole(role);
+  }, []);
+
+  const isAdmin = userRole === 'admin' || userRole === 'supervisor';
 
   useEffect(() => {
     const handleScroll = () => {
@@ -78,6 +87,12 @@ export const ShopNavbar: React.FC = () => {
               >
                 Favoritos
               </a>
+              <a 
+                href="/orders" 
+                className="text-white hover:text-[#D4F5E6] transition-colors text-sm font-medium uppercase tracking-wide"
+              >
+                Mis Pedidos
+              </a>
             </nav>
 
             {/* Action Buttons */}
@@ -89,6 +104,14 @@ export const ShopNavbar: React.FC = () => {
               >
                 <Search className="w-5 h-5" />
               </button>
+
+              <a 
+                href="/orders" 
+                className="hidden sm:flex text-white hover:text-[#D4F5E6] transition-colors"
+                aria-label="Mis Pedidos"
+              >
+                <ClipboardList className="w-5 h-5" />
+              </a>
 
               <a 
                 href="/cart" 
@@ -103,7 +126,16 @@ export const ShopNavbar: React.FC = () => {
                 )}
               </a>
 
-              <div className="hidden md:block">
+              <div className="hidden md:flex space-x-2">
+                {isAdmin && (
+                  <a 
+                    href="/admin"
+                    className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-[#80CFB0]/30 hover:bg-[#80CFB0]/40 rounded transition-colors"
+                  >
+                    <Settings className="w-4 h-4 mr-1" />
+                    Admin
+                  </a>
+                )}
                 <Button 
                   variant="ghost" 
                   size="sm"
@@ -197,8 +229,26 @@ export const ShopNavbar: React.FC = () => {
               >
                 Favoritos
               </a>
+              <a 
+                href="/orders" 
+                className="text-white hover:text-[#D4F5E6] transition-colors py-2 border-b border-[#50C3AD]/30 text-lg flex items-center"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <ClipboardList className="w-5 h-5 mr-2" />
+                Mis Pedidos
+              </a>
               
-              <div className="pt-4">
+              <div className="pt-4 flex flex-col space-y-3">
+                {isAdmin && (
+                  <a 
+                    href="/admin"
+                    className="flex justify-center items-center py-2 text-white bg-[#80CFB0]/30 hover:bg-[#80CFB0]/40 rounded transition-colors"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    <Settings className="w-5 h-5 mr-2" />
+                    Panel de Administración
+                  </a>
+                )}
                 <Button 
                   variant="ghost" 
                   className="w-full justify-center text-white bg-white/10 hover:bg-white/20"

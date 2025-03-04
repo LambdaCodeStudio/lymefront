@@ -1,30 +1,30 @@
 ---
 import ShopLayout from '../layouts/ShopLayout.astro';
-import { CartWrapper } from '../components/shop/CartWrapper';
+import { OrdersWrapper } from '../components/shop/OrdersWrapper';
 import { Footer } from '../components/common/Footer'
 ---
 
-<ShopLayout title="Tienda Lyme - Tu Carrito">
-  <CartWrapper client:load />
+<ShopLayout title="Tienda Lyme - Mis Ordenes">
+  <OrdersWrapper client:load />
   <Footer client:load />
 </ShopLayout>
 
 <style>
-  /* Additional cart-specific styling */
-  :global(.cart-item) {
+  /* Additional orders-specific styling */
+  :global(.order-item) {
     border-color: rgba(145, 190, 173, 0.3) !important;
   }
   
-  :global(.checkout-button) {
+  :global(.receipt-button) {
     background-color: #29696B !important;
     color: white !important;
   }
   
-  :global(.checkout-button:hover) {
+  :global(.receipt-button:hover) {
     background-color: #7AA79C !important;
   }
   
-  :global(.cart-summary) {
+  :global(.orders-table) {
     background-color: rgba(41, 105, 107, 0.2) !important;
     border: 1px solid rgba(145, 190, 173, 0.3) !important;
   }
