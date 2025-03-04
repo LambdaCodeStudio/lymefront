@@ -148,52 +148,17 @@ const DownloadsManagement: React.FC = () => {
       try {
         setError('');
         
-        // Obtener información del cliente seleccionado
-        const clienteResponse = await api.getClient().get(`/cliente/${selectedCliente}`);
         
-        if (!clienteResponse.data) {
-          setPedidos([]);
-          setError('Cliente no encontrado');
-          return;
-        }
+        const pedidosResponse = await api.getClient().get(`/pedido/cliente/${selectedCliente}`);
         
-        // Obtener servicio y sección del cliente seleccionado para filtrar pedidos
-        const servicio = clienteResponse.data.servicio;
-        const seccionDelServicio = clienteResponse.data.seccionDelServicio;
-        
-        // Extraer userId del cliente como respaldo
-        const userId = typeof clienteResponse.data.userId === 'object' 
-          ? clienteResponse.data.userId._id 
-          : clienteResponse.data.userId;
-        
-        // Obtener todos los pedidos (podríamos optimizar esto más adelante)
-        const pedidosResponse = await api.getClient().get('/pedido');
-        
-        if (!pedidosResponse.data || !Array.isArray(pedidosResponse.data)) {
+        if (pedidosResponse.data && Array.isArray(pedidosResponse.data)) {
+          setPedidos(pedidosResponse.data);
+          if (pedidosResponse.data.length === 0) {
+            setError('No se encontraron pedidos para este cliente');
+          }
+        } else {
           setPedidos([]);
           setError('Formato de respuesta inválido al cargar pedidos');
-          return;
-        }
-        
-        // Filtrar pedidos que coincidan con el servicio y sección del cliente
-        // o con el userId si los criterios anteriores no funcionan
-        const pedidosFiltrados = pedidosResponse.data.filter(pedido => {
-          // Opción 1: Coincidir por servicio y sección
-          const coincideServicio = pedido.servicio === servicio;
-          const coincideSeccion = !seccionDelServicio || pedido.seccionDelServicio === seccionDelServicio;
-          
-          // Opción 2: Coincidir por userId como respaldo
-          const pedidoUserId = typeof pedido.userId === 'object' 
-            ? pedido.userId._id 
-            : pedido.userId;
-          const coincideUserId = userId && pedidoUserId === userId;
-          
-          return (coincideServicio && coincideSeccion) || coincideUserId;
-        });
-        
-        setPedidos(pedidosFiltrados);
-        if (pedidosFiltrados.length === 0) {
-          setError('No se encontraron pedidos para este cliente');
         }
       } catch (err) {
         console.error('Error al cargar pedidos:', err);
