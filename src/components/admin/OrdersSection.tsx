@@ -963,10 +963,6 @@ const fetchOrdersByDate = async () => {
       setClientSections(grouped);
       setDebugInfo(`Clientes cargados: ${clientsData.length}, Servicios: ${Object.keys(grouped).length}`);
       
-      // Notificación para clientes no encontrados
-      if (addNotification && clientsData.length === 0) {
-        addNotification('No se encontraron clientes asignados a este usuario. Contacte a un administrador.', 'warning');
-      }
     } catch (err) {
       console.error('Error al cargar clientes:', err);
       setDebugInfo(prev => prev + "\nError clientes: " + (err instanceof Error ? err.message : String(err)));

@@ -147,14 +147,11 @@ const DownloadsManagement: React.FC = () => {
       
       try {
         setError('');
-        
-        
         const pedidosResponse = await api.getClient().get(`/pedido/cliente/${selectedCliente}`);
         
         if (pedidosResponse.data && Array.isArray(pedidosResponse.data)) {
           setPedidos(pedidosResponse.data);
           if (pedidosResponse.data.length === 0) {
-            setError('No se encontraron pedidos para este cliente');
           }
         } else {
           setPedidos([]);
