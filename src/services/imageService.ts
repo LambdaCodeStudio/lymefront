@@ -7,6 +7,7 @@ interface ImageOptions {
   height?: number;
   quality?: number;
   timestamp?: boolean;
+  useBase64?: boolean; // Nueva opción para usar base64
 }
 
 interface Product {
@@ -70,24 +71,29 @@ class ImageService {
   getImageUrl(productId: string, options: ImageOptions = {}): string {
     if (!productId) return '';
     
+    // Determinar si usar el endpoint base64 o el binario
+    const endpoint = options.useBase64 ? 'imagen-base64' : 'imagen';
+    
     // Construir la URL base
-    let url = `${this.baseUrl}/producto/${productId}/imagen`;
+    let url = `${this.baseUrl}/producto/${productId}/${endpoint}`;
     
-    // Añadir parámetros de consulta
-    const params = new URLSearchParams();
-    
-    if (options.width) params.append('width', options.width.toString());
-    if (options.height) params.append('height', options.height.toString());
-    if (options.quality !== undefined) params.append('quality', options.quality.toString());
-    
-    // Añadir timestamp para evitar caché si se solicita o por defecto
-    if (options.timestamp !== false) {
-      params.append('timestamp', new Date().getTime().toString());
-    }
-    
-    const queryString = params.toString();
-    if (queryString) {
-      url += `?${queryString}`;
+    // Para el endpoint binario, añadir parámetros de consulta para redimensión y calidad
+    if (!options.useBase64) {
+      const params = new URLSearchParams();
+      
+      if (options.width) params.append('width', options.width.toString());
+      if (options.height) params.append('height', options.height.toString());
+      if (options.quality !== undefined) params.append('quality', options.quality.toString());
+      
+      // Añadir timestamp para evitar caché si se solicita o por defecto
+      if (options.timestamp !== false) {
+        params.append('timestamp', new Date().getTime().toString());
+      }
+      
+      const queryString = params.toString();
+      if (queryString) {
+        url += `?${queryString}`;
+      }
     }
     
     return url;
@@ -139,6 +145,72 @@ class ImageService {
   }
 
   /**
+   * Sube una imagen en formato base64 para un producto
+   */
+  async uploadImageBase64(productId: string, base64Image: string): Promise<any> {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('No hay token de autenticación');
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}/producto/${productId}/imagen-base64`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ base64Image })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Error al subir la imagen base64');
+      }
+
+      // Invalidar el caché después de subir una nueva imagen
+      this.invalidateCache(productId);
+      
+      return await response.json();
+    } catch (error: any) {
+      console.error('Error al subir imagen base64:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene una imagen en formato base64
+   */
+  async getImageBase64(productId: string): Promise<string> {
+    try {
+      const token = getAuthToken();
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${this.baseUrl}/producto/${productId}/imagen-base64`, {
+        method: 'GET',
+        headers
+      });
+
+      if (response.status === 204) {
+        throw new Error('El producto no tiene una imagen');
+      }
+
+      if (!response.ok) {
+        throw new Error('Error al obtener la imagen');
+      }
+
+      const data = await response.json();
+      return data.image;
+    } catch (error: any) {
+      console.error('Error al obtener imagen base64:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Elimina la imagen de un producto
    */
   async deleteImage(productId: string): Promise<any> {
@@ -168,6 +240,18 @@ class ImageService {
       console.error('Error al eliminar imagen:', error);
       throw error;
     }
+  }
+
+  /**
+   * Convierte un archivo de imagen a Base64
+   */
+  async fileToBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = error => reject(error);
+    });
   }
 
   /**

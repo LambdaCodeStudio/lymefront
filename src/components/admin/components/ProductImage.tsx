@@ -15,10 +15,12 @@ interface ProductImageProps {
   checkExistence?: boolean;
   placeholderText?: string;
   retryOnError?: boolean;
+  useBase64?: boolean; // Nueva propiedad para elegir el formato
 }
 
 /**
  * Componente para mostrar imágenes de productos con estados de carga y error
+ * Añadido soporte para cargar imágenes en formato base64
  */
 const ProductImage: React.FC<ProductImageProps> = ({
   productId,
@@ -31,13 +33,14 @@ const ProductImage: React.FC<ProductImageProps> = ({
   fallbackClassName = "",
   checkExistence = true,
   placeholderText = "Sin imagen",
-  retryOnError = true
+  retryOnError = true,
+  useBase64 = false // Por defecto usamos el método binario
 }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [imageExists, setImageExists] = useState<boolean | null>(null);
   const [retryCount, setRetryCount] = useState(0);
-  const [imageUrl, setImageUrl] = useState<string>('');
+  const [imageData, setImageData] = useState<string>(''); // Para base64 o URL
   
   // Función para cargar la imagen
   const loadImage = useCallback(async () => {
@@ -51,35 +54,49 @@ const ProductImage: React.FC<ProductImageProps> = ({
     setError(false);
     
     try {
-      // Verificar existencia si es necesario
-      if (checkExistence) {
-        const exists = await imageService.checkImageExists(productId);
-        setImageExists(exists);
-        
-        if (!exists) {
+      if (useBase64) {
+        // Método Base64
+        try {
+          const base64Data = await imageService.getImageBase64(productId);
+          setImageData(base64Data);
+          setImageExists(true);
+          // El estado de loading cambiará cuando la imagen se procese
+        } catch (error) {
+          console.error('Error obteniendo imagen base64:', error);
           setError(true);
+          setImageExists(false);
           setLoading(false);
-          return;
         }
+      } else {
+        // Método URL (original)
+        if (checkExistence) {
+          const exists = await imageService.checkImageExists(productId);
+          setImageExists(exists);
+          
+          if (!exists) {
+            setError(true);
+            setLoading(false);
+            return;
+          }
+        }
+        
+        // Generar URL con timestamp único para evitar problemas de caché
+        const url = imageService.getImageUrl(productId, { 
+          width, 
+          height, 
+          quality,
+          timestamp: true
+        });
+        
+        setImageData(url);
+        // El estado de loading cambiará cuando la imagen se cargue o falle
       }
-      
-      // Generar URL con timestamp único para evitar problemas de caché
-      const url = imageService.getImageUrl(productId, { 
-        width, 
-        height, 
-        quality,
-        timestamp: true
-      });
-      
-      setImageUrl(url);
-      
-      // El estado de loading cambiará cuando la imagen se cargue o falle
     } catch (err) {
       console.error('Error al cargar imagen:', err);
       setError(true);
       setLoading(false);
     }
-  }, [productId, checkExistence, width, height, quality]);
+  }, [productId, checkExistence, width, height, quality, useBase64]);
   
   // Iniciar carga de imagen
   useEffect(() => {
@@ -126,9 +143,9 @@ const ProductImage: React.FC<ProductImageProps> = ({
       )}
       
       {/* Imagen */}
-      {!error && imageUrl && (
+      {!error && imageData && (
         <img 
-          src={imageUrl}
+          src={imageData}
           alt={alt}
           className={`${className} ${loading ? 'opacity-0' : 'opacity-100 transition-opacity duration-300'}`}
           onLoad={handleLoad}

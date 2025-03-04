@@ -23,6 +23,7 @@ interface Product {
   precio: number;
   stock: number;
   hasImage?: boolean;
+  imageBase64?: string;
 }
 
 interface ProductCardProps {
@@ -30,13 +31,15 @@ interface ProductCardProps {
   isFavorite: boolean;
   onToggleFavorite: () => void;
   onAddToCart: (quantity: number) => void;
+  useBase64?: boolean; // Nueva propiedad para elegir el formato de imagen
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({
   product,
   isFavorite,
   onToggleFavorite,
-  onAddToCart
+  onAddToCart,
+  useBase64 = true // Por defecto usar Base64
 }) => {
   const [quantity, setQuantity] = useState<number>(1);
   const [showQuantitySelector, setShowQuantitySelector] = useState<boolean>(false);
@@ -97,17 +100,27 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         {/* Imagen del producto */}
         <div className="relative pt-3 px-3">
           <div className="aspect-square rounded-lg overflow-hidden bg-white/10 flex items-center justify-center">
-            <ProductImage 
-              productId={product._id}
-              alt={product.nombre}
-              width={300}
-              height={300}
-              quality={85}
-              className="object-cover h-full w-full"
-              containerClassName="h-full w-full"
-              fallbackClassName="h-full w-full"
-              placeholderText="Sin imagen"
-            />
+            {/* Usar la imagen base64 directamente si está disponible */}
+            {useBase64 && product.imageBase64 ? (
+              <img 
+                src={product.imageBase64}
+                alt={product.nombre}
+                className="object-cover h-full w-full"
+              />
+            ) : (
+              <ProductImage 
+                productId={product._id}
+                alt={product.nombre}
+                width={300}
+                height={300}
+                quality={85}
+                className="object-cover h-full w-full"
+                containerClassName="h-full w-full"
+                fallbackClassName="h-full w-full"
+                placeholderText="Sin imagen"
+                useBase64={useBase64} // Usar Base64 según configuración
+              />
+            )}
           </div>
           
           {/* Botón de favorito */}

@@ -37,7 +37,9 @@ import {
   AlertTriangle,
   Image as ImageIcon,
   X,
-  Loader2
+  Loader2,
+  ToggleLeft,
+  ToggleRight
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +51,8 @@ import { inventoryObservable, getAuthToken } from '@/utils/inventoryUtils';
 import { imageService } from '@/services/imageService';
 // Importar el componente ProductImage
 import ProductImage from '@/components/admin/components/ProductImage';
+// Importar el nuevo componente de carga de imágenes
+import ImageUpload from '@/components/admin/components/ImageUpload';
 
 // Componente para input de stock con límite máximo
 const ProductStockInput: React.FC<{
@@ -110,6 +114,7 @@ interface ProductExtended extends Product {
   imagen?: string | Buffer | null;
   vendidos?: number;
   hasImage?: boolean;
+  imageBase64?: string;
 }
 
 interface FormData {
@@ -151,6 +156,8 @@ const InventorySection: React.FC = () => {
     sortOrder: 'asc'
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Nuevo estado para elegir entre Base64 y binario
+  const [useBase64, setUseBase64] = useState<boolean>(true);
   
   const [formData, setFormData] = useState<FormData>({
     nombre: '',
@@ -268,6 +275,17 @@ const InventorySection: React.FC = () => {
     }
   };
 
+  // Modificado: Cargar la imagen en Base64 para productos específicos
+  const fetchProductImageBase64 = async (productId: string) => {
+    try {
+      const base64Image = await imageService.getImageBase64(productId);
+      return base64Image;
+    } catch (error) {
+      console.error(`Error al obtener imagen base64 para producto ${productId}:`, error);
+      return null;
+    }
+  };
+
   // Manejar cambio de imagen
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -341,7 +359,14 @@ const InventorySection: React.FC = () => {
     
     try {
       setImageLoading(true);
-      await imageService.uploadImage(productId, formData.imagen);
+      if (useBase64) {
+        // Convertir a base64 y subir
+        const base64Data = await imageService.fileToBase64(formData.imagen);
+        await imageService.uploadImageBase64(productId, base64Data);
+      } else {
+        // Subir como archivo binario (método original)
+        await imageService.uploadImage(productId, formData.imagen);
+      }
       return true;
     } catch (error: any) {
       addNotification('Error al subir imagen: ' + error.message, 'error');
@@ -473,8 +498,25 @@ const InventorySection: React.FC = () => {
   };
 
   // Preparar edición de producto
-  const handleEdit = (product: ProductExtended) => {
+  const handleEdit = async (product: ProductExtended) => {
     setEditingProduct(product);
+    
+    // Si estamos usando base64, intentamos cargar la imagen en este formato
+    let imagePreview = null;
+    if (useBase64 && imageService.hasImage(product)) {
+      try {
+        // Cargar imagen base64 para vista previa
+        const base64Image = await fetchProductImageBase64(product._id);
+        imagePreview = base64Image;
+      } catch (error) {
+        console.error('Error al cargar imagen base64:', error);
+        // Fallback a la URL normal
+        imagePreview = imageService.getImageUrl(product._id);
+      }
+    } else if (imageService.hasImage(product)) {
+      // Usar la URL normal
+      imagePreview = imageService.getImageUrl(product._id);
+    }
     
     setFormData({
       nombre: product.nombre,
@@ -485,7 +527,7 @@ const InventorySection: React.FC = () => {
       stock: product.stock.toString(),
       proovedorInfo: product.proovedorInfo || '',
       imagen: null,
-      imagenPreview: imageService.hasImage(product) ? imageService.getImageUrl(product._id) : null
+      imagenPreview: imagePreview
     });
     
     setShowModal(true);
@@ -595,6 +637,13 @@ const InventorySection: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Manejar la subida de imagen con el nuevo componente
+  const handleImageUploaded = (success: boolean) => {
+    if (success) {
+      fetchProducts(); // Recargar productos después de subir la imagen
+    }
+  };
+
   return (
     <div className="p-4 md:p-6 space-y-6 bg-[#DFEFE6]/30">
       {/* Alertas */}
@@ -654,17 +703,37 @@ const InventorySection: React.FC = () => {
             </TabsList>
           </Tabs>
         </div>
-        
-        <Button 
-          onClick={() => {
-            resetForm();
-            setShowModal(true);
-          }}
-          className="w-full md:w-auto bg-[#29696B] hover:bg-[#29696B]/90 text-white"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Nuevo Producto
-        </Button>
+
+        <div className="w-full md:w-auto flex flex-col md:flex-row gap-2 items-center">
+          {/* Selector de modo de imagen */}
+          <div 
+            className="flex items-center gap-2 text-sm cursor-pointer mb-2 md:mb-0 mr-4" 
+            onClick={() => setUseBase64(!useBase64)}
+          >
+            {useBase64 ? (
+              <>
+                <span className="text-[#29696B] font-medium">Modo Base64</span>
+                <ToggleRight className="h-5 w-5 text-[#29696B]" />
+              </>
+            ) : (
+              <>
+                <span className="text-gray-500">Modo Binario</span>
+                <ToggleLeft className="h-5 w-5 text-gray-500" />
+              </>
+            )}
+          </div>
+          
+          <Button 
+            onClick={() => {
+              resetForm();
+              setShowModal(true);
+            }}
+            className="w-full md:w-auto bg-[#29696B] hover:bg-[#29696B]/90 text-white"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Nuevo Producto
+          </Button>
+        </div>
       </div>
 
       {/* Alerta para productos con stock bajo */}
@@ -738,6 +807,7 @@ const InventorySection: React.FC = () => {
                             className="h-10 w-10 rounded-full object-cover border border-[#91BEAD]/30"
                             fallbackClassName="h-10 w-10 rounded-full bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30"
                             containerClassName="h-10 w-10"
+                            useBase64={useBase64} // Usar Base64 según la configuración
                           />
                         </div>
                         <div>
@@ -840,6 +910,7 @@ const InventorySection: React.FC = () => {
                     className="h-16 w-16 rounded-md object-cover border border-[#91BEAD]/30"
                     fallbackClassName="h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30"
                     containerClassName="h-16 w-16"
+                    useBase64={useBase64} // Usar Base64 según la configuración
                   />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -1019,53 +1090,87 @@ const InventorySection: React.FC = () => {
               </div>
 
               <div>
-                <Label htmlFor="imagen" className="text-sm text-[#29696B]">Imagen del Producto</Label>
-                <div className="mt-1 flex flex-col space-y-2">
-                  {formData.imagenPreview ? (
-                    <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
-                      <img 
-                        src={formData.imagenPreview} 
-                        alt="Vista previa" 
-                        className="w-full h-full object-contain" 
-                      />
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        onClick={
-                          // Para producto existente con imagen previa pero sin cambios
-                          editingProduct && !formData.imagen 
-                            ? () => confirmDeleteImage(editingProduct._id)
-                            : handleRemoveImage
-                        }
-                        className="absolute top-2 right-2 h-8 w-8 p-0 bg-red-500 hover:bg-red-600"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-center w-full">
-                      <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#91BEAD]/30 border-dashed rounded-md cursor-pointer bg-[#DFEFE6]/20 hover:bg-[#DFEFE6]/40 transition-colors">
-                        <div className="flex flex-col items-center justify-center pt-3 pb-4">
-                          <ImageIcon className="w-8 h-8 text-[#7AA79C] mb-1" />
-                          <p className="text-xs text-[#7AA79C]">
-                            Haz clic para subir una imagen
-                          </p>
-                          <p className="text-xs text-[#7AA79C]">
-                            Máximo 5MB
-                          </p>
-                        </div>
-                        <input 
-                          ref={fileInputRef}
-                          type="file" 
-                          accept="image/*" 
-                          className="hidden" 
-                          onChange={handleImageChange}
-                        />
-                      </label>
-                    </div>
-                  )}
+                <Label className="text-sm text-[#29696B] block mb-2">Imagen del Producto</Label>
+                {/* Agregar un indicador del modo de imagen */}
+                <div className="text-xs text-[#7AA79C] mb-2 flex items-center">
+                  <span>Usando modo: </span>
+                  <Badge variant="outline" className="ml-2 text-[#29696B] border-[#29696B]">
+                    {useBase64 ? 'Base64' : 'Binario'}
+                  </Badge>
                 </div>
+                
+                {/* Mostrar el componente de carga de imágenes cuando estamos editando */}
+                {editingProduct ? (
+                  <div className="mt-2">
+                    {formData.imagenPreview ? (
+                      <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
+                        <img 
+                          src={formData.imagenPreview} 
+                          alt="Vista previa" 
+                          className="w-full h-full object-contain" 
+                        />
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => confirmDeleteImage(editingProduct._id)}
+                          className="absolute top-2 right-2 h-8 w-8 p-0 bg-red-500 hover:bg-red-600"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <ImageUpload 
+                        productId={editingProduct._id}
+                        useBase64={useBase64}
+                        onImageUploaded={handleImageUploaded}
+                      />
+                    )}
+                  </div>
+                ) : (
+                  // Para nuevos productos, mantenemos la UI original
+                  <div className="mt-1 flex flex-col space-y-2">
+                    {formData.imagenPreview ? (
+                      <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
+                        <img 
+                          src={formData.imagenPreview} 
+                          alt="Vista previa" 
+                          className="w-full h-full object-contain" 
+                        />
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          onClick={handleRemoveImage}
+                          className="absolute top-2 right-2 h-8 w-8 p-0 bg-red-500 hover:bg-red-600"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center w-full">
+                        <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#91BEAD]/30 border-dashed rounded-md cursor-pointer bg-[#DFEFE6]/20 hover:bg-[#DFEFE6]/40 transition-colors">
+                          <div className="flex flex-col items-center justify-center pt-3 pb-4">
+                            <ImageIcon className="w-8 h-8 text-[#7AA79C] mb-1" />
+                            <p className="text-xs text-[#7AA79C]">
+                              Haz clic para subir una imagen
+                            </p>
+                            <p className="text-xs text-[#7AA79C]">
+                              Máximo 5MB
+                            </p>
+                          </div>
+                          <input 
+                            ref={fileInputRef}
+                            type="file" 
+                            accept="image/*" 
+                            className="hidden" 
+                            onChange={handleImageChange}
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
