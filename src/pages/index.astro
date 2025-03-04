@@ -1,10 +1,14 @@
 ---
-import Layout from '../layouts/Layout.astro';
-import '../styles/global.css';
----
+// Redirección directa a la página de login
+import { getAuthToken } from '../utils/inventoryUtils';
 
-<Layout title="Lyme">
-  <main>
-    <slot />
-  </main>
-</Layout>
+// Verificar si hay un token de autenticación
+const token = getAuthToken();
+
+// Si no hay token, redirigir a login, de lo contrario continuar a la app
+if (!token) {
+  return Astro.redirect('/login');
+} else {
+  return Astro.redirect('/shop');
+}
+---

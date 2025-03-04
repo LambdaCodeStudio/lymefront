@@ -35,16 +35,18 @@ import {
   PackageOpen,
   DollarSign,
   AlertTriangle,
-  Image,
-  X
+  Image as ImageIcon,
+  X,
+  Loader2
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import Pagination from "@/components/ui/pagination";
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import type { Product, ProductFilters } from '@/types/inventory';
-// Importación correcta sin try/catch
 import { useNotification } from '@/context/NotificationContext';
-// Importar el observable
 import { inventoryObservable, getAuthToken } from '@/utils/inventoryUtils';
+import { imageService } from '@/services/imageService';
 
 // Componente para input de stock con límite máximo
 const ProductStockInput: React.FC<{
@@ -58,26 +60,22 @@ const ProductStockInput: React.FC<{
   onChange,
   id = "stock",
   required = true,
-  maxStock = 999999999 // Límite máximo de stock (9 dígitos)
+  maxStock = 999999999
 }) => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const inputValue = e.target.value;
     
-    // Permitir campo vacío para que el usuario pueda borrar el input
     if (inputValue === '') {
       onChange('');
       return;
     }
     
-    // Convertir a número y verificar que sea un entero positivo
     const numValue = parseInt(inputValue, 10);
     
-    // Verificar que sea un número válido
     if (isNaN(numValue)) {
       return;
     }
     
-    // Limitar al valor máximo
     if (numValue > maxStock) {
       onChange(maxStock.toString());
     } else if (numValue < 0) {
@@ -106,10 +104,10 @@ const ProductStockInput: React.FC<{
   );
 };
 
-// Extendemos la interfaz Product para incluir campos de imagen
 interface ProductExtended extends Product {
   imagen?: string | Buffer | null;
   vendidos?: number;
+  hasImage?: boolean; // Nueva propiedad para precalcular si tiene imagen
 }
 
 interface FormData {
@@ -120,23 +118,26 @@ interface FormData {
   precio: string;
   stock: string;
   proovedorInfo: string;
-  imagen?: string | null;
+  imagen?: File | null;
+  imagenPreview?: string | null;
 }
 
 // Definir umbral de stock bajo
 const LOW_STOCK_THRESHOLD = 10;
 
 const InventorySection: React.FC = () => {
-  // Usar directamente el contexto de notificaciones sin fallback
   const { addNotification } = useNotification();
-  // También podríamos verificar si está disponible
-  console.log('NotificationContext disponible:', addNotification ? true : false);
-
   const [products, setProducts] = useState<ProductExtended[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [imageLoading, setImageLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [showModal, setShowModal] = useState<boolean>(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
+  const [deleteImageDialogOpen, setDeleteImageDialogOpen] = useState<boolean>(false);
+  const [productToDelete, setProductToDelete] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [productsPerPage] = useState<number>(10);
   const [editingProduct, setEditingProduct] = useState<ProductExtended | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -149,7 +150,6 @@ const InventorySection: React.FC = () => {
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  // Inicializar formData con valores predeterminados
   const [formData, setFormData] = useState<FormData>({
     nombre: '',
     descripcion: '',
@@ -158,8 +158,17 @@ const InventorySection: React.FC = () => {
     precio: '',
     stock: '',
     proovedorInfo: '',
-    imagen: null
+    imagen: null,
+    imagenPreview: null
   });
+
+  // Función para verificar si un producto tiene imagen
+  const hasProductImage = (product: ProductExtended): boolean => {
+    if (!product) return false;
+    
+    // Verifica si el producto tiene una propiedad imagen que no sea null/undefined
+    return !!product.imagen;
+  };
 
   // Subcategorías organizadas por categoría
   const subCategorias: Record<string, Array<{value: string, label: string}>> = {
@@ -183,11 +192,6 @@ const InventorySection: React.FC = () => {
     ]
   };
 
-  // Debugging para ver cambios en el formulario
-  useEffect(() => {
-    console.log("Estado actual del formulario:", formData);
-  }, [formData]);
-
   // Verificar productos con stock bajo y enviar notificación
   useEffect(() => {
     const lowStockProducts = products.filter(product => 
@@ -198,24 +202,21 @@ const InventorySection: React.FC = () => {
       const productNames = lowStockProducts.map(p => p.nombre).join(', ');
       const message = `Alerta: ${lowStockProducts.length} producto${lowStockProducts.length > 1 ? 's' : ''} con stock bajo: ${productNames}`;
       
-      // Notificar solo si hay productos y es la primera carga (no en cada actualización)
       if (!loading && addNotification) {
         addNotification(message, 'warning');
       }
     }
-  }, [products, loading]);
+  }, [products, loading, addNotification]);
 
   // Cargar productos y suscribirse al observable
   useEffect(() => {
     fetchProducts();
     
-    // Suscribirse al observable de inventario
     const unsubscribe = inventoryObservable.subscribe(() => {
       console.log('InventorySection: Actualización de inventario notificada por observable');
       fetchProducts();
     });
     
-    // Limpiar la suscripción al desmontar el componente
     return () => {
       unsubscribe();
     };
@@ -237,7 +238,6 @@ const InventorySection: React.FC = () => {
       
       if (!response.ok) {
         if (response.status === 401) {
-          // Token expirado o inválido
           if (typeof window !== 'undefined') {
             localStorage.removeItem('token');
             localStorage.removeItem('userRole');
@@ -250,15 +250,20 @@ const InventorySection: React.FC = () => {
       
       const data = await response.json();
       console.log(`Productos actualizados: ${data.length}`);
-      setProducts(data);
+      
+      // Precalcular qué productos tienen imágenes para evitar solicitudes innecesarias
+      const productsWithImageInfo = data.map((product: ProductExtended) => ({
+        ...product,
+        hasImage: hasProductImage(product)
+      }));
+      
+      setProducts(productsWithImageInfo);
     } catch (err: any) {
       const errorMsg = 'Error al cargar productos: ' + err.message;
       setError(errorMsg);
       
-      // Asegurarnos de que addNotification sea una función antes de llamarla
       if (typeof addNotification === 'function') {
         addNotification(errorMsg, 'error');
-        console.log('Notificación de error enviada:', errorMsg);
       } else {
         console.error('addNotification no está disponible:', errorMsg);
       }
@@ -271,13 +276,32 @@ const InventorySection: React.FC = () => {
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      const reader = new FileReader();
       
+      // Validar tamaño del archivo (5MB máximo)
+      if (file.size > 5 * 1024 * 1024) {
+        addNotification('La imagen no debe superar los 5MB', 'error');
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+        return;
+      }
+
+      // Validar tipo de archivo
+      if (!file.type.startsWith('image/')) {
+        addNotification('El archivo debe ser una imagen', 'error');
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+        return;
+      }
+      
+      // Crear URL para vista previa
+      const reader = new FileReader();
       reader.onloadend = () => {
-        const base64String = reader.result as string;
         setFormData({
           ...formData,
-          imagen: base64String
+          imagen: file,
+          imagenPreview: reader.result as string
         });
       };
       
@@ -289,10 +313,45 @@ const InventorySection: React.FC = () => {
   const handleRemoveImage = () => {
     setFormData({
       ...formData,
-      imagen: null
+      imagen: null,
+      imagenPreview: null
     });
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+  };
+
+  // Eliminar imagen del producto ya guardado
+  const handleDeleteProductImage = async (productId: string) => {
+    try {
+      setImageLoading(true);
+      await imageService.deleteImage(productId);
+      
+      // Actualizar la lista de productos
+      await fetchProducts();
+      
+      addNotification('Imagen eliminada correctamente', 'success');
+      setDeleteImageDialogOpen(false);
+    } catch (error: any) {
+      addNotification('Error al eliminar la imagen: ' + error.message, 'error');
+    } finally {
+      setImageLoading(false);
+    }
+  };
+
+  // Manejar subida de imagen después de crear/editar producto
+  const handleImageUpload = async (productId: string) => {
+    if (!formData.imagen) return true;
+    
+    try {
+      setImageLoading(true);
+      await imageService.uploadImage(productId, formData.imagen);
+      return true;
+    } catch (error: any) {
+      addNotification('Error al subir imagen: ' + error.message, 'error');
+      return false;
+    } finally {
+      setImageLoading(false);
     }
   };
 
@@ -313,14 +372,16 @@ const InventorySection: React.FC = () => {
       
       const method = editingProduct ? 'PUT' : 'POST';
       
+      // Datos básicos del producto (sin la imagen que se manejará por separado)
       const payload = {
-        ...formData,
+        nombre: formData.nombre,
+        descripcion: formData.descripcion,
+        categoria: formData.categoria,
+        subCategoria: formData.subCategoria,
         precio: Number(formData.precio),
         stock: Number(formData.stock),
-        imagen: formData.imagen?.split(',')[1] || null // Extraer la parte base64 sin el prefijo data:image
+        proovedorInfo: formData.proovedorInfo
       };
-      
-      console.log("Enviando payload:", payload);
       
       const response = await fetch(url, {
         method,
@@ -336,6 +397,13 @@ const InventorySection: React.FC = () => {
         throw new Error(error.error || 'Error al procesar la solicitud');
       }
       
+      const savedProduct = await response.json();
+      
+      // Manejar la subida de imagen si hay una imagen nueva
+      if (formData.imagen) {
+        await handleImageUpload(savedProduct._id);
+      }
+      
       setShowModal(false);
       resetForm();
       await fetchProducts(); // Actualizar datos localmente
@@ -343,8 +411,6 @@ const InventorySection: React.FC = () => {
       const successMsg = `Producto ${editingProduct ? 'actualizado' : 'creado'} correctamente`;
       setSuccessMessage(successMsg);
       
-      // Notificación de éxito - VERIFICAR QUE SE LLAME CORRECTAMENTE
-      console.log('Intentando mostrar notificación de éxito:', successMsg);
       addNotification(successMsg, 'success');
       
       // Limpiar mensaje después de unos segundos
@@ -353,16 +419,24 @@ const InventorySection: React.FC = () => {
       const errorMsg = 'Error al guardar producto: ' + err.message;
       setError(errorMsg);
       
-      // Notificación de error
-      console.log('Intentando mostrar notificación de error:', errorMsg);
       addNotification(errorMsg, 'error');
     }
   };
 
-  // Eliminar producto
+  // Iniciar el proceso de eliminación mostrando el diálogo de confirmación
+  const confirmDelete = (id: string) => {
+    setProductToDelete(id);
+    setDeleteDialogOpen(true);
+  };
+
+  // Confirmar eliminación de imagen
+  const confirmDeleteImage = (id: string) => {
+    setProductToDelete(id);
+    setDeleteImageDialogOpen(true);
+  };
+
+  // Eliminar producto (después de confirmación)
   const handleDelete = async (id: string) => {
-    if (typeof window === 'undefined' || !window.confirm('¿Estás seguro de eliminar este producto?')) return;
-    
     try {
       const token = getAuthToken();
       if (!token) {
@@ -386,8 +460,6 @@ const InventorySection: React.FC = () => {
       const successMsg = 'Producto eliminado correctamente';
       setSuccessMessage(successMsg);
       
-      // Notificación de éxito
-      console.log('Intentando mostrar notificación de éxito (eliminar):', successMsg);
       addNotification(successMsg, 'success');
       
       // Limpiar mensaje después de unos segundos
@@ -396,15 +468,21 @@ const InventorySection: React.FC = () => {
       const errorMsg = 'Error al eliminar producto: ' + err.message;
       setError(errorMsg);
       
-      // Notificación de error
-      console.log('Intentando mostrar notificación de error:', errorMsg);
       addNotification(errorMsg, 'error');
+    } finally {
+      // Cerrar diálogo de confirmación
+      setDeleteDialogOpen(false);
+      setProductToDelete(null);
     }
   };
 
   // Preparar edición de producto
-  const handleEdit = (product: Product) => {
+  const handleEdit = (product: ProductExtended) => {
     setEditingProduct(product);
+    
+    // Verificar si el producto tiene imagen
+    const hasImage = product.hasImage || false;
+    
     setFormData({
       nombre: product.nombre,
       descripcion: product.descripcion || '',
@@ -413,8 +491,10 @@ const InventorySection: React.FC = () => {
       precio: product.precio.toString(),
       stock: product.stock.toString(),
       proovedorInfo: product.proovedorInfo || '',
-      imagen: product.imagen ? `data:image/jpeg;base64,${product.imagen}` : null
+      imagen: null,
+      imagenPreview: hasImage ? imageService.getImageUrl(product._id) : null
     });
+    
     setShowModal(true);
   };
 
@@ -428,7 +508,8 @@ const InventorySection: React.FC = () => {
       precio: '',
       stock: '',
       proovedorInfo: '',
-      imagen: null
+      imagen: null,
+      imagenPreview: null
     });
     setEditingProduct(null);
     if (fileInputRef.current) {
@@ -438,38 +519,26 @@ const InventorySection: React.FC = () => {
 
   // Manejar cambio de categoría
   const handleCategoryChange = (value: string) => {
-    console.log("Cambiando categoría a:", value);
-    
     try {
-      // Validar que value es una categoría válida
       if (!subCategorias[value]) {
         console.error(`Categoría no válida: ${value}`);
         addNotification(`Error: Categoría '${value}' no válida`, 'error');
         return;
       }
       
-      // Asegurarnos de que la subcategoría corresponda a la nueva categoría
       const defaultSubcategoria = subCategorias[value][0].value;
-      console.log("Subcategorías disponibles:", subCategorias[value]);
-      console.log("Nueva subcategoría seleccionada:", defaultSubcategoria);
       
-      // Importante: actualizar primero la categoría y luego en un segundo estado la subcategoría
-      // para evitar problemas de sincronización de estado en React
       setFormData(prevState => ({
         ...prevState,
         categoria: value
       }));
       
-      // Actualizar la subcategoría en un segundo cambio de estado
       setTimeout(() => {
         setFormData(prevState => ({
           ...prevState,
           subCategoria: defaultSubcategoria
         }));
       }, 0);
-      
-      // Registrar cambio para depuración
-      console.log(`Categoría cambiada a: ${value}, subcategoría a: ${defaultSubcategoria}`);
     } catch (error) {
       console.error("Error al cambiar categoría:", error);
       addNotification("Error al cambiar categoría", 'error');
@@ -509,8 +578,8 @@ const InventorySection: React.FC = () => {
   const filteredProducts = products.filter(product => {
     const matchesSearch = 
       product.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.descripcion?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.proovedorInfo?.toLowerCase().includes(searchTerm.toLowerCase());
+      (product.descripcion ? product.descripcion.toLowerCase().includes(searchTerm.toLowerCase()) : false) ||
+      (product.proovedorInfo ? product.proovedorInfo.toLowerCase().includes(searchTerm.toLowerCase()) : false);
       
     const matchesCategory = 
       selectedCategory === 'all' || 
@@ -520,6 +589,18 @@ const InventorySection: React.FC = () => {
       
     return matchesSearch && matchesCategory;
   });
+  
+  // Calcular paginación
+  const indexOfLastProduct = currentPage * productsPerPage;
+  const indexOfFirstProduct = indexOfLastProduct - productsPerPage;
+  const currentProducts = filteredProducts.slice(indexOfFirstProduct, indexOfLastProduct);
+
+  // Función para cambiar de página
+  const handlePageChange = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
+    // Al cambiar de página, hacemos scroll hacia arriba
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   return (
     <div className="p-4 md:p-6 space-y-6 bg-[#DFEFE6]/30">
@@ -615,7 +696,7 @@ const InventorySection: React.FC = () => {
 
       {/* Tabla para pantallas medianas y grandes */}
       <div className="hidden md:block bg-white rounded-xl shadow-sm overflow-hidden border border-[#91BEAD]/20">
-        {!loading && filteredProducts.length > 0 && (
+        {!loading && currentProducts.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-[#DFEFE6]/50 border-b border-[#91BEAD]/20">
@@ -641,7 +722,7 @@ const InventorySection: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-[#91BEAD]/20">
-                {filteredProducts.map((product) => (
+                {currentProducts.map((product) => (
                   <tr 
                     key={product._id} 
                     className={`hover:bg-[#DFEFE6]/20 transition-colors ${
@@ -654,13 +735,17 @@ const InventorySection: React.FC = () => {
                   >
                     <td className="px-6 py-4">
                       <div className="flex items-center">
-                        {product.imagen && (
+                        {product.hasImage ? (
                           <div className="flex-shrink-0 h-10 w-10 mr-3">
                             <img 
                               className="h-10 w-10 rounded-full object-cover border border-[#91BEAD]/30" 
-                              src={`data:image/jpeg;base64,${product.imagen}`} 
-                              alt={product.nombre} 
+                              src={imageService.getImageUrl(product._id, { width: 80, height: 80, quality: 80 })}
+                              alt={product.nombre}
                             />
+                          </div>
+                        ) : (
+                          <div className="flex-shrink-0 h-10 w-10 mr-3 rounded-full bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30">
+                            <PackageOpen className="w-5 h-5 text-[#91BEAD]" />
                           </div>
                         )}
                         <div>
@@ -703,7 +788,7 @@ const InventorySection: React.FC = () => {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDelete(product._id)}
+                          onClick={() => confirmDelete(product._id)}
                           className="text-red-600 hover:text-red-800 hover:bg-red-50"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -716,11 +801,23 @@ const InventorySection: React.FC = () => {
             </table>
           </div>
         )}
+        
+        {/* Paginación para la tabla */}
+        {filteredProducts.length > productsPerPage && (
+          <div className="p-4 border-t border-[#91BEAD]/20">
+            <Pagination
+              totalItems={filteredProducts.length}
+              itemsPerPage={productsPerPage}
+              currentPage={currentPage}
+              onPageChange={handlePageChange}
+            />
+          </div>
+        )}
       </div>
 
       {/* Vista de Tarjetas para dispositivos móviles */}
       <div className="md:hidden grid grid-cols-1 gap-4">
-        {!loading && filteredProducts.map(product => (
+        {!loading && currentProducts.map(product => (
           <Card 
             key={product._id} 
             className={`overflow-hidden shadow-sm border ${
@@ -741,13 +838,17 @@ const InventorySection: React.FC = () => {
             </CardHeader>
             <CardContent className="p-4 pt-2 pb-3">
               <div className="flex gap-4 mb-3">
-                {product.imagen && (
+                {product.hasImage ? (
                   <div className="flex-shrink-0 h-16 w-16">
                     <img 
                       className="h-16 w-16 rounded-md object-cover border border-[#91BEAD]/30" 
-                      src={`data:image/jpeg;base64,${product.imagen}`} 
-                      alt={product.nombre} 
+                      src={imageService.getImageUrl(product._id, { width: 120, height: 120, quality: 80 })}
+                      alt={product.nombre}
                     />
+                  </div>
+                ) : (
+                  <div className="flex-shrink-0 h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30">
+                    <PackageOpen className="w-8 h-8 text-[#91BEAD]" />
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
@@ -796,7 +897,7 @@ const InventorySection: React.FC = () => {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => handleDelete(product._id)}
+                onClick={() => confirmDelete(product._id)}
                 className="text-red-600 hover:text-red-800 hover:bg-red-50"
               >
                 <Trash2 className="w-4 h-4" />
@@ -804,6 +905,18 @@ const InventorySection: React.FC = () => {
             </CardFooter>
           </Card>
         ))}
+        
+        {/* Paginación para móviles */}
+        {filteredProducts.length > productsPerPage && (
+          <div className="mt-4">
+            <Pagination
+              totalItems={filteredProducts.length}
+              itemsPerPage={productsPerPage}
+              currentPage={currentPage}
+              onPageChange={handlePageChange}
+            />
+          </div>
+        )}
       </div>
 
       {/* Modal de Producto */}
@@ -888,6 +1001,7 @@ const InventorySection: React.FC = () => {
                     onChange={(e) => setFormData({ ...formData, precio: e.target.value })}
                     required
                     className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
+                    maxLength={10}
                   />
                 </div>
 
@@ -916,10 +1030,10 @@ const InventorySection: React.FC = () => {
               <div>
                 <Label htmlFor="imagen" className="text-sm text-[#29696B]">Imagen del Producto</Label>
                 <div className="mt-1 flex flex-col space-y-2">
-                  {formData.imagen ? (
+                  {formData.imagenPreview ? (
                     <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
                       <img 
-                        src={formData.imagen} 
+                        src={formData.imagenPreview} 
                         alt="Vista previa" 
                         className="w-full h-full object-contain" 
                       />
@@ -927,7 +1041,12 @@ const InventorySection: React.FC = () => {
                         type="button"
                         variant="destructive"
                         size="sm"
-                        onClick={handleRemoveImage}
+                        onClick={
+                          // Para producto existente con imagen previa pero sin cambios
+                          editingProduct && !formData.imagen 
+                            ? () => confirmDeleteImage(editingProduct._id)
+                            : handleRemoveImage
+                        }
                         className="absolute top-2 right-2 h-8 w-8 p-0 bg-red-500 hover:bg-red-600"
                       >
                         <X className="h-4 w-4" />
@@ -937,9 +1056,12 @@ const InventorySection: React.FC = () => {
                     <div className="flex items-center justify-center w-full">
                       <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#91BEAD]/30 border-dashed rounded-md cursor-pointer bg-[#DFEFE6]/20 hover:bg-[#DFEFE6]/40 transition-colors">
                         <div className="flex flex-col items-center justify-center pt-3 pb-4">
-                          <Image className="w-8 h-8 text-[#7AA79C] mb-1" />
+                          <ImageIcon className="w-8 h-8 text-[#7AA79C] mb-1" />
                           <p className="text-xs text-[#7AA79C]">
                             Haz clic para subir una imagen
+                          </p>
+                          <p className="text-xs text-[#7AA79C]">
+                            Máximo 5MB
                           </p>
                         </div>
                         <input 
@@ -971,13 +1093,45 @@ const InventorySection: React.FC = () => {
               <Button 
                 type="submit"
                 className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
+                disabled={imageLoading}
               >
-                {editingProduct ? 'Guardar Cambios' : 'Crear Producto'}
+                {imageLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Procesando imagen...
+                  </>
+                ) : (
+                  editingProduct ? 'Guardar Cambios' : 'Crear Producto'
+                )}
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Diálogo de confirmación de eliminación */}
+      <ConfirmationDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Eliminar producto"
+        description="¿Está seguro de que desea eliminar este producto? Esta acción no se puede deshacer."
+        confirmText="Eliminar"
+        cancelText="Cancelar" 
+        onConfirm={() => productToDelete && handleDelete(productToDelete)}
+        variant="destructive"
+      />
+
+      {/* Diálogo de confirmación de eliminación de imagen */}
+      <ConfirmationDialog
+        open={deleteImageDialogOpen}
+        onOpenChange={setDeleteImageDialogOpen}
+        title="Eliminar imagen"
+        description="¿Está seguro de que desea eliminar la imagen de este producto?"
+        confirmText="Eliminar"
+        cancelText="Cancelar" 
+        onConfirm={() => productToDelete && handleDeleteProductImage(productToDelete)}
+        variant="destructive"
+      />
     </div>
   );
 };

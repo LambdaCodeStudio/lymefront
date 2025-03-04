@@ -6,7 +6,6 @@ import {
   Calendar,
   Loader2,
   Search,
-  Filter,
   SlidersHorizontal
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -100,14 +99,14 @@ const DownloadsManagement: React.FC = () => {
   const [filteredPedidos, setFilteredPedidos] = useState<Pedido[]>([]);
   const [loadingPedidos, setLoadingPedidos] = useState(false);
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({
-    servicio: '',
+    servicio: 'todos',
     fechaInicio: '',
     fechaFin: '',
   });
   
   // Estado temporal para formulario de filtros
   const [tempFilterOptions, setTempFilterOptions] = useState<FilterOptions>({
-    servicio: '',
+    servicio: 'todos',
     fechaInicio: '',
     fechaFin: '',
   });
@@ -119,38 +118,20 @@ const DownloadsManagement: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
-  const [debugMode, setDebugMode] = useState(true); // Para diagnóstico
 
   // Cargar clientes
   useEffect(() => {
     const fetchClientes = async () => {
       try {
-        console.log("⚡ Obteniendo clientes...");
-        
-        // IMPORTANTE: Quitamos el prefijo /api porque ya está en baseURL
         const response = await api.getClient().get('/cliente');
-        
-        // Log detallado para depuración
-        if (debugMode) {
-          console.log("Respuesta completa:", response);
-          console.log("Status:", response.status);
-          console.log("Headers:", response.headers);
-        }
-        
         if (response.data && Array.isArray(response.data)) {
-          console.log(`✅ Clientes cargados: ${response.data.length}`);
-          if (debugMode && response.data.length > 0) {
-            console.log("Primer cliente:", response.data[0]);
-          }
-          
-          // Si los clientes vienen con la estructura correcta, usarlos directamente
           setClientes(response.data);
         } else {
-          console.error('❌ Respuesta de clientes inválida:', response.data);
           setClientes([]);
         }
       } catch (err) {
-        console.error('❌ Error al cargar clientes:', err);
+        console.error('Error al cargar clientes:', err);
+        setClientes([]);
       }
     };
     fetchClientes();
@@ -165,50 +146,57 @@ const DownloadsManagement: React.FC = () => {
       }
       
       try {
-        console.log(`⚡ Obteniendo pedidos para cliente ID: ${selectedCliente}`);
+        setError('');
         
-        // Primero debemos obtener el cliente para acceder a su userId
+        // Obtener información del cliente seleccionado
         const clienteResponse = await api.getClient().get(`/cliente/${selectedCliente}`);
         
         if (!clienteResponse.data) {
-          console.error('❌ Cliente no encontrado:', selectedCliente);
           setPedidos([]);
           setError('Cliente no encontrado');
           return;
         }
         
-        // Extraer userId del cliente
+        // Obtener servicio y sección del cliente seleccionado para filtrar pedidos
+        const servicio = clienteResponse.data.servicio;
+        const seccionDelServicio = clienteResponse.data.seccionDelServicio;
+        
+        // Extraer userId del cliente como respaldo
         const userId = typeof clienteResponse.data.userId === 'object' 
           ? clienteResponse.data.userId._id 
           : clienteResponse.data.userId;
-          
-        if (!userId) {
-          console.error('❌ Cliente sin userId asociado:', clienteResponse.data);
+        
+        // Obtener todos los pedidos (podríamos optimizar esto más adelante)
+        const pedidosResponse = await api.getClient().get('/pedido');
+        
+        if (!pedidosResponse.data || !Array.isArray(pedidosResponse.data)) {
           setPedidos([]);
-          setError('Este cliente no tiene un usuario asociado');
+          setError('Formato de respuesta inválido al cargar pedidos');
           return;
         }
         
-        console.log(`ℹ️ Usando userId: ${userId} para obtener pedidos`);
+        // Filtrar pedidos que coincidan con el servicio y sección del cliente
+        // o con el userId si los criterios anteriores no funcionan
+        const pedidosFiltrados = pedidosResponse.data.filter(pedido => {
+          // Opción 1: Coincidir por servicio y sección
+          const coincideServicio = pedido.servicio === servicio;
+          const coincideSeccion = !seccionDelServicio || pedido.seccionDelServicio === seccionDelServicio;
+          
+          // Opción 2: Coincidir por userId como respaldo
+          const pedidoUserId = typeof pedido.userId === 'object' 
+            ? pedido.userId._id 
+            : pedido.userId;
+          const coincideUserId = userId && pedidoUserId === userId;
+          
+          return (coincideServicio && coincideSeccion) || coincideUserId;
+        });
         
-        // Ahora buscamos los pedidos por userId
-        const pedidosResponse = await api.getClient().get(`/pedido/user/${userId}`);
-        
-        if (pedidosResponse.data && Array.isArray(pedidosResponse.data)) {
-          console.log(`✅ Pedidos cargados: ${pedidosResponse.data.length}`);
-          setPedidos(pedidosResponse.data);
-          if (pedidosResponse.data.length === 0) {
-            setError('No se encontraron pedidos para este cliente');
-          } else {
-            setError('');
-          }
-        } else {
-          console.error('❌ Respuesta de pedidos inválida:', pedidosResponse.data);
-          setPedidos([]);
-          setError('Formato de respuesta inválido al cargar pedidos');
+        setPedidos(pedidosFiltrados);
+        if (pedidosFiltrados.length === 0) {
+          setError('No se encontraron pedidos para este cliente');
         }
       } catch (err) {
-        console.error('❌ Error al cargar pedidos:', err);
+        console.error('Error al cargar pedidos:', err);
         setPedidos([]);
         setError('Error al cargar pedidos para este cliente');
       }
@@ -222,19 +210,10 @@ const DownloadsManagement: React.FC = () => {
     const fetchAllPedidos = async () => {
       setLoadingPedidos(true);
       try {
-        console.log("⚡ Obteniendo todos los pedidos...");
-        
-        // IMPORTANTE: Quitamos el prefijo /api porque ya está en baseURL
         const response = await api.getClient().get('/pedido');
-        
-        if (debugMode) {
-          console.log("Respuesta todos pedidos:", response);
-        }
         
         // Verificar que response.data exista y sea un array
         if (response.data && Array.isArray(response.data)) {
-          console.log(`✅ Todos los pedidos cargados: ${response.data.length}`);
-          
           // Calcular total para cada pedido
           const pedidosConTotal = response.data.map((pedido: any) => {
             let total = 0;
@@ -253,18 +232,17 @@ const DownloadsManagement: React.FC = () => {
           
           // Inicializar las opciones de filtro temporales
           setTempFilterOptions({
-            servicio: '',
+            servicio: 'todos',
             fechaInicio: '',
             fechaFin: '',
           });
         } else {
           // Si la respuesta no es un array, inicializar con array vacío
-          console.error('❌ Respuesta de pedidos inválida:', response.data);
           setAllPedidos([]);
           setFilteredPedidos([]);
         }
       } catch (err) {
-        console.error('❌ Error al cargar todos los pedidos:', err);
+        console.error('Error al cargar todos los pedidos:', err);
         setAllPedidos([]);
         setFilteredPedidos([]);
       } finally {
@@ -280,7 +258,7 @@ const DownloadsManagement: React.FC = () => {
     let filtered = [...allPedidos];
     
     // Filtrar por servicio
-    if (filterOptions.servicio) {
+    if (filterOptions.servicio && filterOptions.servicio !== 'todos') {
       filtered = filtered.filter(pedido => 
         pedido.servicio === filterOptions.servicio
       );
@@ -305,9 +283,6 @@ const DownloadsManagement: React.FC = () => {
       });
     }
     
-    console.log("Aplicando filtros:", filterOptions);
-    console.log("Pedidos filtrados:", filtered.length);
-    
     setFilteredPedidos(filtered);
   };
   
@@ -322,8 +297,6 @@ const DownloadsManagement: React.FC = () => {
     setFilterOptions(tempFilterOptions);
     // Cerrar el diálogo
     setIsFilterDialogOpen(false);
-    
-    console.log("Filtros aplicados:", tempFilterOptions);
   };
 
   // Función para descargar Excel
@@ -337,7 +310,6 @@ const DownloadsManagement: React.FC = () => {
       setIsLoading(true);
       setError('');
 
-      // IMPORTANTE: Quitamos el prefijo /api porque ya está en baseURL
       const response = await api.getClient().get('/downloads/excel', {
         params: {
           from: dateRange.from.toISOString(),
@@ -358,7 +330,8 @@ const DownloadsManagement: React.FC = () => {
       setSuccessMessage('Excel descargado correctamente');
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Error al descargar el Excel');
+      console.error('Error downloading Excel:', err);
+      setError(err.response?.data?.mensaje || 'Error al descargar el Excel');
     } finally {
       setIsLoading(false);
     }
@@ -370,16 +343,34 @@ const DownloadsManagement: React.FC = () => {
       setError('Por favor selecciona un pedido');
       return;
     }
-
+  
     try {
       setIsLoading(true);
       setError('');
-
-      // IMPORTANTE: Quitamos el prefijo /api porque ya está en baseURL
+      setSuccessMessage('');
+  
+      console.log(`Iniciando descarga de remito para pedido: ${pedidoId}`);
+      
+      // Add a longer timeout to give the server time to generate the PDF
       const response = await api.getClient().get(`/downloads/remito/${pedidoId}`, {
-        responseType: 'blob'
+        responseType: 'blob',
+        timeout: 30000 // 30 seconds timeout
       });
-
+      
+      // Check if response is valid
+      if (!response.data || response.data.size === 0) {
+        throw new Error('La respuesta del servidor está vacía');
+      }
+  
+      // Check MIME type
+      const contentType = response.headers['content-type'];
+      if (!contentType || !contentType.includes('application/pdf')) {
+        console.warn(`Tipo de contenido inesperado: ${contentType}`);
+      }
+  
+      console.log(`PDF recibido: ${response.data.size} bytes`);
+      
+      // Create blob URL and trigger download
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -391,13 +382,39 @@ const DownloadsManagement: React.FC = () => {
       
       document.body.appendChild(link);
       link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      
+      // Clean up
+      setTimeout(() => {
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }, 100);
       
       setSuccessMessage('Remito descargado correctamente');
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Error al descargar el remito');
+      console.error('Error downloading remito:', err);
+      
+      // Provide more specific error message
+      let errorMessage = 'Error al descargar el remito';
+      
+      if (err.response) {
+        // Server responded with error
+        if (err.response.data && typeof err.response.data === 'object') {
+          errorMessage = err.response.data.mensaje || errorMessage;
+        } else if (err.response.status === 404) {
+          errorMessage = 'No se encontró el pedido solicitado';
+        } else if (err.response.status === 500) {
+          errorMessage = 'Error en el servidor al generar el PDF';
+        }
+      } else if (err.request) {
+        // No response received
+        errorMessage = 'No se recibió respuesta del servidor. Verifica tu conexión.';
+      } else {
+        // Other error
+        errorMessage = err.message || errorMessage;
+      }
+      
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -406,7 +423,7 @@ const DownloadsManagement: React.FC = () => {
   // Función para restablecer filtros
   const resetFilters = () => {
     const emptyFilters = {
-      servicio: '',
+      servicio: 'todos',
       fechaInicio: '',
       fechaFin: '',
     };
@@ -456,26 +473,6 @@ const DownloadsManagement: React.FC = () => {
   // Obtener servicios únicos para filtro
   const serviciosUnicos = [...new Set(allPedidos.map(p => p.servicio).filter(Boolean))];
 
-  // Función para verificar si clientes están vacíos para depuración
-  const checkClientsEmpty = () => {
-    console.log("🔍 Verificando estado de clientes:");
-    console.log("  - Total clientes en estado:", clientes.length);
-    console.log("  - Total clientes filtrados:", filteredClientes.length);
-    console.log("  - Término de búsqueda:", searchTerm || "(vacío)");
-    
-    if (clientes.length === 0) {
-      console.log("❌ No hay clientes cargados. Posibles causas:");
-      console.log("  1. La API no devolvió datos");
-      console.log("  2. La respuesta no tiene el formato esperado");
-      console.log("  3. Hubo un error en la petición");
-    }
-    
-    if (clientes.length > 0 && filteredClientes.length === 0) {
-      console.log("⚠️ Hay clientes cargados pero ninguno coincide con el filtro");
-      console.log("  - Primer cliente:", clientes[0]);
-    }
-  };
-
   return (
     <div className="space-y-6 bg-[#DFEFE6]/20 p-4 md:p-6 rounded-xl">
       {/* Alertas */}
@@ -489,26 +486,6 @@ const DownloadsManagement: React.FC = () => {
         <Alert className="mb-4 bg-[#DFEFE6] border border-[#91BEAD] text-[#29696B] rounded-lg">
           <AlertDescription className="text-[#29696B]">{successMessage}</AlertDescription>
         </Alert>
-      )}
-      
-      {/* Botón de diagnóstico (solo visible en desarrollo) */}
-      {debugMode && (
-        <div className="mb-4">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={checkClientsEmpty}
-            className="text-xs border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/40"
-          >
-            Diagnosticar Clientes
-          </Button>
-          <div className="text-xs text-[#7AA79C] mt-1">
-            {`Clientes cargados: ${clientes.length}, Filtrados: ${filteredClientes.length}`}
-          </div>
-          <div className="text-xs text-[#7AA79C] mt-1">
-            {`Estado de filtros: Servicio=${filterOptions.servicio}, Desde=${filterOptions.fechaInicio}, Hasta=${filterOptions.fechaFin}`}
-          </div>
-        </div>
       )}
 
       <Tabs defaultValue="excel" className="w-full">
@@ -629,18 +606,6 @@ const DownloadsManagement: React.FC = () => {
                 </div>
               </div>
 
-              {/* Debug info */}
-              {debugMode && clientes.length === 0 && (
-                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md text-sm">
-                  <p>No se encontraron clientes. Verifica:</p>
-                  <ul className="list-disc pl-5 mt-1 text-xs">
-                    <li>Que la API esté respondiendo correctamente</li>
-                    <li>Que la ruta del endpoint sea correcta</li>
-                    <li>Que estés autenticado correctamente</li>
-                  </ul>
-                </div>
-              )}
-
               {/* Selector de cliente */}
               <div className="space-y-2">
                 <Label className="text-[#29696B]">Seleccionar Cliente</Label>
@@ -760,7 +725,7 @@ const DownloadsManagement: React.FC = () => {
                             <SelectValue placeholder="Todos los servicios" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">Todos los servicios</SelectItem>
+                            <SelectItem value="todos">Todos los servicios</SelectItem>
                             {serviciosUnicos.map((servicio) => (
                               <SelectItem key={servicio} value={servicio}>
                                 {servicio}

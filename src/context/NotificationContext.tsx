@@ -7,6 +7,7 @@ export interface Notification {
   id: string;
   message: string;
   type: NotificationType;
+  timestamp: number; // Añadimos un timestamp para controlar frecuencia
 }
 
 interface NotificationContextType {
@@ -16,6 +17,8 @@ interface NotificationContextType {
 }
 
 const MAX_NOTIFICATIONS = 3; // Máximo de notificaciones visibles a la vez
+const MIN_NOTIFICATION_INTERVAL = 30000; // Intervalo mínimo entre notificaciones del mismo tipo (30 segundos)
+const NOTIFICATION_DURATION = 8000; // Duración de las notificaciones (8 segundos)
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
@@ -33,6 +36,9 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
   
   // Cola de notificaciones pendientes
   const [notificationQueue, setNotificationQueue] = useState<Notification[]>([]);
+
+  // Historial de notificaciones recientes (para evitar duplicadas en corto tiempo)
+  const [recentNotifications, setRecentNotifications] = useState<Record<string, number>>({});
   
   // Efecto para procesar la cola cuando hay espacio para nuevas notificaciones
   useEffect(() => {
@@ -50,20 +56,41 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
       // Configuramos su eliminación automática
       setTimeout(() => {
         removeNotification(nextNotification.id);
-      }, 5000);
+      }, NOTIFICATION_DURATION);
       
       console.log(`Mostrando notificación de la cola: ${nextNotification.id}`);
     }
   }, [notifications, notificationQueue]);
 
   const addNotification = (message: string, type: NotificationType) => {
-    const id = Date.now().toString();
-    const newNotification = { id, message, type };
+    const now = Date.now();
+    const id = now.toString();
+    
+    // Crear clave única para esta combinación de mensaje y tipo
+    const notificationKey = `${type}:${message}`;
+    
+    // Verificar si se mostró recientemente una notificación similar
+    const lastShown = recentNotifications[notificationKey] || 0;
+    const timeSinceLastShown = now - lastShown;
+    
+    // Si se mostró recientemente (menos del intervalo mínimo), no mostrar otra vez
+    if (timeSinceLastShown < MIN_NOTIFICATION_INTERVAL) {
+      console.log(`Ignorando notificación similar mostrada hace ${timeSinceLastShown}ms: ${message}`);
+      return;
+    }
+    
+    // Actualizar el historial de notificaciones recientes
+    setRecentNotifications(prev => ({
+      ...prev,
+      [notificationKey]: now
+    }));
+    
+    // Crear la nueva notificación
+    const newNotification = { id, message, type, timestamp: now };
     
     console.log(`Creando notificación: ${id}, mensaje: ${message}, tipo: ${type}`);
     
-    // Verificar si ya hay MAX_NOTIFICATIONS visibles, contando solo las que están 
-    // realmente renderizadas y no las que podrían estar programadas para eliminarse
+    // Verificar si ya hay MAX_NOTIFICATIONS visibles
     if (notifications.length < MAX_NOTIFICATIONS) {
       // Si hay menos de MAX_NOTIFICATIONS visibles, mostrar inmediatamente
       setNotifications(prev => {
@@ -76,10 +103,10 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
         return [...prev, newNotification];
       });
       
-      // Auto-eliminar después de 5 segundos
+      // Auto-eliminar después del tiempo definido
       setTimeout(() => {
         removeNotification(id);
-      }, 5000);
+      }, NOTIFICATION_DURATION);
     } else {
       // Si ya hay MAX_NOTIFICATIONS visibles, añadir a la cola
       console.log(`Cola llena, agregando notificación ${id} a la cola`);

@@ -722,74 +722,138 @@ const OrdersSection = () => {
   };
 
   // Cargar pedidos por rango de fechas
-  const fetchOrdersByDate = async () => {
-    if (!dateFilter.fechaInicio || !dateFilter.fechaFin) {
-      const errorMsg = 'Por favor seleccione ambas fechas';
-      setError(errorMsg);
-      
-      // Notificación para campos faltantes
-      if (addNotification) {
-        addNotification(errorMsg, 'warning');
-      }
-      
-      return;
+const formatDateForAPI = (dateString) => {
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return dateString; // Si la fecha no es válida, devolver el string original
+  
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+// Cargar pedidos por rango de fechas
+const fetchOrdersByDate = async () => {
+  if (!dateFilter.fechaInicio || !dateFilter.fechaFin) {
+    const errorMsg = 'Por favor seleccione ambas fechas';
+    setError(errorMsg);
+    
+    // Notificación para campos faltantes
+    if (addNotification) {
+      addNotification(errorMsg, 'warning');
+    }
+    
+    return;
+  }
+
+  try {
+    setLoading(true);
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('No hay token de autenticación');
     }
 
+    // Obtenemos las fechas del input del usuario
+    let fechaInicio = dateFilter.fechaInicio;
+    let fechaFin = dateFilter.fechaFin;
+    
+    console.log("Fechas originales del formulario:", fechaInicio, fechaFin);
+    
     try {
-      setLoading(true);
-      const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-
-      const response = await fetch(
-        `http://localhost:4000/api/pedido/fecha?fechaInicio=${dateFilter.fechaInicio}&fechaFin=${dateFilter.fechaFin}`,
-        {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Error al filtrar pedidos por fecha');
-      }
-
-      const data = await response.json();
-      setOrders(data);
-      setError(null);
-
-      // Mensaje de éxito mostrando cuántos pedidos se encontraron
-      let successMsg = '';
-      if (data.length === 0) {
-        successMsg = 'No se encontraron pedidos en el rango de fechas seleccionado';
+      // Los input type="date" ya proporcionan fechas en formato YYYY-MM-DD, 
+      // que es justo lo que necesitamos para el backend
+      // Verificamos si necesitamos hacer algún ajuste en la zona horaria
+      const fechaInicioObj = new Date(fechaInicio);
+      const fechaFinObj = new Date(fechaFin);
+      
+      if (!isNaN(fechaInicioObj.getTime()) && !isNaN(fechaFinObj.getTime())) {
+        console.log("Objetos de fecha parseados correctamente:",
+          fechaInicioObj.toISOString(), fechaFinObj.toISOString());
       } else {
-        successMsg = `Se encontraron ${data.length} pedidos en el rango seleccionado`;
+        console.warn("No se pudieron parsear las fechas como objetos Date válidos");
       }
-      
-      setSuccessMessage(successMsg);
-      
-      // Notificación de filtro aplicado
-      if (addNotification) {
-        addNotification(successMsg, data.length === 0 ? 'info' : 'success');
-      }
-      
-      // Eliminar mensaje después de 3 segundos
-      setTimeout(() => setSuccessMessage(''), 3000);
-      
-      // Cerrar filtros móviles si están abiertos
-      setShowMobileFilters(false);
-    } catch (err) {
-      const errorMsg = 'Error al filtrar por fecha: ' +
-        (err instanceof Error ? err.message : String(err));
-      setError(errorMsg);
-      
-      // Notificación para error de filtro por fecha
-      if (addNotification) {
-        addNotification(errorMsg, 'error');
-      }
-    } finally {
-      setLoading(false);
+    } catch (e) {
+      console.error("Error al manipular fechas:", e);
     }
-  };
+
+    console.log(`Filtrando pedidos desde ${fechaInicio} hasta ${fechaFin}`);
+    
+    // Construimos la URL con las fechas originales del formulario
+    // Los inputs type="date" ya dan el formato YYYY-MM-DD que necesitamos
+    const url = `http://localhost:4000/api/pedido/fecha?fechaInicio=${encodeURIComponent(fechaInicio)}&fechaFin=${encodeURIComponent(fechaFin)}`;
+    console.log("URL de solicitud:", url);
+    
+    // Opciones de la solicitud con el token de autenticación
+    const requestOptions = {
+      method: 'GET',
+      headers: { 
+        'Authorization': `Bearer ${token}`
+      }
+    };
+
+    console.log("Enviando solicitud GET a la API...");
+    const response = await fetch(url, requestOptions);
+
+    if (!response.ok) {
+      // Intentar obtener el mensaje de error del cuerpo de la respuesta
+      try {
+        const errorText = await response.text();
+        console.error("Respuesta de error completa:", errorText);
+        
+        try {
+          // Intentar parsear como JSON si es posible
+          const errorData = JSON.parse(errorText);
+          console.error("Datos de error:", errorData);
+          throw new Error(errorData.mensaje || errorData.error || `Error al filtrar pedidos por fecha (status: ${response.status})`);
+        } catch (jsonError) {
+          // Si no es JSON, usar el texto como está
+          throw new Error(`Error al filtrar pedidos por fecha (status: ${response.status}): ${errorText.substring(0, 100)}`);
+        }
+      } catch (e) {
+        console.error("Error al procesar la respuesta:", e);
+        throw new Error(`Error al filtrar pedidos por fecha (status: ${response.status})`);
+      }
+    }
+
+    const data = await response.json();
+    console.log(`Pedidos obtenidos en el rango de fechas: ${data.length}`);
+    setOrders(data);
+    setError(null);
+
+    // Mensaje de éxito mostrando cuántos pedidos se encontraron
+    let successMsg = '';
+    if (data.length === 0) {
+      successMsg = 'No se encontraron pedidos en el rango de fechas seleccionado';
+    } else {
+      successMsg = `Se encontraron ${data.length} pedidos en el rango seleccionado`;
+    }
+    
+    setSuccessMessage(successMsg);
+    
+    // Notificación de filtro aplicado
+    if (addNotification) {
+      addNotification(successMsg, data.length === 0 ? 'info' : 'success');
+    }
+    
+    // Eliminar mensaje después de 3 segundos
+    setTimeout(() => setSuccessMessage(''), 3000);
+    
+    // Cerrar filtros móviles si están abiertos
+    setShowMobileFilters(false);
+  } catch (err) {
+    const errorMsg = 'Error al filtrar por fecha: ' +
+      (err instanceof Error ? err.message : String(err));
+    console.error(errorMsg, err);
+    setError(errorMsg);
+    
+    // Notificación para error de filtro por fecha
+    if (addNotification) {
+      addNotification(errorMsg, 'error');
+    }
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Cargar productos
   const fetchProducts = async () => {

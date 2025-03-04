@@ -1,4 +1,6 @@
 ---
+import { ScrollToTop } from '../components/ui/scroll-to-top';
+
 interface Props {
   title?: string;
 }
@@ -10,7 +12,7 @@ const { title = "Lyme" } = Astro.props;
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="description" content="Astro description" />
+    <meta name="description" content="Sistema de gestión de Lyme" />
     <meta name="viewport" content="width=device-width" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="generator" content={Astro.generator} />
@@ -18,5 +20,6 @@ const { title = "Lyme" } = Astro.props;
   </head>
   <body>
     <slot />
+    <ScrollToTop client:load />
   </body>
 </html>

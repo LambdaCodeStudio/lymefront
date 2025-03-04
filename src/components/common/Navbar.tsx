@@ -10,7 +10,7 @@ export const Navbar = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           <div className="flex items-center">
-            <a href="/" className="text-xl font-bold text-[#D4F5E6] transition-colors hover:text-white flex items-center">
+            <a href="/admin" className="text-xl font-bold text-[#D4F5E6] transition-colors hover:text-white flex items-center">
               <span className="mr-1">Lyme</span>
               <span className="text-white bg-white/10 px-2 py-0.5 rounded-md text-sm font-normal">Admin</span>
             </a>

@@ -12,6 +12,7 @@ LymeFront es la interfaz de usuario para el sistema de gestión Lyme, una aplica
 - **Tailwind CSS**: Framework CSS utilitario
 - **Shadcn/UI**: Componentes de UI reutilizables
 - **Lucide React**: Iconos modernos
+- **Framer Motion**: Animaciones fluidas
 
 ## Requisitos previos
 
@@ -64,15 +65,18 @@ lymefront/
 │   ├── components/        # Componentes React
 │   │   ├── admin/         # Componentes del panel administrativo
 │   │   ├── auth/          # Componentes de autenticación
-│   │   ├── dashboard/     # Componentes del dashboard
-│   │   └── ui/            # Componentes de UI generales
+│   │   ├── shop/          # Componentes de la tienda
+│   │   ├── common/        # Componentes comunes
+│   │   └── ui/            # Componentes de UI reutilizables
 │   ├── context/           # Contextos de React
 │   ├── hooks/             # Hooks personalizados
 │   ├── layouts/           # Layouts de Astro
 │   ├── pages/             # Páginas de Astro
+│   ├── providers/         # Providers de React
 │   ├── services/          # Servicios (API, etc.)
 │   ├── styles/            # Estilos globales
-│   └── types/             # Definiciones de tipos TypeScript
+│   ├── types/             # Definiciones de tipos TypeScript
+│   └── utils/             # Utilidades
 ├── astro.config.mjs       # Configuración de Astro
 ├── tailwind.config.mjs    # Configuración de Tailwind
 └── tsconfig.json          # Configuración de TypeScript
@@ -86,8 +90,28 @@ lymefront/
 - **Gestión de clientes**: Crear, editar y eliminar clientes y servicios
 - **Control de inventario**: Gestión de productos y categorías
 - **Sistema de órdenes**: Creación y seguimiento de órdenes
+- **Tienda online**: Interfaz para compra de productos
+- **Carrito de compras**: Gestión de productos seleccionados
 - **Notificaciones en tiempo real**: Alertas y mensajes del sistema
 - **UI responsiva**: Diseño adaptable a móviles y escritorio
+- **Paginación**: Presenta los datos en páginas para mejor navegación
+
+## Mejoras recientes
+
+### Navegación y UX
+- **Redirección inteligente**: Redireccionamiento automático a /login cuando no hay sesión
+- **Botón "Volver arriba"**: Aparece cuando el usuario desplaza la página
+- **Paginación de contenido**: Todos los listados están paginados (10-20 elementos)
+- **Validación de inputs**: Límites configurados para inputs numéricos
+
+### Interfaz de usuario
+- **Favicon personalizado**: Favicon con la marca Lyme
+- **Alertas personalizadas**: Reemplazo de alertas del navegador por diálogos personalizados
+- **Temporizador de notificaciones**: Las notificaciones tienen un temporizador para evitar duplicidades
+
+### Tienda y carrito
+- **Selección de cantidad**: Permite seleccionar cantidad directamente al agregar al carrito
+- **Sin límite de unidades**: Eliminación del límite de 99 unidades en el carrito
 
 ## Módulos principales
 
@@ -109,9 +133,19 @@ Gestión de clientes y servicios:
 ### Inventario
 
 Control de productos:
-- Agrupación por categorías
-- Seguimiento de stock
-- Historial de movimientos
+- Agrupación por categorías y subcategorías
+- Seguimiento de stock con alertas automáticas
+- Gestión de productos con imágenes
+- Paginación del listado de productos
+
+### Tienda online
+
+Interfaz para usuarios finales:
+- Catálogo de productos con categorías
+- Filtros de búsqueda
+- Favoritos
+- Carrito de compras
+- Proceso de checkout simplificado
 
 ### Órdenes
 
@@ -119,16 +153,24 @@ Sistema de creación y seguimiento de órdenes:
 - Asignación a usuarios
 - Estados de progreso
 - Registro de acciones
+- Filtrado y búsqueda
 
 ## Flujos de trabajo
 
-### Gestión de clientes sin usuario asignado
+### Gestión de inventario bajo stock
 
-Cuando un usuario es eliminado, los clientes que tenía asignados quedan en estado de "pendiente de reasignación". El administrador debe:
+Cuando un producto está por debajo del umbral mínimo (10 unidades):
+1. Se muestra una alerta visual en la lista de productos
+2. Se envía una notificación al administrador
+3. El producto sigue disponible pero marcado como stock bajo
 
-1. Acceder a la sección de clientes
-2. Ver los clientes sin asignar (marcados con una bandera especial)
-3. Editar cada cliente para asignarle un nuevo usuario responsable
+### Agregado de productos al carrito
+
+El sistema permite al usuario:
+1. Seleccionar la cantidad deseada directamente desde la tarjeta del producto
+2. Ver un resumen del carrito actualizado
+3. Continuar comprando o proceder al checkout
+4. Recibir notificaciones de confirmación
 
 ## Integración con el backend
 
@@ -136,24 +178,24 @@ La comunicación con el backend se realiza a través de la API RESTful de LymeBa
 
 - `/auth`: Autenticación y gestión de usuarios
 - `/cliente`: Gestión de clientes
-- `/inventario`: Control de inventario
-- `/orden`: Sistema de órdenes
+- `/producto`: Control de inventario
+- `/pedido`: Sistema de órdenes
 
 ## Solución de problemas comunes
 
-### Error de inicio de sesión
+### Error al agregar productos al carrito
 
-Si tienes problemas para iniciar sesión:
-- Verifica que el backend esté en funcionamiento
-- Comprueba que las credenciales sean correctas
-- Revisa la conexión a internet
+Si tienes problemas al agregar productos:
+- Verifica que el producto tenga stock disponible
+- Asegúrate de que la cantidad seleccionada es válida
+- Comprueba la conexión con el backend
 
-### Clientes no se actualizan
+### Notificaciones que no desaparecen
 
-Si los clientes no reflejan cambios recientes:
+Si las notificaciones permanecen visibles:
 - Recarga la página
-- Verifica que tengas permisos para ver esos clientes
-- Comprueba en la consola si hay errores de API
+- Verifica que no haya errores en la consola
+- Confirma que el tiempo de visualización es adecuado
 
 ## Contribución
 

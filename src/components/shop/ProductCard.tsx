@@ -1,13 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Heart, 
   ShoppingCart,
-  AlertTriangle
+  AlertTriangle,
+  Plus,
+  Minus
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 
 interface Product {
   _id: string;
@@ -24,7 +27,7 @@ interface ProductCardProps {
   product: Product;
   isFavorite: boolean;
   onToggleFavorite: () => void;
-  onAddToCart: () => void;
+  onAddToCart: (quantity: number) => void;
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({
@@ -33,6 +36,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   onToggleFavorite,
   onAddToCart
 }) => {
+  const [quantity, setQuantity] = useState<number>(1);
+  const [showQuantitySelector, setShowQuantitySelector] = useState<boolean>(false);
+  
   // Función para truncar texto largo
   const truncateText = (text: string, maxLength: number) => {
     if (text.length <= maxLength) return text;
@@ -61,6 +67,20 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       return 'bg-[#00888A] hover:bg-[#50C3AD]';
     }
     return 'bg-[#50C3AD] hover:bg-[#00888A]';
+  };
+
+  // Manejar cambio de cantidad
+  const handleQuantityChange = (newQuantity: number) => {
+    // Asegurar que la cantidad esté entre 1 y el stock disponible
+    const limitedQuantity = Math.min(Math.max(1, newQuantity), product.stock);
+    setQuantity(limitedQuantity);
+  };
+  
+  // Manejar añadir al carrito
+  const handleAddToCart = () => {
+    onAddToCart(quantity);
+    setShowQuantitySelector(false);
+    setQuantity(1); // Resetear a 1 después de añadir
   };
 
   return (
@@ -125,13 +145,51 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         </CardContent>
         
         <CardFooter className="pt-2 pb-4">
-          <Button
-            className={`w-full ${getButtonClass()} group transition-all duration-300 text-white`}
-            onClick={onAddToCart}
-          >
-            <ShoppingCart size={16} className="mr-2 group-hover:animate-bounce" />
-            Agregar al carrito
-          </Button>
+          {showQuantitySelector ? (
+            <div className="w-full">
+              <div className="flex items-center justify-between mb-2 bg-white/10 rounded-md p-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 text-[#D4F5E6]"
+                  onClick={() => handleQuantityChange(quantity - 1)}
+                >
+                  <Minus className="h-3 w-3" />
+                </Button>
+                <Input
+                  type="number"
+                  min="1"
+                  max={product.stock}
+                  value={quantity}
+                  onChange={(e) => handleQuantityChange(parseInt(e.target.value) || 1)}
+                  className="w-14 h-8 text-center p-0 border-0 bg-transparent focus:ring-0 text-[#D4F5E6]"
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 text-[#D4F5E6]"
+                  onClick={() => handleQuantityChange(quantity + 1)}
+                >
+                  <Plus className="h-3 w-3" />
+                </Button>
+              </div>
+              <Button
+                className={`w-full ${getButtonClass()} text-white`}
+                onClick={handleAddToCart}
+              >
+                <ShoppingCart size={16} className="mr-2" />
+                Agregar {quantity} {quantity > 1 ? 'unidades' : 'unidad'}
+              </Button>
+            </div>
+          ) : (
+            <Button
+              className={`w-full ${getButtonClass()} group transition-all duration-300 text-white`}
+              onClick={() => setShowQuantitySelector(true)}
+            >
+              <ShoppingCart size={16} className="mr-2 group-hover:animate-bounce" />
+              Agregar al carrito
+            </Button>
+          )}
         </CardFooter>
       </Card>
     </motion.div>

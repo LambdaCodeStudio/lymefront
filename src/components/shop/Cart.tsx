@@ -35,8 +35,9 @@ export const Cart: React.FC = () => {
   
   // Actualizar cantidad con validación
   const handleQuantityChange = (id: string, newQuantity: number) => {
+    // Sólo aseguramos que la cantidad sea positiva
     if (newQuantity < 1) newQuantity = 1;
-    if (newQuantity > 99) newQuantity = 99;
+    // Eliminamos el límite superior de 99 unidades
     updateQuantity(id, newQuantity);
   };
   
@@ -246,10 +247,9 @@ export const Cart: React.FC = () => {
                                 <Input
                                   type="number"
                                   min="1"
-                                  max="99"
                                   value={item.quantity}
                                   onChange={(e) => handleQuantityChange(item.id, parseInt(e.target.value) || 1)}
-                                  className="w-12 h-8 text-center p-0 border-0 bg-transparent focus:ring-0 text-[#D4F5E6]"
+                                  className="w-16 h-8 text-center p-0 border-0 bg-transparent focus:ring-0 text-[#D4F5E6]"
                                 />
                                 <Button
                                   variant="ghost"
@@ -311,7 +311,7 @@ export const Cart: React.FC = () => {
                       <CardHeader className="border-b border-[#80CFB0]/50">
                         <CardTitle className="text-[#D4F5E6]">Resumen del pedido</CardTitle>
                       </CardHeader>
-                      <CardContent className="space-y-3 pt-6">
+                      <CardContent className="space-y-3 pt-6 overflow-y-auto max-h-60">
                         {items.map((item) => (
                           <div key={item.id} className="flex justify-between py-1 text-[#D4F5E6]">
                             <span>
@@ -413,7 +413,7 @@ export const Cart: React.FC = () => {
                       <Button 
                         onClick={() => setCheckoutStep(2)}
                         className="bg-[#00888A] hover:bg-[#50C3AD] text-white shadow-md shadow-[#00888A]/20"
-                  >
+                      >
                         Proceder a confirmar la orden
                       </Button>
                     ) : (
