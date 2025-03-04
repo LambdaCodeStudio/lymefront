@@ -47,6 +47,8 @@ import type { Product, ProductFilters } from '@/types/inventory';
 import { useNotification } from '@/context/NotificationContext';
 import { inventoryObservable, getAuthToken } from '@/utils/inventoryUtils';
 import { imageService } from '@/services/imageService';
+// Importar el componente ProductImage
+import ProductImage from '@/components/admin/components/ProductImage';
 
 // Componente para input de stock con límite máximo
 const ProductStockInput: React.FC<{
@@ -107,7 +109,7 @@ const ProductStockInput: React.FC<{
 interface ProductExtended extends Product {
   imagen?: string | Buffer | null;
   vendidos?: number;
-  hasImage?: boolean; // Nueva propiedad para precalcular si tiene imagen
+  hasImage?: boolean;
 }
 
 interface FormData {
@@ -161,14 +163,6 @@ const InventorySection: React.FC = () => {
     imagen: null,
     imagenPreview: null
   });
-
-  // Función para verificar si un producto tiene imagen
-  const hasProductImage = (product: ProductExtended): boolean => {
-    if (!product) return false;
-    
-    // Verifica si el producto tiene una propiedad imagen que no sea null/undefined
-    return !!product.imagen;
-  };
 
   // Subcategorías organizadas por categoría
   const subCategorias: Record<string, Array<{value: string, label: string}>> = {
@@ -251,13 +245,15 @@ const InventorySection: React.FC = () => {
       const data = await response.json();
       console.log(`Productos actualizados: ${data.length}`);
       
-      // Precalcular qué productos tienen imágenes para evitar solicitudes innecesarias
-      const productsWithImageInfo = data.map((product: ProductExtended) => ({
-        ...product,
-        hasImage: hasProductImage(product)
-      }));
+      // Establecer productos
+      setProducts(data);
       
-      setProducts(productsWithImageInfo);
+      // Verificar imágenes en segundo plano para mejorar UX
+      if (data.length > 0) {
+        const productIds = data.map((product: ProductExtended) => product._id);
+        imageService.batchCheckImages(productIds).catch(console.error);
+      }
+      
     } catch (err: any) {
       const errorMsg = 'Error al cargar productos: ' + err.message;
       setError(errorMsg);
@@ -480,9 +476,6 @@ const InventorySection: React.FC = () => {
   const handleEdit = (product: ProductExtended) => {
     setEditingProduct(product);
     
-    // Verificar si el producto tiene imagen
-    const hasImage = product.hasImage || false;
-    
     setFormData({
       nombre: product.nombre,
       descripcion: product.descripcion || '',
@@ -492,7 +485,7 @@ const InventorySection: React.FC = () => {
       stock: product.stock.toString(),
       proovedorInfo: product.proovedorInfo || '',
       imagen: null,
-      imagenPreview: hasImage ? imageService.getImageUrl(product._id) : null
+      imagenPreview: imageService.hasImage(product) ? imageService.getImageUrl(product._id) : null
     });
     
     setShowModal(true);
@@ -735,19 +728,18 @@ const InventorySection: React.FC = () => {
                   >
                     <td className="px-6 py-4">
                       <div className="flex items-center">
-                        {product.hasImage ? (
-                          <div className="flex-shrink-0 h-10 w-10 mr-3">
-                            <img 
-                              className="h-10 w-10 rounded-full object-cover border border-[#91BEAD]/30" 
-                              src={imageService.getImageUrl(product._id, { width: 80, height: 80, quality: 80 })}
-                              alt={product.nombre}
-                            />
-                          </div>
-                        ) : (
-                          <div className="flex-shrink-0 h-10 w-10 mr-3 rounded-full bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30">
-                            <PackageOpen className="w-5 h-5 text-[#91BEAD]" />
-                          </div>
-                        )}
+                        <div className="flex-shrink-0 h-10 w-10 mr-3">
+                          <ProductImage
+                            productId={product._id}
+                            alt={product.nombre}
+                            width={40}
+                            height={40}
+                            quality={80}
+                            className="h-10 w-10 rounded-full object-cover border border-[#91BEAD]/30"
+                            fallbackClassName="h-10 w-10 rounded-full bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30"
+                            containerClassName="h-10 w-10"
+                          />
+                        </div>
                         <div>
                           <div className="text-sm font-medium text-[#29696B]">
                             {product.nombre}
@@ -838,19 +830,18 @@ const InventorySection: React.FC = () => {
             </CardHeader>
             <CardContent className="p-4 pt-2 pb-3">
               <div className="flex gap-4 mb-3">
-                {product.hasImage ? (
-                  <div className="flex-shrink-0 h-16 w-16">
-                    <img 
-                      className="h-16 w-16 rounded-md object-cover border border-[#91BEAD]/30" 
-                      src={imageService.getImageUrl(product._id, { width: 120, height: 120, quality: 80 })}
-                      alt={product.nombre}
-                    />
-                  </div>
-                ) : (
-                  <div className="flex-shrink-0 h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30">
-                    <PackageOpen className="w-8 h-8 text-[#91BEAD]" />
-                  </div>
-                )}
+                <div className="flex-shrink-0 h-16 w-16">
+                  <ProductImage
+                    productId={product._id}
+                    alt={product.nombre}
+                    width={64}
+                    height={64}
+                    quality={80}
+                    className="h-16 w-16 rounded-md object-cover border border-[#91BEAD]/30"
+                    fallbackClassName="h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30"
+                    containerClassName="h-16 w-16"
+                  />
+                </div>
                 <div className="flex-1 min-w-0">
                   {product.descripcion && (
                     <p className="text-sm text-[#7AA79C] line-clamp-2 mb-2">

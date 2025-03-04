@@ -1,109 +1,154 @@
 // src/services/imageService.ts
+
 import { getAuthToken } from '@/utils/inventoryUtils';
 
 interface ImageOptions {
-  quality?: number;
   width?: number;
   height?: number;
+  quality?: number;
+  timestamp?: boolean;
 }
 
-const BASE_URL = 'http://localhost:4000/api';
+interface Product {
+  _id: string;
+  hasImage?: boolean;
+  imagen?: any;
+}
 
-/**
- * Verifica si un producto tiene imagen basado en sus datos
- * @param product - Objeto producto o su ID y propiedad de imagen
- * @returns boolean indicando si el producto tiene imagen
- */
-export const hasProductImage = (product: any): boolean => {
-  // Si es null o undefined, no tiene imagen
-  if (!product) return false;
-  
-  // Comprobación explícita para ver si el producto tiene una imagen
-  if (typeof product === 'object') {
-    // Verificamos si tiene una propiedad imagen que sea un Buffer o un string no vacío
-    return !!(
-      product.imagen && 
-      (
-        (Buffer.isBuffer(product.imagen) && product.imagen.length > 0) ||
-        (typeof product.imagen === 'string' && product.imagen.length > 0)
-      )
-    );
+// Cache para resultados de verificación de existencia de imágenes
+const imageExistenceCache: Record<string, { exists: boolean; timestamp: number }> = {};
+// Tiempo de expiración del caché (5 minutos)
+const CACHE_EXPIRATION = 5 * 60 * 1000;
+
+class ImageService {
+  private baseUrl: string;
+
+  constructor(baseUrl: string = 'http://localhost:4000/api') {
+    this.baseUrl = baseUrl;
   }
-  
-  return false;
-};
 
-/**
- * Servicio para gestionar las imágenes de productos
- */
-export const imageService = {
   /**
-   * Sube una imagen para un producto específico
-   * @param {string} productId - ID del producto
-   * @param {File} file - Archivo de imagen a subir
-   * @returns {Promise<boolean>} - true si la operación fue exitosa
+   * Verifica si un producto tiene imagen basado en propiedades del producto
+   * o resultados cacheados de verificaciones previas
    */
-  async uploadImage(productId: string, file: File): Promise<boolean> {
+  hasImage(product: Product | null | undefined): boolean {
+    if (!product || !product._id) return false;
+    
+    // Verificar el caché primero
+    const cachedResult = imageExistenceCache[product._id];
+    if (cachedResult && (Date.now() - cachedResult.timestamp) < CACHE_EXPIRATION) {
+      return cachedResult.exists;
+    }
+    
+    // Si hay una propiedad hasImage explícita, usarla
+    if (product.hasImage !== undefined) {
+      // Actualizar el caché
+      imageExistenceCache[product._id] = { 
+        exists: product.hasImage, 
+        timestamp: Date.now() 
+      };
+      return product.hasImage;
+    }
+    
+    // Si hay un campo imagen, verificar si existe
+    if (product.imagen) {
+      // Actualizar el caché
+      imageExistenceCache[product._id] = { 
+        exists: true, 
+        timestamp: Date.now() 
+      };
+      return true;
+    }
+    
+    // Si no hay información disponible, asumir que no hay imagen
+    return false;
+  }
+
+  /**
+   * Genera una URL para obtener la imagen de un producto
+   */
+  getImageUrl(productId: string, options: ImageOptions = {}): string {
+    if (!productId) return '';
+    
+    // Construir la URL base
+    let url = `${this.baseUrl}/producto/${productId}/imagen`;
+    
+    // Añadir parámetros de consulta
+    const params = new URLSearchParams();
+    
+    if (options.width) params.append('width', options.width.toString());
+    if (options.height) params.append('height', options.height.toString());
+    if (options.quality !== undefined) params.append('quality', options.quality.toString());
+    
+    // Añadir timestamp para evitar caché si se solicita o por defecto
+    if (options.timestamp !== false) {
+      params.append('timestamp', new Date().getTime().toString());
+    }
+    
+    const queryString = params.toString();
+    if (queryString) {
+      url += `?${queryString}`;
+    }
+    
+    return url;
+  }
+
+  /**
+   * Invalida el caché para un producto específico
+   */
+  invalidateCache(productId: string): void {
+    if (productId && imageExistenceCache[productId]) {
+      delete imageExistenceCache[productId];
+    }
+  }
+
+  /**
+   * Sube una imagen para un producto
+   */
+  async uploadImage(productId: string, imageFile: File): Promise<any> {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('No hay token de autenticación');
+    }
+
+    const formData = new FormData();
+    formData.append('imagen', imageFile);
+
     try {
-      const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-
-      const formData = new FormData();
-      formData.append('imagen', file);
-
-      const response = await fetch(`${BASE_URL}/producto/${productId}/imagen`, {
+      const response = await fetch(`${this.baseUrl}/producto/${productId}/imagen`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
-          // No incluir Content-Type aquí, fetch lo configurará automáticamente con el boundary correcto
         },
         body: formData
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Error al subir la imagen');
+        const error = await response.json();
+        throw new Error(error.message || 'Error al subir la imagen');
       }
 
-      return true;
-    } catch (error) {
+      // Invalidar el caché después de subir una nueva imagen
+      this.invalidateCache(productId);
+      
+      return await response.json();
+    } catch (error: any) {
       console.error('Error al subir imagen:', error);
       throw error;
     }
-  },
-
-  /**
-   * Obtiene la URL de la imagen de un producto con opciones de calidad y tamaño
-   * @param {string} productId - ID del producto
-   * @param {ImageOptions} options - Opciones de la imagen (calidad, ancho, alto)
-   * @returns {string} - URL de la imagen
-   */
-  getImageUrl(productId: string, options: ImageOptions = {}): string {
-    const { quality = 80, width, height } = options;
-    
-    let url = `${BASE_URL}/producto/${productId}/imagen?quality=${quality}`;
-    
-    if (width) url += `&width=${width}`;
-    if (height) url += `&height=${height}`;
-    
-    return url;
-  },
+  }
 
   /**
    * Elimina la imagen de un producto
-   * @param {string} productId - ID del producto
-   * @returns {Promise<boolean>} - true si la operación fue exitosa
    */
-  async deleteImage(productId: string): Promise<boolean> {
-    try {
-      const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
+  async deleteImage(productId: string): Promise<any> {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('No hay token de autenticación');
+    }
 
-      const response = await fetch(`${BASE_URL}/producto/${productId}/imagen`, {
+    try {
+      const response = await fetch(`${this.baseUrl}/producto/${productId}/imagen`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -111,14 +156,84 @@ export const imageService = {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Error al eliminar la imagen');
+        const error = await response.json();
+        throw new Error(error.message || 'Error al eliminar la imagen');
       }
 
-      return true;
-    } catch (error) {
+      // Actualizar el caché después de eliminar la imagen
+      imageExistenceCache[productId] = { exists: false, timestamp: Date.now() };
+      
+      return await response.json();
+    } catch (error: any) {
       console.error('Error al eliminar imagen:', error);
       throw error;
     }
   }
-};
+
+  /**
+   * Comprueba si una imagen existe para un producto
+   * mediante una solicitud HEAD (más eficiente que GET)
+   * y almacena el resultado en caché
+   */
+  async checkImageExists(productId: string): Promise<boolean> {
+    if (!productId) return false;
+    
+    // Verificar el caché primero
+    const cachedResult = imageExistenceCache[productId];
+    if (cachedResult && (Date.now() - cachedResult.timestamp) < CACHE_EXPIRATION) {
+      return cachedResult.exists;
+    }
+    
+    try {
+      const response = await fetch(`${this.baseUrl}/producto/${productId}/imagen`, {
+        method: 'HEAD',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken() || ''}`
+        }
+      });
+      
+      const exists = response.status === 200;
+      
+      // Actualizar el caché
+      imageExistenceCache[productId] = { exists, timestamp: Date.now() };
+      
+      return exists;
+    } catch (error) {
+      console.error(`Error verificando imagen para producto ${productId}:`, error);
+      
+      // En caso de error, asumir que no existe y cachear resultado negativo
+      imageExistenceCache[productId] = { exists: false, timestamp: Date.now() };
+      
+      return false;
+    }
+  }
+  
+  /**
+   * Verifica proactivamente la existencia de imágenes para una lista de productos
+   * y actualiza el caché. Útil para prefetch.
+   */
+  async batchCheckImages(productIds: string[]): Promise<Record<string, boolean>> {
+    const results: Record<string, boolean> = {};
+    
+    // Agrupar en lotes de 10 para no sobrecargar el servidor
+    const batchSize = 10;
+    for (let i = 0; i < productIds.length; i += batchSize) {
+      const batch = productIds.slice(i, i + batchSize);
+      
+      // Ejecutar en paralelo para el lote actual
+      const promises = batch.map(async (id) => {
+        const exists = await this.checkImageExists(id);
+        results[id] = exists;
+      });
+      
+      await Promise.all(promises);
+    }
+    
+    return results;
+  }
+}
+
+// Exportar una instancia única del servicio
+export const imageService = new ImageService();
+
+export default imageService;

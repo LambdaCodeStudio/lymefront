@@ -11,6 +11,8 @@ import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+// Importar el componente ProductImage
+import ProductImage from '@/components/admin/components/ProductImage';
 
 interface Product {
   _id: string;
@@ -20,7 +22,7 @@ interface Product {
   subCategoria: string;
   precio: number;
   stock: number;
-  imagen?: string;
+  hasImage?: boolean;
 }
 
 interface ProductCardProps {
@@ -95,17 +97,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         {/* Imagen del producto */}
         <div className="relative pt-3 px-3">
           <div className="aspect-square rounded-lg overflow-hidden bg-white/10 flex items-center justify-center">
-            {product.imagen ? (
-              <img 
-                src={`data:image/jpeg;base64,${product.imagen}`}
-                alt={product.nombre}
-                className="object-cover h-full w-full"
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full w-full text-[#D4F5E6]/50">
-                Sin imagen
-              </div>
-            )}
+            <ProductImage 
+              productId={product._id}
+              alt={product.nombre}
+              width={300}
+              height={300}
+              quality={85}
+              className="object-cover h-full w-full"
+              containerClassName="h-full w-full"
+              fallbackClassName="h-full w-full"
+              placeholderText="Sin imagen"
+            />
           </div>
           
           {/* Botón de favorito */}
