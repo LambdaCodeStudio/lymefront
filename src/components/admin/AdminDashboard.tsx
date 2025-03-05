@@ -50,7 +50,7 @@ const AdminDashboard: React.FC = () => {
 
   // Verificar si es administrador
   useEffect(() => {
-    if (auth.user && auth.user.role !== 'admin' && auth.user.role !== 'basic') {
+    if (auth.user && auth.user.role !== 'admin' && auth.user.role !== 'supervisor') {
       window.location.href = '/unauthorized';
     }
   }, [auth.user]);

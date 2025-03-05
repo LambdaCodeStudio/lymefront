@@ -116,12 +116,12 @@ export const LoginForm: React.FC<LoginFormProps> = ({ redirectPath }) => {
     
     const rolePaths: Record<string, string> = {
       'admin': '/admin',
-      'supervisor': '/supervisor',
+      'supervisor': '/admin',
       'basic': '/shop',
       'temporal': '/shop'
     };
     
-    return rolePaths[role] || '/dashboard';
+    return rolePaths[role];
   };
 
   // Manejar envío del formulario
