@@ -1,14 +1,8 @@
 ---
-// Redirección directa a la página de login
-import { getAuthToken } from '../utils/inventoryUtils';
-
-// Verificar si hay un token de autenticación
-const token = getAuthToken();
-
-// Si no hay token, redirigir a login, de lo contrario continuar a la app
-if (!token) {
-  return Astro.redirect('/login');
-} else {
-  return Astro.redirect('/shop');
-}
+import Layout from '../layouts/Layout.astro';
+import { LoginForm } from '../components/auth/LoginForm';
 ---
+
+<Layout title="Iniciar sesión | Lyme">
+  <LoginForm client:load />
+</Layout>
