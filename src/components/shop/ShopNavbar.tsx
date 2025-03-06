@@ -31,7 +31,9 @@ export const ShopNavbar: React.FC = () => {
   }, []);
 
   const isAdmin = userRole === 'admin' || userRole === 'supervisor';
-  const isBasic = userRole === 'basic'; // Nuevo estado para verificar si es usuario básico
+  const isBasic = userRole === 'basic'; // Usuario básico
+  const isTemporal = userRole === 'temporal'; // Usuario temporal
+  const canViewOrders = isBasic || isTemporal; // Usuarios que pueden ver "Mis pedidos"
 
   useEffect(() => {
     const handleScroll = () => {
@@ -92,14 +94,18 @@ export const ShopNavbar: React.FC = () => {
               >
                 Favoritos
               </a>
-              <a 
-                href="/orders" 
-                className="text-white hover:text-[#D4F5E6] transition-colors text-sm font-medium uppercase tracking-wide"
-              >
-                Mis Pedidos
-              </a>
               
-              {/* Nuevo enlace para administrar usuarios temporales - visible sólo para usuarios básicos */}
+              {/* Sólo mostrar "Mis Pedidos" para usuarios básicos y temporales */}
+              {canViewOrders && (
+                <a 
+                  href="/orders" 
+                  className="text-white hover:text-[#D4F5E6] transition-colors text-sm font-medium uppercase tracking-wide"
+                >
+                  Mis Pedidos
+                </a>
+              )}
+              
+              {/* Enlace para administrar usuarios temporales - visible sólo para usuarios básicos */}
               {isBasic && (
                 <a 
                   href="/temporal-users" 
@@ -120,13 +126,16 @@ export const ShopNavbar: React.FC = () => {
                 <Search className="w-5 h-5" />
               </button>
 
-              <a 
-                href="/orders" 
-                className="hidden sm:flex text-white hover:text-[#D4F5E6] transition-colors"
-                aria-label="Mis Pedidos"
-              >
-                <ClipboardList className="w-5 h-5" />
-              </a>
+              {/* Sólo mostrar icono de "Mis Pedidos" para usuarios básicos y temporales */}
+              {canViewOrders && (
+                <a 
+                  href="/orders" 
+                  className="hidden sm:flex text-white hover:text-[#D4F5E6] transition-colors"
+                  aria-label="Mis Pedidos"
+                >
+                  <ClipboardList className="w-5 h-5" />
+                </a>
+              )}
 
               <a 
                 href="/cart" 
@@ -141,7 +150,7 @@ export const ShopNavbar: React.FC = () => {
                 )}
               </a>
 
-              {/* Nuevo botón para usuarios básicos */}
+              {/* Botón para usuarios básicos */}
               {isBasic && (
                 <button 
                   onClick={() => setIsCreateModalOpen(true)}
@@ -256,16 +265,20 @@ export const ShopNavbar: React.FC = () => {
               >
                 Favoritos
               </a>
-              <a 
-                href="/orders" 
-                className="text-white hover:text-[#D4F5E6] transition-colors py-2 border-b border-[#50C3AD]/30 text-lg flex items-center"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                <ClipboardList className="w-5 h-5 mr-2" />
-                Mis Pedidos
-              </a>
               
-              {/* Nuevo enlace móvil para usuarios temporales */}
+              {/* Sólo mostrar "Mis Pedidos" en móvil para usuarios básicos y temporales */}
+              {canViewOrders && (
+                <a 
+                  href="/orders" 
+                  className="text-white hover:text-[#D4F5E6] transition-colors py-2 border-b border-[#50C3AD]/30 text-lg flex items-center"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  <ClipboardList className="w-5 h-5 mr-2" />
+                  Mis Pedidos
+                </a>
+              )}
+              
+              {/* Enlace móvil para usuarios temporales */}
               {isBasic && (
                 <a 
                   href="/temporal-users" 

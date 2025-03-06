@@ -17,7 +17,8 @@ import {
   Download,
   Clock,
   Image as ImageIcon,
-  PackageOpen
+  PackageOpen,
+  UserCircle2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -101,6 +102,19 @@ interface Cliente {
   };
 }
 
+// Interface para el usuario
+interface User {
+  _id: string;
+  id?: string;
+  email?: string;
+  usuario?: string;
+  nombre?: string;
+  apellido?: string;
+  tipo?: string;
+  createdBy?: string;
+  isTemporary?: boolean;
+}
+
 export const Cart: React.FC = () => {
   const { items, removeItem, updateQuantity, clearCart, totalItems, totalPrice } = useCartContext();
   const { addNotification } = useNotificationSafe(); // Usando versión segura
@@ -127,9 +141,17 @@ export const Cart: React.FC = () => {
     seccionDelServicio: ''
   });
   
+  // Estados para manejo de usuario temporal
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isTemporaryUser, setIsTemporaryUser] = useState<boolean>(false);
+  const [parentUserId, setParentUserId] = useState<string | null>(null);
+  const [parentUserName, setParentUserName] = useState<string | null>(null);
+  
   // Obtener clientes del usuario al cargar el componente
   useEffect(() => {
-    fetchClientes();
+    fetchCurrentUser().then(() => {
+      fetchClientes();
+    });
   }, []);
 
   // Contador para redirección automática tras completar pedido
@@ -150,7 +172,61 @@ export const Cart: React.FC = () => {
     }
   }, [orderComplete]);
 
-  // Función para obtener los clientes del usuario actual
+  // Función para obtener información del usuario actual
+  const fetchCurrentUser = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
+      
+      const response = await fetch('http://localhost:4000/api/auth/me', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Error al obtener información del usuario');
+      }
+      
+      const userData: User = await response.json();
+      setCurrentUser(userData);
+      
+      // Determinar si es un usuario temporal
+      const isTemp = userData.isTemporary || userData.tipo === 'temporal';
+      setIsTemporaryUser(isTemp);
+      
+      // Si es temporal y tiene createdBy, obtener información del usuario básico
+      if (isTemp && userData.createdBy) {
+        setParentUserId(userData.createdBy);
+        
+        // Opcionalmente, obtener más detalles del usuario básico si es necesario
+        try {
+          const basicUserResponse = await fetch(`http://localhost:4000/api/usuario/${userData.createdBy}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          
+          if (basicUserResponse.ok) {
+            const basicUserData = await basicUserResponse.json();
+            const displayName = 
+              basicUserData.nombre && basicUserData.apellido 
+                ? `${basicUserData.nombre} ${basicUserData.apellido}`
+                : basicUserData.usuario || basicUserData.email || 'Usuario Básico';
+            
+            setParentUserName(displayName);
+          }
+        } catch (error) {
+          console.error('Error al obtener detalles del usuario básico:', error);
+        }
+      }
+      
+      return userData;
+    } catch (error) {
+      console.error('Error al obtener información del usuario:', error);
+      return null;
+    }
+  };
+
+  // Función para obtener los clientes del usuario adecuado (usuario actual o básico)
   const fetchClientes = async () => {
     try {
       setCargandoClientes(true);
@@ -161,24 +237,29 @@ export const Cart: React.FC = () => {
         throw new Error('No hay token de autenticación. Por favor, inicie sesión nuevamente.');
       }
       
-      // Primero, obtener información del usuario actual
-      const userResponse = await fetch('http://localhost:4000/api/auth/me', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      // Determinar qué ID de usuario usar para obtener clientes
+      let clientsUserId;
       
-      if (!userResponse.ok) {
-        throw new Error('Error al obtener información del usuario');
+      if (isTemporaryUser && parentUserId) {
+        // Si es usuario temporal, usar el ID del usuario básico
+        clientsUserId = parentUserId;
+        console.log('Usando ID de usuario básico para obtener clientes:', clientsUserId);
+      } else if (currentUser) {
+        // De lo contrario, usar el ID del usuario actual
+        clientsUserId = currentUser._id || currentUser.id;
+        console.log('Usando ID de usuario actual para obtener clientes:', clientsUserId);
+      } else {
+        // Si no hay usuario actual (no debería ocurrir), intentar obtenerlo
+        const userData = await fetchCurrentUser();
+        clientsUserId = userData?._id || userData?.id;
+        
+        if (!clientsUserId) {
+          throw new Error('No se pudo determinar el ID del usuario para obtener clientes');
+        }
       }
       
-      const userData = await userResponse.json();
-      const userId = userData._id || userData.id;
-      
-      if (!userId) {
-        throw new Error('No se pudo determinar el ID del usuario actual');
-      }
-      
-      // Obtener clientes asociados al usuario actual
-      const response = await fetch(`http://localhost:4000/api/cliente/user/${userId}`, {
+      // Obtener clientes asociados al usuario
+      const response = await fetch(`http://localhost:4000/api/cliente/user/${clientsUserId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -211,7 +292,7 @@ export const Cart: React.FC = () => {
           seccionDelServicio: data[0].seccionDelServicio
         }));
       } else {
-        setErrorClientes('No tienes clientes asignados. Por favor, contacta con administración para que te asignen clientes antes de realizar pedidos.');
+        setErrorClientes('No hay clientes asignados. Por favor, contacta con administración para que te asignen clientes antes de realizar pedidos.');
       }
       
     } catch (error) {
@@ -310,7 +391,7 @@ export const Cart: React.FC = () => {
   const processOrder = async () => {
     if (items.length === 0) return;
     if (clientes.length === 0) {
-      setOrderError('No tienes clientes asignados. No puedes realizar pedidos hasta que administración te asigne clientes.');
+      setOrderError('No hay clientes asignados. No puedes realizar pedidos hasta que administración asigne clientes.');
       return;
     }
     if (!clienteSeleccionado && clientes.length > 0) {
@@ -328,17 +409,26 @@ export const Cart: React.FC = () => {
         throw new Error('No hay token de autenticación. Por favor, inicie sesión nuevamente.');
       }
       
-      // Obtener información del usuario
-      const userResponse = await fetch('http://localhost:4000/api/auth/me', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      // Determinar el ID de usuario para el pedido
+      let orderUserId;
       
-      if (!userResponse.ok) {
-        throw new Error('Error al obtener información del usuario');
+      // Si es usuario temporal, usar el ID del usuario básico
+      if (isTemporaryUser && parentUserId) {
+        orderUserId = parentUserId;
+        console.log('Usando ID de usuario básico para el pedido:', orderUserId);
+      } else if (currentUser) {
+        // Si no, usar el ID del usuario actual
+        orderUserId = currentUser._id || currentUser.id;
+        console.log('Usando ID de usuario actual para el pedido:', orderUserId);
+      } else {
+        // Si no hay usuario actual, obtenerlo
+        const userData = await fetchCurrentUser();
+        orderUserId = userData?._id || userData?.id;
+        
+        if (!orderUserId) {
+          throw new Error('No se pudo determinar el ID del usuario para el pedido');
+        }
       }
-      
-      const userData = await userResponse.json();
-      const userId = userData._id || userData.id;
       
       // Formato de los productos para la API
       const productsData = items.map(item => ({
@@ -353,11 +443,16 @@ export const Cart: React.FC = () => {
       
       // Crear objeto de pedido
       const orderData = {
-        userId: userId,
+        userId: orderUserId,
         servicio: clienteObj ? clienteObj.servicio : orderForm.servicio || "Sin especificar",
         seccionDelServicio: clienteObj ? clienteObj.seccionDelServicio : orderForm.seccionDelServicio || "Sin especificar",
         detalle: orderForm.notes || "Pedido creado desde la tienda web",
-        productos: productsData
+        productos: productsData,
+        // Añadir metadata si el pedido lo hizo un usuario temporal
+        metadata: isTemporaryUser ? {
+          creadoPorUsuarioTemporal: true,
+          usuarioTemporalId: currentUser?._id || currentUser?.id
+        } : undefined
       };
       
       console.log('Enviando pedido:', JSON.stringify(orderData));
@@ -441,6 +536,16 @@ export const Cart: React.FC = () => {
                 Hemos recibido tu solicitud. El equipo de administración revisará tu pedido y te contactará pronto.
               </p>
               
+              {/* Mostrar información del usuario básico si es un usuario temporal */}
+              {isTemporaryUser && parentUserName && (
+                <div className="mb-6 p-3 bg-white/10 border border-[#80CFB0] rounded-lg">
+                  <p className="flex items-center justify-center text-[#D4F5E6]">
+                    <UserCircle2 className="h-4 w-4 mr-2" />
+                    Pedido realizado a nombre de: <span className="font-bold ml-1">{parentUserName}</span>
+                  </p>
+                </div>
+              )}
+              
               {/* Botones de acción */}
               <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 justify-center mb-6">
                 <Button 
@@ -488,6 +593,17 @@ export const Cart: React.FC = () => {
             <ShoppingCart className="mr-3 h-8 w-8" />
             Tu Carrito
           </h1>
+          
+          {/* Mostrar banner informativo para usuarios temporales */}
+          {isTemporaryUser && parentUserName && (
+            <Alert className="mb-6 bg-[#00888A]/30 border-[#50C3AD] shadow-md">
+              <UserCircle2 className="h-5 w-5 text-[#D4F5E6]" />
+              <AlertDescription className="ml-2 text-[#D4F5E6]">
+                Estás realizando un pedido a nombre de <span className="font-bold">{parentUserName}</span>. 
+                Los clientes mostrados y el pedido se asignarán a esta cuenta.
+              </AlertDescription>
+            </Alert>
+          )}
           
           <div className="flex flex-col lg:flex-row gap-8">
             {/* Lista de productos */}
@@ -593,9 +709,9 @@ export const Cart: React.FC = () => {
                         ) : clientes.length === 0 ? (
                           <div>
                             <Alert className="bg-yellow-600/30 border-2 border-yellow-500/80 mb-4">
-                              <AlertCircle className="h-4 w-4 text-yellow-300" />
+                              <AlertTriangle className="h-4 w-4 text-yellow-300" />
                               <AlertDescription className="ml-2 text-yellow-100 font-medium">
-                                No tienes clientes asignados. Por favor, contacta con administración para que te asignen clientes antes de realizar pedidos.
+                                No hay clientes asignados. Por favor, contacta con administración para que te asignen clientes antes de realizar pedidos.
                               </AlertDescription>
                             </Alert>
                             
@@ -615,6 +731,14 @@ export const Cart: React.FC = () => {
                               Cliente Asociado
                               {cargandoClientes && <Loader2 className="ml-2 h-3 w-3 animate-spin text-white/70" />}
                             </Label>
+                            
+                            {/* Indicador de usuario básico para temporales */}
+                            {isTemporaryUser && parentUserName && (
+                              <div className="text-xs text-[#D4F5E6] mb-2 flex items-center">
+                                <UserCircle2 className="h-3 w-3 mr-1 text-[#50C3AD]" />
+                                Mostrando clientes de: {parentUserName}
+                              </div>
+                            )}
                             
                             <div className="relative mt-1">
                               <Select 
@@ -817,6 +941,17 @@ export const Cart: React.FC = () => {
                       <span>Productos:</span>
                       <span>{totalItems} {totalItems === 1 ? 'item' : 'items'}</span>
                     </div>
+                    
+                    {/* Mostrar información del usuario básico para temporales en el resumen */}
+                    {isTemporaryUser && parentUserName && (
+                      <div className="bg-white/10 rounded-md p-2 text-xs text-[#D4F5E6] border border-[#80CFB0]/50">
+                        <div className="flex items-center mb-1 text-[#50C3AD]">
+                          <UserCircle2 className="h-3 w-3 mr-1" />
+                          <span className="font-medium">Información de usuario</span>
+                        </div>
+                        <p>Pedido a nombre de: <span className="font-medium">{parentUserName}</span></p>
+                      </div>
+                    )}
                     
                     <Separator className="bg-[#80CFB0]/30" />
                     
