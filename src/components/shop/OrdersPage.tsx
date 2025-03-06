@@ -201,40 +201,7 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No se encontró token de autenticación');
       }
       
-      // Obtener el ID del usuario actual
-      let currentUserId;
-      try {
-        currentUserId = localStorage.getItem('selectedUserId');
-        
-        if (!currentUserId) {
-          console.warn('ID de usuario no encontrado en localStorage, obteniéndolo desde la API');
-          // Si no está en localStorage, intentamos obtenerlo desde la API
-          const userResponse = await fetch('https://lyme-back.vercel.app/api/auth/me', {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          
-          if (!userResponse.ok) {
-            throw new Error(`Error al obtener información del usuario (estado: ${userResponse.status})`);
-          }
-          
-          const userData = await userResponse.json();
-          // Usar el ID de usuario de la respuesta de la API
-          currentUserId = userData._id || userData.id;
-          
-          if (!currentUserId) {
-            throw new Error('No se pudo determinar el ID del usuario');
-          }
-          
-          // Guardar en localStorage para futuras consultas
-          localStorage.setItem('selectedUserId', currentUserId);
-        }
-      } catch (error) {
-        console.error('Error al obtener ID de usuario:', error);
-        // Si no podemos obtener el ID, cargamos todos los pedidos sin filtrar
-        currentUserId = null;
-      }
-  
-      // Primero obtenemos todos los pedidos
+      // Obtener todos los pedidos primero
       const response = await fetch('https://lyme-back.vercel.app/api/pedido', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -249,100 +216,148 @@ export const OrdersPage: React.FC = () => {
         throw new Error(`Error al cargar pedidos (estado: ${response.status})`);
       }
   
-      const data = await response.json();
+      const allOrders = await response.json();
       
-      // Si no tenemos un ID de usuario, mostramos todos los pedidos
-      if (!currentUserId) {
-        const processedOrders = data.map((order) => ({
-          ...order,
-          total: calculateOrderTotal(order)
-        }));
-        
-        processedOrders.sort((a, b) => 
-          new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
-        );
-        
-        setOrders(processedOrders);
-        setFilteredOrders(processedOrders);
-        setError(null);
-        return;
-      }
-      
+      // Obtener información del usuario actual
+      let currentUserId = null;
       try {
-        // Ahora obtenemos los clientes del usuario para filtrar los pedidos
-        const clientsResponse = await fetch(`https://lyme-back.vercel.app/api/cliente/user/${currentUserId}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        // Intentar obtener el ID del localStorage primero
+        currentUserId = localStorage.getItem('selectedUserId');
         
-        if (!clientsResponse.ok) {
-          throw new Error(`Error al cargar clientes (estado: ${clientsResponse.status})`);
+        // Si no está en localStorage o no es válido, obtenerlo de la API
+        if (!currentUserId || !isValidObjectId(currentUserId)) {
+          console.warn('ID de usuario no encontrado o inválido, obteniéndolo desde la API');
+          
+          const userResponse = await fetch('https://lyme-back.vercel.app/api/auth/me', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          
+          if (!userResponse.ok) {
+            throw new Error(`Error al obtener información del usuario (estado: ${userResponse.status})`);
+          }
+          
+          const userData = await userResponse.json();
+          currentUserId = userData._id || userData.id;
+          
+          if (!currentUserId || !isValidObjectId(currentUserId)) {
+            throw new Error('No se pudo obtener un ID de usuario válido');
+          }
+          
+          // Guardar en localStorage para futuras consultas
+          localStorage.setItem('selectedUserId', currentUserId);
         }
         
-        const clientsData = await clientsResponse.json();
-        setClients(clientsData);
+        console.log(`ID de usuario obtenido: ${currentUserId}`);
         
-        // Crear un objeto de búsqueda para filtrado más eficiente
-        const userClientLookup = {};
-        clientsData.forEach((client) => {
-          const key = `${client.servicio}-${client.seccionDelServicio || ''}`;
-          userClientLookup[key] = true;
-        });
+        // Obtener clientes del usuario
+        try {
+          // Ahora obtenemos los clientes del usuario para filtrar los pedidos
+          const clientsResponse = await fetch(`https://lyme-back.vercel.app/api/cliente/user/${currentUserId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          
+          if (!clientsResponse.ok) {
+            throw new Error(`Error al cargar clientes (estado: ${clientsResponse.status})`);
+          }
+          
+          const clientsData = await clientsResponse.json();
+          setClients(clientsData);
+          
+          // Si no hay clientes, mostrar un mensaje y devolver todos los pedidos
+          if (!clientsData || clientsData.length === 0) {
+            console.warn('No se encontraron clientes asociados a este usuario');
+            
+            const processedOrders = allOrders.map((order) => ({
+              ...order,
+              total: calculateOrderTotal(order)
+            })).sort((a, b) => 
+              new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
+            );
+            
+            setOrders(processedOrders);
+            setFilteredOrders(processedOrders);
+            setError("No se encontraron clientes asociados a su usuario. Mostrando todos los pedidos disponibles.");
+            return;
+          }
+          
+          // Crear un objeto de búsqueda para filtrado más eficiente
+          const userClientLookup = {};
+          clientsData.forEach((client) => {
+            if (client && client.servicio) {
+              const key = `${client.servicio}-${client.seccionDelServicio || ''}`;
+              userClientLookup[key] = true;
+            }
+          });
+          
+          // Filtrar pedidos para incluir solo aquellos de los clientes del usuario
+          const userOrders = allOrders.filter((order) => {
+            if (!order || !order.servicio) return false;
+            
+            // Crear una clave para comparar con el objeto de búsqueda
+            const orderClientKey = `${order.servicio}-${order.seccionDelServicio || ''}`;
+            return userClientLookup[orderClientKey] === true;
+          });
+          
+          console.log(`Pedidos filtrados por cliente: ${userOrders.length} de ${allOrders.length} totales`);
+          
+          // Procesar pedidos (calcular totales y ordenar)
+          const processedOrders = userOrders.map((order) => ({
+            ...order,
+            total: calculateOrderTotal(order)
+          })).sort((a, b) => 
+            new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
+          );
+          
+          setOrders(processedOrders);
+          setFilteredOrders(processedOrders);
+          setError(null);
+        } catch (clientError) {
+          console.error('Error al procesar clientes:', clientError);
+          
+          // En caso de error con los clientes, mostrar todos los pedidos
+          const processedAllOrders = allOrders.map((order) => ({
+            ...order,
+            total: calculateOrderTotal(order)
+          })).sort((a, b) => 
+            new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
+          );
+          
+          setOrders(processedAllOrders);
+          setFilteredOrders(processedAllOrders);
+          setError(`Error al cargar clientes: ${clientError.message}. Mostrando todos los pedidos disponibles.`);
+        }
         
-        // Filtrar pedidos para incluir solo aquellos de los clientes del usuario
-        const userOrders = data.filter((order) => {
-          // Crear una clave para comparar con el objeto de búsqueda
-          const orderClientKey = `${order.servicio}-${order.seccionDelServicio || ''}`;
-          return userClientLookup[orderClientKey] === true;
-        });
+      } catch (userError) {
+        console.error('Error al obtener información del usuario:', userError);
         
-        // Calcular totales para los pedidos del usuario
-        const processedOrders = userOrders.map((order) => ({
+        // Si hay un error obteniendo el usuario, mostrar todos los pedidos
+        const processedAllOrders = allOrders.map((order) => ({
           ...order,
           total: calculateOrderTotal(order)
-        }));
-        
-        // Ordenar por fecha (más recientes primero)
-        processedOrders.sort((a, b) => 
+        })).sort((a, b) => 
           new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
         );
         
-        setOrders(processedOrders);
-        setFilteredOrders(processedOrders);
-      } catch (error) {
-        console.error("Error al procesar clientes, mostrando todos los pedidos:", error);
-        
-        // En caso de error con los clientes, mostrar todos los pedidos
-        const processedOrders = data.map((order) => ({
-          ...order,
-          total: calculateOrderTotal(order)
-        }));
-        
-        processedOrders.sort((a, b) => 
-          new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
-        );
-        
-        setOrders(processedOrders);
-        setFilteredOrders(processedOrders);
-        
-        // Establecer un mensaje de error pero seguir mostrando datos
-        setError("No se pudieron cargar los clientes. Mostrando todos los pedidos disponibles.");
+        setOrders(processedAllOrders);
+        setFilteredOrders(processedAllOrders);
+        setError(`Error al identificar al usuario: ${userError.message}. Mostrando todos los pedidos disponibles.`);
       }
-        
+      
       // Crear caché de productos para cálculos de precios
       const productCache = {};
-      orders.forEach(order => {
+      allOrders.forEach(order => {
         if (Array.isArray(order.productos)) {
           order.productos.forEach(item => {
-            // Si el producto está poblado con datos
             if (typeof item.productoId === 'object' && item.productoId) {
-              productCache[item.productoId._id] = {
-                nombre: item.productoId.nombre || item.nombre || 'Producto desconocido',
-                precio: item.productoId.precio || item.precio || 0
-              };
-            } 
-            // Si tenemos precio y nombre en el item
-            else if (item.nombre && typeof item.precio === 'number') {
-              productCache[typeof item.productoId === 'string' ? item.productoId : 'unknown'] = {
+              const productId = item.productoId._id;
+              if (productId) {
+                productCache[productId] = {
+                  nombre: item.productoId.nombre || item.nombre || 'Producto desconocido',
+                  precio: item.productoId.precio || item.precio || 0
+                };
+              }
+            } else if (item.nombre && typeof item.precio === 'number' && typeof item.productoId === 'string') {
+              productCache[item.productoId] = {
                 nombre: item.nombre,
                 precio: item.precio
               };
@@ -352,9 +367,11 @@ export const OrdersPage: React.FC = () => {
       });
       
       setCachedProducts(productCache);
+      
     } catch (err) {
       const errorMsg = 'Error al cargar pedidos: ' +
         (err instanceof Error ? err.message : String(err));
+      console.error(errorMsg);
       setError(errorMsg);
       
       if (addNotification) {
@@ -363,6 +380,12 @@ export const OrdersPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const isValidObjectId = (id) => {
+    // Expresión regular para verificar si un string parece un ObjectId de MongoDB (24 caracteres hexadecimales)
+    const objectIdRegex = /^[0-9a-fA-F]{24}$/;
+    return objectIdRegex.test(id);
   };
 
   // Cargar clientes para el usuario actual
