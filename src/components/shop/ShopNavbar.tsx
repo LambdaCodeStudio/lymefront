@@ -33,7 +33,7 @@ export const ShopNavbar: React.FC = () => {
   const isAdmin = userRole === 'admin' || userRole === 'supervisor';
   const isBasic = userRole === 'basic'; // Usuario básico
   const isTemporal = userRole === 'temporal'; // Usuario temporal
-  const canViewOrders = isBasic || isTemporal; // Usuarios que pueden ver "Mis pedidos"
+  const canViewOrders = isBasic ; // Usuarios que pueden ver "Mis pedidos"
 
   useEffect(() => {
     const handleScroll = () => {
