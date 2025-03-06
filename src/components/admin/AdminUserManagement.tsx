@@ -48,7 +48,6 @@ const UserManagementContent: React.FC = () => {
     handleDelete,
     handleToggleStatus,
     handleEdit,
-    handleAssignClient,
     resetForm
   } = useUserManagement();
 
@@ -116,7 +115,6 @@ const UserManagementContent: React.FC = () => {
             onEdit={handleEdit}
             onDelete={handleDelete}
             onToggleStatus={handleToggleStatus}
-            onAssignClient={handleAssignClient}
             getUserIdentifier={getUserIdentifier}
             getFullName={getFullName}
           />
@@ -132,7 +130,6 @@ const UserManagementContent: React.FC = () => {
             onEdit={handleEdit}
             onDelete={handleDelete}
             onToggleStatus={handleToggleStatus}
-            onAssignClient={handleAssignClient}
             getUserIdentifier={getUserIdentifier}
             getFullName={getFullName}
           />

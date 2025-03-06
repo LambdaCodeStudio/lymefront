@@ -38,8 +38,6 @@ import {
   Image as ImageIcon,
   X,
   Loader2,
-  ToggleLeft,
-  ToggleRight
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -156,8 +154,6 @@ const InventorySection: React.FC = () => {
     sortOrder: 'asc'
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // Nuevo estado para elegir entre Base64 y binario
-  const [useBase64, setUseBase64] = useState<boolean>(true);
   
   const [formData, setFormData] = useState<FormData>({
     nombre: '',
@@ -234,7 +230,9 @@ const InventorySection: React.FC = () => {
       const response = await fetch('http://localhost:4000/api/producto', {
         headers: {
           'Authorization': `Bearer ${token}`
-        }
+        },
+        // Añadir un parámetro para evitar el caché del navegador
+        cache: 'no-store'
       });
       
       if (!response.ok) {
@@ -255,10 +253,22 @@ const InventorySection: React.FC = () => {
       // Establecer productos
       setProducts(data);
       
-      // Verificar imágenes en segundo plano para mejorar UX
+      // Verificar imágenes en segundo plano para mejorar UX y precargar
       if (data.length > 0) {
         const productIds = data.map((product: ProductExtended) => product._id);
-        imageService.batchCheckImages(productIds).catch(console.error);
+        
+        // Limpiar caché para todos los productos para asegurar datos frescos
+        productIds.forEach(id => {
+          imageService.invalidateCache(id);
+        });
+        
+        // Verificar y precargar imágenes
+        Promise.all([
+          imageService.batchCheckImages(productIds),
+          imageService.batchLoadBase64Images(productIds.slice(0, 10)) // Precargar solo las primeras 10 para rendimiento
+        ]).catch(err => {
+          console.log('Error al procesar imágenes:', err);
+        });
       }
       
     } catch (err: any) {
@@ -275,7 +285,7 @@ const InventorySection: React.FC = () => {
     }
   };
 
-  // Modificado: Cargar la imagen en Base64 para productos específicos
+  // Cargar la imagen en Base64 para productos específicos
   const fetchProductImageBase64 = async (productId: string) => {
     try {
       const base64Image = await imageService.getImageBase64(productId);
@@ -293,6 +303,7 @@ const InventorySection: React.FC = () => {
       
       // Validar tamaño del archivo (5MB máximo)
       if (file.size > 5 * 1024 * 1024) {
+        console.log('La imagen no debe superar los 5MB');
         addNotification('La imagen no debe superar los 5MB', 'error');
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
@@ -302,6 +313,7 @@ const InventorySection: React.FC = () => {
 
       // Validar tipo de archivo
       if (!file.type.startsWith('image/')) {
+        console.log('El archivo debe ser una imagen');
         addNotification('El archivo debe ser una imagen', 'error');
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
@@ -341,13 +353,30 @@ const InventorySection: React.FC = () => {
       setImageLoading(true);
       await imageService.deleteImage(productId);
       
-      // Actualizar la lista de productos
-      await fetchProducts();
+      // Actualizar la vista del formulario para permitir subir una nueva imagen
+      setFormData(prev => ({
+        ...prev,
+        imagen: null,
+        imagenPreview: null
+      }));
+      
+      // Invalidar cualquier caché de imagen que pueda existir
+      imageService.invalidateCache(productId);
+      
+      // Actualizar la lista de productos con un pequeño retraso
+      // para asegurar que el servidor haya procesado la eliminación
+      setTimeout(async () => {
+        await fetchProducts();
+        
+        // Notificar a otros componentes que deben actualizarse
+        inventoryObservable.notify();
+      }, 300);
       
       addNotification('Imagen eliminada correctamente', 'success');
       setDeleteImageDialogOpen(false);
     } catch (error: any) {
-      addNotification('Error al eliminar la imagen: ' + error.message, 'error');
+      console.error('Error al eliminar la imagen:', error);
+      addNotification('Error al eliminar la imagen', 'error');
     } finally {
       setImageLoading(false);
     }
@@ -359,17 +388,13 @@ const InventorySection: React.FC = () => {
     
     try {
       setImageLoading(true);
-      if (useBase64) {
-        // Convertir a base64 y subir
-        const base64Data = await imageService.fileToBase64(formData.imagen);
-        await imageService.uploadImageBase64(productId, base64Data);
-      } else {
-        // Subir como archivo binario (método original)
-        await imageService.uploadImage(productId, formData.imagen);
-      }
+      // Convertir a base64 y subir
+      const base64Data = await imageService.fileToBase64(formData.imagen);
+      await imageService.uploadImageBase64(productId, base64Data);
+      
       return true;
     } catch (error: any) {
-      addNotification('Error al subir imagen: ' + error.message, 'error');
+      console.error('Error al subir imagen:', error);
       return false;
     } finally {
       setImageLoading(false);
@@ -422,12 +447,29 @@ const InventorySection: React.FC = () => {
       
       // Manejar la subida de imagen si hay una imagen nueva
       if (formData.imagen) {
-        await handleImageUpload(savedProduct._id);
+        const imageUploaded = await handleImageUpload(savedProduct._id);
+        if (!imageUploaded) {
+          console.log('Hubo un problema al subir la imagen, pero el producto se guardó correctamente');
+        }
       }
       
       setShowModal(false);
       resetForm();
-      await fetchProducts(); // Actualizar datos localmente
+      
+      // Importante: damos un pequeño retraso antes de recargar los productos
+      // para asegurarnos de que el servidor haya procesado todo (especialmente las imágenes)
+      setTimeout(async () => {
+        // Invalidar cualquier caché de imagen que pueda existir
+        if (editingProduct) {
+          imageService.invalidateCache(editingProduct._id);
+        }
+        
+        // Recargar productos con datos frescos
+        await fetchProducts();
+        
+        // Notificar a otros componentes que deben actualizarse
+        inventoryObservable.notify();
+      }, 500);
       
       const successMsg = `Producto ${editingProduct ? 'actualizado' : 'creado'} correctamente`;
       setSuccessMessage(successMsg);
@@ -501,21 +543,23 @@ const InventorySection: React.FC = () => {
   const handleEdit = async (product: ProductExtended) => {
     setEditingProduct(product);
     
-    // Si estamos usando base64, intentamos cargar la imagen en este formato
+    // Intentamos cargar la imagen en formato base64
     let imagePreview = null;
-    if (useBase64 && imageService.hasImage(product)) {
+    if (imageService.hasImage(product)) {
       try {
         // Cargar imagen base64 para vista previa
         const base64Image = await fetchProductImageBase64(product._id);
-        imagePreview = base64Image;
+        if (base64Image) {
+          imagePreview = `data:image/jpeg;base64,${base64Image}`;
+        } else {
+          // Fallback a la URL normal
+          imagePreview = imageService.getImageUrl(product._id);
+        }
       } catch (error) {
-        console.error('Error al cargar imagen base64:', error);
+        console.error('Error al cargar imagen:', error);
         // Fallback a la URL normal
         imagePreview = imageService.getImageUrl(product._id);
       }
-    } else if (imageService.hasImage(product)) {
-      // Usar la URL normal
-      imagePreview = imageService.getImageUrl(product._id);
     }
     
     setFormData({
@@ -704,25 +748,7 @@ const InventorySection: React.FC = () => {
           </Tabs>
         </div>
 
-        <div className="w-full md:w-auto flex flex-col md:flex-row gap-2 items-center">
-          {/* Selector de modo de imagen */}
-          <div 
-            className="flex items-center gap-2 text-sm cursor-pointer mb-2 md:mb-0 mr-4" 
-            onClick={() => setUseBase64(!useBase64)}
-          >
-            {useBase64 ? (
-              <>
-                <span className="text-[#29696B] font-medium">Modo Base64</span>
-                <ToggleRight className="h-5 w-5 text-[#29696B]" />
-              </>
-            ) : (
-              <>
-                <span className="text-gray-500">Modo Binario</span>
-                <ToggleLeft className="h-5 w-5 text-gray-500" />
-              </>
-            )}
-          </div>
-          
+        <div className="w-full md:w-auto">          
           <Button 
             onClick={() => {
               resetForm();
@@ -807,7 +833,7 @@ const InventorySection: React.FC = () => {
                             className="h-10 w-10 rounded-full object-cover border border-[#91BEAD]/30"
                             fallbackClassName="h-10 w-10 rounded-full bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30"
                             containerClassName="h-10 w-10"
-                            useBase64={useBase64} // Usar Base64 según la configuración
+                            useBase64={true}
                           />
                         </div>
                         <div>
@@ -910,7 +936,7 @@ const InventorySection: React.FC = () => {
                     className="h-16 w-16 rounded-md object-cover border border-[#91BEAD]/30"
                     fallbackClassName="h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30"
                     containerClassName="h-16 w-16"
-                    useBase64={useBase64} // Usar Base64 según la configuración
+                    useBase64={true}
                   />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -1091,13 +1117,6 @@ const InventorySection: React.FC = () => {
 
               <div>
                 <Label className="text-sm text-[#29696B] block mb-2">Imagen del Producto</Label>
-                {/* Agregar un indicador del modo de imagen */}
-                <div className="text-xs text-[#7AA79C] mb-2 flex items-center">
-                  <span>Usando modo: </span>
-                  <Badge variant="outline" className="ml-2 text-[#29696B] border-[#29696B]">
-                    {useBase64 ? 'Base64' : 'Binario'}
-                  </Badge>
-                </div>
                 
                 {/* Mostrar el componente de carga de imágenes cuando estamos editando */}
                 {editingProduct ? (
@@ -1122,7 +1141,7 @@ const InventorySection: React.FC = () => {
                     ) : (
                       <ImageUpload 
                         productId={editingProduct._id}
-                        useBase64={useBase64}
+                        useBase64={true}
                         onImageUploaded={handleImageUploaded}
                       />
                     )}

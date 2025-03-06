@@ -3,6 +3,9 @@
 type EventCallback = (...args: any[]) => void;
 
 class EventService {
+  on(arg0: string, handleUserUpdated: () => void) {
+    throw new Error('Method not implemented.');
+  }
   private events: Record<string, EventCallback[]> = {};
 
   // Suscribirse a un evento

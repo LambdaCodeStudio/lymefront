@@ -15,7 +15,6 @@ interface ProductImageProps {
   checkExistence?: boolean;
   placeholderText?: string;
   retryOnError?: boolean;
-  useBase64?: boolean; // Nueva propiedad para configurar el modo de imagen
 }
 
 /**
@@ -32,8 +31,7 @@ const ProductImage: React.FC<ProductImageProps> = ({
   fallbackClassName = "",
   checkExistence = true,
   placeholderText = "Sin imagen",
-  retryOnError = true,
-  useBase64 = false // Por defecto, usar el método tradicional
+  retryOnError = true
 }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -66,25 +64,23 @@ const ProductImage: React.FC<ProductImageProps> = ({
         }
       }
       
-      // Si usamos base64, cargar la imagen en este formato
-      if (useBase64) {
-        try {
-          const base64Data = await imageService.getImageBase64(productId);
-          if (base64Data) {
-            setImageBase64(base64Data);
-            setLoading(false);
-            return;
-          } else {
-            // Si no se pudo obtener la imagen en base64, intentar con URL normal
-            console.log(`No se pudo obtener imagen base64 para ${productId}, usando URL normal`);
-          }
-        } catch (error) {
-          console.error('Error al cargar imagen base64:', error);
-          // Fallback a URL normal
+      // Intentar cargar la imagen en base64
+      try {
+        const base64Data = await imageService.getImageBase64(productId);
+        if (base64Data) {
+          setImageBase64(base64Data);
+          setLoading(false);
+          return;
+        } else {
+          // Si no se pudo obtener la imagen en base64, intentar con URL normal
+          console.log(`No se pudo obtener imagen base64 para ${productId}, usando URL normal`);
         }
+      } catch (error) {
+        console.error('Error al cargar imagen base64:', error);
+        // Fallback a URL normal
       }
       
-      // Si no usamos base64 o hubo un error al cargarla, usar URL normal
+      // Si hubo un error al cargarla, usar URL normal
       const url = imageService.getImageUrl(productId, { 
         width, 
         height, 
@@ -100,12 +96,12 @@ const ProductImage: React.FC<ProductImageProps> = ({
       setError(true);
       setLoading(false);
     }
-  }, [productId, checkExistence, width, height, quality, useBase64]);
+  }, [productId, checkExistence, width, height, quality]);
   
   // Iniciar carga de imagen
   useEffect(() => {
     loadImage();
-  }, [loadImage, productId, retryCount, useBase64]);
+  }, [loadImage, productId, retryCount]);
 
   // Manejadores de eventos
   const handleLoad = () => {

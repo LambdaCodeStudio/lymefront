@@ -1,9 +1,10 @@
 // src/components/admin/components/ImageUpload.tsx
 import React, { useState, useRef } from 'react';
 import { imageService } from '@/services/imageService';
-import { ImageIcon, Upload, X, Loader2, RefreshCw, Check } from 'lucide-react';
+import { ImageIcon, Upload, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNotification } from '@/context/NotificationContext';
+import { getAuthToken } from '@/utils/inventoryUtils';
 
 interface ImageUploadProps {
   productId: string;
@@ -13,14 +14,12 @@ interface ImageUploadProps {
 
 const ImageUpload: React.FC<ImageUploadProps> = ({
   productId,
-  useBase64 = false,
   onImageUploaded
 }) => {
   const { addNotification } = useNotification();
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [fileToUpload, setFileToUpload] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Validar y procesar el archivo seleccionado
@@ -30,7 +29,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
       
       // Validar tamaño del archivo (5MB máximo)
       if (file.size > 5 * 1024 * 1024) {
-        setError('La imagen no debe superar los 5MB');
+        console.log('La imagen no debe superar los 5MB');
         addNotification?.('La imagen no debe superar los 5MB', 'error');
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
@@ -40,7 +39,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
 
       // Validar tipo de archivo
       if (!file.type.startsWith('image/')) {
-        setError('El archivo debe ser una imagen');
+        console.log('El archivo debe ser una imagen');
         addNotification?.('El archivo debe ser una imagen', 'error');
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
@@ -48,50 +47,45 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
         return;
       }
       
-      // Resetear estados previos
-      setError(null);
-      setSuccess(false);
-      
       // Mostrar vista previa
       const reader = new FileReader();
       reader.onloadend = () => {
         setImagePreview(reader.result as string);
+        setFileToUpload(file); // Guardar el archivo para subirlo posteriormente
       };
       reader.readAsDataURL(file);
-      
-      // Iniciar la carga
-      uploadImage(file);
     }
   };
   
   // Subir imagen al servidor
-  const uploadImage = async (file: File) => {
+  const uploadImage = async () => {
+    if (!fileToUpload) {
+      console.log('No hay imagen para subir');
+      return;
+    }
+
     setLoading(true);
-    setError(null);
     
     try {
-      if (useBase64) {
-        // Convertir a base64 y subir
-        const base64Data = await imageService.fileToBase64(file);
-        await imageService.uploadImageBase64(productId, base64Data);
-      } else {
-        // Subir como archivo (método original)
-        await imageService.uploadImage(productId, file);
-      }
-      
-      setSuccess(true);
-      addNotification?.('Imagen subida correctamente', 'success');
-      
-      // Notificar al componente padre
-      if (onImageUploaded) {
-        onImageUploaded(true);
+      // Convertir a base64 y subir
+      try {
+        console.log('Subiendo imagen en Base64 para producto:', productId);
+        const base64Data = await convertFileToBase64(fileToUpload);
+        await uploadBase64Direct(productId, base64Data);
+        
+        console.log('Imagen Base64 subida correctamente');
+        addNotification?.('Imagen subida correctamente', 'success');
+        
+        if (onImageUploaded) {
+          onImageUploaded(true);
+        }
+      } catch (err: any) {
+        console.error('Error en subida Base64:', err);
+        throw err;
       }
     } catch (err: any) {
       console.error('Error al subir imagen:', err);
-      setError(err.message || 'Error al subir la imagen');
-      addNotification?.(`Error al subir imagen: ${err.message}`, 'error');
       
-      // Notificar al componente padre
       if (onImageUploaded) {
         onImageUploaded(false);
       }
@@ -99,19 +93,43 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
       setLoading(false);
     }
   };
-  
-  // Reintentar subida
-  const handleRetry = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
+
+  // Función auxiliar para convertir File a Base64
+  const convertFileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = error => reject(error);
+    });
+  };
+
+  // Función auxiliar para subir Base64 directamente (evita problemas potenciales con imageService)
+  const uploadBase64Direct = async (productId: string, base64Image: string): Promise<void> => {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('No hay token de autenticación');
+    }
+
+    const response = await fetch(`http://localhost:4000/api/producto/${productId}/imagen-base64`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ base64Image })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Error al subir imagen');
     }
   };
   
   // Limpiar selección y estados
   const handleClear = () => {
     setImagePreview(null);
-    setError(null);
-    setSuccess(false);
+    setFileToUpload(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -134,16 +152,9 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
               <div className="flex flex-col items-center">
                 <Loader2 className="h-8 w-8 animate-spin text-white mb-2" />
                 <span className="text-xs text-white font-medium">
-                  {useBase64 ? 'Procesando imagen...' : 'Subiendo imagen...'}
+                  Procesando imagen...
                 </span>
               </div>
-            </div>
-          )}
-          
-          {/* Indicador de éxito */}
-          {success && !loading && (
-            <div className="absolute top-2 right-2 bg-green-500 rounded-full p-1">
-              <Check className="h-4 w-4 text-white" />
             </div>
           )}
           
@@ -162,13 +173,6 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
         </div>
       )}
       
-      {/* Mensaje de error */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-800 p-2 rounded-md mb-2 text-xs">
-          {error}
-        </div>
-      )}
-      
       {/* Área de subida */}
       {!imagePreview ? (
         <div className="flex items-center justify-center w-full">
@@ -176,7 +180,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
             <div className="flex flex-col items-center justify-center pt-3 pb-4">
               <ImageIcon className="w-8 h-8 text-[#7AA79C] mb-1" />
               <p className="text-xs text-[#7AA79C]">
-                Haz clic para subir una imagen
+                Haz clic para seleccionar una imagen
               </p>
               <p className="text-xs text-[#7AA79C]">
                 Máximo 5MB
@@ -191,34 +195,21 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
             />
           </label>
         </div>
-      ) : error ? (
-        <Button
-          type="button"
-          variant="outline"
-          className="w-full border-amber-500 text-amber-700 hover:bg-amber-50"
-          onClick={handleRetry}
-        >
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Reintentar
-        </Button>
-      ) : success ? (
+      ) : (
         <div className="flex justify-between gap-2">
-          <Button
-            type="button"
-            variant="outline" 
-            className="flex-1 border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
-            onClick={handleClear}
-          >
-            <Upload className="w-4 h-4 mr-2" />
-            Subir otra
-          </Button>
+          {!loading && (
+            <Button
+              type="button"
+              className="flex-1 bg-[#29696B] hover:bg-[#29696B]/90 text-white"
+              onClick={uploadImage}
+              disabled={loading}
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              Subir imagen
+            </Button>
+          )}
         </div>
-      ) : null}
-      
-      {/* Indicador de modo */}
-      <div className="mt-2 text-xs text-[#7AA79C] text-center">
-        Modo: <span className="font-medium">{useBase64 ? 'Base64' : 'Binario'}</span>
-      </div>
+      )}
     </div>
   );
 };

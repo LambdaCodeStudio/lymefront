@@ -3,7 +3,7 @@
  * Muestra información compacta de usuarios con acciones
  */
 import React from 'react';
-import { UserCog, Trash2, CheckCircle, XCircle, UserPlus, Clock } from 'lucide-react';
+import { UserCog, Trash2, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,7 +20,6 @@ interface UserCardProps {
   onEdit: (user: AdminUser) => void;
   onDelete: (userId: string) => void;
   onToggleStatus: (userId: string, activate: boolean) => void;
-  onAssignClient?: (userId: string, identifier: string) => void;
   getUserIdentifier: (user: AdminUser) => string;
   getFullName: (user: AdminUser) => string | null;
 }
@@ -33,7 +32,6 @@ const UserCard: React.FC<UserCardProps> = ({
   onEdit,
   onDelete,
   onToggleStatus,
-  onAssignClient,
   getUserIdentifier,
   getFullName
 }) => {
@@ -100,17 +98,6 @@ const UserCard: React.FC<UserCardProps> = ({
       </CardContent>
       <CardFooter className="p-2 flex justify-end space-x-2 bg-gray-50">
         {/* Botones de acción */}
-        {user.role === 'basic' && user.isActive && onAssignClient && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onAssignClient(user._id, getUserIdentifier(user))} 
-            className="text-blue-600"
-          >
-            <UserPlus className="w-4 h-4" />
-          </Button>
-        )}
-        
         <Button
           variant="ghost"
           size="sm"

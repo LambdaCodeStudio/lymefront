@@ -62,7 +62,6 @@ import {
 
 import { useDashboard } from '@/hooks/useDashboard';
 import type { UserRole } from '@/types/users';
-import eventService from '@/services/EventService';
 
 // Tipo extendido para los usuarios con la estructura que viene del backend
 interface UserExtended {
@@ -91,6 +90,7 @@ interface Client {
   };
   createdAt?: string;
   updatedAt?: string;
+  requiereAsignacion?: boolean; // Propiedad añadida para marcar clientes que necesitan asignación
 }
 
 interface CreateClientData {
@@ -145,8 +145,6 @@ const ClientsSection: React.FC = () => {
     userId: ''
   });
 
-  
-
   // Verificar disponibilidad del contexto de notificaciones
   useEffect(() => {
     console.log('NotificationContext disponible:', addNotification ? true : false);
@@ -160,16 +158,25 @@ const ClientsSection: React.FC = () => {
     }));
   };
 
-  // Función para expandir todos los servicios
-  const expandAllServices = (services: string[]) => {
-    const expanded: Record<string, boolean> = {};
-    services.forEach(service => {
-      expanded[service] = true;
-    });
-    setExpandedServices(expanded);
+  // Función mejorada para expandir/contraer todos los servicios
+  const toggleAllServices = (services: string[]) => {
+    // Verificar si todos los servicios están expandidos
+    const allExpanded = services.every(service => expandedServices[service]);
+    
+    if (allExpanded) {
+      // Si todos están expandidos, contraer todos
+      setExpandedServices({});
+    } else {
+      // Si al menos uno está contraído, expandir todos
+      const expanded: Record<string, boolean> = {};
+      services.forEach(service => {
+        expanded[service] = true;
+      });
+      setExpandedServices(expanded);
+    }
   };
 
-  // Función para contraer todos los servicios
+  // Función para contraer todos los servicios (mantenemos esta para compatibilidad)
   const collapseAllServices = () => {
     setExpandedServices({});
   };
@@ -187,6 +194,8 @@ const ClientsSection: React.FC = () => {
     console.log("ClientSection montado, selectedUserId:", selectedUserId);
     fetchClients();
     fetchUsers();
+    // Cargar también clientes sin asignar
+    fetchClientsWithoutUser();
 
     // Verificar si hay un usuario preseleccionado (de AdminUserManagement)
     if (typeof window !== 'undefined') {
@@ -235,6 +244,56 @@ const ClientsSection: React.FC = () => {
     }
   }, [selectedUserId]);
 
+  // Escuchar eventos de actualización de usuarios
+  useEffect(() => {
+    // Función para manejar eventos globales
+    const handleUserUpdated = () => {
+      console.log("Detectado cambio de usuarios, actualizando lista...");
+      fetchUsers();
+      // También revisamos clientes sin asignar por si alguno quedó así tras eliminar un usuario
+      fetchClientsWithoutUser();
+    };
+  
+    // Verificar localStorage para eventos
+    const checkLocalStorage = () => {
+      if (typeof window !== 'undefined') {
+        const userUpdated = localStorage.getItem('userUpdated');
+        if (userUpdated === 'true') {
+          handleUserUpdated();
+          localStorage.removeItem('userUpdated');
+        }
+      }
+    };
+  
+    // Intervalo para verificar localStorage (como fallback)
+    const interval = setInterval(checkLocalStorage, 2000);
+  
+    // Evento personalizado cuando localStorage cambia
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'userUpdated' && e.newValue === 'true') {
+        handleUserUpdated();
+        // Limpiar la bandera
+        localStorage.removeItem('userUpdated');
+      }
+    };
+  
+    // Suscribirse a storage events (funciona entre tabs)
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', handleStorageChange);
+    }
+  
+    // Verificar al montar si hay actualizaciones pendientes
+    checkLocalStorage();
+  
+    // Limpieza al desmontar
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('storage', handleStorageChange);
+      }
+      clearInterval(interval);
+    };
+  }, []);
+
   // Cargar clientes
   const fetchClients = async () => {
     try {
@@ -269,6 +328,60 @@ const ClientsSection: React.FC = () => {
       setError(errorMsg);
 
       // Notificación para error de carga de clientes
+      if (addNotification) {
+        addNotification(errorMsg, 'error');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Cargar clientes sin asignar
+  const fetchClientsWithoutUser = async () => {
+    try {
+      setLoading(true);
+      const token = getAuthToken();
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
+
+      const response = await fetch('http://localhost:4000/api/cliente/sin-asignar', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al cargar clientes sin asignar');
+      }
+
+      const data: Client[] = await response.json();
+      console.log("Clientes sin asignar:", data.length);
+      
+      // Agregar estos clientes al estado, marcándolos especialmente
+      setClients(prevClients => {
+        const clientsWithoutDuplicates = [...prevClients];
+        
+        // Añadir solo los que no están ya en la lista
+        data.forEach(newClient => {
+          if (!clientsWithoutDuplicates.some(c => c._id === newClient._id)) {
+            // Añadir propiedad para identificarlos visualmente
+            clientsWithoutDuplicates.push({
+              ...newClient,
+              requiereAsignacion: true
+            });
+          }
+        });
+        
+        return clientsWithoutDuplicates;
+      });
+      
+      // Mostrar alerta si hay clientes sin asignar
+      if (data.length > 0 && addNotification) {
+        addNotification(`Se encontraron ${data.length} clientes sin usuario asignado. Puede reasignarlos editándolos.`, 'warning', 8000);
+      }
+      
+    } catch (err) {
+      const errorMsg = 'Error al cargar clientes sin asignar: ' + (err instanceof Error ? err.message : String(err));
+      setError(errorMsg);
       if (addNotification) {
         addNotification(errorMsg, 'error');
       }
@@ -903,11 +1016,20 @@ const ClientsSection: React.FC = () => {
           {Object.keys(groupedClients).length > 0 && (
             <Button
               variant="outline"
-              onClick={() => expandAllServices(Object.keys(groupedClients))}
+              onClick={() => toggleAllServices(Object.keys(groupedClients))}
               className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50 hover:text-[#29696B]"
             >
-              <ChevronDown className="w-4 h-4 mr-2" />
-              Expandir Todo
+              {Object.keys(groupedClients).every(service => expandedServices[service]) ? (
+                <>
+                  <ChevronUp className="w-4 h-4 mr-2" />
+                  Contraer Todo
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="w-4 h-4 mr-2" />
+                  Expandir Todo
+                </>
+              )}
             </Button>
           )}
           <Button
@@ -985,20 +1107,20 @@ const ClientsSection: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => expandAllServices(Object.keys(groupedClients))}
+                  onClick={() => toggleAllServices(Object.keys(groupedClients))}
                   className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50"
                 >
-                  <ChevronDown className="w-3 h-3 mr-1" />
-                  Expandir Todo
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={collapseAllServices}
-                  className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50"
-                >
-                  <ChevronUp className="w-3 h-3 mr-1" />
-                  Contraer Todo
+                  {Object.keys(groupedClients).every(service => expandedServices[service]) ? (
+                    <>
+                      <ChevronUp className="w-3 h-3 mr-1" />
+                      Contraer Todo
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="w-3 h-3 mr-1" />
+                      Expandir Todo
+                    </>
+                  )}
                 </Button>
               </div>
             )}
@@ -1092,6 +1214,11 @@ const ClientsSection: React.FC = () => {
                                 <MapPin className="w-4 h-4 text-[#7AA79C] mt-1" />
                                 <div>
                                   <span className="font-medium text-[#29696B]">{client.seccionDelServicio}</span>
+                                  {client.requiereAsignacion && (
+                                    <Badge variant="outline" className="ml-2 text-xs bg-amber-50 text-amber-700 border-amber-300">
+                                      Requiere Asignación
+                                    </Badge>
+                                  )}
                                   <div className="text-sm text-[#7AA79C]">
                                     <div className="flex items-center">
                                       <Users className="w-3 h-3 mr-1 inline" />
@@ -1122,6 +1249,11 @@ const ClientsSection: React.FC = () => {
                                         ? getUserIdentifierById(client.userId)
                                         : 'No disponible'
                                   }</strong>
+                                  {client.requiereAsignacion && (
+                                    <Badge variant="outline" className="ml-2 text-xs bg-amber-50 text-amber-700 border-amber-300">
+                                      Requiere Asignación
+                                    </Badge>
+                                  )}
                                 </div>
                                 {/* Mostrar información del creador */}
                                 <div className="flex items-center mt-1">
@@ -1264,6 +1396,11 @@ const ClientsSection: React.FC = () => {
                                     : 'No disponible'
                               }</strong></span>
                             </div>
+                            {client.requiereAsignacion && (
+                              <Badge variant="outline" className="self-start mt-1 text-xs bg-amber-50 text-amber-700 border-amber-300">
+                                Requiere Asignación
+                              </Badge>
+                            )}
                             {/* Mostrar información del creador en móvil */}
                             <div className="flex items-center">
                               <Mail className="w-3 h-3 mr-1" />
@@ -1571,11 +1708,18 @@ const ClientsSection: React.FC = () => {
 
           {clientToDelete && (
             <div className="bg-red-50 p-3 rounded-md border border-red-200 text-sm">
-              <p>ID del cliente: <strong>{clientToDelete}</strong></p>
-              {clients.find(c => c._id === clientToDelete)?.seccionDelServicio && (
-                <p className="mt-1">Sección: <strong>{clients.find(c => c._id === clientToDelete)?.seccionDelServicio}</strong></p>
-              )}
-              <p className="mt-1">Servicio: <strong>{clients.find(c => c._id === clientToDelete)?.servicio}</strong></p>
+              {(() => {
+                const client = clients.find(c => c._id === clientToDelete);
+                return (
+                  <>
+                    <p className="font-medium text-red-700">Datos del cliente:</p>
+                    <p className="mt-1">Servicio: <strong>{client?.servicio}</strong></p>
+                    {client?.seccionDelServicio && (
+                      <p className="mt-1">Sección: <strong>{client.seccionDelServicio}</strong></p>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           )}
 

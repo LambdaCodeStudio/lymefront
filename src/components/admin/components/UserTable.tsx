@@ -3,7 +3,7 @@
  * Incluye todas las acciones disponibles para administración de usuarios
  */
 import React from 'react';
-import { UserCog, Trash2, CheckCircle, XCircle, UserPlus, Clock } from 'lucide-react';
+import { UserCog, Trash2, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import type { AdminUser } from '../services/userService';
 
@@ -12,7 +12,6 @@ interface UserTableProps {
   onEdit: (user: AdminUser) => void;
   onDelete: (userId: string) => void;
   onToggleStatus: (userId: string, activate: boolean) => void;
-  onAssignClient?: (userId: string, identifier: string) => void;
   getUserIdentifier: (user: AdminUser) => string;
   getFullName: (user: AdminUser) => string | null;
 }
@@ -25,7 +24,6 @@ const UserTable: React.FC<UserTableProps> = ({
   onEdit,
   onDelete,
   onToggleStatus,
-  onAssignClient,
   getUserIdentifier,
   getFullName
 }) => {
@@ -103,17 +101,6 @@ const UserTable: React.FC<UserTableProps> = ({
               </td>
               <td className="px-6 py-4 text-right">
                 <div className="flex justify-end space-x-2">
-                  {/* Botón de Asignar Cliente (solo para usuarios básicos activos) */}
-                  {user.role === 'basic' && user.isActive && onAssignClient && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onAssignClient(user._id, getUserIdentifier(user))} 
-                      className="text-blue-600 hover:text-blue-800 hover:bg-blue-50">
-                      <UserPlus className="w-4 h-4" />
-                    </Button>
-                  )}
-                  
                   {/* Botón de activar/desactivar */}
                   <Button
                     variant="ghost"

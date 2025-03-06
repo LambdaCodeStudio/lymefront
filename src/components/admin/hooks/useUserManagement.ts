@@ -76,6 +76,7 @@ export function useUserManagement() {
         if (role === 'admin') {
           setUserRole('admin');
           setAvailableRoles([
+            { value: 'admin', label: 'Administrador' },
             { value: 'supervisor', label: 'Supervisor' },
             { value: 'basic', label: 'Básico' },
             { value: 'temporal', label: 'Temporal' }
@@ -153,17 +154,6 @@ export function useUserManagement() {
             userId: data._id, 
             role: formData.role 
           });
-        }
-        
-        // Preguntar si quiere asignar un cliente si es usuario básico
-        if (formData.role === 'basic' && typeof window !== 'undefined') {
-          if (window.confirm('¿Desea asignar un cliente a este usuario ahora?')) {
-            // Guardar temporalmente el ID para usarlo en el componente de clientes
-            localStorage.setItem('lastCreatedUserId', data._id || '');
-            
-            // Cambiar a la sección de clientes
-            changeSection('clients', data._id);
-          }
         }
         
         const message = 'Usuario creado correctamente';
@@ -326,22 +316,6 @@ export function useUserManagement() {
     }
   };
 
-  // Ir a la gestión de clientes para este usuario
-  const handleAssignClient = (userId: string, identifier: string) => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('selectedUserId', userId);
-      localStorage.setItem('selectedUserIdentifier', identifier);
-    }
-    
-    // Cambiar a la sección de clientes usando el contexto
-    changeSection('clients', userId);
-    
-    // Notificación informativa opcional para asignación de clientes
-    if (addNotification) {
-      addNotification(`Asignando clientes a usuario: ${identifier}`, 'info');
-    }
-  };
-
   // Resetear formulario
   const resetForm = () => {
     setFormData({
@@ -383,7 +357,6 @@ export function useUserManagement() {
     handleDelete,
     handleToggleStatus,
     handleEdit,
-    handleAssignClient,
     resetForm
   };
 }

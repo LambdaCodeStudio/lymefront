@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AtSign, Lock, ArrowRight } from 'lucide-react';
+import { AtSign, Lock, ArrowRight, User } from 'lucide-react';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from '@/hooks/useAuth';
 import LoadingScreen from '@/components/ui/loading-screen';
@@ -90,13 +90,13 @@ export const LoginForm: React.FC<LoginFormProps> = ({ redirectPath }) => {
   // Usar hook de autenticación
   const { login, loading, error } = useAuth();
 
-  // Cargar email guardado al montar el componente
+  // Cargar credenciales guardadas al montar el componente
   useEffect(() => {
-    const savedEmail = localStorage.getItem('rememberedEmail');
-    if (savedEmail) {
+    const savedIdentifier = localStorage.getItem('rememberedIdentifier');
+    if (savedIdentifier) {
       setFormData(prev => ({
         ...prev,
-        email: savedEmail,
+        email: savedIdentifier,
         rememberMe: true
       }));
     }
@@ -106,7 +106,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ redirectPath }) => {
   const handleRememberMe = (checked: boolean) => {
     setFormData(prev => ({ ...prev, rememberMe: checked }));
     if (!checked) {
-      localStorage.removeItem('rememberedEmail');
+      localStorage.removeItem('rememberedIdentifier');
     }
   };
 
@@ -132,11 +132,11 @@ export const LoginForm: React.FC<LoginFormProps> = ({ redirectPath }) => {
       // Usar el hook de login
       const response = await login(formData.email, formData.password);
 
-      // Si recordar está activado, guardar el email
+      // Si recordar está activado, guardar el identificador
       if (formData.rememberMe) {
-        localStorage.setItem('rememberedEmail', formData.email);
+        localStorage.setItem('rememberedIdentifier', formData.email);
       } else {
-        localStorage.removeItem('rememberedEmail');
+        localStorage.removeItem('rememberedIdentifier');
       }
 
       // Obtener el rol desde response.role o response.user.role
@@ -161,11 +161,11 @@ export const LoginForm: React.FC<LoginFormProps> = ({ redirectPath }) => {
         <form onSubmit={handleSubmit} className="mt-6 space-y-6">
           <div className="space-y-4">
             <InputField
-              type="email"
+              type="text"
               value={formData.email}
               onChange={(e) => setFormData(prev => ({...prev, email: e.target.value}))}
-              placeholder="Correo electrónico"
-              icon={AtSign}
+              placeholder="Email o nombre de usuario"
+              icon={User}
               error={error}
               required
             />
@@ -196,7 +196,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ redirectPath }) => {
                 htmlFor="remember-me"
                 className="ml-2 block text-sm text-[#29696B] cursor-pointer"
               >
-                Recordar mi correo
+                Recordar mi usuario
               </label>
             </div>
           </div>
