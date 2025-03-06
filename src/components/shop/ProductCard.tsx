@@ -99,29 +99,31 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       <Card className={`h-full flex flex-col bg-gradient-to-br ${getGradientClass()} backdrop-blur-sm border ${getBorderClass()} hover:shadow-lg transition-all overflow-hidden`}>
         {/* Imagen del producto */}
         <div className="relative pt-3 px-3">
-          <div className="aspect-square rounded-lg overflow-hidden bg-white/10 flex items-center justify-center">
-            {/* Usar la imagen base64 directamente si está disponible */}
-            {useBase64 && product.imageBase64 ? (
-              <img 
-                src={product.imageBase64}
-                alt={product.nombre}
-                className="object-cover h-full w-full"
-              />
-            ) : (
-              <ProductImage 
-                productId={product._id}
-                alt={product.nombre}
-                width={300}
-                height={300}
-                quality={85}
-                className="object-cover h-full w-full"
-                containerClassName="h-full w-full"
-                fallbackClassName="h-full w-full"
-                placeholderText="Sin imagen"
-                useBase64={useBase64} // Usar Base64 según configuración
-              />
-            )}
-          </div>
+  <div className="aspect-square rounded-lg overflow-hidden bg-white/10 flex items-center justify-center">
+    <div className="w-full h-full flex items-center justify-center">
+      {/* Usar la imagen base64 directamente si está disponible */}
+      {useBase64 && product.imageBase64 ? (
+        <img 
+          src={product.imageBase64}
+          alt={product.nombre}
+          className="max-w-full max-h-full object-contain"
+        />
+      ) : (
+        <ProductImage 
+          productId={product._id}
+          alt={product.nombre}
+          width={300}
+          height={300}
+          quality={85}
+          className="max-w-full max-h-full object-contain"
+          containerClassName="h-full w-full flex items-center justify-center"
+          fallbackClassName="h-full w-full flex items-center justify-center"
+          placeholderText="Sin imagen"
+          useBase64={useBase64} // Usar Base64 según configuración
+        />
+      )}
+    </div>
+  </div>
           
           {/* Botón de favorito */}
           <Button
