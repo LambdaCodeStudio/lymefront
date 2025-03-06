@@ -296,18 +296,18 @@ export const ShopHome: React.FC = () => {
                       value={selectedCategory}
                       onChange={(e) => setSelectedCategory(e.target.value)}
                     >
-                      <option value="all">Todas las categorías</option>
-                      <option value="limpieza">Limpieza</option>
-                      <option value="mantenimiento">Mantenimiento</option>
-                      <option value="aerosoles">Aerosoles</option>
-                      <option value="liquidos">Líquidos</option>
-                      <option value="papeles">Papeles</option>
-                      <option value="accesorios">Accesorios</option>
-                      <option value="indumentaria">Indumentaria</option>
-                      <option value="iluminaria">Iluminaria</option>
-                      <option value="electricidad">Electricidad</option>
-                      <option value="cerraduraCortina">Cerraduras</option>
-                      <option value="pintura">Pintura</option>
+                      <option value="all" className='bg-[#00888A] text-white'>Todas las categorías</option>
+                      <option value="limpieza" className='bg-[#00888A] text-white'>Limpieza</option>
+                      <option value="mantenimiento" className='bg-[#00888A] text-white'>Mantenimiento</option>
+                      <option value="aerosoles" className='bg-[#00888A] text-white'>Aerosoles</option>
+                      <option value="liquidos" className='bg-[#00888A] text-white'>Líquidos</option>
+                      <option value="papeles" className='bg-[#00888A] text-white'>Papeles</option>
+                      <option value="accesorios" className='bg-[#00888A] text-white'>Accesorios</option>
+                      <option value="indumentaria" className='bg-[#00888A] text-white'>Indumentaria</option>
+                      <option value="iluminaria" className='bg-[#00888A] text-white'>Iluminaria</option>
+                      <option value="electricidad" className='bg-[#00888A] text-white'>Electricidad</option>
+                      <option value="cerraduraCortina" className='bg-[#00888A] text-white'>Cerraduras</option>
+                      <option value="pintura" className='bg-[#00888A] text-white'>Pintura</option>
                     </select>
                   </div>
                 </div>
