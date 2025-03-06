@@ -6,7 +6,8 @@ import {
   Calendar,
   Loader2,
   Search,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Hash
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from "@/components/ui/button";
@@ -67,11 +68,13 @@ interface Cliente {
 interface Pedido {
   _id: string;
   fecha: string;
-  numero: string;
+  nPedido?: number; // Campo específico para número de pedido (backend)
+  numero?: string;  // Campo de compatibilidad anterior
   servicio: string;
   seccionDelServicio: string;
   productos: any[];
   total?: number;
+  displayNumber?: string; // Campo para mostrar consistentemente
 }
 
 interface FilterOptions {
@@ -150,9 +153,14 @@ const DownloadsManagement: React.FC = () => {
         const pedidosResponse = await api.getClient().get(`/pedido/cliente/${selectedCliente}`);
         
         if (pedidosResponse.data && Array.isArray(pedidosResponse.data)) {
-          setPedidos(pedidosResponse.data);
-          if (pedidosResponse.data.length === 0) {
-          }
+          // Procesar los pedidos para asegurar que displayNumber esté definido
+          const processedPedidos = pedidosResponse.data.map((pedido: any) => {
+            return {
+              ...pedido,
+              displayNumber: pedido.nPedido?.toString() || pedido.numero || 'S/N'
+            };
+          });
+          setPedidos(processedPedidos);
         } else {
           setPedidos([]);
           setError('Formato de respuesta inválido al cargar pedidos');
@@ -176,7 +184,7 @@ const DownloadsManagement: React.FC = () => {
         
         // Verificar que response.data exista y sea un array
         if (response.data && Array.isArray(response.data)) {
-          // Calcular total para cada pedido
+          // Calcular total para cada pedido y agregar displayNumber
           const pedidosConTotal = response.data.map((pedido: any) => {
             let total = 0;
             if (pedido.productos && Array.isArray(pedido.productos)) {
@@ -186,7 +194,11 @@ const DownloadsManagement: React.FC = () => {
                 return sum + (precio * cantidad);
               }, 0);
             }
-            return { ...pedido, total };
+            
+            // Add display number that prioritizes nPedido
+            const displayNumber = pedido.nPedido?.toString() || pedido.numero || 'S/N';
+            
+            return { ...pedido, total, displayNumber };
           });
           
           setAllPedidos(pedidosConTotal);
@@ -350,7 +362,9 @@ const DownloadsManagement: React.FC = () => {
       
       const pedido = pedidos.find(p => p._id === pedidoId) || 
                     allPedidos.find(p => p._id === pedidoId);
-      const fileName = `remito_${pedido?.numero || pedidoId}.pdf`;
+                    
+      // Usar nPedido prioritariamente para el nombre del archivo
+      const fileName = `remito_${pedido?.nPedido || pedido?.numero || pedidoId}.pdf`;
       link.setAttribute('download', fileName);
       
       document.body.appendChild(link);
@@ -474,22 +488,23 @@ const DownloadsManagement: React.FC = () => {
       )}
 
       <Tabs defaultValue="excel" className="w-full">
-        <TabsList className="grid grid-cols-3 mb-4 bg-[#DFEFE6]/50 p-1">
+        {/* Tabs responsivas: grid-cols-1 en móvil, grid-cols-3 en desktop */}
+        <TabsList className="grid grid-cols-1 sm:grid-cols-3 gap-1 mb-4 bg-[#DFEFE6]/50 p-1">
           <TabsTrigger 
             value="excel" 
-            className="data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
+            className="text-xs sm:text-sm data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
           >
             Reportes Excel
           </TabsTrigger>
           <TabsTrigger 
             value="remitos" 
-            className="data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
+            className="text-xs sm:text-sm data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
           >
             Remitos por Cliente
           </TabsTrigger>
           <TabsTrigger 
             value="tabla" 
-            className="data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
+            className="text-xs sm:text-sm data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
           >
             Tabla de Pedidos
           </TabsTrigger>
@@ -626,7 +641,7 @@ const DownloadsManagement: React.FC = () => {
                       {pedidos.length > 0 ? (
                         pedidos.map((pedido) => (
                           <SelectItem key={pedido._id} value={pedido._id}>
-                            {`Pedido ${pedido.numero || 'S/N'} - ${
+                            {`Pedido ${pedido.nPedido || pedido.numero || 'S/N'} - ${
                               pedido.fecha ? new Date(pedido.fecha).toLocaleDateString() : 'Sin fecha'
                             }`}
                           </SelectItem>
@@ -681,7 +696,7 @@ const DownloadsManagement: React.FC = () => {
                     >
                       <SlidersHorizontal className="w-4 h-4" />
                       Filtros
-                      {(filterOptions.servicio || filterOptions.fechaInicio || filterOptions.fechaFin) && (
+                      {(filterOptions.servicio && filterOptions.servicio !== 'todos' || filterOptions.fechaInicio || filterOptions.fechaFin) && (
                         <Badge className="ml-1 bg-[#29696B] text-white">
                           Activos
                         </Badge>
@@ -750,7 +765,7 @@ const DownloadsManagement: React.FC = () => {
                         variant="outline" 
                         onClick={() => {
                           setTempFilterOptions({
-                            servicio: '',
+                            servicio: 'todos',
                             fechaInicio: '',
                             fechaFin: '',
                           });
@@ -772,11 +787,11 @@ const DownloadsManagement: React.FC = () => {
               </div>
               
               {/* Barra de filtros activos */}
-              {(filterOptions.servicio || filterOptions.fechaInicio || filterOptions.fechaFin) && (
+              {(filterOptions.servicio && filterOptions.servicio !== 'todos' || filterOptions.fechaInicio || filterOptions.fechaFin) && (
                 <div className="flex flex-wrap items-center gap-2 mt-2 p-2 bg-[#DFEFE6]/30 rounded-md border border-[#91BEAD]/20">
                   <span className="text-xs text-[#29696B] font-medium">Filtros activos:</span>
                   
-                  {filterOptions.servicio && (
+                  {filterOptions.servicio && filterOptions.servicio !== 'todos' && (
                     <Badge variant="outline" className="bg-[#DFEFE6]/40 border-[#91BEAD] text-[#29696B]">
                       Servicio: {filterOptions.servicio}
                     </Badge>
@@ -842,7 +857,12 @@ const DownloadsManagement: React.FC = () => {
                           key={pedido._id} 
                           className="hover:bg-[#DFEFE6]/10 transition-colors"
                         >
-                          <TableCell className="text-[#29696B] font-medium">{pedido.numero || 'S/N'}</TableCell>
+                          <TableCell className="text-[#29696B] font-medium">
+                            <div className="flex items-center">
+                              <Hash className="w-4 h-4 text-[#7AA79C] mr-2" />
+                              {pedido.nPedido || pedido.numero || 'S/N'}
+                            </div>
+                          </TableCell>
                           <TableCell className="text-[#7AA79C]">{formatDisplayDate(pedido.fecha)}</TableCell>
                           <TableCell>
                             <Badge variant="outline" className="border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/20">
