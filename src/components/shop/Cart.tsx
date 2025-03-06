@@ -111,7 +111,15 @@ interface User {
   nombre?: string;
   apellido?: string;
   tipo?: string;
-  createdBy?: string;
+  role?: string;
+  createdBy?: string | {
+    _id?: string;
+    id?: string;
+    email?: string;
+    usuario?: string;
+    nombre?: string;
+    apellido?: string;
+  };
   isTemporary?: boolean;
 }
 
@@ -147,11 +155,25 @@ export const Cart: React.FC = () => {
   const [parentUserId, setParentUserId] = useState<string | null>(null);
   const [parentUserName, setParentUserName] = useState<string | null>(null);
   
-  // Obtener clientes del usuario al cargar el componente
+  // Obtener clientes del usuario al cargar el componente - MEJORADO
   useEffect(() => {
-    fetchCurrentUser().then(() => {
-      fetchClientes();
-    });
+    async function initializeCart() {
+      try {
+        // Obtener información del usuario primero
+        const userData = await fetchCurrentUser();
+        
+        if (userData) {
+          // Esperar un breve período para asegurarnos de que los estados se han actualizado
+          setTimeout(() => {
+            fetchClientes();
+          }, 100);
+        }
+      } catch (error) {
+        console.error('Error inicializando carrito:', error);
+      }
+    }
+    
+    initializeCart();
   }, []);
 
   // Contador para redirección automática tras completar pedido
@@ -172,7 +194,7 @@ export const Cart: React.FC = () => {
     }
   }, [orderComplete]);
 
-  // Función para obtener información del usuario actual
+  // Función para obtener información del usuario actual - MEJORADA
   const fetchCurrentUser = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -204,48 +226,101 @@ export const Cart: React.FC = () => {
         
         setParentUserId(createdById);
         
-        // Obtener detalles del usuario básico
+        // Verificar si ya tenemos información del usuario básico en los datos actuales
+        if (typeof userData.createdBy === 'object' && userData.createdBy) {
+          const basicUser = userData.createdBy;
+          
+          // Intentar extraer el nombre del objeto createdBy si contiene la información
+          if (basicUser.nombre || basicUser.apellido || basicUser.email || basicUser.usuario) {
+            const displayName = 
+              basicUser.nombre && basicUser.apellido 
+                ? `${basicUser.nombre} ${basicUser.apellido}`
+                : basicUser.usuario || basicUser.email || 'Usuario Básico';
+            
+            setParentUserName(displayName);
+            console.log('Información de usuario básico obtenida de datos existentes:', displayName);
+            return userData;
+          }
+        }
+        
+        // Si no tenemos la información en los datos actuales, intentar obtenerla a través de los clientes
         try {
-          // Usar el endpoint correcto según la estructura del backend
-          const basicUserResponse = await fetch(`https://lyme-back.vercel.app/api/auth/users/${createdById}`, {
+          console.log('Obteniendo información del usuario básico a través de sus clientes...');
+          
+          // Obtener los clientes del usuario básico para ver si podemos extraer su información
+          const clientesResponse = await fetch(`https://lyme-back.vercel.app/api/cliente/user/${createdById}`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           
-          if (basicUserResponse.ok) {
-            const basicUserData = await basicUserResponse.json();
-            const displayName = 
-              basicUserData.nombre && basicUserData.apellido 
-                ? `${basicUserData.nombre} ${basicUserData.apellido}`
-                : basicUserData.usuario || basicUserData.email || 'Usuario Básico';
+          if (clientesResponse.ok) {
+            const clientesData = await clientesResponse.json();
             
-            setParentUserName(displayName);
-            console.log('Usuario básico asociado:', displayName);
-          } else {
-            console.log('No se pudo obtener información del usuario básico, intentando endpoint alternativo');
+            // Buscar en los clientes si alguno tiene información poblada del userId
+            if (clientesData && clientesData.length > 0) {
+              // Buscar un cliente que tenga información de usuario poblada
+              const clienteConInfo = clientesData.find(cliente => 
+                cliente.userId && typeof cliente.userId === 'object' && 
+                (cliente.userId.nombre || cliente.userId.email || cliente.userId.usuario)
+              );
+              
+              if (clienteConInfo && clienteConInfo.userId) {
+                const basicUser = clienteConInfo.userId;
+                const displayName = 
+                  basicUser.nombre && basicUser.apellido 
+                    ? `${basicUser.nombre} ${basicUser.apellido}`
+                    : basicUser.usuario || basicUser.email || 'Usuario Básico';
+                
+                setParentUserName(displayName);
+                console.log('Información de usuario básico obtenida de clientes:', displayName);
+                return userData;
+              }
+            }
+          }
+          
+          // Si llegamos aquí, intentamos obtener la info del usuario directamente
+          // Intentar con endpoints directos
+          try {
+            const basicUserResponse = await fetch(`https://lyme-back.vercel.app/api/auth/users/${createdById}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
             
-            // Intentar con endpoint alternativo si existe
+            if (basicUserResponse.ok) {
+              const basicUserData = await basicUserResponse.json();
+              const displayName = 
+                basicUserData.nombre && basicUserData.apellido 
+                  ? `${basicUserData.nombre} ${basicUserData.apellido}`
+                  : basicUserData.usuario || basicUserData.email || 'Usuario Básico';
+              
+              setParentUserName(displayName);
+              return userData;
+            }
+            
+            // Intentar endpoint alternativo
             const altResponse = await fetch(`https://lyme-back.vercel.app/api/user/${createdById}`, {
               headers: { 'Authorization': `Bearer ${token}` }
             });
             
             if (altResponse.ok) {
               const altUserData = await altResponse.json();
-              const altDisplayName = 
+              const displayName = 
                 altUserData.nombre && altUserData.apellido 
                   ? `${altUserData.nombre} ${altUserData.apellido}`
                   : altUserData.usuario || altUserData.email || 'Usuario Básico';
               
-              setParentUserName(altDisplayName);
-              console.log('Usuario básico asociado (alt):', altDisplayName);
-            } else {
-              // Si no se puede obtener el nombre, usar un nombre genérico
-              setParentUserName("Usuario básico");
+              setParentUserName(displayName);
+              return userData;
             }
+          } catch (error) {
+            console.log('Error al intentar obtener información directa del usuario básico');
           }
+          
+          // Si llegamos aquí, no pudimos obtener información detallada
+          console.log('No se pudo obtener información detallada del usuario básico');
+          setParentUserName(`Usuario ID: ${createdById.substring(0, 8)}...`);
         } catch (error) {
           console.error('Error al obtener detalles del usuario básico:', error);
-          // Usar un nombre genérico en caso de error
-          setParentUserName("Usuario básico");
+          // Usar ID parcial para identificación
+          setParentUserName(`Usuario ID: ${createdById.substring(0, 8)}...`);
         }
       }
       
@@ -256,7 +331,7 @@ export const Cart: React.FC = () => {
     }
   };
 
-  // Función para obtener los clientes del usuario adecuado (usuario actual o básico)
+  // Función para obtener los clientes del usuario adecuado - MEJORADA
   const fetchClientes = async () => {
     try {
       setCargandoClientes(true);
@@ -270,6 +345,13 @@ export const Cart: React.FC = () => {
       // Determinar qué ID de usuario usar para obtener clientes
       let clientsUserId;
       
+      // Verificación explícita de los valores actuales
+      console.log('Estado al obtener clientes:', {
+        isTemporaryUser,
+        parentUserId,
+        currentUser: currentUser?._id || currentUser?.id
+      });
+      
       if (isTemporaryUser && parentUserId) {
         // Si es usuario temporal, usar el ID del usuario básico
         clientsUserId = parentUserId;
@@ -279,31 +361,123 @@ export const Cart: React.FC = () => {
         clientsUserId = currentUser._id || currentUser.id;
         console.log('Usando ID de usuario actual para obtener clientes:', clientsUserId);
       } else {
-        // Si no hay usuario actual (no debería ocurrir), intentar obtenerlo
+        // Si no hay usuario actual (no debería ocurrir), intentar obtenerlo de nuevo
         const userData = await fetchCurrentUser();
-        clientsUserId = userData?._id || userData?.id;
         
-        if (!clientsUserId) {
-          throw new Error('No se pudo determinar el ID del usuario para obtener clientes');
+        // Si no hay usuario disponible aún, esperamos 500ms e intentamos de nuevo
+        // Esta es una medida de contingencia en caso de que haya problemas de temporización
+        if (!userData || (!userData._id && !userData.id)) {
+          console.log('Usuario no disponible aún, esperando...');
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // Intentar determinar clientsUserId una vez más
+          if (isTemporaryUser && parentUserId) {
+            clientsUserId = parentUserId;
+          } else if (currentUser) {
+            clientsUserId = currentUser._id || currentUser.id;
+          } else {
+            throw new Error('No se pudo determinar el ID del usuario para obtener clientes');
+          }
+        } else {
+          // Usar datos del usuario que acabamos de obtener
+          const isTemp = userData.role === 'temporal' || userData.tipo === 'temporal';
+          
+          if (isTemp && userData.createdBy) {
+            const createdById = typeof userData.createdBy === 'object' 
+              ? userData.createdBy._id || userData.createdBy.id 
+              : userData.createdBy;
+            
+            clientsUserId = createdById;
+          } else {
+            clientsUserId = userData._id || userData.id;
+          }
         }
       }
       
-      // Obtener clientes asociados al usuario
+      if (!clientsUserId) {
+        throw new Error('No se pudo determinar el ID del usuario para obtener clientes');
+      }
+      
+      console.log('ID final usado para buscar clientes:', clientsUserId);
+      
+      // Ahora, hacemos el fetch de los clientes con el ID determinado
       const response = await fetch(`https://lyme-back.vercel.app/api/cliente/user/${clientsUserId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
       
+      // Verificar respuesta HTTP
       if (!response.ok) {
-        throw new Error(`Error al cargar clientes: ${response.status}`);
+        const errorText = await response.text();
+        console.error(`Error HTTP ${response.status}: ${errorText}`);
+        throw new Error(`Error al cargar clientes (${response.status}): ${response.statusText}`);
       }
       
+      // Procesar los datos
       const data = await response.json();
+      console.log(`Se obtuvieron ${data.length} clientes para el usuario ${clientsUserId}`);
+      
+      // Si no hay clientes pero es un usuario temporal, intentar con un endpoint alternativo
+      if (data.length === 0 && isTemporaryUser && parentUserId) {
+        console.log('No se encontraron clientes, intentando endpoint alternativo');
+        
+        // Intentar obtener directamente todos los clientes y filtrar
+        try {
+          const allClientsResponse = await fetch(`https://lyme-back.vercel.app/api/cliente`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          
+          if (allClientsResponse.ok) {
+            const allClients = await allClientsResponse.json();
+            
+            // Filtrar clientes que pertenecen al usuario básico
+            const filteredClients = allClients.filter(cliente => {
+              // Verificar si userId es un objeto o un string
+              if (typeof cliente.userId === 'object' && cliente.userId !== null) {
+                return cliente.userId._id === parentUserId || cliente.userId.id === parentUserId;
+              } else {
+                return cliente.userId === parentUserId;
+              }
+            });
+            
+            console.log(`Después de filtrar todos los clientes, se encontraron ${filteredClients.length} para el usuario básico`);
+            
+            if (filteredClients.length > 0) {
+              setClientes(filteredClients);
+              
+              // Agrupar clientes por servicio
+              const agrupados = filteredClients.reduce((acc, cliente) => {
+                if (!acc[cliente.servicio]) {
+                  acc[cliente.servicio] = [];
+                }
+                acc[cliente.servicio].push(cliente);
+                return acc;
+              }, {});
+              
+              setClientesAgrupados(agrupados);
+              setClienteSeleccionado(filteredClients[0]._id);
+              setOrderForm(prev => ({
+                ...prev,
+                servicio: filteredClients[0].servicio,
+                seccionDelServicio: filteredClients[0].seccionDelServicio
+              }));
+              
+              setCargandoClientes(false);
+              return; // Salir de la función aquí
+            }
+          }
+        } catch (alternativeError) {
+          console.error('Error al intentar endpoint alternativo:', alternativeError);
+        }
+      }
+      
       setClientes(data);
       
-      // Agrupar clientes por servicio para una mejor organización
-      const agrupados = data.reduce((acc: Record<string, Cliente[]>, cliente: Cliente) => {
+      // Agrupar clientes por servicio
+      const agrupados = data.reduce((acc, cliente) => {
         if (!acc[cliente.servicio]) {
           acc[cliente.servicio] = [];
         }
@@ -415,7 +589,7 @@ export const Cart: React.FC = () => {
     }
   };
   
-  // Procesamiento real de pedido
+  // Procesamiento de pedido - MEJORADO
   const processOrder = async () => {
     if (items.length === 0) return;
     if (clientes.length === 0) {
@@ -441,6 +615,12 @@ export const Cart: React.FC = () => {
       let orderUserId;
       let actualUserId = currentUser?._id || currentUser?.id;
       
+      console.log('Estado al procesar pedido:', {
+        isTemporaryUser,
+        parentUserId,
+        currentUserId: actualUserId
+      });
+      
       // IMPORTANTE: Si es usuario temporal, usar el ID del usuario básico
       if (isTemporaryUser && parentUserId) {
         orderUserId = parentUserId;
@@ -452,12 +632,27 @@ export const Cart: React.FC = () => {
         // Si no hay usuario actual, obtenerlo
         const userData = await fetchCurrentUser();
         actualUserId = userData?._id || userData?.id;
-        orderUserId = isTemporaryUser && parentUserId ? parentUserId : actualUserId;
+        
+        // Intentar determinar si es usuario temporal después de obtener datos
+        const isTemp = userData?.role === 'temporal' || userData?.tipo === 'temporal';
+        
+        if (isTemp && userData?.createdBy) {
+          // Extraer ID del usuario básico
+          const createdById = typeof userData.createdBy === 'object' 
+            ? userData.createdBy._id || userData.createdBy.id 
+            : userData.createdBy;
+            
+          orderUserId = createdById;
+        } else {
+          orderUserId = actualUserId;
+        }
         
         if (!orderUserId) {
           throw new Error('No se pudo determinar el ID del usuario para el pedido');
         }
       }
+      
+      console.log('ID final usado para asociar pedido:', orderUserId);
       
       // Formato de los productos para la API
       const productsData = items.map(item => ({
@@ -470,11 +665,15 @@ export const Cart: React.FC = () => {
       // Encontrar el cliente seleccionado
       const clienteObj = clientes.find(c => c._id === clienteSeleccionado);
       
+      if (!clienteObj) {
+        throw new Error('Cliente seleccionado no encontrado en la lista de clientes');
+      }
+      
       // Crear objeto de pedido
       const orderData = {
         userId: orderUserId, // Este es el ID del usuario básico si es temporal
-        servicio: clienteObj ? clienteObj.servicio : orderForm.servicio || "Sin especificar",
-        seccionDelServicio: clienteObj ? clienteObj.seccionDelServicio : orderForm.seccionDelServicio || "Sin especificar",
+        servicio: clienteObj.servicio || orderForm.servicio || "Sin especificar",
+        seccionDelServicio: clienteObj.seccionDelServicio || orderForm.seccionDelServicio || "Sin especificar",
         detalle: orderForm.notes || "Pedido creado desde la tienda web",
         productos: productsData,
         // Información más detallada si el pedido lo hizo un usuario temporal
@@ -504,10 +703,17 @@ export const Cart: React.FC = () => {
         const errorData = await response.json();
         throw new Error(errorData.mensaje || `Error al crear el pedido (status: ${response.status})`);
       }
-  
+
       // Obtener datos del pedido creado para guardar el ID
       const pedidoCreado = await response.json();
       setCreatedOrderId(pedidoCreado._id);
+      
+      // Log para confirmar que el pedido se creó correctamente
+      console.log('Pedido creado exitosamente:', {
+        id: pedidoCreado._id,
+        asignadoA: orderUserId,
+        esUsuarioTemporal: isTemporaryUser
+      });
       
       // Pedido creado correctamente
       setOrderComplete(true);
