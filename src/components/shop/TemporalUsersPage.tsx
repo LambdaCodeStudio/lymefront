@@ -138,7 +138,7 @@ export const TemporalUsersPage = () => {
       }
       
       // Primero obtenemos todos los usuarios
-      const response = await fetch('http://localhost:4000/api/auth/users', {
+      const response = await fetch('https://lyme-back.vercel.app/api/auth/users', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -157,7 +157,7 @@ export const TemporalUsersPage = () => {
       const allUsers = await response.json();
       
       // Obtener información del usuario actual
-      const userResponse = await fetch('http://localhost:4000/api/auth/me', {
+      const userResponse = await fetch('https://lyme-back.vercel.app/api/auth/me', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -201,7 +201,7 @@ export const TemporalUsersPage = () => {
         throw new Error('No hay token de autenticación');
       }
       
-      const response = await fetch(`http://localhost:4000/api/pedido/user/${userId}`, {
+      const response = await fetch(`https://lyme-back.vercel.app/api/pedido/user/${userId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -238,7 +238,7 @@ export const TemporalUsersPage = () => {
       console.log(`Intentando ${action} usuario con ID: ${userId}`);
       
       // Depuración: mostrar URL completa y detalles
-      const url = `http://localhost:4000/api/auth/users/${userId}/${action}`;
+      const url = `https://lyme-back.vercel.app/api/auth/users/${userId}/${action}`;
       console.log('URL:', url);
       console.log('Método:', 'PUT');
       console.log('Headers:', { 'Authorization': 'Bearer [token]' });
@@ -313,7 +313,7 @@ export const TemporalUsersPage = () => {
         throw new Error('No hay token de autenticación');
       }
       
-      const response = await fetch(`http://localhost:4000/api/auth/users/${deletingUserId}`, {
+      const response = await fetch(`https://lyme-back.vercel.app/api/auth/users/${deletingUserId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -380,7 +380,7 @@ export const TemporalUsersPage = () => {
         delete updateData.password;
       }
       
-      const response = await fetch(`http://localhost:4000/api/auth/users/${editingUser._id}`, {
+      const response = await fetch(`https://lyme-back.vercel.app/api/auth/users/${editingUser._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

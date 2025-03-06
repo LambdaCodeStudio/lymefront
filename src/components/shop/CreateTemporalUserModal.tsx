@@ -95,7 +95,7 @@ export const CreateTemporalUserModal = ({ isOpen, onClose }) => {
       });
       
       // Enviar solicitud para crear usuario temporal
-      const response = await fetch('http://localhost:4000/api/auth/temporary', {
+      const response = await fetch('https://lyme-back.vercel.app/api/auth/temporary', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

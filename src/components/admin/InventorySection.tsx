@@ -227,7 +227,7 @@ const InventorySection: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('http://localhost:4000/api/producto', {
+      const response = await fetch('https://lyme-back.vercel.app/api/producto', {
         headers: {
           'Authorization': `Bearer ${token}`
         },
@@ -413,8 +413,8 @@ const InventorySection: React.FC = () => {
       }
 
       const url = editingProduct
-        ? `http://localhost:4000/api/producto/${editingProduct._id}`
-        : 'http://localhost:4000/api/producto';
+        ? `https://lyme-back.vercel.app/api/producto/${editingProduct._id}`
+        : 'https://lyme-back.vercel.app/api/producto';
       
       const method = editingProduct ? 'PUT' : 'POST';
       
@@ -506,7 +506,7 @@ const InventorySection: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
       
-      const response = await fetch(`http://localhost:4000/api/producto/${id}`, {
+      const response = await fetch(`https://lyme-back.vercel.app/api/producto/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`

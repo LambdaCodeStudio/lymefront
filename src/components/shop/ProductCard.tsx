@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { 
-  Heart, 
+import {
+  Heart,
   ShoppingCart,
   AlertTriangle,
   Plus,
@@ -43,7 +43,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 }) => {
   const [quantity, setQuantity] = useState<number>(1);
   const [showQuantitySelector, setShowQuantitySelector] = useState<boolean>(false);
-  
+
   // Función para truncar texto largo
   const truncateText = (text: string, maxLength: number) => {
     if (text.length <= maxLength) return text;
@@ -80,7 +80,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     const limitedQuantity = Math.min(Math.max(1, newQuantity), product.stock);
     setQuantity(limitedQuantity);
   };
-  
+
   // Manejar añadir al carrito
   const handleAddToCart = () => {
     onAddToCart(quantity);
@@ -99,32 +99,32 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       <Card className={`h-full flex flex-col bg-gradient-to-br ${getGradientClass()} backdrop-blur-sm border ${getBorderClass()} hover:shadow-lg transition-all overflow-hidden`}>
         {/* Imagen del producto */}
         <div className="relative pt-3 px-3">
-  <div className="aspect-square rounded-lg overflow-hidden bg-white/10 flex items-center justify-center">
-    <div className="w-full h-full flex items-center justify-center">
-      {/* Usar la imagen base64 directamente si está disponible */}
-      {useBase64 && product.imageBase64 ? (
-        <img 
-          src={product.imageBase64}
-          alt={product.nombre}
-          className="max-w-full max-h-full object-contain"
-        />
-      ) : (
-        <ProductImage 
-          productId={product._id}
-          alt={product.nombre}
-          width={300}
-          height={300}
-          quality={85}
-          className="max-w-full max-h-full object-contain"
-          containerClassName="h-full w-full flex items-center justify-center"
-          fallbackClassName="h-full w-full flex items-center justify-center"
-          placeholderText="Sin imagen"
-          useBase64={useBase64} // Usar Base64 según configuración
-        />
-      )}
-    </div>
-  </div>
-          
+          <div className="aspect-square rounded-lg overflow-hidden bg-white/10 flex items-center justify-center">
+            <div className="w-full h-full flex items-center justify-center">
+              {/* Usar la imagen base64 directamente si está disponible */}
+              {useBase64 && product.imageBase64 ? (
+                <img
+                  src={product.imageBase64}
+                  alt={product.nombre}
+                  className="max-w-full max-h-full object-contain"
+                />
+              ) : (
+                <ProductImage
+                  productId={product._id}
+                  alt={product.nombre}
+                  width={300}
+                  height={300}
+                  quality={85}
+                  className="max-w-full max-h-full object-contain"
+                  containerClassName="h-full w-full flex items-center justify-center"
+                  fallbackClassName="h-full w-full flex items-center justify-center"
+                  placeholderText="Sin imagen"
+                  useBase64={useBase64} // Usar Base64 según configuración
+                />
+              )}
+            </div>
+          </div>
+
           {/* Botón de favorito */}
           <Button
             variant="ghost"
@@ -135,7 +135,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           >
             <Heart className={isFavorite ? 'fill-current' : ''} size={16} />
           </Button>
-          
+
           {/* Indicador de stock bajo */}
           {product.stock <= 5 && (
             <Badge className="absolute top-4 left-4 bg-amber-50 text-amber-700 border-amber-200">
@@ -144,23 +144,23 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             </Badge>
           )}
         </div>
-        
+
         <CardContent className="flex-grow pt-4">
           <Badge variant="outline" className="mb-2 text-xs border-[#75D0E0] text-[#D4F5E6] bg-[#75D0E0]/20">
             {product.subCategoria}
           </Badge>
-          
+
           <h3 className="font-medium text-lg mb-1 line-clamp-1 text-white">{product.nombre}</h3>
-          
+
           {product.descripcion && (
             <p className="text-sm text-[#D4F5E6]/80 line-clamp-2 mb-3">
               {product.descripcion}
             </p>
           )}
-          
+
           <div className="text-xl font-bold text-white">${product.precio.toFixed(2)}</div>
         </CardContent>
-        
+
         <CardFooter className="pt-2 pb-4">
           {showQuantitySelector ? (
             <div className="w-full">

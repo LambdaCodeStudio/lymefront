@@ -3,7 +3,7 @@ import axios, { type AxiosInstance, AxiosError, type AxiosRequestConfig, type Ax
 
 // Configuración del API base
 const API_CONFIG = {
-  baseURL: import.meta.env.PUBLIC_API_URL || 'http://localhost:4000/api',
+  baseURL: import.meta.env.PUBLIC_API_URL || 'https://lyme-back.vercel.app/api',
   headers: {
     'Content-Type': 'application/json',
   },

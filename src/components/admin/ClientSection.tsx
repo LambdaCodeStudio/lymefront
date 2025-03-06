@@ -303,7 +303,7 @@ const ClientsSection: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('http://localhost:4000/api/cliente', {
+      const response = await fetch('https://lyme-back.vercel.app/api/cliente', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -345,7 +345,7 @@ const ClientsSection: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('http://localhost:4000/api/cliente/sin-asignar', {
+      const response = await fetch('https://lyme-back.vercel.app/api/cliente/sin-asignar', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -398,7 +398,7 @@ const ClientsSection: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('http://localhost:4000/api/auth/users', {
+      const response = await fetch('https://lyme-back.vercel.app/api/auth/users', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -445,7 +445,7 @@ const ClientsSection: React.FC = () => {
 
       console.log("Creando cliente con datos:", formData);
 
-      const response = await fetch('http://localhost:4000/api/cliente', {
+      const response = await fetch('https://lyme-back.vercel.app/api/cliente', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -507,7 +507,7 @@ const ClientsSection: React.FC = () => {
 
       console.log("Actualizando cliente:", currentClient._id, "con datos:", updateData);
 
-      const response = await fetch(`http://localhost:4000/api/cliente/${currentClient._id}`, {
+      const response = await fetch(`https://lyme-back.vercel.app/api/cliente/${currentClient._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -555,7 +555,7 @@ const ClientsSection: React.FC = () => {
       }
 
       console.log(`Eliminando cliente con ID: ${id}`);
-      const response = await fetch(`http://localhost:4000/api/cliente/${id}`, {
+      const response = await fetch(`https://lyme-back.vercel.app/api/cliente/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -674,7 +674,7 @@ const ClientsSection: React.FC = () => {
 
       // Actualizamos cada cliente que pertenece a este servicio
       const updatePromises = clientesDelServicio.map(client => {
-        return fetch(`http://localhost:4000/api/cliente/${client._id}`, {
+        return fetch(`https://lyme-back.vercel.app/api/cliente/${client._id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -751,7 +751,7 @@ const ClientsSection: React.FC = () => {
       for (const client of clientesDelServicio) {
         console.log(`Eliminando sección: ${client._id} - ${client.seccionDelServicio || 'Sin sección'}`);
         try {
-          const response = await fetch(`http://localhost:4000/api/cliente/${client._id}`, {
+          const response = await fetch(`https://lyme-back.vercel.app/api/cliente/${client._id}`, {
             method: 'DELETE',
             headers: {
               'Authorization': `Bearer ${token}`

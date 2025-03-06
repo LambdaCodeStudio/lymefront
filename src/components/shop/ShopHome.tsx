@@ -150,7 +150,7 @@ export const ShopHome: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('http://localhost:4000/api/producto', {
+      const response = await fetch('https://lyme-back.vercel.app/api/producto', {
         headers: {
           'Authorization': `Bearer ${token}`
         }

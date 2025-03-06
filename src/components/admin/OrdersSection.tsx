@@ -478,7 +478,7 @@ const OrdersSection = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('http://localhost:4000/api/auth/me', {
+      const response = await fetch('https://lyme-back.vercel.app/api/auth/me', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -527,7 +527,7 @@ const OrdersSection = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('http://localhost:4000/api/pedido', {
+      const response = await fetch('https://lyme-back.vercel.app/api/pedido', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -594,7 +594,7 @@ const OrdersSection = () => {
       const token = getAuthToken();
       if (!token) return null;
 
-      const response = await fetch(`http://localhost:4000/api/producto/${id}`, {
+      const response = await fetch(`https://lyme-back.vercel.app/api/producto/${id}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -787,7 +787,7 @@ const fetchOrdersByDate = async () => {
     
     // Construimos la URL con las fechas originales del formulario
     // Los inputs type="date" ya dan el formato YYYY-MM-DD que necesitamos
-    const url = `http://localhost:4000/api/pedido/fecha?fechaInicio=${encodeURIComponent(fechaInicio)}&fechaFin=${encodeURIComponent(fechaFin)}`;
+    const url = `https://lyme-back.vercel.app/api/pedido/fecha?fechaInicio=${encodeURIComponent(fechaInicio)}&fechaFin=${encodeURIComponent(fechaFin)}`;
     console.log("URL de solicitud:", url);
     
     // Opciones de la solicitud con el token de autenticación
@@ -870,7 +870,7 @@ const fetchOrdersByDate = async () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('http://localhost:4000/api/producto', {
+      const response = await fetch('https://lyme-back.vercel.app/api/producto', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -915,7 +915,7 @@ const fetchOrdersByDate = async () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('http://localhost:4000/api/auth/users', {
+      const response = await fetch('https://lyme-back.vercel.app/api/auth/users', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -946,7 +946,7 @@ const fetchOrdersByDate = async () => {
       }
 
       console.log(`Cargando clientes para usuario ID: ${userId}`);
-      const response = await fetch(`http://localhost:4000/api/cliente/user/${userId}`, {
+      const response = await fetch(`https://lyme-back.vercel.app/api/cliente/user/${userId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -1032,7 +1032,7 @@ const fetchOrdersByDate = async () => {
 
       console.log("Enviando pedido:", JSON.stringify(pedidoData));
 
-      const response = await fetch('http://localhost:4000/api/pedido', {
+      const response = await fetch('https://lyme-back.vercel.app/api/pedido', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1107,7 +1107,7 @@ const fetchOrdersByDate = async () => {
 
       console.log("Actualizando pedido:", currentOrder._id, "con datos:", updateData);
 
-      const response = await fetch(`http://localhost:4000/api/pedido/${currentOrder._id}`, {
+      const response = await fetch(`https://lyme-back.vercel.app/api/pedido/${currentOrder._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -1165,7 +1165,7 @@ const fetchOrdersByDate = async () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch(`http://localhost:4000/api/pedido/${id}`, {
+      const response = await fetch(`https://lyme-back.vercel.app/api/pedido/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`

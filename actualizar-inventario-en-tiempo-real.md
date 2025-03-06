@@ -41,7 +41,7 @@ export const refreshInventory = async () => {
       throw new Error('No hay token de autenticación');
     }
     
-    await fetch('http://localhost:4000/api/producto', {
+    await fetch('https://lyme-back.vercel.app/api/producto', {
       headers: {
         'Authorization': `Bearer ${token}`
       }

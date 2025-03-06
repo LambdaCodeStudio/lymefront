@@ -26,7 +26,7 @@ const CACHE_EXPIRATION = 5 * 60 * 1000;
 class ImageService {
   private baseUrl: string;
 
-  constructor(baseUrl: string = 'http://localhost:4000/api') {
+  constructor(baseUrl: string = 'https://lyme-back.vercel.app/api') {
     this.baseUrl = baseUrl;
   }
 

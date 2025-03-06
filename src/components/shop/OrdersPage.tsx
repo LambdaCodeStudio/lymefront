@@ -175,7 +175,7 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No se encontró token de autenticación');
       }
 
-      const response = await fetch('http://localhost:4000/api/auth/me', {
+      const response = await fetch('https://lyme-back.vercel.app/api/auth/me', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -207,7 +207,7 @@ export const OrdersPage: React.FC = () => {
       if (!currentUserId) {
         console.warn('ID de usuario no encontrado en localStorage, intentando obtenerlo desde la API');
         // Si no está en localStorage, intentamos obtenerlo desde la API
-        const userResponse = await fetch('http://localhost:4000/api/auth/me', {
+        const userResponse = await fetch('https://lyme-back.vercel.app/api/auth/me', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
@@ -225,7 +225,7 @@ export const OrdersPage: React.FC = () => {
       }
 
       // Primero obtenemos todos los pedidos (luego los filtraremos por los clientes del usuario)
-      const response = await fetch('http://localhost:4000/api/pedido', {
+      const response = await fetch('https://lyme-back.vercel.app/api/pedido', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -242,7 +242,7 @@ export const OrdersPage: React.FC = () => {
       const data = await response.json();
       
       // Ahora obtenemos los clientes del usuario para filtrar los pedidos
-      const clientsResponse = await fetch(`http://localhost:4000/api/cliente/user/${currentUserId}`, {
+      const clientsResponse = await fetch(`https://lyme-back.vercel.app/api/cliente/user/${currentUserId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -331,7 +331,7 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No se encontró token de autenticación');
       }
 
-      const response = await fetch(`http://localhost:4000/api/cliente/user/${userId}`, {
+      const response = await fetch(`https://lyme-back.vercel.app/api/cliente/user/${userId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -375,7 +375,7 @@ export const OrdersPage: React.FC = () => {
         throw new Error('ID de usuario no encontrado en localStorage');
       }
 
-      const url = `http://localhost:4000/api/pedido/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
+      const url = `https://lyme-back.vercel.app/api/pedido/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
       
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -390,7 +390,7 @@ export const OrdersPage: React.FC = () => {
       // Necesitamos filtrar los resultados para incluir solo pedidos de los clientes del usuario
       if (clients.length === 0) {
         // Si los clientes no están cargados aún, los obtenemos
-        const clientsResponse = await fetch(`http://localhost:4000/api/cliente/user/${currentUserId}`, {
+        const clientsResponse = await fetch(`https://lyme-back.vercel.app/api/cliente/user/${currentUserId}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
@@ -516,7 +516,7 @@ export const OrdersPage: React.FC = () => {
       
       console.log(`Iniciando descarga de remito para pedido: ${orderId}`);
       
-      const response = await fetch(`http://localhost:4000/api/downloads/remito/${orderId}`, {
+      const response = await fetch(`https://lyme-back.vercel.app/api/downloads/remito/${orderId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },

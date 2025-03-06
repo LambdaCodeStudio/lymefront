@@ -111,7 +111,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
       throw new Error('No hay token de autenticación');
     }
 
-    const response = await fetch(`http://localhost:4000/api/producto/${productId}/imagen-base64`, {
+    const response = await fetch(`https://lyme-back.vercel.app/api/producto/${productId}/imagen-base64`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
