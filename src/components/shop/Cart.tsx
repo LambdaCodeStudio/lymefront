@@ -318,8 +318,6 @@ export const Cart: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
       
-      console.log(`Iniciando descarga de remito para pedido: ${createdOrderId}`);
-      
       // Realizar la solicitud con un timeout adecuado
       const response = await fetch(`https://lyme-back.vercel.app/api/downloads/remito/${createdOrderId}`, {
         headers: {
