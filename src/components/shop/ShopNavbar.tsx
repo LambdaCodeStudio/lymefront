@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, User, Menu, X, LogOut, Search, Settings, ClipboardList } from 'lucide-react';
+import { ShoppingCart, User, Menu, X, LogOut, Search, Settings, ClipboardList, Users, Clock } from 'lucide-react';
 import { useAuthContext } from '@/components/auth/AuthProvider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCartContext } from '@/providers/CartProvider';
+import { CreateTemporalUserModal } from './CreateTemporalUserModal'; // Importamos el nuevo componente modal
 
 export const ShopNavbar: React.FC = () => {
   // Removed useAuthContext to fix error
@@ -19,6 +20,9 @@ export const ShopNavbar: React.FC = () => {
   const [cartItemCount, setCartItemCount] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
+  
+  // Estado para controlar la visibilidad del modal de creación de usuarios temporales
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   // Get user role from localStorage
   useEffect(() => {
@@ -27,6 +31,7 @@ export const ShopNavbar: React.FC = () => {
   }, []);
 
   const isAdmin = userRole === 'admin' || userRole === 'supervisor';
+  const isBasic = userRole === 'basic'; // Nuevo estado para verificar si es usuario básico
 
   useEffect(() => {
     const handleScroll = () => {
@@ -62,7 +67,7 @@ export const ShopNavbar: React.FC = () => {
             </div>
 
             {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center space-x-8">
+            <nav className="hidden md:flex items-center space-x-6">
               <a 
                 href="/shop" 
                 className="text-white hover:text-[#D4F5E6] transition-colors text-sm font-medium uppercase tracking-wide"
@@ -93,6 +98,16 @@ export const ShopNavbar: React.FC = () => {
               >
                 Mis Pedidos
               </a>
+              
+              {/* Nuevo enlace para administrar usuarios temporales - visible sólo para usuarios básicos */}
+              {isBasic && (
+                <a 
+                  href="/temporal-users" 
+                  className="text-white hover:text-[#D4F5E6] transition-colors text-sm font-medium uppercase tracking-wide"
+                >
+                  Usuarios Temp
+                </a>
+              )}
             </nav>
 
             {/* Action Buttons */}
@@ -125,6 +140,18 @@ export const ShopNavbar: React.FC = () => {
                   </span>
                 )}
               </a>
+
+              {/* Nuevo botón para usuarios básicos */}
+              {isBasic && (
+                <button 
+                  onClick={() => setIsCreateModalOpen(true)}
+                  className="hidden md:flex items-center text-sm font-medium text-white rounded transition-colors"
+                  aria-label="Crear Usuario Temporal"
+                >
+                  <Users className="w-5 h-5" />
+                  <Clock className="w-3 h-3" />
+                </button>
+              )}
 
               <div className="hidden md:flex space-x-2">
                 {isAdmin && (
@@ -238,6 +265,32 @@ export const ShopNavbar: React.FC = () => {
                 Mis Pedidos
               </a>
               
+              {/* Nuevo enlace móvil para usuarios temporales */}
+              {isBasic && (
+                <a 
+                  href="/temporal-users" 
+                  className="text-white hover:text-[#D4F5E6] transition-colors py-2 border-b border-[#50C3AD]/30 text-lg flex items-center"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  <Users className="w-5 h-5 mr-2" />
+                  Usuarios Temporales
+                </a>
+              )}
+              
+              {/* Botón móvil para crear usuario temporal */}
+              {isBasic && (
+                <button 
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    setIsCreateModalOpen(true);
+                  }}
+                  className="text-white hover:text-[#D4F5E6] transition-colors py-2 border-b border-[#50C3AD]/30 text-lg flex items-center"
+                >
+                  <Clock className="w-5 h-5 mr-2" />
+                  Crear Usuario Temporal
+                </button>
+              )}
+              
               <div className="pt-4 flex flex-col space-y-3">
                 {isAdmin && (
                   <a 
@@ -265,6 +318,12 @@ export const ShopNavbar: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Modal para crear usuario temporal */}
+      <CreateTemporalUserModal 
+        isOpen={isCreateModalOpen} 
+        onClose={() => setIsCreateModalOpen(false)} 
+      />
 
       {/* Espacio para que el contenido no quede debajo del navbar */}
       <div className="h-16 md:h-20"></div>

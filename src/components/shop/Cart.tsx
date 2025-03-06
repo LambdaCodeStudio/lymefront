@@ -210,6 +210,8 @@ export const Cart: React.FC = () => {
           servicio: data[0].servicio,
           seccionDelServicio: data[0].seccionDelServicio
         }));
+      } else {
+        setErrorClientes('No tienes clientes asignados. Por favor, contacta con administración para que te asignen clientes antes de realizar pedidos.');
       }
       
     } catch (error) {
@@ -307,10 +309,14 @@ export const Cart: React.FC = () => {
   // Procesamiento real de pedido
   const processOrder = async () => {
     if (items.length === 0) return;
+    if (clientes.length === 0) {
+      setOrderError('No tienes clientes asignados. No puedes realizar pedidos hasta que administración te asigne clientes.');
+      return;
+    }
     if (!clienteSeleccionado && clientes.length > 0) {
       setOrderError('Por favor, seleccione un cliente para el pedido');
       return;
-    }
+    }  
     
     setProcessingOrder(true);
     setOrderError(null);
@@ -586,36 +592,21 @@ export const Cart: React.FC = () => {
                           </Alert>
                         ) : clientes.length === 0 ? (
                           <div>
-                            <Alert className="bg-yellow-100 border-2 border-yellow-400 mb-4">
-                              <AlertCircle className="h-4 w-4 text-yellow-700" />
-                              <AlertDescription className="ml-2 text-yellow-800 font-medium">
-                                No tienes clientes asignados. Por favor, contacta con administración.
+                            <Alert className="bg-yellow-600/30 border-2 border-yellow-500/80 mb-4">
+                              <AlertCircle className="h-4 w-4 text-yellow-300" />
+                              <AlertDescription className="ml-2 text-yellow-100 font-medium">
+                                No tienes clientes asignados. Por favor, contacta con administración para que te asignen clientes antes de realizar pedidos.
                               </AlertDescription>
                             </Alert>
                             
-                            <div className="space-y-3">
-                              <div>
-                                <Label htmlFor="customServicio" className="text-white font-medium">Servicio</Label>
-                                <Input
-                                  id="customServicio"
-                                  placeholder="Introduce el nombre del servicio"
-                                  className="bg-white border-2 border-[#50C3AD] mt-1 text-black font-medium"
-                                  value={orderForm.servicio}
-                                  onChange={(e) => setOrderForm({...orderForm, servicio: e.target.value})}
-                                  required
-                                />
-                              </div>
-                              
-                              <div>
-                                <Label htmlFor="customSeccion" className="text-white font-medium">Sección del Servicio (opcional)</Label>
-                                <Input
-                                  id="customSeccion"
-                                  placeholder="Introduce la sección si aplica"
-                                  className="bg-white border-2 border-[#50C3AD] mt-1 text-black font-medium"
-                                  value={orderForm.seccionDelServicio}
-                                  onChange={(e) => setOrderForm({...orderForm, seccionDelServicio: e.target.value})}
-                                />
-                              </div>
+                            <div className="flex justify-center mt-6">
+                              <Button 
+                                onClick={() => window.location.href = '/shop'}
+                                className="bg-[#00888A] hover:bg-[#50C3AD] text-white"
+                              >
+                                <ArrowLeft className="mr-2 h-4 w-4" />
+                                Volver a la tienda
+                              </Button>
                             </div>
                           </div>
                         ) : (

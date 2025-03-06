@@ -1,0 +1,19 @@
+---
+import ShopLayout from '../layouts/ShopLayout.astro';
+import { TemporalUsersWrapper } from '../components/shop/TemporalWrapper';
+
+---
+
+<ShopLayout title="Usuarios Temporales | Lyme S.A.">
+  <TemporalUsersWrapper client:load />
+</ShopLayout>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const userRole = localStorage.getItem('userRole');
+    // Solo permitir acceso a usuarios 'basic'
+    if (userRole !== 'basic') {
+      window.location.href = '/shop';
+    }
+  });
+</script>

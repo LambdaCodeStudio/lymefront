@@ -1,3 +1,8 @@
+// CAMBIOS PRINCIPALES:
+// 1. Agregado campo nPedido a la interfaz Order
+// 2. Modificado la visualización para mostrar el número de pedido en desktop y móvil
+// 3. Corregido la visualización del correo de usuario en lugar del ID al editar
+
 import React, { useState, useEffect } from 'react';
 import { useNotification } from '@/context/NotificationContext';
 import {
@@ -19,7 +24,8 @@ import {
   ChevronUp,
   Calendar,
   User,
-  DollarSign
+  DollarSign,
+  Hash
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
@@ -90,6 +96,7 @@ interface OrderProduct {
 
 interface Order {
   _id: string;
+  nPedido: number; // Agregado el campo nPedido
   servicio: string;
   seccionDelServicio: string;
   userId: string | User;
@@ -1755,6 +1762,10 @@ const fetchOrdersByDate = async () => {
               <table className="w-full">
                 <thead className="bg-[#DFEFE6]/30">
                   <tr>
+                    {/* Nueva columna para número de pedido */}
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
+                      Nº Pedido
+                    </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
                       Fecha
                     </th>
@@ -1779,6 +1790,15 @@ const fetchOrdersByDate = async () => {
                   {filteredOrders.map((order) => (
                     <React.Fragment key={order._id}>
                       <tr className="hover:bg-[#DFEFE6]/10 transition-colors">
+                        {/* Celda para el número de pedido */}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <Hash className="w-4 h-4 text-[#7AA79C] mr-2" />
+                            <div className="text-sm font-medium text-[#29696B]">
+                              {order.nPedido}
+                            </div>
+                          </div>
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-[#29696B]">
                             {new Date(order.fecha).toLocaleDateString()}
@@ -1852,7 +1872,7 @@ const fetchOrdersByDate = async () => {
                       {/* Detalles del pedido (expandible) */}
                       {orderDetailsOpen === order._id && (
                         <tr>
-                          <td colSpan={6} className="px-6 py-4 bg-[#DFEFE6]/20">
+                          <td colSpan={7} className="px-6 py-4 bg-[#DFEFE6]/20">
                             <div className="space-y-3">
                               <div className="font-medium text-[#29696B]">Detalles del Pedido</div>
                               <div className="overflow-x-auto">
@@ -1921,9 +1941,18 @@ const fetchOrdersByDate = async () => {
                         </div>
                       )}
                     </div>
-                    <Badge variant="outline" className="text-xs border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/20">
-                      {new Date(order.fecha).toLocaleDateString()}
-                    </Badge>
+                    <div className="flex flex-col items-end gap-1">
+                      {/* Badge para el número de pedido */}
+                      <Badge variant="outline" className="text-xs border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/20">
+                        <Hash className="w-3 h-3 mr-1" />
+                        {order.nPedido}
+                      </Badge>
+                      {/* Badge para la fecha */}
+                      <Badge variant="outline" className="text-xs border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/20">
+                        <Calendar className="w-3 h-3 mr-1" />
+                        {new Date(order.fecha).toLocaleDateString()}
+                      </Badge>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="py-2">
@@ -2012,7 +2041,7 @@ const fetchOrdersByDate = async () => {
         <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto bg-white border border-[#91BEAD]/20">
           <DialogHeader>
             <DialogTitle className="text-[#29696B]">
-              {currentOrder ? 'Editar Pedido' : 'Nuevo Pedido'}
+              {currentOrder ? `Editar Pedido #${currentOrder.nPedido}` : 'Nuevo Pedido'}
             </DialogTitle>
           </DialogHeader>
 
@@ -2068,12 +2097,12 @@ const fetchOrdersByDate = async () => {
               )}
             </div>
 
-            {/* Estado del formulario para debug */}
+            {/* Estado del formulario para debug - Actualizado para mostrar email en lugar de ID */}
             {orderForm.servicio && (
               <div className="p-3 bg-[#DFEFE6]/20 rounded-md text-xs text-[#7AA79C] border border-[#91BEAD]/30">
                 <div><strong className="text-[#29696B]">Cliente:</strong> {orderForm.servicio}</div>
                 <div><strong className="text-[#29696B]">Sección:</strong> {orderForm.seccionDelServicio || "No especificada"}</div>
-                <div><strong className="text-[#29696B]">Usuario:</strong> {orderForm.userId || "No asignado"}</div>
+                <div><strong className="text-[#29696B]">Usuario:</strong> {getUserEmail(orderForm.userId) || "No asignado"}</div>
               </div>
             )}
 
