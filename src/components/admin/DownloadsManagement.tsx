@@ -313,26 +313,37 @@ const DownloadsManagement: React.FC = () => {
   
       console.log(`Iniciando descarga de remito para pedido: ${pedidoId}`);
       
-      // Add a longer timeout to give the server time to generate the PDF
+      // Aumentar el timeout para dar tiempo al servidor
       const response = await api.getClient().get(`/downloads/remito/${pedidoId}`, {
         responseType: 'blob',
-        timeout: 30000 // 30 seconds timeout
+        timeout: 60000 // Incrementar a 60 segundos
       });
       
-      // Check if response is valid
+      // Verificar que la respuesta sea válida
       if (!response.data || response.data.size === 0) {
         throw new Error('La respuesta del servidor está vacía');
       }
   
-      // Check MIME type
+      // Revisar el tipo de contenido
       const contentType = response.headers['content-type'];
-      if (!contentType || !contentType.includes('application/pdf')) {
-        console.warn(`Tipo de contenido inesperado: ${contentType}`);
+      if (contentType && contentType.includes('application/json')) {
+        // Si el servidor envió un JSON en lugar de un PDF, probablemente sea un mensaje de error
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const errorObj = JSON.parse(reader.result as string);
+            setError(errorObj.mensaje || 'Error al generar el PDF');
+          } catch (parseErr) {
+            setError('Error al procesar la respuesta del servidor');
+          }
+        };
+        reader.readAsText(response.data);
+        return;
       }
-  
+      
+      // Todo bien, crear el blob y descargar
       console.log(`PDF recibido: ${response.data.size} bytes`);
       
-      // Create blob URL and trigger download
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -345,7 +356,7 @@ const DownloadsManagement: React.FC = () => {
       document.body.appendChild(link);
       link.click();
       
-      // Clean up
+      // Limpiar
       setTimeout(() => {
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
@@ -356,23 +367,35 @@ const DownloadsManagement: React.FC = () => {
     } catch (err: any) {
       console.error('Error downloading remito:', err);
       
-      // Provide more specific error message
+      // Proporcionar mensaje de error más específico
       let errorMessage = 'Error al descargar el remito';
       
       if (err.response) {
-        // Server responded with error
-        if (err.response.data && typeof err.response.data === 'object') {
-          errorMessage = err.response.data.mensaje || errorMessage;
+        // El servidor respondió con error
+        if (err.response.data instanceof Blob) {
+          // Intentar leer el blob como texto
+          const reader = new FileReader();
+          reader.onload = () => {
+            try {
+              const errorObj = JSON.parse(reader.result as string);
+              setError(errorObj.mensaje || errorMessage);
+            } catch (parseErr) {
+              // No se puede parsear como JSON
+              setError(errorMessage);
+            }
+          };
+          reader.readAsText(err.response.data);
+          return;
         } else if (err.response.status === 404) {
           errorMessage = 'No se encontró el pedido solicitado';
         } else if (err.response.status === 500) {
-          errorMessage = 'Error en el servidor al generar el PDF';
+          errorMessage = 'Error en el servidor al generar el PDF. Intente nuevamente.';
         }
       } else if (err.request) {
-        // No response received
-        errorMessage = 'No se recibió respuesta del servidor. Verifica tu conexión.';
+        // No se recibió respuesta
+        errorMessage = 'No se recibió respuesta del servidor. Verifique su conexión.';
       } else {
-        // Other error
+        // Otro error
         errorMessage = err.message || errorMessage;
       }
       
