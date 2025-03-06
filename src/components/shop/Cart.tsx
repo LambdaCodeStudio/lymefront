@@ -197,12 +197,17 @@ export const Cart: React.FC = () => {
       
       // Si es temporal y tiene createdBy, obtener información del usuario básico
       if (isTemp && userData.createdBy) {
-        setParentUserId(userData.createdBy);
+        // Extraer el ID correctamente, ya sea que createdBy sea un string o un objeto
+        const createdById = typeof userData.createdBy === 'object' 
+          ? userData.createdBy._id || userData.createdBy.id 
+          : userData.createdBy;
+        
+        setParentUserId(createdById);
         
         // Obtener detalles del usuario básico
         try {
           // Usar el endpoint correcto según la estructura del backend
-          const basicUserResponse = await fetch(`https://lyme-back.vercel.app/api/auth/users/${userData.createdBy}`, {
+          const basicUserResponse = await fetch(`https://lyme-back.vercel.app/api/auth/users/${createdById}`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           
@@ -219,7 +224,7 @@ export const Cart: React.FC = () => {
             console.log('No se pudo obtener información del usuario básico, intentando endpoint alternativo');
             
             // Intentar con endpoint alternativo si existe
-            const altResponse = await fetch(`https://lyme-back.vercel.app/api/user/${userData.createdBy}`, {
+            const altResponse = await fetch(`https://lyme-back.vercel.app/api/user/${createdById}`, {
               headers: { 'Authorization': `Bearer ${token}` }
             });
             
@@ -233,14 +238,14 @@ export const Cart: React.FC = () => {
               setParentUserName(altDisplayName);
               console.log('Usuario básico asociado (alt):', altDisplayName);
             } else {
-              // Si no se puede obtener el nombre, al menos tener el ID
-              setParentUserName(`ID: ${userData.createdBy}`);
+              // Si no se puede obtener el nombre, usar un nombre genérico
+              setParentUserName("Usuario básico");
             }
           }
         } catch (error) {
           console.error('Error al obtener detalles del usuario básico:', error);
-          // Asegurar que al menos tenemos el ID como referencia
-          setParentUserName(`ID: ${userData.createdBy}`);
+          // Usar un nombre genérico en caso de error
+          setParentUserName("Usuario básico");
         }
       }
       
