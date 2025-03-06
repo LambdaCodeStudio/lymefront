@@ -192,16 +192,17 @@ export const Cart: React.FC = () => {
       setCurrentUser(userData);
       
       // Determinar si es un usuario temporal
-      const isTemp = userData.isTemporary || userData.tipo === 'temporal';
+      const isTemp = userData.role === 'temporal' || userData.tipo === 'temporal';
       setIsTemporaryUser(isTemp);
       
       // Si es temporal y tiene createdBy, obtener información del usuario básico
       if (isTemp && userData.createdBy) {
         setParentUserId(userData.createdBy);
         
-        // Opcionalmente, obtener más detalles del usuario básico si es necesario
+        // Obtener detalles del usuario básico
         try {
-          const basicUserResponse = await fetch(`https://lyme-back.vercel.app/api/usuario/${userData.createdBy}`, {
+          // Usar el endpoint correcto según la estructura del backend
+          const basicUserResponse = await fetch(`https://lyme-back.vercel.app/api/auth/users/${userData.createdBy}`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           
@@ -213,9 +214,33 @@ export const Cart: React.FC = () => {
                 : basicUserData.usuario || basicUserData.email || 'Usuario Básico';
             
             setParentUserName(displayName);
+            console.log('Usuario básico asociado:', displayName);
+          } else {
+            console.log('No se pudo obtener información del usuario básico, intentando endpoint alternativo');
+            
+            // Intentar con endpoint alternativo si existe
+            const altResponse = await fetch(`https://lyme-back.vercel.app/api/user/${userData.createdBy}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (altResponse.ok) {
+              const altUserData = await altResponse.json();
+              const altDisplayName = 
+                altUserData.nombre && altUserData.apellido 
+                  ? `${altUserData.nombre} ${altUserData.apellido}`
+                  : altUserData.usuario || altUserData.email || 'Usuario Básico';
+              
+              setParentUserName(altDisplayName);
+              console.log('Usuario básico asociado (alt):', altDisplayName);
+            } else {
+              // Si no se puede obtener el nombre, al menos tener el ID
+              setParentUserName(`ID: ${userData.createdBy}`);
+            }
           }
         } catch (error) {
           console.error('Error al obtener detalles del usuario básico:', error);
+          // Asegurar que al menos tenemos el ID como referencia
+          setParentUserName(`ID: ${userData.createdBy}`);
         }
       }
       
@@ -409,19 +434,20 @@ export const Cart: React.FC = () => {
       
       // Determinar el ID de usuario para el pedido
       let orderUserId;
+      let actualUserId = currentUser?._id || currentUser?.id;
       
-      // Si es usuario temporal, usar el ID del usuario básico
+      // IMPORTANTE: Si es usuario temporal, usar el ID del usuario básico
       if (isTemporaryUser && parentUserId) {
         orderUserId = parentUserId;
-        console.log('Usando ID de usuario básico para el pedido:', orderUserId);
+        console.log('Usuario temporal: Usando ID de usuario básico para el pedido:', orderUserId);
       } else if (currentUser) {
-        // Si no, usar el ID del usuario actual
-        orderUserId = currentUser._id || currentUser.id;
-        console.log('Usando ID de usuario actual para el pedido:', orderUserId);
+        orderUserId = actualUserId;
+        console.log('Usuario regular: Usando ID de usuario actual para el pedido:', orderUserId);
       } else {
         // Si no hay usuario actual, obtenerlo
         const userData = await fetchCurrentUser();
-        orderUserId = userData?._id || userData?.id;
+        actualUserId = userData?._id || userData?.id;
+        orderUserId = isTemporaryUser && parentUserId ? parentUserId : actualUserId;
         
         if (!orderUserId) {
           throw new Error('No se pudo determinar el ID del usuario para el pedido');
@@ -441,15 +467,19 @@ export const Cart: React.FC = () => {
       
       // Crear objeto de pedido
       const orderData = {
-        userId: orderUserId,
+        userId: orderUserId, // Este es el ID del usuario básico si es temporal
         servicio: clienteObj ? clienteObj.servicio : orderForm.servicio || "Sin especificar",
         seccionDelServicio: clienteObj ? clienteObj.seccionDelServicio : orderForm.seccionDelServicio || "Sin especificar",
         detalle: orderForm.notes || "Pedido creado desde la tienda web",
         productos: productsData,
-        // Añadir metadata si el pedido lo hizo un usuario temporal
+        // Información más detallada si el pedido lo hizo un usuario temporal
         metadata: isTemporaryUser ? {
           creadoPorUsuarioTemporal: true,
-          usuarioTemporalId: currentUser?._id || currentUser?.id
+          usuarioTemporalId: actualUserId,
+          usuarioTemporalNombre: currentUser?.nombre || currentUser?.usuario || currentUser?.email,
+          fechaCreacion: new Date().toISOString(),
+          usuarioBasicoId: parentUserId,
+          usuarioBasicoNombre: parentUserName
         } : undefined
       };
       
@@ -469,7 +499,7 @@ export const Cart: React.FC = () => {
         const errorData = await response.json();
         throw new Error(errorData.mensaje || `Error al crear el pedido (status: ${response.status})`);
       }
-
+  
       // Obtener datos del pedido creado para guardar el ID
       const pedidoCreado = await response.json();
       setCreatedOrderId(pedidoCreado._id);
@@ -477,9 +507,22 @@ export const Cart: React.FC = () => {
       // Pedido creado correctamente
       setOrderComplete(true);
       clearCart();
+      
+      // Notificar al usuario
+      if (addNotification) {
+        if (isTemporaryUser && parentUserName) {
+          addNotification(`Pedido realizado exitosamente a nombre de ${parentUserName}`, 'success');
+        } else {
+          addNotification('Pedido realizado exitosamente', 'success');
+        }
+      }
     } catch (error) {
       console.error('Error al procesar pedido:', error);
       setOrderError(error instanceof Error ? error.message : 'Hubo un problema al procesar tu pedido. Por favor, intenta nuevamente.');
+      
+      if (addNotification) {
+        addNotification('Error al procesar el pedido', 'error');
+      }
     } finally {
       setProcessingOrder(false);
     }
