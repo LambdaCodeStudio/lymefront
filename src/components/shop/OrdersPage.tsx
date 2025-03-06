@@ -16,7 +16,8 @@ import {
   Package,
   CalendarRange,
   X,
-  DollarSign
+  DollarSign,
+  Hash
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -61,6 +62,8 @@ interface Order {
   productos: OrderProduct[];
   detalle?: string;
   numero?: string;
+  nPedido?: number; // Campo específico para número de pedido (backend)
+  displayNumber?: string; // Campo para mostrar consistentemente
   total?: number;
 }
 
@@ -157,7 +160,7 @@ export const OrdersPage: React.FC = () => {
       result = result.filter(order => 
         order.servicio.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (order.seccionDelServicio || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (order.numero || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (order.displayNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (typeof order.userId === 'object' && order.userId.email 
           ? order.userId.email.toLowerCase().includes(searchTerm.toLowerCase())
           : false)
@@ -267,8 +270,10 @@ export const OrdersPage: React.FC = () => {
           if (!clientsData || clientsData.length === 0) {
             console.warn('No se encontraron clientes asociados a este usuario');
             
+            // Procesar pedidos - agregar displayNumber y calcular total
             const processedOrders = allOrders.map((order) => ({
               ...order,
+              displayNumber: order.nPedido?.toString() || order.numero || 'S/N',
               total: calculateOrderTotal(order)
             })).sort((a, b) => 
               new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
@@ -300,9 +305,10 @@ export const OrdersPage: React.FC = () => {
           
           console.log(`Pedidos filtrados por cliente: ${userOrders.length} de ${allOrders.length} totales`);
           
-          // Procesar pedidos (calcular totales y ordenar)
+          // Procesar pedidos (calcular totales y ordenar) - agregar displayNumber
           const processedOrders = userOrders.map((order) => ({
             ...order,
+            displayNumber: order.nPedido?.toString() || order.numero || 'S/N',
             total: calculateOrderTotal(order)
           })).sort((a, b) => 
             new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
@@ -317,6 +323,7 @@ export const OrdersPage: React.FC = () => {
           // En caso de error con los clientes, mostrar todos los pedidos
           const processedAllOrders = allOrders.map((order) => ({
             ...order,
+            displayNumber: order.nPedido?.toString() || order.numero || 'S/N',
             total: calculateOrderTotal(order)
           })).sort((a, b) => 
             new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
@@ -333,6 +340,7 @@ export const OrdersPage: React.FC = () => {
         // Si hay un error obteniendo el usuario, mostrar todos los pedidos
         const processedAllOrders = allOrders.map((order) => ({
           ...order,
+          displayNumber: order.nPedido?.toString() || order.numero || 'S/N',
           total: calculateOrderTotal(order)
         })).sort((a, b) => 
           new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
@@ -479,9 +487,10 @@ export const OrdersPage: React.FC = () => {
           return userClientLookup[orderClientKey] === true;
         });
         
-        // Calcular totales para los pedidos del usuario
+        // Calcular totales para los pedidos del usuario y agregar displayNumber
         const processedOrders = userOrders.map((order: Order) => ({
           ...order,
+          displayNumber: order.nPedido?.toString() || order.numero || 'S/N',
           total: calculateOrderTotal(order)
         }));
         
@@ -507,9 +516,10 @@ export const OrdersPage: React.FC = () => {
           return userClientLookup[orderClientKey] === true;
         });
         
-        // Calcular totales para los pedidos del usuario
+        // Calcular totales para los pedidos del usuario y agregar displayNumber
         const processedOrders = userOrders.map((order: Order) => ({
           ...order,
+          displayNumber: order.nPedido?.toString() || order.numero || 'S/N',
           total: calculateOrderTotal(order)
         }));
         
@@ -602,11 +612,15 @@ export const OrdersPage: React.FC = () => {
         throw new Error('La respuesta del servidor está vacía');
       }
       
+      // Obtener información del pedido para el nombre del archivo
+      const order = orders.find(o => o._id === orderId);
+      
       // Crear URL y descargar
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `remito_${orderId}.pdf`);
+      // Usar el displayNumber para el nombre del archivo
+      link.setAttribute('download', `remito_${order?.displayNumber || orderId}.pdf`);
       document.body.appendChild(link);
       link.click();
       
@@ -920,7 +934,10 @@ export const OrdersPage: React.FC = () => {
                         <React.Fragment key={order._id}>
                           <tr className="hover:bg-[#00888A]/20 transition-colors">
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="font-medium">{order.numero || 'N/A'}</div>
+                              <div className="flex items-center font-medium">
+                                <Hash className="w-4 h-4 text-[#7AA79C] mr-2" />
+                                {order.displayNumber}
+                              </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div>{formatDate(order.fecha)}</div>
@@ -983,7 +1000,7 @@ export const OrdersPage: React.FC = () => {
                             <tr>
                               <td colSpan={6} className="px-6 py-4 bg-[#00888A]/20">
                                 <div className="space-y-3">
-                                  <h3 className="font-medium text-[#D4F5E6]">Detalles del Pedido</h3>
+                                  <h3 className="font-medium text-[#D4F5E6]">Detalles del Pedido #{order.displayNumber}</h3>
                                   
                                   {/* Productos del pedido */}
                                   <div className="bg-white/5 rounded-md border border-[#91BEAD]/20 overflow-hidden">
@@ -1078,7 +1095,8 @@ export const OrdersPage: React.FC = () => {
                       <div className="flex justify-between items-start">
                         <div>
                           <CardTitle className="text-sm flex items-center text-[#D4F5E6]">
-                            Pedido #{order.numero || 'N/A'}
+                            <Hash className="w-4 h-4 text-[#7AA79C] mr-1" />
+                            Pedido #{order.displayNumber}
                           </CardTitle>
                           <p className="text-xs text-[#75D0E0] mt-1">
                             {formatDate(order.fecha)}
