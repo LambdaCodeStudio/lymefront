@@ -18,7 +18,9 @@ import {
   Settings,
   AlertTriangle,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -62,6 +64,37 @@ import {
 
 import { useDashboard } from '@/hooks/useDashboard';
 import type { UserRole } from '@/types/users';
+
+// Componente para controles de paginación simplificados
+const PaginationControls = ({ currentPage, totalPages, onPageChange }) => {
+  return (
+    <div className="flex items-center justify-center gap-2 my-4">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => onPageChange(currentPage - 1)}
+        disabled={currentPage <= 1}
+        className="h-8 w-8 p-0 border-[#91BEAD]"
+      >
+        <ChevronLeft className="h-4 w-4" />
+      </Button>
+      
+      <span className="text-sm text-[#7AA79C]">
+        Página {currentPage} de {totalPages || 1}
+      </span>
+      
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => onPageChange(currentPage + 1)}
+        disabled={currentPage >= totalPages}
+        className="h-8 w-8 p-0 border-[#91BEAD]"
+      >
+        <ChevronRight className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+};
 
 // Tipo extendido para los usuarios con la estructura que viene del backend
 interface UserExtended {
@@ -137,6 +170,10 @@ const ClientsSection: React.FC = () => {
 
   // Nuevo estado para controlar servicios expandidos/contraídos
   const [expandedServices, setExpandedServices] = useState<Record<string, boolean>>({});
+
+  // Estado para la paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  const [clientsPerPage, setClientsPerPage] = useState(10);
 
   // Estado para el formulario
   const [formData, setFormData] = useState<CreateClientData>({
@@ -323,6 +360,9 @@ const ClientsSection: React.FC = () => {
       console.log("Clientes cargados:", data.length);
       setClients(data);
       setError(null);
+      
+      // Resetear a la primera página cuando se cargan nuevos datos
+      setCurrentPage(1);
     } catch (err) {
       const errorMsg = 'Error al cargar los clientes: ' + (err instanceof Error ? err.message : String(err));
       setError(errorMsg);
@@ -923,6 +963,27 @@ const ClientsSection: React.FC = () => {
     return acc;
   }, {});
 
+  // Configurar paginación
+  const indexOfLastItem = currentPage * clientsPerPage;
+  const indexOfFirstItem = indexOfLastItem - clientsPerPage;
+  const totalPages = Math.ceil(Object.keys(groupedClients).length / clientsPerPage);
+  
+  // Obtener los servicios para la página actual
+  const currentServicesKeys = Object.keys(groupedClients).slice(indexOfFirstItem, indexOfLastItem);
+  const currentServiceGroups = currentServicesKeys.reduce((result, key) => {
+    result[key] = groupedClients[key];
+    return result;
+  }, {});
+
+  // Manejar cambio de página
+  const handlePageChange = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
+    // Hacer scroll al inicio cuando cambiamos de página
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
   // Modal automático para crear cliente si hay un usuario seleccionado y no hay clientes
   useEffect(() => {
     if (activeUserId !== "all" && !loading && clients.filter(c => {
@@ -987,7 +1048,10 @@ const ClientsSection: React.FC = () => {
             placeholder="Buscar clientes..."
             className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setCurrentPage(1); // Resetear a la primera página al buscar
+            }}
           />
         </div>
 
@@ -995,7 +1059,10 @@ const ClientsSection: React.FC = () => {
         <div>
           <Select
             value={activeUserId}
-            onValueChange={setActiveUserId}
+            onValueChange={(value) => {
+              setActiveUserId(value);
+              setCurrentPage(1); // Resetear a la primera página al cambiar usuario
+            }}
           >
             <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
               <SelectValue placeholder="Filtrar por usuario" />
@@ -1055,7 +1122,10 @@ const ClientsSection: React.FC = () => {
               placeholder="Buscar clientes..."
               className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
             />
           </div>
           <Button
@@ -1087,6 +1157,7 @@ const ClientsSection: React.FC = () => {
               onValueChange={(value) => {
                 setActiveUserId(value);
                 setIsMobileFilterOpen(false);
+                setCurrentPage(1);
               }}
             >
               <SelectTrigger id="mobileUserFilter" className="border-[#91BEAD] focus:ring-[#29696B]/20">
@@ -1144,7 +1215,7 @@ const ClientsSection: React.FC = () => {
         <div className="space-y-6">
           {/* Vista para pantallas medianas y grandes */}
           <div className="hidden md:block space-y-6">
-            {Object.entries(groupedClients).map(([servicio, clientesDelServicio]) => (
+            {Object.entries(currentServiceGroups).map(([servicio, clientesDelServicio]) => (
               <div key={servicio} className="bg-white rounded-xl shadow-sm overflow-hidden border border-[#91BEAD]/20">
                 <div className="p-4 bg-[#DFEFE6]/30 border-b border-[#91BEAD]/20 flex justify-between items-center">
                   <div className="flex items-center">
@@ -1304,11 +1375,66 @@ const ClientsSection: React.FC = () => {
                 )}
               </div>
             ))}
+            
+            {/* Controles de paginación para desktop */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20">
+                <div className="text-sm text-[#7AA79C]">
+                  Mostrando {indexOfFirstItem + 1}-{Math.min(indexOfLastItem, Object.keys(groupedClients).length)} de {Object.keys(groupedClients).length} servicios
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(1)}
+                    disabled={currentPage <= 1}
+                    className="h-8 px-3 border-[#91BEAD]"
+                  >
+                    Primera
+                  </Button>
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage <= 1}
+                    className="h-8 w-8 p-0 border-[#91BEAD]"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  
+                  <span className="text-sm px-2">
+                    Página {currentPage} de {totalPages}
+                  </span>
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage >= totalPages}
+                    className="h-8 w-8 p-0 border-[#91BEAD]"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(totalPages)}
+                    disabled={currentPage >= totalPages}
+                    className="h-8 px-3 border-[#91BEAD]"
+                  >
+                    Última
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Vista móvil: tarjetas agrupadas por servicio */}
           <div className="md:hidden space-y-6">
-            {Object.entries(groupedClients).map(([servicio, clientesDelServicio]) => (
+            {Object.entries(currentServiceGroups).map(([servicio, clientesDelServicio]) => (
               <div key={servicio} className="space-y-3">
                 <div className="flex justify-between items-center px-1 bg-white p-3 rounded-lg shadow-sm border border-[#91BEAD]/20">
                   <div className="flex items-center">
@@ -1448,6 +1574,20 @@ const ClientsSection: React.FC = () => {
                 )}
               </div>
             ))}
+            
+            {/* Controles de paginación para móvil */}
+            {totalPages > 1 && (
+              <div className="mt-4">
+                <PaginationControls 
+                  currentPage={currentPage} 
+                  totalPages={totalPages} 
+                  onPageChange={handlePageChange} 
+                />
+                <p className="text-center text-xs text-[#7AA79C] mt-1">
+                  Mostrando {indexOfFirstItem + 1}-{Math.min(indexOfLastItem, Object.keys(groupedClients).length)} de {Object.keys(groupedClients).length} servicios
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
