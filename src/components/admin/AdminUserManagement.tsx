@@ -29,10 +29,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import UserTable from './components/UserTable';
 import UserCard from './components/UserCard';
 import UserForm from './components/UserForm';
-import Pagination from '@/components/ui/Pagination'; // Ajusta esta ruta a donde hayas puesto el componente
+import Pagination from './components/Pagination'; 
 
 // Importar hook personalizado de gestión de usuarios
-import { useUserManagement } from '../hooks/useUserManagement';
+import { useUserManagement } from './hooks/useUserManagement';
 
 // Componente de paginación simple para móvil
 const MobilePaginationControls = ({ currentPage, totalPages, onPageChange }) => {
