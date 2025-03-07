@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNotification } from '@/context/NotificationContext';
 
 import {
@@ -18,7 +18,8 @@ import {
   Settings,
   AlertTriangle,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  X
 } from 'lucide-react';
 
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -60,6 +61,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+import Pagination from '@/components/ui/pagination';
 import { useDashboard } from '@/hooks/useDashboard';
 import type { UserRole } from '@/types/users';
 
@@ -145,10 +147,44 @@ const ClientsSection: React.FC = () => {
     userId: ''
   });
 
+  // Estado para controlar la paginación
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  
+  // Referencia para el scroll en móvil
+  const mobileListRef = useRef<HTMLDivElement>(null);
+  
+  // Tamaños de página para diferentes dispositivos
+  const ITEMS_PER_PAGE_MOBILE = 3;
+  const ITEMS_PER_PAGE_DESKTOP = 7;
+  
+  // Estado para controlar el ancho de la ventana
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
+  
+  // Calcular dinámicamente el número de items por página basado en el ancho de la ventana
+  const itemsPerPage = windowWidth < 768 ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP;
+
   // Verificar disponibilidad del contexto de notificaciones
   useEffect(() => {
     console.log('NotificationContext disponible:', addNotification ? true : false);
   }, [addNotification]);
+
+  // Efecto para detectar el tamaño de la ventana
+  useEffect(() => {
+    const handleResize = () => {
+      const newWidth = window.innerWidth;
+      setWindowWidth(newWidth);
+      
+      // Si cambiamos entre móvil y escritorio, volver a la primera página
+      if ((newWidth < 768 && windowWidth >= 768) || (newWidth >= 768 && windowWidth < 768)) {
+        setCurrentPage(1);
+      }
+    };
+    
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }
+  }, [windowWidth]);
 
   // Función para alternar la expansión de un servicio
   const toggleServiceExpansion = (servicio: string) => {
@@ -232,6 +268,11 @@ const ClientsSection: React.FC = () => {
     }
   }, [selectedUserId]);
 
+  // Resetear la página actual cuando cambie el término de búsqueda o userId activo
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, activeUserId]);
+
   // Observar cambios en selectedUserId
   useEffect(() => {
     if (selectedUserId) {
@@ -293,6 +334,44 @@ const ClientsSection: React.FC = () => {
       clearInterval(interval);
     };
   }, []);
+
+  // Corregir problema de apertura automática de modal al recargar con usuario seleccionado
+  useEffect(() => {
+    let modalAutoOpening = false;
+    if (activeUserId !== "all" && !loading) {
+      const userClients = clients.filter(c => {
+        return typeof c.userId === 'object' && c.userId !== null
+          ? c.userId._id === activeUserId
+          : c.userId === activeUserId;
+      });
+      
+      // Solo abrir automáticamente si no hay clientes para este usuario y no estamos ya abriendo el modal
+      modalAutoOpening = userClients.length === 0 && !showModal;
+      
+      if (modalAutoOpening) {
+        // Comprobar si acabamos de recargar la página (F5)
+        const isPageReload = typeof window !== 'undefined' && 
+          (performance.navigation.type === 1 || document.referrer === window.location.href);
+          
+        // Si es recarga, no abrir el modal automáticamente y limpiar usuario seleccionado
+        if (isPageReload) {
+          console.log("Detección de recarga de página - evitando apertura automática de modal");
+          // Restablecer a todos los usuarios para evitar el comportamiento no deseado
+          setActiveUserId("all");
+          return;
+        }
+        
+        console.log("Abriendo modal automáticamente para usuario:", activeUserId);
+        resetForm();
+        setShowModal(true);
+
+        // Notificación informativa
+        if (addNotification) {
+          addNotification(`No se encontraron clientes para el usuario seleccionado. Puede crear uno nuevo.`, 'info');
+        }
+      }
+    }
+  }, [activeUserId, loading, clients, showModal, addNotification]);
 
   // Cargar clientes
   const fetchClients = async () => {
@@ -858,6 +937,30 @@ const ClientsSection: React.FC = () => {
     setShowAddingSectionMode(false);
   };
 
+  // Limpiar selección de usuario activo
+  const clearActiveUserId = () => {
+    setActiveUserId("all");
+    // También limpiar localStorage por si acaso
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('selectedUserId');
+      localStorage.removeItem('lastCreatedUserId');
+    }
+    // Notificar al usuario
+    if (addNotification) {
+      addNotification('Se ha limpiado el filtro de usuario', 'info');
+    }
+  };
+
+  // Función para cambiar de página
+  const handlePageChange = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
+    
+    // Hacer scroll al inicio de la lista en móvil
+    if (windowWidth < 768 && mobileListRef.current) {
+      mobileListRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   // Obtener el identificador del usuario por su ID (email, usuario o nombre)
   const getUserIdentifierById = (userId: string) => {
     const user = users.find(u => u._id === userId);
@@ -923,24 +1026,21 @@ const ClientsSection: React.FC = () => {
     return acc;
   }, {});
 
-  // Modal automático para crear cliente si hay un usuario seleccionado y no hay clientes
-  useEffect(() => {
-    if (activeUserId !== "all" && !loading && clients.filter(c => {
-      return typeof c.userId === 'object' && c.userId !== null
-        ? c.userId._id === activeUserId
-        : c.userId === activeUserId;
-    }).length === 0) {
-      // Abrir automáticamente el modal para crear un cliente para este usuario
-      console.log("Abriendo modal automáticamente para usuario:", activeUserId);
-      resetForm();
-      setShowModal(true);
+  // Convertir el objeto agrupado a un array para la paginación
+  const groupedServicesArray = Object.entries(groupedClients);
+  
+  // Calcular paginación para servicios
+  const indexOfLastService = currentPage * itemsPerPage;
+  const indexOfFirstService = indexOfLastService - itemsPerPage;
+  const currentServices = groupedServicesArray.slice(indexOfFirstService, indexOfLastService);
 
-      // Notificación informativa
-      if (addNotification) {
-        addNotification(`No se encontraron clientes para el usuario seleccionado. Puede crear uno nuevo.`, 'info');
-      }
-    }
-  }, [activeUserId, loading, clients]);
+  // Calcular el número total de páginas
+  const totalPages = Math.ceil(groupedServicesArray.length / itemsPerPage);
+  
+  // Información de paginación
+  const showingFromTo = groupedServicesArray.length > 0 
+    ? `${indexOfFirstService + 1}-${Math.min(indexOfLastService, groupedServicesArray.length)} de ${groupedServicesArray.length}`
+    : '0 de 0';
 
   if (loading && clients.length === 0) {
     return (
@@ -969,11 +1069,21 @@ const ClientsSection: React.FC = () => {
 
       {/* Usuario actualmente seleccionado */}
       {activeUserId !== "all" && (
-        <Alert className="mb-4 bg-[#DFEFE6]/50 border border-[#91BEAD]/50 text-[#29696B] rounded-lg">
-          <UserPlus className="h-4 w-4 text-[#29696B]" />
-          <AlertDescription className="ml-2">
-            Gestionando clientes para el usuario: <strong>{getUserIdentifierById(activeUserId)}</strong>
-          </AlertDescription>
+        <Alert className="mb-4 bg-[#DFEFE6]/50 border border-[#91BEAD]/50 text-[#29696B] rounded-lg flex justify-between items-center">
+          <div className="flex items-center">
+            <UserPlus className="h-4 w-4 text-[#29696B] mr-2" />
+            <AlertDescription>
+              Gestionando clientes para el usuario: <strong>{getUserIdentifierById(activeUserId)}</strong>
+            </AlertDescription>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearActiveUserId}
+            className="text-[#29696B] hover:bg-[#DFEFE6]/40"
+          >
+            <X className="w-4 h-4" />
+          </Button>
         </Alert>
       )}
 
@@ -1013,13 +1123,13 @@ const ClientsSection: React.FC = () => {
 
         {/* Botón Nuevo Cliente */}
         <div className="flex justify-end gap-2">
-          {Object.keys(groupedClients).length > 0 && (
+          {currentServices.length > 0 && (
             <Button
               variant="outline"
-              onClick={() => toggleAllServices(Object.keys(groupedClients))}
+              onClick={() => toggleAllServices(currentServices.map(([servicio]) => servicio))}
               className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50 hover:text-[#29696B]"
             >
-              {Object.keys(groupedClients).every(service => expandedServices[service]) ? (
+              {currentServices.every(([servicio]) => expandedServices[servicio]) ? (
                 <>
                   <ChevronUp className="w-4 h-4 mr-2" />
                   Contraer Todo
@@ -1086,7 +1196,13 @@ const ClientsSection: React.FC = () => {
               value={activeUserId}
               onValueChange={(value) => {
                 setActiveUserId(value);
-                setIsMobileFilterOpen(false);
+                if (value !== "all") {
+                  // Si se selecciona un usuario, mantener el panel de filtros abierto
+                  // para que el usuario pueda ver que hay un filtro activo
+                } else {
+                  // Si se selecciona "Todos los usuarios", cerrar el panel de filtros
+                  setIsMobileFilterOpen(false);
+                }
               }}
             >
               <SelectTrigger id="mobileUserFilter" className="border-[#91BEAD] focus:ring-[#29696B]/20">
@@ -1102,15 +1218,31 @@ const ClientsSection: React.FC = () => {
               </SelectContent>
             </Select>
 
-            {Object.keys(groupedClients).length > 0 && (
+            {activeUserId !== "all" && (
+              <div className="mt-2 flex items-center justify-between py-1 px-2 bg-[#DFEFE6]/40 rounded border border-[#91BEAD]/20">
+                <div className="text-xs text-[#29696B]">
+                  Usuario seleccionado: <strong>{getUserIdentifierById(activeUserId)}</strong>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={clearActiveUserId}
+                  className="h-6 w-6 p-0"
+                >
+                  <X className="h-3 w-3 text-[#29696B]" />
+                </Button>
+              </div>
+            )}
+
+            {currentServices.length > 0 && (
               <div className="mt-3 flex flex-col gap-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => toggleAllServices(Object.keys(groupedClients))}
+                  onClick={() => toggleAllServices(currentServices.map(([servicio]) => servicio))}
                   className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50"
                 >
-                  {Object.keys(groupedClients).every(service => expandedServices[service]) ? (
+                  {currentServices.every(([servicio]) => expandedServices[servicio]) ? (
                     <>
                       <ChevronUp className="w-3 h-3 mr-1" />
                       Contraer Todo
@@ -1129,7 +1261,7 @@ const ClientsSection: React.FC = () => {
       </div>
 
       {/* Mensaje cuando no hay clientes */}
-      {Object.keys(groupedClients).length === 0 ? (
+      {groupedServicesArray.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm p-8 text-center text-[#7AA79C] border border-[#91BEAD]/20">
           <div className="inline-flex items-center justify-center w-12 h-12 bg-[#DFEFE6] rounded-full mb-4">
             <Users className="w-6 h-6 text-[#29696B]" />
@@ -1142,9 +1274,35 @@ const ClientsSection: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-6">
+          {/* Contador de resultados con información detallada */}
+          {groupedServicesArray.length > 0 && (
+            <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm text-[#29696B] flex flex-col sm:flex-row sm:justify-between items-center">
+              <span>
+                Total: {groupedServicesArray.length} {groupedServicesArray.length === 1 ? 'servicio' : 'servicios'}
+              </span>
+              <span className="text-[#29696B] font-medium">
+                Mostrando: {showingFromTo}
+              </span>
+            </div>
+          )}
+
+          {/* Paginación visible en la parte superior para móvil */}
+          <div ref={mobileListRef} id="mobile-clients-list" className="md:hidden">
+            {groupedServicesArray.length > itemsPerPage && (
+              <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20 mb-4">
+                <Pagination
+                  totalItems={groupedServicesArray.length}
+                  itemsPerPage={itemsPerPage}
+                  currentPage={currentPage}
+                  onPageChange={handlePageChange}
+                />
+              </div>
+            )}
+          </div>
+
           {/* Vista para pantallas medianas y grandes */}
           <div className="hidden md:block space-y-6">
-            {Object.entries(groupedClients).map(([servicio, clientesDelServicio]) => (
+            {currentServices.map(([servicio, clientesDelServicio]) => (
               <div key={servicio} className="bg-white rounded-xl shadow-sm overflow-hidden border border-[#91BEAD]/20">
                 <div className="p-4 bg-[#DFEFE6]/30 border-b border-[#91BEAD]/20 flex justify-between items-center">
                   <div className="flex items-center">
@@ -1304,11 +1462,24 @@ const ClientsSection: React.FC = () => {
                 )}
               </div>
             ))}
+            
+            {/* Paginación para la vista de escritorio */}
+            {groupedServicesArray.length > itemsPerPage && (
+              <div className="py-4">
+                <Pagination
+                  totalItems={groupedServicesArray.length}
+                  itemsPerPage={itemsPerPage}
+                  currentPage={currentPage}
+                  onPageChange={handlePageChange}
+                  className="px-6"
+                />
+              </div>
+            )}
           </div>
 
           {/* Vista móvil: tarjetas agrupadas por servicio */}
           <div className="md:hidden space-y-6">
-            {Object.entries(groupedClients).map(([servicio, clientesDelServicio]) => (
+            {currentServices.map(([servicio, clientesDelServicio]) => (
               <div key={servicio} className="space-y-3">
                 <div className="flex justify-between items-center px-1 bg-white p-3 rounded-lg shadow-sm border border-[#91BEAD]/20">
                   <div className="flex items-center">
@@ -1448,6 +1619,27 @@ const ClientsSection: React.FC = () => {
                 )}
               </div>
             ))}
+            
+            {/* Información de paginación para móvil */}
+            {groupedServicesArray.length > itemsPerPage && (
+              <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm">
+                <span className="text-[#29696B] font-medium">
+                  Página {currentPage} de {totalPages}
+                </span>
+              </div>
+            )}
+            
+            {/* Paginación duplicada al final de la lista para mayor visibilidad */}
+            {groupedServicesArray.length > itemsPerPage && (
+              <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20 mt-2">
+                <Pagination
+                  totalItems={groupedServicesArray.length}
+                  itemsPerPage={itemsPerPage}
+                  currentPage={currentPage}
+                  onPageChange={handlePageChange}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
