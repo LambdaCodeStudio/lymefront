@@ -20,7 +20,7 @@ import UserTable from './components/UserTable';
 import UserCard from './components/UserCard';
 import UserForm from './components/UserForm';
 import UserFilters from './components/UserFilters';
-import Pagination from './components/Pagination'; 
+import EnhancedPagination from './components/Pagination'; 
 
 // Importar hooks y utilidades
 import { useUserManagement } from './hooks/useUserManagement';
@@ -57,12 +57,23 @@ const UserManagementContent: React.FC = () => {
 
   // Estado para la paginación
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10; // Número de usuarios por página
+  // Reducir el número de elementos por página en móvil para mejor visualización
+  const itemsPerPage = window.innerWidth < 768 ? 5 : 10;
 
   // Resetear la página actual cuando cambian los filtros
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, showInactiveUsers]);
+
+  // Actualizar itemsPerPage cuando cambia el tamaño de la ventana
+  useEffect(() => {
+    const handleResize = () => {
+      setCurrentPage(1); // Reset to first page on resize
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Obtener usuarios para la página actual
   const indexOfLastItem = currentPage * itemsPerPage;
@@ -72,8 +83,13 @@ const UserManagementContent: React.FC = () => {
   // Función para cambiar de página
   const handlePageChange = (pageNumber) => {
     setCurrentPage(pageNumber);
-    // Opcional: hacer scroll al inicio de la tabla
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Hacer scroll al inicio de la lista en móvil
+    if (window.innerWidth < 768) {
+      const mobileList = document.getElementById('mobile-users-list');
+      if (mobileList) {
+        mobileList.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
   };
 
   return (
@@ -111,6 +127,13 @@ const UserManagementContent: React.FC = () => {
         </Button>
       </div>
 
+      {/* Contador de resultados - Visible en todos los dispositivos */}
+      {!loading && filteredUsers.length > 0 && (
+        <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm text-[#29696B]">
+          {filteredUsers.length} {filteredUsers.length === 1 ? 'usuario encontrado' : 'usuarios encontrados'}
+        </div>
+      )}
+
       {/* Vista de Carga */}
       {loading && users.length === 0 && (
         <div className="flex justify-center items-center py-8 bg-white rounded-xl shadow-sm border border-[#91BEAD]/20 p-6">
@@ -144,40 +167,52 @@ const UserManagementContent: React.FC = () => {
             
             {/* Paginación debajo de la tabla */}
             <div className="py-4 border-t border-[#91BEAD]/20">
-              <Pagination 
+              <EnhancedPagination 
                 totalItems={filteredUsers.length}
                 itemsPerPage={itemsPerPage}
                 currentPage={currentPage}
                 onPageChange={handlePageChange}
-                className="mt-4"
+                className="px-6"
               />
             </div>
           </>
         )}
       </div>
 
-      {/* Vista de Tarjetas para dispositivos móviles */}
-      <div className="md:hidden grid grid-cols-1 gap-4">
-        {!loading && currentUsers.map(user => (
-          <UserCard 
-            key={user._id}
-            user={user}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            onToggleStatus={handleToggleStatus}
-            getUserIdentifier={getUserIdentifier}
-            getFullName={getFullName}
-          />
-        ))}
-        
-        {/* Paginación para vista móvil */}
-        {!loading && filteredUsers.length > itemsPerPage && (
-          <Pagination 
+      {/* Vista de Tarjetas para dispositivos móviles con ID para scroll */}
+      <div id="mobile-users-list" className="md:hidden space-y-6">
+        {/* Paginación visible en la parte superior para móvil */}
+        {!loading && filteredUsers.length > 0 && (
+          <EnhancedPagination 
             totalItems={filteredUsers.length}
             itemsPerPage={itemsPerPage}
             currentPage={currentPage}
             onPageChange={handlePageChange}
-            className="mt-4"
+          />
+        )}
+        
+        {/* Lista de tarjetas de usuario */}
+        <div className="grid grid-cols-1 gap-4">
+          {!loading && currentUsers.map(user => (
+            <UserCard 
+              key={user._id}
+              user={user}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onToggleStatus={handleToggleStatus}
+              getUserIdentifier={getUserIdentifier}
+              getFullName={getFullName}
+            />
+          ))}
+        </div>
+        
+        {/* Paginación duplicada al final de la lista para mayor visibilidad */}
+        {!loading && filteredUsers.length > itemsPerPage && (
+          <EnhancedPagination 
+            totalItems={filteredUsers.length}
+            itemsPerPage={itemsPerPage}
+            currentPage={currentPage}
+            onPageChange={handlePageChange}
           />
         )}
       </div>
