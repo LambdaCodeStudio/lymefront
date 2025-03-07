@@ -2,8 +2,9 @@
 // 1. Agregado campo nPedido a la interfaz Order
 // 2. Modificado la visualización para mostrar el número de pedido en desktop y móvil
 // 3. Corregido la visualización del correo de usuario en lugar del ID al editar
+// 4. Implementado sistema de paginación similar a InventorySection
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNotification } from '@/context/NotificationContext';
 import {
   Plus,
@@ -59,6 +60,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import Pagination from "@/components/ui/pagination";
 // Importamos la función de actualización del inventario
 import { refreshInventory, getAuthToken } from '@/utils/inventoryUtils';
 
@@ -431,6 +433,20 @@ const OrdersSection = () => {
   const [debugInfo, setDebugInfo] = useState<string>('');
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
+  // Estados para paginación
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
+
+  // Referencias para el scroll en móvil
+  const mobileListRef = useRef<HTMLDivElement>(null);
+
+  // IMPORTANTE: Tamaños fijos para cada tipo de dispositivo
+  const ITEMS_PER_PAGE_MOBILE = 5;
+  const ITEMS_PER_PAGE_DESKTOP = 10;
+
+  // Calculamos dinámicamente itemsPerPage basado en el ancho de la ventana
+  const itemsPerPage = windowWidth < 768 ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP;
+
   // Verificar disponibilidad del contexto de notificaciones
   useEffect(() => {
     console.log('NotificationContext disponible:', addNotification ? true : false);
@@ -469,6 +485,29 @@ const OrdersSection = () => {
     fetchUsers(); // Cargar usuarios primero para tener los datos disponibles
     fetchOrders();
   }, []);
+
+  // Efecto para detectar el tamaño de la ventana
+  useEffect(() => {
+    const handleResize = () => {
+      const newWidth = window.innerWidth;
+      setWindowWidth(newWidth);
+      
+      // Si cambiamos entre móvil y escritorio, volvemos a la primera página
+      if ((newWidth < 768 && windowWidth >= 768) || (newWidth >= 768 && windowWidth < 768)) {
+        setCurrentPage(1);
+      }
+    };
+    
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }
+  }, [windowWidth]);
+
+  // Resetear la página actual cuando cambian los filtros
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, dateFilter.fechaInicio, dateFilter.fechaFin]);
 
   // Cargar usuario actual
   const fetchCurrentUser = async () => {
@@ -729,138 +768,139 @@ const OrdersSection = () => {
   };
 
   // Cargar pedidos por rango de fechas
-const formatDateForAPI = (dateString) => {
-  const d = new Date(dateString);
-  if (isNaN(d.getTime())) return dateString; // Si la fecha no es válida, devolver el string original
-  
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
+  const formatDateForAPI = (dateString) => {
+    const d = new Date(dateString);
+    if (isNaN(d.getTime())) return dateString; // Si la fecha no es válida, devolver el string original
+    
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
-// Cargar pedidos por rango de fechas
-const fetchOrdersByDate = async () => {
-  if (!dateFilter.fechaInicio || !dateFilter.fechaFin) {
-    const errorMsg = 'Por favor seleccione ambas fechas';
-    setError(errorMsg);
-    
-    // Notificación para campos faltantes
-    if (addNotification) {
-      addNotification(errorMsg, 'warning');
-    }
-    
-    return;
-  }
-
-  try {
-    setLoading(true);
-    const token = getAuthToken();
-    if (!token) {
-      throw new Error('No hay token de autenticación');
-    }
-
-    // Obtenemos las fechas del input del usuario
-    let fechaInicio = dateFilter.fechaInicio;
-    let fechaFin = dateFilter.fechaFin;
-    
-    console.log("Fechas originales del formulario:", fechaInicio, fechaFin);
-    
-    try {
-      // Los input type="date" ya proporcionan fechas en formato YYYY-MM-DD, 
-      // que es justo lo que necesitamos para el backend
-      // Verificamos si necesitamos hacer algún ajuste en la zona horaria
-      const fechaInicioObj = new Date(fechaInicio);
-      const fechaFinObj = new Date(fechaFin);
+  // Cargar pedidos por rango de fechas
+  const fetchOrdersByDate = async () => {
+    if (!dateFilter.fechaInicio || !dateFilter.fechaFin) {
+      const errorMsg = 'Por favor seleccione ambas fechas';
+      setError(errorMsg);
       
-      if (!isNaN(fechaInicioObj.getTime()) && !isNaN(fechaFinObj.getTime())) {
-        console.log("Objetos de fecha parseados correctamente:",
-          fechaInicioObj.toISOString(), fechaFinObj.toISOString());
-      } else {
-        console.warn("No se pudieron parsear las fechas como objetos Date válidos");
+      // Notificación para campos faltantes
+      if (addNotification) {
+        addNotification(errorMsg, 'warning');
       }
-    } catch (e) {
-      console.error("Error al manipular fechas:", e);
+      
+      return;
     }
 
-    console.log(`Filtrando pedidos desde ${fechaInicio} hasta ${fechaFin}`);
-    
-    // Construimos la URL con las fechas originales del formulario
-    // Los inputs type="date" ya dan el formato YYYY-MM-DD que necesitamos
-    const url = `https://lyme-back.vercel.app/api/pedido/fecha?fechaInicio=${encodeURIComponent(fechaInicio)}&fechaFin=${encodeURIComponent(fechaFin)}`;
-    console.log("URL de solicitud:", url);
-    
-    // Opciones de la solicitud con el token de autenticación
-    const requestOptions = {
-      method: 'GET',
-      headers: { 
-        'Authorization': `Bearer ${token}`
+    try {
+      setLoading(true);
+      const token = getAuthToken();
+      if (!token) {
+        throw new Error('No hay token de autenticación');
       }
-    };
 
-    console.log("Enviando solicitud GET a la API...");
-    const response = await fetch(url, requestOptions);
-
-    if (!response.ok) {
-      // Intentar obtener el mensaje de error del cuerpo de la respuesta
+      // Obtenemos las fechas del input del usuario
+      let fechaInicio = dateFilter.fechaInicio;
+      let fechaFin = dateFilter.fechaFin;
+      
+      console.log("Fechas originales del formulario:", fechaInicio, fechaFin);
+      
       try {
-        const errorText = await response.text();
-        console.error("Respuesta de error completa:", errorText);
+        // Los input type="date" ya proporcionan fechas en formato YYYY-MM-DD, 
+        // que es justo lo que necesitamos para el backend
+        // Verificamos si necesitamos hacer algún ajuste en la zona horaria
+        const fechaInicioObj = new Date(fechaInicio);
+        const fechaFinObj = new Date(fechaFin);
         
-        try {
-          // Intentar parsear como JSON si es posible
-          const errorData = JSON.parse(errorText);
-          console.error("Datos de error:", errorData);
-          throw new Error(errorData.mensaje || errorData.error || `Error al filtrar pedidos por fecha (status: ${response.status})`);
-        } catch (jsonError) {
-          // Si no es JSON, usar el texto como está
-          throw new Error(`Error al filtrar pedidos por fecha (status: ${response.status}): ${errorText.substring(0, 100)}`);
+        if (!isNaN(fechaInicioObj.getTime()) && !isNaN(fechaFinObj.getTime())) {
+          console.log("Objetos de fecha parseados correctamente:",
+            fechaInicioObj.toISOString(), fechaFinObj.toISOString());
+        } else {
+          console.warn("No se pudieron parsear las fechas como objetos Date válidos");
         }
       } catch (e) {
-        console.error("Error al procesar la respuesta:", e);
-        throw new Error(`Error al filtrar pedidos por fecha (status: ${response.status})`);
+        console.error("Error al manipular fechas:", e);
       }
-    }
 
-    const data = await response.json();
-    console.log(`Pedidos obtenidos en el rango de fechas: ${data.length}`);
-    setOrders(data);
-    setError(null);
+      console.log(`Filtrando pedidos desde ${fechaInicio} hasta ${fechaFin}`);
+      
+      // Construimos la URL con las fechas originales del formulario
+      // Los inputs type="date" ya dan el formato YYYY-MM-DD que necesitamos
+      const url = `https://lyme-back.vercel.app/api/pedido/fecha?fechaInicio=${encodeURIComponent(fechaInicio)}&fechaFin=${encodeURIComponent(fechaFin)}`;
+      console.log("URL de solicitud:", url);
+      
+      // Opciones de la solicitud con el token de autenticación
+      const requestOptions = {
+        method: 'GET',
+        headers: { 
+          'Authorization': `Bearer ${token}`
+        }
+      };
 
-    // Mensaje de éxito mostrando cuántos pedidos se encontraron
-    let successMsg = '';
-    if (data.length === 0) {
-      successMsg = 'No se encontraron pedidos en el rango de fechas seleccionado';
-    } else {
-      successMsg = `Se encontraron ${data.length} pedidos en el rango seleccionado`;
+      console.log("Enviando solicitud GET a la API...");
+      const response = await fetch(url, requestOptions);
+
+      if (!response.ok) {
+        // Intentar obtener el mensaje de error del cuerpo de la respuesta
+        try {
+          const errorText = await response.text();
+          console.error("Respuesta de error completa:", errorText);
+          
+          try {
+            // Intentar parsear como JSON si es posible
+            const errorData = JSON.parse(errorText);
+            console.error("Datos de error:", errorData);
+            throw new Error(errorData.mensaje || errorData.error || `Error al filtrar pedidos por fecha (status: ${response.status})`);
+          } catch (jsonError) {
+            // Si no es JSON, usar el texto como está
+            throw new Error(`Error al filtrar pedidos por fecha (status: ${response.status}): ${errorText.substring(0, 100)}`);
+          }
+        } catch (e) {
+          console.error("Error al procesar la respuesta:", e);
+          throw new Error(`Error al filtrar pedidos por fecha (status: ${response.status})`);
+        }
+      }
+
+      const data = await response.json();
+      console.log(`Pedidos obtenidos en el rango de fechas: ${data.length}`);
+      setOrders(data);
+      setError(null);
+      setCurrentPage(1); // Resetear a la primera página al cambiar los datos
+
+      // Mensaje de éxito mostrando cuántos pedidos se encontraron
+      let successMsg = '';
+      if (data.length === 0) {
+        successMsg = 'No se encontraron pedidos en el rango de fechas seleccionado';
+      } else {
+        successMsg = `Se encontraron ${data.length} pedidos en el rango seleccionado`;
+      }
+      
+      setSuccessMessage(successMsg);
+      
+      // Notificación de filtro aplicado
+      if (addNotification) {
+        addNotification(successMsg, data.length === 0 ? 'info' : 'success');
+      }
+      
+      // Eliminar mensaje después de 3 segundos
+      setTimeout(() => setSuccessMessage(''), 3000);
+      
+      // Cerrar filtros móviles si están abiertos
+      setShowMobileFilters(false);
+    } catch (err) {
+      const errorMsg = 'Error al filtrar por fecha: ' +
+        (err instanceof Error ? err.message : String(err));
+      console.error(errorMsg, err);
+      setError(errorMsg);
+      
+      // Notificación para error de filtro por fecha
+      if (addNotification) {
+        addNotification(errorMsg, 'error');
+      }
+    } finally {
+      setLoading(false);
     }
-    
-    setSuccessMessage(successMsg);
-    
-    // Notificación de filtro aplicado
-    if (addNotification) {
-      addNotification(successMsg, data.length === 0 ? 'info' : 'success');
-    }
-    
-    // Eliminar mensaje después de 3 segundos
-    setTimeout(() => setSuccessMessage(''), 3000);
-    
-    // Cerrar filtros móviles si están abiertos
-    setShowMobileFilters(false);
-  } catch (err) {
-    const errorMsg = 'Error al filtrar por fecha: ' +
-      (err instanceof Error ? err.message : String(err));
-    console.error(errorMsg, err);
-    setError(errorMsg);
-    
-    // Notificación para error de filtro por fecha
-    if (addNotification) {
-      addNotification(errorMsg, 'error');
-    }
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   // Cargar productos
   const fetchProducts = async () => {
@@ -1536,10 +1576,24 @@ const fetchOrdersByDate = async () => {
     setDateFilter({ fechaInicio: '', fechaFin: '' });
     fetchOrders();
     setShowMobileFilters(false);
+    setCurrentPage(1); // Resetear a la primera página
     
     // Notificación para filtros limpiados
     if (addNotification) {
       addNotification('Filtros eliminados. Mostrando todos los pedidos.', 'info');
+    }
+  };
+
+  // Función para cambiar de página
+  const handlePageChange = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
+    
+    // Al cambiar de página, hacemos scroll hacia arriba
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    
+    // Hacer scroll al inicio de la lista en móvil
+    if (windowWidth < 768 && mobileListRef.current) {
+      mobileListRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   };
 
@@ -1549,6 +1603,27 @@ const fetchOrdersByDate = async () => {
     (order.seccionDelServicio || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
     getUserEmail(order.userId).toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Calcular paginación
+  const indexOfLastOrder = currentPage * itemsPerPage;
+  const indexOfFirstOrder = indexOfLastOrder - itemsPerPage;
+  const currentOrders = filteredOrders.slice(indexOfFirstOrder, indexOfLastOrder);
+  
+  // Calcular el total de páginas
+  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
+
+  // Información de paginación
+  const showingFromTo = filteredOrders.length > 0 
+    ? `${indexOfFirstOrder + 1}-${Math.min(indexOfLastOrder, filteredOrders.length)} de ${filteredOrders.length}`
+    : '0 de 0';
+
+  // Asegurarse de que la página actual es válida
+  useEffect(() => {
+    const maxPage = Math.max(1, totalPages);
+    if (currentPage > maxPage) {
+      setCurrentPage(maxPage);
+    }
+  }, [filteredOrders.length, itemsPerPage, currentPage, totalPages]);
 
   if (loading && orders.length === 0) {
     return (
@@ -1787,7 +1862,7 @@ const fetchOrdersByDate = async () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#91BEAD]/20">
-                  {filteredOrders.map((order) => (
+                  {currentOrders.map((order) => (
                     <React.Fragment key={order._id}>
                       <tr className="hover:bg-[#DFEFE6]/10 transition-colors">
                         {/* Celda para el número de pedido */}
@@ -1921,11 +1996,36 @@ const fetchOrdersByDate = async () => {
                 </tbody>
               </table>
             </div>
+
+            {/* Paginación para la tabla */}
+            {filteredOrders.length > itemsPerPage && (
+              <div className="py-4 border-t border-[#91BEAD]/20">
+                <Pagination
+                  totalItems={filteredOrders.length}
+                  itemsPerPage={itemsPerPage}
+                  currentPage={currentPage}
+                  onPageChange={handlePageChange}
+                  className="px-6"
+                />
+              </div>
+            )}
           </div>
 
           {/* Vista de tarjetas para móviles */}
-          <div className="space-y-4 md:hidden">
-            {filteredOrders.map((order) => (
+          <div ref={mobileListRef} id="mobile-orders-list" className="md:hidden grid grid-cols-1 gap-4">
+            {/* Paginación visible en la parte superior para móvil */}
+            {!loading && filteredOrders.length > itemsPerPage && (
+              <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20">
+                <Pagination
+                  totalItems={filteredOrders.length}
+                  itemsPerPage={itemsPerPage}
+                  currentPage={currentPage}
+                  onPageChange={handlePageChange}
+                />
+              </div>
+            )}
+            
+            {!loading && currentOrders.map(order => (
               <Card key={order._id} className="overflow-hidden shadow-sm border border-[#91BEAD]/20">
                 <CardHeader className="pb-2 bg-[#DFEFE6]/20">
                   <div className="flex justify-between items-start">
@@ -2032,13 +2132,34 @@ const fetchOrdersByDate = async () => {
                 </CardFooter>
               </Card>
             ))}
+
+            {/* Mensaje que muestra la página actual y el total */}
+            {!loading && filteredOrders.length > itemsPerPage && (
+              <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm">
+                <span className="text-[#29696B] font-medium">
+                  Página {currentPage} de {totalPages}
+                </span>
+              </div>
+            )}
+            
+            {/* Paginación duplicada al final de la lista para mayor visibilidad */}
+            {!loading && filteredOrders.length > itemsPerPage && (
+              <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20 mt-2">
+                <Pagination
+                  totalItems={filteredOrders.length}
+                  itemsPerPage={itemsPerPage}
+                  currentPage={currentPage}
+                  onPageChange={handlePageChange}
+                />
+              </div>
+            )}
           </div>
         </>
       )}
 
-      {/* Modal de Crear/Editar Pedido */}
+      {/* Modal de Producto */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto bg-white border border-[#91BEAD]/20">
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-auto bg-white border border-[#91BEAD]/20">
           <DialogHeader>
             <DialogTitle className="text-[#29696B]">
               {currentOrder ? `Editar Pedido #${currentOrder.nPedido}` : 'Nuevo Pedido'}
