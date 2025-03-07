@@ -58,48 +58,71 @@ const UserManagementContent: React.FC = () => {
 
   // Estado para la paginación
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
+  
+  // IMPORTANTE: Tamaño fijo para móviles - siempre 5 elementos por página
+  const ITEMS_PER_PAGE_MOBILE = 5;
+  const ITEMS_PER_PAGE_DESKTOP = 10;
   
   // Estado para controlar el ancho de la ventana
-  const [isMobile, setIsMobile] = useState(false);
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
+  
+  // Calculamos dinámicamente itemsPerPage basado en el ancho de la ventana
+  const itemsPerPage = windowWidth < 768 ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP;
 
-  // Detectar cambios en el tamaño de la ventana
+  // Efecto para detectar el tamaño de la ventana
   useEffect(() => {
-    const checkIfMobile = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobile(mobile);
-      setItemsPerPage(mobile ? 5 : 10);
+    const handleResize = () => {
+      const newWidth = window.innerWidth;
+      setWindowWidth(newWidth);
+      
+      // Si cambiamos entre móvil y escritorio, volvemos a la primera página
+      if ((newWidth < 768 && windowWidth >= 768) || (newWidth >= 768 && windowWidth < 768)) {
+        setCurrentPage(1);
+      }
     };
     
-    // Comprobar al cargar
-    checkIfMobile();
-    
-    // Comprobar al redimensionar
-    window.addEventListener('resize', checkIfMobile);
-    
-    return () => {
-      window.removeEventListener('resize', checkIfMobile);
-    };
-  }, []);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }
+  }, [windowWidth]);
 
   // Resetear la página actual cuando cambian los filtros
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, showInactiveUsers, itemsPerPage]);
+  }, [searchTerm, showInactiveUsers]);
 
-  // Obtener usuarios para la página actual
+  // Calcular los índices para el slice
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  
+  // Asegurarnos de no exceder el límite de usuarios
   const currentUsers = filteredUsers.slice(indexOfFirstItem, indexOfLastItem);
+
+  // Calcular el total de páginas
+  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
+
+  // Asegurarnos de que la página actual no exceda el número total de páginas
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   // Función para cambiar de página
   const handlePageChange = (pageNumber) => {
     setCurrentPage(pageNumber);
+    
     // Hacer scroll al inicio de la lista en móvil
-    if (isMobile && mobileListRef.current) {
+    if (windowWidth < 768 && mobileListRef.current) {
       mobileListRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   };
+
+  // Mostrar información detallada sobre la paginación
+  const showingFromTo = filteredUsers.length > 0 
+    ? `${indexOfFirstItem + 1}-${Math.min(indexOfLastItem, filteredUsers.length)} de ${filteredUsers.length}`
+    : '0 de 0';
 
   return (
     <div className="p-4 md:p-6 space-y-6">
@@ -136,10 +159,15 @@ const UserManagementContent: React.FC = () => {
         </Button>
       </div>
 
-      {/* Contador de resultados - Visible en todos los dispositivos */}
+      {/* Contador de resultados con información detallada */}
       {!loading && filteredUsers.length > 0 && (
-        <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm text-[#29696B]">
-          {filteredUsers.length} {filteredUsers.length === 1 ? 'usuario encontrado' : 'usuarios encontrados'}
+        <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm text-[#29696B] flex flex-col sm:flex-row sm:justify-between items-center">
+          <span>
+            Total: {filteredUsers.length} {filteredUsers.length === 1 ? 'usuario' : 'usuarios'}
+          </span>
+          <span className="text-[#29696B] font-medium">
+            Mostrando: {showingFromTo}
+          </span>
         </div>
       )}
 
@@ -189,19 +217,21 @@ const UserManagementContent: React.FC = () => {
       </div>
 
       {/* Vista de Tarjetas para dispositivos móviles con ID para scroll */}
-      <div ref={mobileListRef} id="mobile-users-list" className="md:hidden space-y-6">
+      <div ref={mobileListRef} id="mobile-users-list" className="md:hidden space-y-4">
         {/* Paginación visible en la parte superior para móvil */}
         {!loading && filteredUsers.length > 0 && (
-          <EnhancedPagination 
-            totalItems={filteredUsers.length}
-            itemsPerPage={itemsPerPage}
-            currentPage={currentPage}
-            onPageChange={handlePageChange}
-          />
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20">
+            <EnhancedPagination 
+              totalItems={filteredUsers.length}
+              itemsPerPage={itemsPerPage}
+              currentPage={currentPage}
+              onPageChange={handlePageChange}
+            />
+          </div>
         )}
         
-        {/* Lista de tarjetas de usuario con altura fija y scroll */}
-        <div className="space-y-4 mobile-user-cards-container">
+        {/* Lista de tarjetas de usuario */}
+        <div className="space-y-3">
           {!loading && currentUsers.map(user => (
             <UserCard 
               key={user._id}
@@ -213,25 +243,27 @@ const UserManagementContent: React.FC = () => {
               getFullName={getFullName}
             />
           ))}
-          
-          {/* Generar tarjetas vacías para asegurar que siempre se muestren 5 espacios */}
-          {!loading && currentUsers.length < itemsPerPage && isMobile && Array(itemsPerPage - currentUsers.length).fill(0).map((_, index) => (
-            <div 
-              key={`placeholder-${index}`} 
-              className="h-4 opacity-0"
-              aria-hidden="true"
-            />
-          ))}
         </div>
+        
+        {/* Mensaje que muestra la página actual y el total */}
+        {!loading && filteredUsers.length > itemsPerPage && (
+          <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm">
+            <span className="text-[#29696B] font-medium">
+              Página {currentPage} de {totalPages}
+            </span>
+          </div>
+        )}
         
         {/* Paginación duplicada al final de la lista para mayor visibilidad */}
         {!loading && filteredUsers.length > itemsPerPage && (
-          <EnhancedPagination 
-            totalItems={filteredUsers.length}
-            itemsPerPage={itemsPerPage}
-            currentPage={currentPage}
-            onPageChange={handlePageChange}
-          />
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20 mt-2">
+            <EnhancedPagination 
+              totalItems={filteredUsers.length}
+              itemsPerPage={itemsPerPage}
+              currentPage={currentPage}
+              onPageChange={handlePageChange}
+            />
+          </div>
         )}
       </div>
 
@@ -250,15 +282,6 @@ const UserManagementContent: React.FC = () => {
         loading={loading}
         error={error}
       />
-      
-      {/* Estilos específicos para móvil para asegurar que se vean todas las tarjetas */}
-      <style jsx>{`
-        @media (max-width: 767px) {
-          .mobile-user-cards-container {
-            padding-bottom: 0.5rem;
-          }
-        }
-      `}</style>
     </div>
   );
 };
