@@ -4,7 +4,9 @@ import {
   ShoppingCart,
   AlertTriangle,
   Plus,
-  Minus
+  Minus,
+  Package,
+  Check
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
@@ -76,6 +78,32 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     return 'bg-[#50C3AD] hover:bg-[#00888A]';
   };
 
+  // Obtener colores y estilos para el indicador de stock
+  const getStockBadgeStyle = () => {
+    if (product.stock <= 5) {
+      return {
+        bg: 'bg-amber-50',
+        text: 'text-amber-700',
+        border: 'border-amber-200',
+        icon: <AlertTriangle size={12} className="mr-1" />
+      };
+    } else if (product.stock <= 15) {
+      return {
+        bg: 'bg-blue-50',
+        text: 'text-blue-700',
+        border: 'border-blue-200',
+        icon: <Package size={12} className="mr-1" />
+      };
+    } else {
+      return {
+        bg: 'bg-green-50',
+        text: 'text-green-700',
+        border: 'border-green-200',
+        icon: <Check size={12} className="mr-1" />
+      };
+    }
+  };
+
   // Manejar cambio de cantidad
   const handleQuantityChange = (newQuantity: number) => {
     // Asegurar que la cantidad esté entre 1 y el stock disponible
@@ -89,6 +117,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     setShowQuantitySelector(false);
     setQuantity(1); // Resetear a 1 después de añadir
   };
+
+  // Obtener estilo del indicador de stock
+  const stockStyle = getStockBadgeStyle();
 
   return (
     <motion.div
@@ -139,20 +170,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             <Heart className={isFavorite ? 'fill-current' : ''} size={compact ? 12 : 16} />
           </Button>
 
-          {/* Indicador de stock bajo - más pequeño y simple en modo compacto */}
-          {product.stock <= 5 && (
-            <Badge className={`absolute top-3 sm:top-4 left-3 sm:left-4 bg-amber-50 text-amber-700 border-amber-200
-              ${compact ? 'text-xs px-1.5 py-0.5' : ''}`}>
-              {compact ? (
-                <span>Stock: {product.stock}</span>
-              ) : (
-                <>
-                  <AlertTriangle size={12} className="mr-1" />
-                  Stock bajo
-                </>
-              )}
-            </Badge>
-          )}
+          {/* Indicador de stock - ahora se muestra para todos los productos */}
+          <Badge className={`absolute top-3 sm:top-4 left-3 sm:left-4 ${stockStyle.bg} ${stockStyle.text} border ${stockStyle.border}
+            ${compact ? 'text-xs px-1.5 py-0.5' : ''}`}>
+            {compact ? (
+              <span>Stock: {product.stock}</span>
+            ) : (
+              <>
+                {stockStyle.icon}
+                {product.stock <= 5 ? 'Stock bajo' : `Stock: ${product.stock}`}
+              </>
+            )}
+          </Badge>
         </div>
 
         <CardContent className={`flex-grow ${compact ? 'pt-2 px-3' : 'pt-4'}`}>
