@@ -38,8 +38,6 @@ import {
   Image as ImageIcon,
   X,
   Loader2,
-  ChevronLeft,
-  ChevronRight,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -110,41 +108,6 @@ const ProductStockInput: React.FC<{
   );
 };
 
-// Componente simple de paginación personalizado
-const PaginationControls: React.FC<{
-  currentPage: number;
-  totalPages: number;
-  onPageChange: (page: number) => void;
-}> = ({ currentPage, totalPages, onPageChange }) => {
-  return (
-    <div className="flex items-center justify-center gap-2 my-4">
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => onPageChange(currentPage - 1)}
-        disabled={currentPage <= 1}
-        className="h-8 w-8 p-0 border-[#91BEAD]"
-      >
-        <ChevronLeft className="h-4 w-4" />
-      </Button>
-      
-      <span className="text-sm text-[#7AA79C]">
-        Página {currentPage} de {totalPages}
-      </span>
-      
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => onPageChange(currentPage + 1)}
-        disabled={currentPage >= totalPages}
-        className="h-8 w-8 p-0 border-[#91BEAD]"
-      >
-        <ChevronRight className="h-4 w-4" />
-      </Button>
-    </div>
-  );
-};
-
 interface ProductExtended extends Product {
   imagen?: string | Buffer | null;
   vendidos?: number;
@@ -178,8 +141,6 @@ const InventorySection: React.FC = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
   const [deleteImageDialogOpen, setDeleteImageDialogOpen] = useState<boolean>(false);
   const [productToDelete, setProductToDelete] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [productsPerPage] = useState<number>(10);
   const [editingProduct, setEditingProduct] = useState<ProductExtended | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -191,6 +152,22 @@ const InventorySection: React.FC = () => {
     sortOrder: 'asc'
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Estado para la paginación
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  
+  // Referencias para el scroll en móvil
+  const mobileListRef = useRef<HTMLDivElement>(null);
+  
+  // IMPORTANTE: Tamaños fijos para cada tipo de dispositivo
+  const ITEMS_PER_PAGE_MOBILE = 5;
+  const ITEMS_PER_PAGE_DESKTOP = 10;
+  
+  // Estado para controlar el ancho de la ventana
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
+  
+  // Calculamos dinámicamente itemsPerPage basado en el ancho de la ventana
+  const itemsPerPage = windowWidth < 768 ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP;
   
   const [formData, setFormData] = useState<FormData>({
     nombre: '',
@@ -255,6 +232,39 @@ const InventorySection: React.FC = () => {
       unsubscribe();
     };
   }, []);
+
+  // Efecto para detectar el tamaño de la ventana
+  useEffect(() => {
+    const handleResize = () => {
+      const newWidth = window.innerWidth;
+      setWindowWidth(newWidth);
+      
+      // Si cambiamos entre móvil y escritorio, volvemos a la primera página
+      if ((newWidth < 768 && windowWidth >= 768) || (newWidth >= 768 && windowWidth < 768)) {
+        setCurrentPage(1);
+      }
+    };
+    
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }
+  }, [windowWidth]);
+
+  // Resetear la página actual cuando cambian los filtros
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedCategory]);
+
+  // Asegurarnos de que la página actual no exceda el número total de páginas
+  useEffect(() => {
+    const filteredProducts = getFilteredProducts();
+    const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+    
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, searchTerm, selectedCategory, products, itemsPerPage]);
 
   const fetchProducts = async () => {
     try {
@@ -690,35 +700,46 @@ const InventorySection: React.FC = () => {
     }
   };
 
-  // Filtrar productos
-  const filteredProducts = products.filter(product => {
-    const matchesSearch = 
-      product.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (product.descripcion ? product.descripcion.toLowerCase().includes(searchTerm.toLowerCase()) : false) ||
-      (product.proovedorInfo ? product.proovedorInfo.toLowerCase().includes(searchTerm.toLowerCase()) : false);
-      
-    const matchesCategory = 
-      selectedCategory === 'all' || 
-      product.categoria === selectedCategory ||
-      (selectedCategory === product.categoria) || 
-      (selectedCategory === product.subCategoria);
-      
-    return matchesSearch && matchesCategory;
-  });
+  // Función para obtener productos filtrados
+  const getFilteredProducts = () => {
+    return products.filter(product => {
+      const matchesSearch = 
+        product.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (product.descripcion ? product.descripcion.toLowerCase().includes(searchTerm.toLowerCase()) : false) ||
+        (product.proovedorInfo ? product.proovedorInfo.toLowerCase().includes(searchTerm.toLowerCase()) : false);
+        
+      const matchesCategory = 
+        selectedCategory === 'all' || 
+        product.categoria === selectedCategory ||
+        (selectedCategory === product.categoria) || 
+        (selectedCategory === product.subCategoria);
+        
+      return matchesSearch && matchesCategory;
+    });
+  };
+
+  // Obtener productos filtrados
+  const filteredProducts = getFilteredProducts();
   
   // Calcular paginación
-  const indexOfLastProduct = currentPage * productsPerPage;
-  const indexOfFirstProduct = indexOfLastProduct - productsPerPage;
+  const indexOfLastProduct = currentPage * itemsPerPage;
+  const indexOfFirstProduct = indexOfLastProduct - itemsPerPage;
   const currentProducts = filteredProducts.slice(indexOfFirstProduct, indexOfLastProduct);
   
-  // Calcular número total de páginas
-  const totalPages = Math.ceil(filteredProducts.length / productsPerPage);
+  // Calcular el total de páginas
+  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
 
   // Función para cambiar de página
   const handlePageChange = (pageNumber: number) => {
     setCurrentPage(pageNumber);
+    
     // Al cambiar de página, hacemos scroll hacia arriba
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    
+    // Hacer scroll al inicio de la lista en móvil
+    if (windowWidth < 768 && mobileListRef.current) {
+      mobileListRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
   };
 
   // Manejar la subida de imagen con el nuevo componente
@@ -727,6 +748,11 @@ const InventorySection: React.FC = () => {
       fetchProducts(); // Recargar productos después de subir la imagen
     }
   };
+
+  // Mostrar información detallada sobre la paginación
+  const showingFromTo = filteredProducts.length > 0 
+    ? `${indexOfFirstProduct + 1}-${Math.min(indexOfLastProduct, filteredProducts.length)} de ${filteredProducts.length}`
+    : '0 de 0';
 
   return (
     <div className="p-4 md:p-6 space-y-6 bg-[#DFEFE6]/30">
@@ -754,10 +780,7 @@ const InventorySection: React.FC = () => {
               type="text"
               placeholder="Buscar productos..."
               value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1); // Resetear a primera página cuando se busca
-              }}
+              onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
             />
           </div>
@@ -765,10 +788,7 @@ const InventorySection: React.FC = () => {
           <Tabs 
             defaultValue="all" 
             value={selectedCategory}
-            onValueChange={(value) => {
-              setSelectedCategory(value);
-              setCurrentPage(1); // Resetear a primera página cuando se cambia categoría
-            }}
+            onValueChange={setSelectedCategory}
             className="w-full"
           >
             <TabsList className="w-full mb-2 flex flex-wrap h-auto bg-[#DFEFE6]/50">
@@ -825,6 +845,18 @@ const InventorySection: React.FC = () => {
             <Search className="w-6 h-6 text-[#29696B]" />
           </div>
           <p className="text-[#7AA79C]">No se encontraron productos que coincidan con la búsqueda</p>
+        </div>
+      )}
+
+      {/* Contador de resultados con información detallada */}
+      {!loading && filteredProducts.length > 0 && (
+        <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm text-[#29696B] flex flex-col sm:flex-row sm:justify-between items-center">
+          <span>
+            Total: {filteredProducts.length} {filteredProducts.length === 1 ? 'producto' : 'productos'}
+          </span>
+          <span className="text-[#29696B] font-medium">
+            Mostrando: {showingFromTo}
+          </span>
         </div>
       )}
 
@@ -937,94 +969,33 @@ const InventorySection: React.FC = () => {
         )}
         
         {/* Paginación para la tabla */}
-        {filteredProducts.length > productsPerPage && (
-          <div className="p-4 border-t border-[#91BEAD]/20">
-            {/* Componente de navegación por páginas mejorado */}
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-[#7AA79C]">
-                Mostrando {indexOfFirstProduct + 1}-{Math.min(indexOfLastProduct, filteredProducts.length)} de {filteredProducts.length} productos
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(1)}
-                  disabled={currentPage === 1}
-                  className="h-8 w-8 p-0 text-xs border-[#91BEAD]"
-                >
-                  1
-                </Button>
-                
-                {currentPage > 3 && (
-                  <span className="text-[#7AA79C]">...</span>
-                )}
-                
-                {Array.from({ length: 3 }, (_, i) => {
-                  const pageNum = currentPage + i - 1;
-                  if (pageNum > 1 && pageNum < totalPages) {
-                    return (
-                      <Button
-                        key={pageNum}
-                        variant={pageNum === currentPage ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => handlePageChange(pageNum)}
-                        className={`h-8 w-8 p-0 text-xs ${
-                          pageNum === currentPage 
-                            ? "bg-[#29696B] text-white hover:bg-[#29696B]/90" 
-                            : "border-[#91BEAD] text-[#7AA79C]"
-                        }`}
-                      >
-                        {pageNum}
-                      </Button>
-                    );
-                  }
-                  return null;
-                })}
-                
-                {currentPage < totalPages - 2 && (
-                  <span className="text-[#7AA79C]">...</span>
-                )}
-                
-                {totalPages > 1 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handlePageChange(totalPages)}
-                    disabled={currentPage === totalPages}
-                    className="h-8 w-8 p-0 text-xs border-[#91BEAD]"
-                  >
-                    {totalPages}
-                  </Button>
-                )}
-                
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  className="h-8 w-8 p-0 border-[#91BEAD]"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePageChange(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                  className="h-8 w-8 p-0 border-[#91BEAD]"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
+        {filteredProducts.length > itemsPerPage && (
+          <div className="py-4 border-t border-[#91BEAD]/20">
+            <Pagination
+              totalItems={filteredProducts.length}
+              itemsPerPage={itemsPerPage}
+              currentPage={currentPage}
+              onPageChange={handlePageChange}
+              className="px-6"
+            />
           </div>
         )}
       </div>
 
       {/* Vista de Tarjetas para dispositivos móviles */}
-      <div className="md:hidden grid grid-cols-1 gap-4">
+      <div ref={mobileListRef} id="mobile-products-list" className="md:hidden grid grid-cols-1 gap-4">
+        {/* Paginación visible en la parte superior para móvil */}
+        {!loading && filteredProducts.length > itemsPerPage && (
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20">
+            <Pagination
+              totalItems={filteredProducts.length}
+              itemsPerPage={itemsPerPage}
+              currentPage={currentPage}
+              onPageChange={handlePageChange}
+            />
+          </div>
+        )}
+        
         {!loading && currentProducts.map(product => (
           <Card 
             key={product._id} 
@@ -1114,17 +1085,24 @@ const InventorySection: React.FC = () => {
           </Card>
         ))}
         
-        {/* Paginación para móviles - Versión simplificada */}
-        {filteredProducts.length > productsPerPage && (
-          <div className="py-4">
-            <PaginationControls
+        {/* Mensaje que muestra la página actual y el total */}
+        {!loading && filteredProducts.length > itemsPerPage && (
+          <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm">
+            <span className="text-[#29696B] font-medium">
+              Página {currentPage} de {totalPages}
+            </span>
+          </div>
+        )}
+        
+        {/* Paginación duplicada al final de la lista para mayor visibilidad */}
+        {!loading && filteredProducts.length > itemsPerPage && (
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20 mt-2">
+            <Pagination
+              totalItems={filteredProducts.length}
+              itemsPerPage={itemsPerPage}
               currentPage={currentPage}
-              totalPages={totalPages}
               onPageChange={handlePageChange}
             />
-            <p className="text-center text-xs text-[#7AA79C] mt-2">
-              Mostrando {indexOfFirstProduct + 1}-{Math.min(indexOfLastProduct, filteredProducts.length)} de {filteredProducts.length} productos
-            </p>
           </div>
         )}
       </div>

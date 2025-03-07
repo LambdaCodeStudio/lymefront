@@ -7,9 +7,7 @@ import {
   Loader2,
   Search,
   SlidersHorizontal,
-  Hash,
-  ChevronLeft,
-  ChevronRight,
+  Hash
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from "@/components/ui/button";
@@ -85,37 +83,6 @@ interface FilterOptions {
   fechaFin: string;
 }
 
-// Componente para controles de paginación simplificados
-const PaginationControls = ({ currentPage, totalPages, onPageChange }) => {
-  return (
-    <div className="flex items-center justify-center gap-2 my-4">
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => onPageChange(currentPage - 1)}
-        disabled={currentPage <= 1}
-        className="h-8 w-8 p-0 border-[#91BEAD]"
-      >
-        <ChevronLeft className="h-4 w-4" />
-      </Button>
-      
-      <span className="text-sm text-[#7AA79C]">
-        Página {currentPage} de {totalPages || 1}
-      </span>
-      
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => onPageChange(currentPage + 1)}
-        disabled={currentPage >= totalPages}
-        className="h-8 w-8 p-0 border-[#91BEAD]"
-      >
-        <ChevronRight className="h-4 w-4" />
-      </Button>
-    </div>
-  );
-};
-
 const DownloadsManagement: React.FC = () => {
   // Estados para Excel
   const [dateRange, setDateRange] = useState<DateRange>({
@@ -154,11 +121,6 @@ const DownloadsManagement: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
-
-  // Estados para paginación
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [totalPages, setTotalPages] = useState(1);
 
   // Cargar clientes
   useEffect(() => {
@@ -248,36 +210,22 @@ const DownloadsManagement: React.FC = () => {
             fechaInicio: '',
             fechaFin: '',
           });
-
-          // Calcular el número total de páginas
-          setTotalPages(Math.ceil(pedidosConTotal.length / itemsPerPage));
         } else {
           // Si la respuesta no es un array, inicializar con array vacío
           setAllPedidos([]);
           setFilteredPedidos([]);
-          setTotalPages(1);
         }
       } catch (err) {
         console.error('Error al cargar todos los pedidos:', err);
         setAllPedidos([]);
         setFilteredPedidos([]);
-        setTotalPages(1);
       } finally {
         setLoadingPedidos(false);
       }
     };
     
     fetchAllPedidos();
-  }, [itemsPerPage]);
-  
-  // Recalcular páginas cuando cambien los filtros
-  useEffect(() => {
-    setTotalPages(Math.ceil(filteredPedidos.length / itemsPerPage));
-    // Asegurarse de que la página actual no sea mayor que el total de páginas
-    if (currentPage > Math.ceil(filteredPedidos.length / itemsPerPage)) {
-      setCurrentPage(1);
-    }
-  }, [filteredPedidos, itemsPerPage]);
+  }, []);
   
   // Función para aplicar filtros manualmente
   const applyFilters = () => {
@@ -310,9 +258,6 @@ const DownloadsManagement: React.FC = () => {
     }
     
     setFilteredPedidos(filtered);
-    
-    // Resetear a la primera página después de aplicar filtros
-    setCurrentPage(1);
   };
   
   // Reaccionar a cambios en filterOptions
@@ -320,16 +265,7 @@ const DownloadsManagement: React.FC = () => {
     applyFilters();
   }, [filterOptions]);
   
-  // Manejar cambio de página
-  const handlePageChange = (pageNumber: number) => {
-    setCurrentPage(pageNumber);
-    // Hacer scroll al inicio cuando cambiamos de página
-    if (typeof window !== 'undefined') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  };
-  
-  // Función para aplicar filtros y cerrar el diálogo
+  // Manejar confirmación de filtros
   const handleApplyFilters = () => {
     // Aplicar los filtros temporales
     setFilterOptions(tempFilterOptions);
@@ -492,8 +428,6 @@ const DownloadsManagement: React.FC = () => {
     };
     setTempFilterOptions(emptyFilters);
     setFilterOptions(emptyFilters);
-    // Resetear a la primera página
-    setCurrentPage(1);
   };
 
   const formatDate = (date: Date) => date.toISOString().split('T')[0];
@@ -537,11 +471,6 @@ const DownloadsManagement: React.FC = () => {
   
   // Obtener servicios únicos para filtro
   const serviciosUnicos = [...new Set(allPedidos.map(p => p.servicio).filter(Boolean))];
-  
-  // Obtener pedidos para la página actual
-  const indexOfLastPedido = currentPage * itemsPerPage;
-  const indexOfFirstPedido = indexOfLastPedido - itemsPerPage;
-  const currentPedidos = filteredPedidos.slice(indexOfFirstPedido, indexOfLastPedido);
 
   return (
     <div className="space-y-6 bg-[#DFEFE6]/20 p-4 md:p-6 rounded-xl">
@@ -923,7 +852,7 @@ const DownloadsManagement: React.FC = () => {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      currentPedidos.map((pedido) => (
+                      filteredPedidos.map((pedido) => (
                         <TableRow 
                           key={pedido._id} 
                           className="hover:bg-[#DFEFE6]/10 transition-colors"
@@ -968,94 +897,11 @@ const DownloadsManagement: React.FC = () => {
                 </Table>
               </div>
             </CardContent>
-            
-            {/* Paginación para Desktop */}
-            {filteredPedidos.length > itemsPerPage && (
-              <CardFooter className="bg-[#DFEFE6]/10 border-t border-[#91BEAD]/20 justify-between p-4">
-                <div className="text-sm text-[#7AA79C]">
-                  Mostrando {indexOfFirstPedido + 1}-{Math.min(indexOfLastPedido, filteredPedidos.length)} de {filteredPedidos.length} pedidos
-                </div>
-                
-                <div className="hidden md:flex items-center space-x-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handlePageChange(1)}
-                    disabled={currentPage === 1}
-                    className="h-8 px-3 border-[#91BEAD]"
-                  >
-                    Primera
-                  </Button>
-                  
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handlePageChange(currentPage - 1)}
-                    disabled={currentPage === 1}
-                    className="h-8 w-8 p-0 border-[#91BEAD]"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  
-                  {/* Mostrar página actual y adyacentes */}
-                  {Array.from({ length: Math.min(3, totalPages) }, (_, i) => {
-                    // Calcular qué números de página mostrar
-                    let pageNum = currentPage - 1 + i;
-                    if (currentPage === 1) pageNum = 1 + i;
-                    if (currentPage === totalPages) pageNum = totalPages - 2 + i;
-                    
-                    // Asegurarse de que el número de página esté dentro del rango válido
-                    if (pageNum > 0 && pageNum <= totalPages) {
-                      return (
-                        <Button
-                          key={pageNum}
-                          variant={currentPage === pageNum ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => handlePageChange(pageNum)}
-                          className={`h-8 w-8 p-0 ${
-                            currentPage === pageNum
-                              ? "bg-[#29696B] text-white"
-                              : "border-[#91BEAD] text-[#7AA79C]"
-                          }`}
-                        >
-                          {pageNum}
-                        </Button>
-                      );
-                    }
-                    return null;
-                  })}
-                  
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handlePageChange(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                    className="h-8 w-8 p-0 border-[#91BEAD]"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                  
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handlePageChange(totalPages)}
-                    disabled={currentPage === totalPages}
-                    className="h-8 px-3 border-[#91BEAD]"
-                  >
-                    Última
-                  </Button>
-                </div>
-                
-                {/* Paginación para móvil */}
-                <div className="md:hidden">
-                  <PaginationControls
-                    currentPage={currentPage}
-                    totalPages={totalPages}
-                    onPageChange={handlePageChange}
-                  />
-                </div>
-              </CardFooter>
-            )}
+            <CardFooter className="bg-[#DFEFE6]/10 border-t border-[#91BEAD]/20 justify-between">
+              <div className="text-sm text-[#7AA79C]">
+                Mostrando {filteredPedidos.length} de {allPedidos.length} pedidos
+              </div>
+            </CardFooter>
           </Card>
         </TabsContent>
       </Tabs>
