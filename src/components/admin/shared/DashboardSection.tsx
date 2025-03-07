@@ -1,4 +1,9 @@
-import React from 'react';
+/**
+ * Componente de sección para el panel de administración
+ * Con altura dinámica y scroll configurable
+ */
+import React, { useState, useRef, useEffect } from 'react';
+import { ChevronDown } from 'lucide-react';
 
 interface DashboardSectionProps {
   id: string;
@@ -17,47 +22,96 @@ const DashboardSection: React.FC<DashboardSectionProps> = ({
   onToggle,
   children
 }) => {
+  // Referencia al contenido para medir su altura
+  const contentRef = useRef<HTMLDivElement>(null);
+  
+  // Estado para controlar si estamos en vista móvil
+  const [isMobile, setIsMobile] = useState(false);
+  
+  // Controlar el cambio de tamaño de ventana
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => {
+      window.removeEventListener('resize', checkMobile);
+    };
+  }, []);
+
   return (
-    <div className={`border-b border-[#91BEAD]/20 last:border-b-0 transition-all duration-300 ${
-      isExpanded ? 'bg-[#DFEFE6]/30' : 'hover:bg-[#DFEFE6]/10'
-    }`}>
+    <div 
+      id={`dashboard-section-${id}`}
+      className={`dashboard-section border-b border-[#91BEAD]/10 last:border-b-0 ${
+        isExpanded ? 'expanded' : ''
+      }`}
+    >
+      {/* Cabecera de la sección */}
       <button
         onClick={onToggle}
-        className="w-full px-6 py-4 flex items-center justify-between focus:outline-none"
+        className="w-full text-left px-4 py-3 flex items-center justify-between bg-white hover:bg-[#DFEFE6]/20 transition-colors"
         aria-expanded={isExpanded}
-        aria-controls={`${id}-content`}
+        aria-controls={`dashboard-content-${id}`}
       >
         <div className="flex items-center">
-          <Icon className={`w-5 h-5 ${isExpanded ? 'text-[#29696B]' : 'text-[#7AA79C]'}`} />
-          <span className={`ml-3 font-medium ${isExpanded ? 'text-[#29696B]' : 'text-[#29696B]/80'}`}>
-            {label}
-          </span>
+          <Icon className="w-5 h-5 text-[#29696B] mr-2" />
+          <span className="font-medium text-[#29696B]">{label}</span>
         </div>
-        <div className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>
-          <svg
-            className="w-5 h-5 text-[#7AA79C]"
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <polyline points="6 9 12 15 18 9"></polyline>
-          </svg>
-        </div>
+        <ChevronDown 
+          className={`w-5 h-5 text-[#7AA79C] transition-transform duration-200 ${
+            isExpanded ? 'transform rotate-180' : ''
+          }`} 
+        />
       </button>
+      
+      {/* Contenido de la sección */}
       <div
-        id={`${id}-content`}
-        className={`overflow-hidden transition-all duration-300 ease-in-out ${
-          isExpanded ? 'max-h-screen opacity-100' : 'max-h-0 opacity-0'
+        id={`dashboard-content-${id}`}
+        ref={contentRef}
+        className={`transition-all duration-300 overflow-hidden ${
+          isExpanded ? 'max-h-full overflow-visible' : 'max-h-0'
         }`}
+        style={{
+          // Si está expandido, no aplicamos altura máxima
+          ...(isExpanded ? {} : { maxHeight: '0px' })
+        }}
       >
-        <div className="px-6 pb-6 pt-2">
-          {children}
-        </div>
+        {/* Si estamos en móvil, usamos un div con altura max definida y scroll */}
+        {isExpanded && isMobile ? (
+          <div className="overflow-y-auto max-h-[70vh] section-mobile-content">
+            {children}
+          </div>
+        ) : (
+          // En desktop mostramos el contenido normalmente
+          isExpanded && children
+        )}
       </div>
+      
+      {/* Estilos específicos para móvil */}
+      <style jsx>{`
+        @media (max-width: 767px) {
+          .section-mobile-content {
+            /* Aseguramos scroll visible */
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 80px; /* Espacio adicional al final */
+          }
+          
+          /* Clase para mostrar un indicador de scroll */
+          .section-mobile-content::after {
+            content: "";
+            display: block;
+            height: 20px;
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(223,239,230,0.3));
+            position: sticky;
+            bottom: 0;
+            margin-top: -20px;
+            pointer-events: none;
+          }
+        }
+      `}</style>
     </div>
   );
 };
