@@ -2,13 +2,11 @@
  * Componente para gestión de usuarios en el panel de administración
  * Permite crear, editar, activar/desactivar y eliminar usuarios del sistema
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Plus,
   AlertCircle,
-  CheckCircle,
-  Search,
-  Filter
+  Search
 } from 'lucide-react';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -30,6 +28,9 @@ import { filterUsers, getUserIdentifier, getFullName } from './utils/userUtils';
  * Componente interno que usa el hook useUserManagement
  */
 const UserManagementContent: React.FC = () => {
+  // Referencia al contenedor de usuarios móviles
+  const mobileListRef = useRef(null);
+  
   // Usar el hook de gestión de usuarios que centraliza toda la lógica
   const {
     users,
@@ -57,23 +58,34 @@ const UserManagementContent: React.FC = () => {
 
   // Estado para la paginación
   const [currentPage, setCurrentPage] = useState(1);
-  // Reducir el número de elementos por página en móvil para mejor visualización
-  const itemsPerPage = window.innerWidth < 768 ? 5 : 10;
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  
+  // Estado para controlar el ancho de la ventana
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detectar cambios en el tamaño de la ventana
+  useEffect(() => {
+    const checkIfMobile = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      setItemsPerPage(mobile ? 5 : 10);
+    };
+    
+    // Comprobar al cargar
+    checkIfMobile();
+    
+    // Comprobar al redimensionar
+    window.addEventListener('resize', checkIfMobile);
+    
+    return () => {
+      window.removeEventListener('resize', checkIfMobile);
+    };
+  }, []);
 
   // Resetear la página actual cuando cambian los filtros
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, showInactiveUsers]);
-
-  // Actualizar itemsPerPage cuando cambia el tamaño de la ventana
-  useEffect(() => {
-    const handleResize = () => {
-      setCurrentPage(1); // Reset to first page on resize
-    };
-    
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, [searchTerm, showInactiveUsers, itemsPerPage]);
 
   // Obtener usuarios para la página actual
   const indexOfLastItem = currentPage * itemsPerPage;
@@ -84,11 +96,8 @@ const UserManagementContent: React.FC = () => {
   const handlePageChange = (pageNumber) => {
     setCurrentPage(pageNumber);
     // Hacer scroll al inicio de la lista en móvil
-    if (window.innerWidth < 768) {
-      const mobileList = document.getElementById('mobile-users-list');
-      if (mobileList) {
-        mobileList.scrollIntoView({ behavior: 'smooth' });
-      }
+    if (isMobile && mobileListRef.current) {
+      mobileListRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   };
 
@@ -180,7 +189,7 @@ const UserManagementContent: React.FC = () => {
       </div>
 
       {/* Vista de Tarjetas para dispositivos móviles con ID para scroll */}
-      <div id="mobile-users-list" className="md:hidden space-y-6">
+      <div ref={mobileListRef} id="mobile-users-list" className="md:hidden space-y-6">
         {/* Paginación visible en la parte superior para móvil */}
         {!loading && filteredUsers.length > 0 && (
           <EnhancedPagination 
@@ -191,8 +200,8 @@ const UserManagementContent: React.FC = () => {
           />
         )}
         
-        {/* Lista de tarjetas de usuario */}
-        <div className="grid grid-cols-1 gap-4">
+        {/* Lista de tarjetas de usuario con altura fija y scroll */}
+        <div className="space-y-4 mobile-user-cards-container">
           {!loading && currentUsers.map(user => (
             <UserCard 
               key={user._id}
@@ -202,6 +211,15 @@ const UserManagementContent: React.FC = () => {
               onToggleStatus={handleToggleStatus}
               getUserIdentifier={getUserIdentifier}
               getFullName={getFullName}
+            />
+          ))}
+          
+          {/* Generar tarjetas vacías para asegurar que siempre se muestren 5 espacios */}
+          {!loading && currentUsers.length < itemsPerPage && isMobile && Array(itemsPerPage - currentUsers.length).fill(0).map((_, index) => (
+            <div 
+              key={`placeholder-${index}`} 
+              className="h-4 opacity-0"
+              aria-hidden="true"
             />
           ))}
         </div>
@@ -232,6 +250,15 @@ const UserManagementContent: React.FC = () => {
         loading={loading}
         error={error}
       />
+      
+      {/* Estilos específicos para móvil para asegurar que se vean todas las tarjetas */}
+      <style jsx>{`
+        @media (max-width: 767px) {
+          .mobile-user-cards-container {
+            padding-bottom: 0.5rem;
+          }
+        }
+      `}</style>
     </div>
   );
 };
