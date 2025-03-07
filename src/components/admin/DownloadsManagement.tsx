@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Download,
   FileSpreadsheet,
@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import Pagination from "@/components/ui/pagination";
 import api from '../../services/api';
 
 interface DateRange {
@@ -121,6 +122,52 @@ const DownloadsManagement: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+
+  // Estados para paginación
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
+  const mobileListRef = useRef<HTMLDivElement>(null);
+
+  // IMPORTANTE: Tamaños fijos para cada tipo de dispositivo
+  const ITEMS_PER_PAGE_MOBILE = 5;
+  const ITEMS_PER_PAGE_DESKTOP = 10;
+  const itemsPerPage = windowWidth < 768 ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP;
+
+  // Efecto para detectar el tamaño de la ventana
+  useEffect(() => {
+    const handleResize = () => {
+      const newWidth = window.innerWidth;
+      setWindowWidth(newWidth);
+      
+      // Si cambiamos entre móvil y escritorio, volvemos a la primera página
+      if ((newWidth < 768 && windowWidth >= 768) || (newWidth >= 768 && windowWidth < 768)) {
+        setCurrentPage(1);
+      }
+    };
+    
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }
+  }, [windowWidth]);
+
+  // Resetear la página actual cuando cambian los filtros
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterOptions]);
+
+  // Función para cambiar de página
+  const handlePageChange = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
+    
+    // Al cambiar de página, hacemos scroll hacia arriba
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    
+    // Hacer scroll al inicio de la lista en móvil
+    if (windowWidth < 768 && mobileListRef.current) {
+      mobileListRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
 
   // Cargar clientes
   useEffect(() => {
@@ -258,6 +305,7 @@ const DownloadsManagement: React.FC = () => {
     }
     
     setFilteredPedidos(filtered);
+    setCurrentPage(1); // Reset to first page when filters change
   };
   
   // Reaccionar a cambios en filterOptions
@@ -472,6 +520,19 @@ const DownloadsManagement: React.FC = () => {
   // Obtener servicios únicos para filtro
   const serviciosUnicos = [...new Set(allPedidos.map(p => p.servicio).filter(Boolean))];
 
+  // Calcular paginación
+  const indexOfLastPedido = currentPage * itemsPerPage;
+  const indexOfFirstPedido = indexOfLastPedido - itemsPerPage;
+  const currentPedidos = filteredPedidos.slice(indexOfFirstPedido, indexOfLastPedido);
+  
+  // Calcular el total de páginas
+  const totalPages = Math.ceil(filteredPedidos.length / itemsPerPage);
+
+  // Información de paginación
+  const showingFromTo = filteredPedidos.length > 0 
+    ? `${indexOfFirstPedido + 1}-${Math.min(indexOfLastPedido, filteredPedidos.length)} de ${filteredPedidos.length}`
+    : '0 de 0';
+
   return (
     <div className="space-y-6 bg-[#DFEFE6]/20 p-4 md:p-6 rounded-xl">
       {/* Alertas */}
@@ -488,25 +549,28 @@ const DownloadsManagement: React.FC = () => {
       )}
 
       <Tabs defaultValue="excel" className="w-full">
-        {/* Tabs responsivas: grid-cols-1 en móvil, grid-cols-3 en desktop */}
-        <TabsList className="grid grid-cols-1 sm:grid-cols-3 gap-1 mb-4 bg-[#DFEFE6]/50 p-1">
+        {/* Tabs mejoradas para ser más responsivas */}
+        <TabsList className="w-full grid grid-cols-1 sm:grid-cols-3 gap-1 mb-4 bg-[#DFEFE6]/50 p-1 rounded-md">
           <TabsTrigger 
             value="excel" 
-            className="text-xs sm:text-sm data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
+            className="px-2 py-1.5 text-xs sm:text-sm data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
           >
-            Reportes Excel
+            <FileSpreadsheet className="w-4 h-4 mr-1.5 inline-block" />
+            <span className="inline-block">Reportes Excel</span>
           </TabsTrigger>
           <TabsTrigger 
             value="remitos" 
-            className="text-xs sm:text-sm data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
+            className="px-2 py-1.5 text-xs sm:text-sm data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
           >
-            Remitos por Cliente
+            <FileText className="w-4 h-4 mr-1.5 inline-block" />
+            <span className="inline-block">Remitos por Cliente</span>
           </TabsTrigger>
           <TabsTrigger 
             value="tabla" 
-            className="text-xs sm:text-sm data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
+            className="px-2 py-1.5 text-xs sm:text-sm data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
           >
-            Tabla de Pedidos
+            <Hash className="w-4 h-4 mr-1.5 inline-block" />
+            <span className="inline-block">Tabla de Pedidos</span>
           </TabsTrigger>
         </TabsList>
         
@@ -821,7 +885,8 @@ const DownloadsManagement: React.FC = () => {
               )}
             </CardHeader>
             <CardContent className="p-0">
-              <div className="rounded-md border border-[#91BEAD]/20">
+              {/* Vista de tabla para escritorio */}
+              <div className="hidden md:block rounded-md border border-[#91BEAD]/20">
                 <Table>
                   <TableHeader className="bg-[#DFEFE6]/30">
                     <TableRow>
@@ -852,7 +917,7 @@ const DownloadsManagement: React.FC = () => {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredPedidos.map((pedido) => (
+                      currentPedidos.map((pedido) => (
                         <TableRow 
                           key={pedido._id} 
                           className="hover:bg-[#DFEFE6]/10 transition-colors"
@@ -896,11 +961,112 @@ const DownloadsManagement: React.FC = () => {
                   </TableBody>
                 </Table>
               </div>
+
+              {/* Vista de tarjetas para móvil */}
+              <div ref={mobileListRef} className="md:hidden space-y-3 p-3">
+                {/* Información de paginación para móvil */}
+                {!loadingPedidos && filteredPedidos.length > 0 && (
+                  <div className="text-xs text-center text-[#7AA79C] py-1">
+                    Mostrando {showingFromTo}
+                  </div>
+                )}
+
+                {loadingPedidos ? (
+                  // Esqueleto de carga para móvil
+                  Array.from({ length: 3 }).map((_, index) => (
+                    <div key={index} className="rounded-lg border border-[#91BEAD]/20 bg-white p-4 space-y-2">
+                      <div className="flex justify-between">
+                        <Skeleton className="h-5 w-24 bg-[#DFEFE6]/40" />
+                        <Skeleton className="h-5 w-14 bg-[#DFEFE6]/40" />
+                      </div>
+                      <Skeleton className="h-4 w-36 bg-[#DFEFE6]/40" />
+                      <div className="flex justify-between items-center pt-2">
+                        <Skeleton className="h-4 w-20 bg-[#DFEFE6]/40" />
+                        <Skeleton className="h-8 w-8 rounded-full bg-[#DFEFE6]/40" />
+                      </div>
+                    </div>
+                  ))
+                ) : filteredPedidos.length === 0 ? (
+                  <div className="text-center py-8 text-[#7AA79C] bg-white rounded-lg border border-[#91BEAD]/20">
+                    No se encontraron pedidos con los filtros seleccionados
+                  </div>
+                ) : (
+                  currentPedidos.map((pedido) => (
+                    <div key={pedido._id} className="rounded-lg border border-[#91BEAD]/20 bg-white overflow-hidden">
+                      <div className="p-3 bg-[#DFEFE6]/20 border-b border-[#91BEAD]/20 flex justify-between items-center">
+                        <div className="flex items-center">
+                          <Hash className="w-4 h-4 text-[#7AA79C] mr-1.5" />
+                          <span className="font-medium text-sm text-[#29696B]">
+                            Pedido #{pedido.nPedido || pedido.numero || 'S/N'}
+                          </span>
+                        </div>
+                        <Badge variant="outline" className="border-[#91BEAD] text-xs text-[#29696B] bg-[#DFEFE6]/10">
+                          {pedido.servicio || 'N/A'}
+                        </Badge>
+                      </div>
+                      <div className="p-3 space-y-1.5">
+                        <div className="text-xs text-[#7AA79C] flex items-center">
+                          <Calendar className="w-3.5 h-3.5 mr-1" />
+                          {formatDisplayDate(pedido.fecha)}
+                        </div>
+                        {pedido.seccionDelServicio && (
+                          <div className="text-xs text-[#7AA79C] flex items-center">
+                            <MapPin className="w-3.5 h-3.5 mr-1" />
+                            {pedido.seccionDelServicio}
+                          </div>
+                        )}
+                        <div className="pt-1.5 flex justify-between items-center">
+                          <div className="text-xs text-[#29696B]">
+                            <span className="font-medium">{pedido.productos?.length || 0}</span> productos
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemitoDownload(pedido._id)}
+                            disabled={isLoading}
+                            className="h-8 w-8 p-0 text-[#29696B] hover:bg-[#DFEFE6]/30"
+                          >
+                            {isLoading ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Download className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+
+                {/* Paginación para móvil */}
+                {!loadingPedidos && filteredPedidos.length > itemsPerPage && (
+                  <div className="mt-4">
+                    <Pagination
+                      totalItems={filteredPedidos.length}
+                      itemsPerPage={itemsPerPage}
+                      currentPage={currentPage}
+                      onPageChange={handlePageChange}
+                    />
+                  </div>
+                )}
+              </div>
             </CardContent>
             <CardFooter className="bg-[#DFEFE6]/10 border-t border-[#91BEAD]/20 justify-between">
               <div className="text-sm text-[#7AA79C]">
-                Mostrando {filteredPedidos.length} de {allPedidos.length} pedidos
+                Mostrando {currentPedidos.length} de {filteredPedidos.length} pedidos
               </div>
+
+              {/* Paginación para escritorio */}
+              {!loadingPedidos && filteredPedidos.length > itemsPerPage && (
+                <div className="hidden md:block">
+                  <Pagination
+                    totalItems={filteredPedidos.length}
+                    itemsPerPage={itemsPerPage}
+                    currentPage={currentPage}
+                    onPageChange={handlePageChange}
+                  />
+                </div>
+              )}
             </CardFooter>
           </Card>
         </TabsContent>
