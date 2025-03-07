@@ -267,10 +267,6 @@ export const ShopHome: React.FC = () => {
                       transition={{ delay: 0.4 }}
                       className="flex"
                     >
-                      <Button className="bg-white hover:bg-[#D4F5E6] text-[#00888A] border-0 font-medium text-xs sm:text-sm md:text-base py-1 sm:py-2 px-3 sm:px-4">
-                        Explorar productos
-                        <ArrowRight className="ml-1 sm:ml-2 h-3 w-3 sm:h-4 sm:w-4" />
-                      </Button>
                     </motion.div>
                   </div>
                 </motion.div>
@@ -436,12 +432,6 @@ export const ShopHome: React.FC = () => {
                     <p className="text-[#D4F5E6]/80 mb-6">
                       Agrega productos a tus favoritos para encontrarlos rápidamente
                     </p>
-                    <Button
-                      onClick={() => setShowFavorites(false)}
-                      className="bg-[#00888A] hover:bg-[#50C3AD] text-white"
-                    >
-                      Explorar productos
-                    </Button>
                   </div>
                 ) : filteredProducts.length === 0 ? (
                   <div className="text-center py-20">
