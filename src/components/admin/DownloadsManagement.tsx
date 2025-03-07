@@ -7,7 +7,8 @@ import {
   Loader2,
   Search,
   SlidersHorizontal,
-  Hash
+  Hash,
+  MapPin
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from "@/components/ui/button";
