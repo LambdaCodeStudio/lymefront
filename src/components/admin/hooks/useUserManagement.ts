@@ -1,8 +1,9 @@
 /**
  * Hook personalizado para la gestión de usuarios en el panel administrativo
  * Centraliza la lógica de manejo de usuarios, estados y operaciones CRUD
+ * Incluye funcionalidad de paginación para una mejor experiencia de usuario
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNotification } from '@/context/NotificationContext';
 import { 
   getAllUsers, 
@@ -18,7 +19,7 @@ import { useDashboard } from '@/hooks/useDashboard';
 import eventService from '@/services/EventService';
 
 /**
- * Hook para la gestión completa de usuarios
+ * Hook para la gestión completa de usuarios con paginación
  */
 export function useUserManagement() {
   // Usar directamente useNotification sin sistema de fallback, como en InventorySection
@@ -38,6 +39,11 @@ export function useUserManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showInactiveUsers, setShowInactiveUsers] = useState(true);
   const [successMessage, setSuccessMessage] = useState<string>('');
+  
+  // Estado para paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [roleFilter, setRoleFilter] = useState<string>('all');
   
   // Estado del usuario actual y roles disponibles
   const [userRole, setUserRole] = useState<RoleType | null>(null);
@@ -113,6 +119,56 @@ export function useUserManagement() {
   useEffect(() => {
     fetchUsers();
   }, []);
+
+  // Filtrar usuarios basados en los criterios seleccionados
+  const filteredUsers = useMemo(() => {
+    return users.filter(user => {
+      // Filtrar por estado activo/inactivo
+      if (!showInactiveUsers && !user.isActive) {
+        return false;
+      }
+
+      // Filtrar por rol
+      if (roleFilter !== 'all' && user.role !== roleFilter) {
+        return false;
+      }
+
+      // Filtrar por término de búsqueda en múltiples campos
+      if (searchTerm) {
+        const searchLower = searchTerm.toLowerCase();
+        const userEmail = user.email?.toLowerCase() || '';
+        const userUsername = user.usuario?.toLowerCase() || '';
+        const userNombre = user.nombre?.toLowerCase() || '';
+        const userApellido = user.apellido?.toLowerCase() || '';
+
+        return (
+          userEmail.includes(searchLower) ||
+          userUsername.includes(searchLower) ||
+          userNombre.includes(searchLower) ||
+          userApellido.includes(searchLower)
+        );
+      }
+
+      return true;
+    });
+  }, [users, searchTerm, showInactiveUsers, roleFilter]);
+
+  // Calcular el número total de páginas
+  const totalPages = useMemo(() => {
+    return Math.max(1, Math.ceil(filteredUsers.length / itemsPerPage));
+  }, [filteredUsers, itemsPerPage]);
+
+  // Obtener usuarios para la página actual
+  const paginatedUsers = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredUsers.slice(startIndex, endIndex);
+  }, [filteredUsers, currentPage, itemsPerPage]);
+
+  // Resetear a la primera página cuando cambien los filtros
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, showInactiveUsers, roleFilter]);
 
   // Crear o actualizar usuario
   const handleSubmit = async () => {
@@ -332,8 +388,23 @@ export function useUserManagement() {
     setEditingUser(null);
   };
 
+  // Manejar cambio de página
+  const handlePageChange = useCallback((pageNumber: number) => {
+    setCurrentPage(pageNumber);
+    // Hacer scroll al inicio cuando cambiamos de página
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, []);
+
+  // Manejar cambio de items por página
+  const handleItemsPerPageChange = useCallback((newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1); // Resetear a primera página
+  }, []);
+
   return {
-    // Estado
+    // Estado original
     users,
     loading,
     error,
@@ -345,18 +416,34 @@ export function useUserManagement() {
     formData,
     availableRoles,
     
-    // Setters
+    // Estados de paginación
+    filteredUsers,
+    paginatedUsers,
+    currentPage,
+    itemsPerPage,
+    totalPages,
+    totalItems: filteredUsers.length,
+    roleFilter,
+    
+    // Setters originales
     setSearchTerm,
     setShowInactiveUsers,
     setShowModal,
     setFormData,
     
-    // Acciones
+    // Setters de paginación
+    setRoleFilter,
+    
+    // Acciones originales
     fetchUsers,
     handleSubmit,
     handleDelete,
     handleToggleStatus,
     handleEdit,
-    resetForm
+    resetForm,
+    
+    // Acciones de paginación
+    handlePageChange,
+    handleItemsPerPageChange
   };
 }
