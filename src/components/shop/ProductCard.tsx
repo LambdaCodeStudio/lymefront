@@ -31,7 +31,8 @@ interface ProductCardProps {
   isFavorite: boolean;
   onToggleFavorite: () => void;
   onAddToCart: (quantity: number) => void;
-  useBase64?: boolean; // Nueva propiedad para elegir el formato de imagen
+  useBase64?: boolean; // Propiedad para elegir el formato de imagen
+  compact?: boolean; // Nueva propiedad para modo compacto en móviles
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({
@@ -39,7 +40,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   isFavorite,
   onToggleFavorite,
   onAddToCart,
-  useBase64 = true // Por defecto usar Base64
+  useBase64 = true,
+  compact = false // Por defecto, no usar modo compacto
 }) => {
   const [quantity, setQuantity] = useState<number>(1);
   const [showQuantitySelector, setShowQuantitySelector] = useState<boolean>(false);
@@ -98,7 +100,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     >
       <Card className={`h-full flex flex-col bg-gradient-to-br ${getGradientClass()} backdrop-blur-sm border ${getBorderClass()} hover:shadow-lg transition-all overflow-hidden`}>
         {/* Imagen del producto */}
-        <div className="relative pt-3 px-3">
+        <div className="relative pt-2 sm:pt-3 px-2 sm:px-3">
           <div className="aspect-square rounded-lg overflow-hidden bg-white/10 flex items-center justify-center">
             <div className="w-full h-full flex items-center justify-center">
               {/* Usar la imagen base64 directamente si está disponible */}
@@ -114,64 +116,85 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                   alt={product.nombre}
                   width={300}
                   height={300}
-                  quality={85}
+                  quality={compact ? 75 : 85} // Reducir calidad en modo compacto para mejor rendimiento
                   className="max-w-full max-h-full object-contain"
                   containerClassName="h-full w-full flex items-center justify-center"
                   fallbackClassName="h-full w-full flex items-center justify-center"
                   placeholderText="Sin imagen"
-                  useBase64={useBase64} // Usar Base64 según configuración
+                  useBase64={useBase64}
                 />
               )}
             </div>
           </div>
 
-          {/* Botón de favorito */}
+          {/* Botón de favorito - más pequeño en modo compacto */}
           <Button
             variant="ghost"
             size="icon"
-            className={`absolute top-4 right-4 bg-white/50 backdrop-blur-md hover:bg-red/70 rounded-full h-8 w-8 
+            className={`absolute top-3 sm:top-4 right-3 sm:right-4 bg-white/50 backdrop-blur-md hover:bg-red/70 rounded-full 
+              ${compact ? 'h-6 w-6' : 'h-8 w-8'} 
               ${isFavorite ? 'text-red-500' : 'text-[#00888A]/70'}`}
             onClick={onToggleFavorite}
           >
-            <Heart className={isFavorite ? 'fill-current' : ''} size={16} />
+            <Heart className={isFavorite ? 'fill-current' : ''} size={compact ? 12 : 16} />
           </Button>
 
-          {/* Indicador de stock bajo */}
+          {/* Indicador de stock bajo - más pequeño y simple en modo compacto */}
           {product.stock <= 5 && (
-            <Badge className="absolute top-4 left-4 bg-amber-50 text-amber-700 border-amber-200">
-              <AlertTriangle size={12} className="mr-1" />
-              Stock bajo
+            <Badge className={`absolute top-3 sm:top-4 left-3 sm:left-4 bg-amber-50 text-amber-700 border-amber-200
+              ${compact ? 'text-xs px-1.5 py-0.5' : ''}`}>
+              {compact ? (
+                <span>Stock: {product.stock}</span>
+              ) : (
+                <>
+                  <AlertTriangle size={12} className="mr-1" />
+                  Stock bajo
+                </>
+              )}
             </Badge>
           )}
         </div>
 
-        <CardContent className="flex-grow pt-4">
-          <Badge variant="outline" className="mb-2 text-xs border-[#75D0E0] text-[#D4F5E6] bg-[#75D0E0]/20">
+        <CardContent className={`flex-grow ${compact ? 'pt-2 px-3' : 'pt-4'}`}>
+          {/* Badge de categoría - oculto en modo compacto en XS */}
+          <Badge 
+            variant="outline" 
+            className={`mb-1 sm:mb-2 text-xs border-[#75D0E0] text-[#D4F5E6] bg-[#75D0E0]/20
+              ${compact ? 'hidden xs:inline-flex' : ''}`}
+          >
             {product.subCategoria}
           </Badge>
 
-          <h3 className="font-medium text-lg mb-1 line-clamp-1 text-white">{product.nombre}</h3>
+          {/* Nombre del producto - tamaño de fuente reducido en modo compacto */}
+          <h3 className={`font-medium line-clamp-1 text-white 
+            ${compact ? 'text-base' : 'text-lg mb-1'}`}>
+            {product.nombre}
+          </h3>
 
-          {product.descripcion && (
+          {/* Descripción - más corta o incluso oculta en modo compacto */}
+          {product.descripcion && !compact && (
             <p className="text-sm text-[#D4F5E6]/80 line-clamp-2 mb-3">
               {product.descripcion}
             </p>
           )}
 
-          <div className="text-xl font-bold text-white">${product.precio.toFixed(2)}</div>
+          {/* Precio - tamaño de fuente reducido en modo compacto */}
+          <div className={`font-bold text-white ${compact ? 'text-lg mt-1' : 'text-xl'}`}>
+            ${product.precio.toFixed(2)}
+          </div>
         </CardContent>
 
-        <CardFooter className="pt-2 pb-4">
+        <CardFooter className={compact ? "pt-1 pb-3 px-3" : "pt-2 pb-4"}>
           {showQuantitySelector ? (
             <div className="w-full">
               <div className="flex items-center justify-between mb-2 bg-white/10 rounded-md p-1">
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 w-8 p-0 text-[#D4F5E6]"
+                  className={`${compact ? 'h-7 w-7' : 'h-8 w-8'} p-0 text-[#D4F5E6]`}
                   onClick={() => handleQuantityChange(quantity - 1)}
                 >
-                  <Minus className="h-3 w-3" />
+                  <Minus className={`${compact ? 'h-3 w-3' : 'h-4 w-4'}`} />
                 </Button>
                 <Input
                   type="number"
@@ -179,32 +202,33 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                   max={product.stock}
                   value={quantity}
                   onChange={(e) => handleQuantityChange(parseInt(e.target.value) || 1)}
-                  className="w-14 h-8 text-center p-0 border-0 bg-transparent focus:ring-0 text-[#D4F5E6]"
+                  className={`${compact ? 'w-10 h-7' : 'w-14 h-8'} text-center p-0 border-0 bg-transparent focus:ring-0 text-[#D4F5E6]`}
                 />
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 w-8 p-0 text-[#D4F5E6]"
+                  className={`${compact ? 'h-7 w-7' : 'h-8 w-8'} p-0 text-[#D4F5E6]`}
                   onClick={() => handleQuantityChange(quantity + 1)}
                 >
-                  <Plus className="h-3 w-3" />
+                  <Plus className={`${compact ? 'h-3 w-3' : 'h-4 w-4'}`} />
                 </Button>
               </div>
               <Button
-                className={`w-full ${getButtonClass()} text-white`}
+                className={`w-full ${getButtonClass()} text-white ${compact ? 'text-xs py-1 h-8' : ''}`}
                 onClick={handleAddToCart}
               >
-                <ShoppingCart size={16} className="mr-2" />
-                Agregar {quantity} {quantity > 1 ? 'unidades' : 'unidad'}
+                <ShoppingCart size={compact ? 14 : 16} className="mr-1 sm:mr-2" />
+                {compact ? `Añadir (${quantity})` : `Agregar ${quantity} ${quantity > 1 ? 'unidades' : 'unidad'}`}
               </Button>
             </div>
           ) : (
             <Button
-              className={`w-full ${getButtonClass()} group transition-all duration-300 text-white`}
+              className={`w-full ${getButtonClass()} group transition-all duration-300 text-white 
+                ${compact ? 'text-xs py-1 h-8' : ''}`}
               onClick={() => setShowQuantitySelector(true)}
             >
-              <ShoppingCart size={16} className="mr-2 group-hover:animate-bounce" />
-              Agregar al carrito
+              <ShoppingCart size={compact ? 14 : 16} className="mr-1 sm:mr-2 group-hover:animate-bounce" />
+              {compact ? 'Añadir' : 'Agregar al carrito'}
             </Button>
           )}
         </CardFooter>

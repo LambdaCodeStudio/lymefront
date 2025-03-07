@@ -313,8 +313,8 @@ export const ShopHome: React.FC = () => {
                     variant={showFavorites ? "default" : "outline"}
                     size="sm"
                     className={`${showFavorites
-                        ? "bg-[#50C3AD] hover:bg-[#00888A] text-white"
-                        : "bg-white/10 hover:bg-white/20 border-[#50C3AD] text-white"
+                      ? "bg-[#50C3AD] hover:bg-[#00888A] text-white"
+                      : "bg-white/10 hover:bg-white/20 border-[#50C3AD] text-white"
                       }`}
                     onClick={() => setShowFavorites(!showFavorites)}
                   >
@@ -484,7 +484,7 @@ export const ShopHome: React.FC = () => {
                       </Badge>
                     </h2>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 xs:gap-4 sm:gap-5 md:gap-6">
                       {filteredProducts.map((product) => (
                         <ProductCard
                           key={product._id}
@@ -492,6 +492,7 @@ export const ShopHome: React.FC = () => {
                           isFavorite={favorites.includes(product._id)}
                           onToggleFavorite={() => toggleFavorite(product._id)}
                           onAddToCart={(quantity) => handleAddToCart(product, quantity)}
+                          compact={true}
                         />
                       ))}
                     </div>
