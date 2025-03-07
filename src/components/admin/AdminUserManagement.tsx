@@ -2,7 +2,7 @@
  * Componente para gestión de usuarios en el panel de administración
  * Permite crear, editar, activar/desactivar y eliminar usuarios del sistema
  */
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Plus,
   AlertCircle,
@@ -20,6 +20,7 @@ import UserTable from './components/UserTable';
 import UserCard from './components/UserCard';
 import UserForm from './components/UserForm';
 import UserFilters from './components/UserFilters';
+import Pagination from './components/Pagination'; 
 
 // Importar hooks y utilidades
 import { useUserManagement } from './hooks/useUserManagement';
@@ -53,6 +54,27 @@ const UserManagementContent: React.FC = () => {
 
   // Filtrar usuarios según criterios de búsqueda
   const filteredUsers = filterUsers(users, searchTerm, showInactiveUsers);
+
+  // Estado para la paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10; // Número de usuarios por página
+
+  // Resetear la página actual cuando cambian los filtros
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, showInactiveUsers]);
+
+  // Obtener usuarios para la página actual
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentUsers = filteredUsers.slice(indexOfFirstItem, indexOfLastItem);
+
+  // Función para cambiar de página
+  const handlePageChange = (pageNumber) => {
+    setCurrentPage(pageNumber);
+    // Opcional: hacer scroll al inicio de la tabla
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   return (
     <div className="p-4 md:p-6 space-y-6">
@@ -109,21 +131,34 @@ const UserManagementContent: React.FC = () => {
 
       {/* Tabla para pantallas medianas y grandes */}
       <div className="hidden md:block bg-white rounded-xl shadow-sm overflow-hidden border border-[#91BEAD]/20">
-        {!loading && filteredUsers.length > 0 && (
-          <UserTable 
-            users={filteredUsers}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            onToggleStatus={handleToggleStatus}
-            getUserIdentifier={getUserIdentifier}
-            getFullName={getFullName}
-          />
+        {!loading && currentUsers.length > 0 && (
+          <>
+            <UserTable 
+              users={currentUsers}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onToggleStatus={handleToggleStatus}
+              getUserIdentifier={getUserIdentifier}
+              getFullName={getFullName}
+            />
+            
+            {/* Paginación debajo de la tabla */}
+            <div className="py-4 border-t border-[#91BEAD]/20">
+              <Pagination 
+                totalItems={filteredUsers.length}
+                itemsPerPage={itemsPerPage}
+                currentPage={currentPage}
+                onPageChange={handlePageChange}
+                className="mt-4"
+              />
+            </div>
+          </>
         )}
       </div>
 
       {/* Vista de Tarjetas para dispositivos móviles */}
       <div className="md:hidden grid grid-cols-1 gap-4">
-        {!loading && filteredUsers.map(user => (
+        {!loading && currentUsers.map(user => (
           <UserCard 
             key={user._id}
             user={user}
@@ -134,6 +169,17 @@ const UserManagementContent: React.FC = () => {
             getFullName={getFullName}
           />
         ))}
+        
+        {/* Paginación para vista móvil */}
+        {!loading && filteredUsers.length > itemsPerPage && (
+          <Pagination 
+            totalItems={filteredUsers.length}
+            itemsPerPage={itemsPerPage}
+            currentPage={currentPage}
+            onPageChange={handlePageChange}
+            className="mt-4"
+          />
+        )}
       </div>
 
       {/* Modal de Usuario */}
