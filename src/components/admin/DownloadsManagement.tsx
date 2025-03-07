@@ -549,405 +549,485 @@ const DownloadsManagement: React.FC = () => {
         </Alert>
       )}
 
-      <Tabs defaultValue="excel" className="w-full">
-        {/* Tabs mejoradas para ser más responsivas */}
-        <TabsList className="w-full grid grid-cols-1 sm:grid-cols-3 gap-1 mb-4 bg-[#DFEFE6]/50 p-1 rounded-md">
-          <TabsTrigger 
-            value="excel" 
-            className="px-2 py-1.5 text-xs sm:text-sm data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
-          >
-            <FileSpreadsheet className="w-4 h-4 mr-1.5 inline-block" />
-            <span className="inline-block">Reportes Excel</span>
-          </TabsTrigger>
-          <TabsTrigger 
-            value="remitos" 
-            className="px-2 py-1.5 text-xs sm:text-sm data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
-          >
-            <FileText className="w-4 h-4 mr-1.5 inline-block" />
-            <span className="inline-block">Remitos por Cliente</span>
-          </TabsTrigger>
-          <TabsTrigger 
-            value="tabla" 
-            className="px-2 py-1.5 text-xs sm:text-sm data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
-          >
-            <Hash className="w-4 h-4 mr-1.5 inline-block" />
-            <span className="inline-block">Tabla de Pedidos</span>
-          </TabsTrigger>
-        </TabsList>
-        
-        {/* Pestaña de Excel */}
-        <TabsContent value="excel">
-          <Card className="border border-[#91BEAD]/20 shadow-sm">
-            <CardHeader className="bg-[#DFEFE6]/20 border-b border-[#91BEAD]/20">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-[#29696B]">Exportar a Excel</CardTitle>
-                <FileSpreadsheet className="w-6 h-6 text-[#7AA79C]" />
-              </div>
-              <CardDescription className="text-[#7AA79C]">
-                Exporta los datos del período seleccionado a una planilla de Excel
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="date-from" className="text-[#29696B]">Desde</Label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-5 h-5" />
-                    <Input
-                      id="date-from"
-                      type="date"
-                      value={dateRange.from ? formatDate(dateRange.from) : ''}
-                      onChange={(e) => setDateRange({
-                        ...dateRange,
-                        from: e.target.value ? new Date(e.target.value) : undefined
-                      })}
-                      className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
-                    />
+      {/* NAVEGACIÓN MEJORADA: Espacio vertical fijo para las tabs */}
+      <div className="min-h-[60px]">
+        <Tabs defaultValue="excel" className="w-full">
+          {/* Tabs mejoradas para ser más responsivas */}
+          <TabsList className="w-full grid grid-cols-3 gap-1 bg-[#DFEFE6]/50 p-1 rounded-md">
+            <TabsTrigger 
+              value="excel" 
+              className="h-12 sm:h-10 px-2 py-1.5 text-xs sm:text-sm data-[state=active]:bg-[#29696B] data-[state=active]:text-white flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span className="text-center sm:text-left">Reportes Excel</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="remitos" 
+              className="h-12 sm:h-10 px-2 py-1.5 text-xs sm:text-sm data-[state=active]:bg-[#29696B] data-[state=active]:text-white flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2"
+            >
+              <FileText className="w-4 h-4" />
+              <span className="text-center sm:text-left">Remitos por Cliente</span>
+            </TabsTrigger>
+            <TabsTrigger 
+              value="tabla" 
+              className="h-12 sm:h-10 px-2 py-1.5 text-xs sm:text-sm data-[state=active]:bg-[#29696B] data-[state=active]:text-white flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2"
+            >
+              <Hash className="w-4 h-4" />
+              <span className="text-center sm:text-left">Tabla de Pedidos</span>
+            </TabsTrigger>
+          </TabsList>
+          
+          {/* Pestaña de Excel */}
+          <TabsContent value="excel" className="mt-4 pt-4">
+            <Card className="border border-[#91BEAD]/20 shadow-sm">
+              <CardHeader className="bg-[#DFEFE6]/20 border-b border-[#91BEAD]/20">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-[#29696B]">Exportar a Excel</CardTitle>
+                  <FileSpreadsheet className="w-6 h-6 text-[#7AA79C]" />
+                </div>
+                <CardDescription className="text-[#7AA79C]">
+                  Exporta los datos del período seleccionado a una planilla de Excel
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="date-from" className="text-[#29696B]">Desde</Label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-5 h-5" />
+                      <Input
+                        id="date-from"
+                        type="date"
+                        value={dateRange.from ? formatDate(dateRange.from) : ''}
+                        onChange={(e) => setDateRange({
+                          ...dateRange,
+                          from: e.target.value ? new Date(e.target.value) : undefined
+                        })}
+                        className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="grid gap-2">
+                    <Label htmlFor="date-to" className="text-[#29696B]">Hasta</Label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-5 h-5" />
+                      <Input
+                        id="date-to"
+                        type="date"
+                        value={dateRange.to ? formatDate(dateRange.to) : ''}
+                        onChange={(e) => setDateRange({
+                          ...dateRange,
+                          to: e.target.value ? new Date(e.target.value) : undefined
+                        })}
+                        className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
+                      />
+                    </div>
                   </div>
                 </div>
-                
-                <div className="grid gap-2">
-                  <Label htmlFor="date-to" className="text-[#29696B]">Hasta</Label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-5 h-5" />
-                    <Input
-                      id="date-to"
-                      type="date"
-                      value={dateRange.to ? formatDate(dateRange.to) : ''}
-                      onChange={(e) => setDateRange({
-                        ...dateRange,
-                        to: e.target.value ? new Date(e.target.value) : undefined
-                      })}
-                      className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
-                    />
-                  </div>
+              </CardContent>
+              <CardFooter className="bg-[#DFEFE6]/10 border-t border-[#91BEAD]/20">
+                <Button
+                  onClick={handleExcelDownload}
+                  disabled={isLoading || !dateRange.from || !dateRange.to}
+                  className="w-full bg-[#29696B] hover:bg-[#29696B]/90 text-white"
+                >
+                  {isLoading ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <>
+                      <Download className="w-5 h-5 mr-2" />
+                      Descargar Excel
+                    </>
+                  )}
+                </Button>
+              </CardFooter>
+            </Card>
+          </TabsContent>
+          
+          {/* Pestaña de Remitos */}
+          <TabsContent value="remitos" className="mt-4 pt-4">
+            <Card className="border border-[#91BEAD]/20 shadow-sm">
+              <CardHeader className="bg-[#DFEFE6]/20 border-b border-[#91BEAD]/20">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-[#29696B]">Descargar Remito</CardTitle>
+                  <FileText className="w-6 h-6 text-[#7AA79C]" />
                 </div>
-              </div>
-            </CardContent>
-            <CardFooter className="bg-[#DFEFE6]/10 border-t border-[#91BEAD]/20">
-              <Button
-                onClick={handleExcelDownload}
-                disabled={isLoading || !dateRange.from || !dateRange.to}
-                className="w-full bg-[#29696B] hover:bg-[#29696B]/90 text-white"
-              >
-                {isLoading ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <>
-                    <Download className="w-5 h-5 mr-2" />
-                    Descargar Excel
-                  </>
-                )}
-              </Button>
-            </CardFooter>
-          </Card>
-        </TabsContent>
-        
-        {/* Pestaña de Remitos */}
-        <TabsContent value="remitos">
-          <Card className="border border-[#91BEAD]/20 shadow-sm">
-            <CardHeader className="bg-[#DFEFE6]/20 border-b border-[#91BEAD]/20">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-[#29696B]">Descargar Remito</CardTitle>
-                <FileText className="w-6 h-6 text-[#7AA79C]" />
-              </div>
-              <CardDescription className="text-[#7AA79C]">
-                Descarga el remito de un pedido específico
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 pt-6">
-              {/* Buscador de clientes */}
-              <div className="space-y-2">
-                <Label className="text-[#29696B]">Buscar Cliente</Label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-5 h-5" />
-                  <Input
-                    type="text"
-                    placeholder="Buscar por nombre..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
-                  />
-                </div>
-              </div>
-
-              {/* Selector de cliente */}
-              <div className="space-y-2">
-                <Label className="text-[#29696B]">Seleccionar Cliente</Label>
-                <Select value={selectedCliente} onValueChange={setSelectedCliente}>
-                  <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
-                    <SelectValue placeholder="Selecciona un cliente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {filteredClientes.length > 0 ? (
-                      filteredClientes.map((cliente) => (
-                        <SelectItem key={cliente._id} value={cliente._id}>
-                          {getClientName(cliente)}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="no-clientes" disabled>
-                        No hay clientes disponibles
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Selector de pedido */}
-              {selectedCliente && (
+                <CardDescription className="text-[#7AA79C]">
+                  Descarga el remito de un pedido específico
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-6">
+                {/* Buscador de clientes */}
                 <div className="space-y-2">
-                  <Label className="text-[#29696B]">Seleccionar Pedido</Label>
-                  <Select value={selectedPedido} onValueChange={setSelectedPedido}>
+                  <Label className="text-[#29696B]">Buscar Cliente</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-5 h-5" />
+                    <Input
+                      type="text"
+                      placeholder="Buscar por nombre..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
+                    />
+                  </div>
+                </div>
+
+                {/* Selector de cliente */}
+                <div className="space-y-2">
+                  <Label className="text-[#29696B]">Seleccionar Cliente</Label>
+                  <Select value={selectedCliente} onValueChange={setSelectedCliente}>
                     <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
-                      <SelectValue placeholder="Selecciona un pedido" />
+                      <SelectValue placeholder="Selecciona un cliente" />
                     </SelectTrigger>
                     <SelectContent>
-                      {pedidos.length > 0 ? (
-                        pedidos.map((pedido) => (
-                          <SelectItem key={pedido._id} value={pedido._id}>
-                            {`Pedido ${pedido.nPedido || pedido.numero || 'S/N'} - ${
-                              pedido.fecha ? new Date(pedido.fecha).toLocaleDateString() : 'Sin fecha'
-                            }`}
+                      {filteredClientes.length > 0 ? (
+                        filteredClientes.map((cliente) => (
+                          <SelectItem key={cliente._id} value={cliente._id}>
+                            {getClientName(cliente)}
                           </SelectItem>
                         ))
                       ) : (
-                        <SelectItem value="no-pedidos" disabled>
-                          No hay pedidos disponibles
+                        <SelectItem value="no-clientes" disabled>
+                          No hay clientes disponibles
                         </SelectItem>
                       )}
                     </SelectContent>
                   </Select>
                 </div>
-              )}
-            </CardContent>
-            <CardFooter className="bg-[#DFEFE6]/10 border-t border-[#91BEAD]/20">
-              <Button
-                onClick={() => handleRemitoDownload()}
-                disabled={isLoading || !selectedCliente || !selectedPedido}
-                className="w-full bg-[#29696B] hover:bg-[#29696B]/90 text-white disabled:bg-[#8DB3BA] disabled:text-white/70"
-              >
-                {isLoading ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <>
-                    <Download className="w-5 h-5 mr-2" />
-                    Descargar Remito
-                  </>
+
+                {/* Selector de pedido */}
+                {selectedCliente && (
+                  <div className="space-y-2">
+                    <Label className="text-[#29696B]">Seleccionar Pedido</Label>
+                    <Select value={selectedPedido} onValueChange={setSelectedPedido}>
+                      <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
+                        <SelectValue placeholder="Selecciona un pedido" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {pedidos.length > 0 ? (
+                          pedidos.map((pedido) => (
+                            <SelectItem key={pedido._id} value={pedido._id}>
+                              {`Pedido ${pedido.nPedido || pedido.numero || 'S/N'} - ${
+                                pedido.fecha ? new Date(pedido.fecha).toLocaleDateString() : 'Sin fecha'
+                              }`}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="no-pedidos" disabled>
+                            No hay pedidos disponibles
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 )}
-              </Button>
-            </CardFooter>
-          </Card>
-        </TabsContent>
-        
-        {/* Pestaña de Tabla de Pedidos */}
-        <TabsContent value="tabla">
-          <Card className="border border-[#91BEAD]/20 shadow-sm">
-            <CardHeader className="bg-[#DFEFE6]/20 border-b border-[#91BEAD]/20">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div>
-                  <CardTitle className="text-[#29696B]">Todos los Pedidos</CardTitle>
-                  <CardDescription className="text-[#7AA79C]">
-                    Visualiza y descarga remitos de cualquier pedido
-                  </CardDescription>
-                </div>
-                
-                {/* Filtros */}
-                <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button 
-                      variant="outline" 
-                      className="flex items-center gap-2 border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/40"
-                    >
-                      <SlidersHorizontal className="w-4 h-4" />
-                      Filtros
-                      {(filterOptions.servicio && filterOptions.servicio !== 'todos' || filterOptions.fechaInicio || filterOptions.fechaFin) && (
-                        <Badge className="ml-1 bg-[#29696B] text-white">
-                          Activos
-                        </Badge>
-                      )}
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="bg-white border border-[#91BEAD]/20">
-                    <DialogHeader>
-                      <DialogTitle className="text-[#29696B]">Filtrar Pedidos</DialogTitle>
-                      <DialogDescription className="text-[#7AA79C]">
-                        Ajusta los filtros para encontrar pedidos específicos
-                      </DialogDescription>
-                    </DialogHeader>
-                    
-                    <div className="space-y-4 py-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="servicio-filter" className="text-[#29696B]">Servicio</Label>
-                        <Select 
-                          value={tempFilterOptions.servicio} 
-                          onValueChange={(value) => setTempFilterOptions({...tempFilterOptions, servicio: value})}
-                        >
-                          <SelectTrigger 
-                            id="servicio-filter" 
-                            className="border-[#91BEAD] focus:ring-[#29696B]/20"
-                          >
-                            <SelectValue placeholder="Todos los servicios" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="todos">Todos los servicios</SelectItem>
-                            {serviciosUnicos.map((servicio) => (
-                              <SelectItem key={servicio} value={servicio}>
-                                {servicio}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="fecha-inicio-filter" className="text-[#29696B]">Desde</Label>
-                          <Input
-                            id="fecha-inicio-filter"
-                            type="date"
-                            value={tempFilterOptions.fechaInicio}
-                            onChange={(e) => setTempFilterOptions({...tempFilterOptions, fechaInicio: e.target.value})}
-                            className="border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
-                          />
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label htmlFor="fecha-fin-filter" className="text-[#29696B]">Hasta</Label>
-                          <Input
-                            id="fecha-fin-filter"
-                            type="date"
-                            value={tempFilterOptions.fechaFin}
-                            onChange={(e) => setTempFilterOptions({...tempFilterOptions, fechaFin: e.target.value})}
-                            className="border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="flex justify-between">
+              </CardContent>
+              <CardFooter className="bg-[#DFEFE6]/10 border-t border-[#91BEAD]/20">
+                <Button
+                  onClick={() => handleRemitoDownload()}
+                  disabled={isLoading || !selectedCliente || !selectedPedido}
+                  className="w-full bg-[#29696B] hover:bg-[#29696B]/90 text-white disabled:bg-[#8DB3BA] disabled:text-white/70"
+                >
+                  {isLoading ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <>
+                      <Download className="w-5 h-5 mr-2" />
+                      Descargar Remito
+                    </>
+                  )}
+                </Button>
+              </CardFooter>
+            </Card>
+          </TabsContent>
+          
+          {/* Pestaña de Tabla de Pedidos */}
+          <TabsContent value="tabla" className="mt-4 pt-4">
+            <Card className="border border-[#91BEAD]/20 shadow-sm">
+              <CardHeader className="bg-[#DFEFE6]/20 border-b border-[#91BEAD]/20">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div>
+                    <CardTitle className="text-[#29696B]">Todos los Pedidos</CardTitle>
+                    <CardDescription className="text-[#7AA79C]">
+                      Visualiza y descarga remitos de cualquier pedido
+                    </CardDescription>
+                  </div>
+                  
+                  {/* Filtros */}
+                  <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
+                    <DialogTrigger asChild>
                       <Button 
                         variant="outline" 
-                        onClick={() => {
-                          setTempFilterOptions({
-                            servicio: 'todos',
-                            fechaInicio: '',
-                            fechaFin: '',
-                          });
-                        }}
-                        className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/40"
+                        className="flex items-center gap-2 border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/40"
                       >
-                        Restablecer
+                        <SlidersHorizontal className="w-4 h-4" />
+                        Filtros
+                        {(filterOptions.servicio && filterOptions.servicio !== 'todos' || filterOptions.fechaInicio || filterOptions.fechaFin) && (
+                          <Badge className="ml-1 bg-[#29696B] text-white">
+                            Activos
+                          </Badge>
+                        )}
                       </Button>
-                      <Button
-                        type="button"
-                        onClick={handleApplyFilters}
-                        className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
-                      >
-                        Aplicar filtros
-                      </Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
-              
-              {/* Barra de filtros activos */}
-              {(filterOptions.servicio && filterOptions.servicio !== 'todos' || filterOptions.fechaInicio || filterOptions.fechaFin) && (
-                <div className="flex flex-wrap items-center gap-2 mt-2 p-2 bg-[#DFEFE6]/30 rounded-md border border-[#91BEAD]/20">
-                  <span className="text-xs text-[#29696B] font-medium">Filtros activos:</span>
-                  
-                  {filterOptions.servicio && filterOptions.servicio !== 'todos' && (
-                    <Badge variant="outline" className="bg-[#DFEFE6]/40 border-[#91BEAD] text-[#29696B]">
-                      Servicio: {filterOptions.servicio}
-                    </Badge>
-                  )}
-                  
-                  {filterOptions.fechaInicio && (
-                    <Badge variant="outline" className="bg-[#DFEFE6]/40 border-[#91BEAD] text-[#29696B]">
-                      Desde: {new Date(filterOptions.fechaInicio).toLocaleDateString()}
-                    </Badge>
-                  )}
-                  
-                  {filterOptions.fechaFin && (
-                    <Badge variant="outline" className="bg-[#DFEFE6]/40 border-[#91BEAD] text-[#29696B]">
-                      Hasta: {new Date(filterOptions.fechaFin).toLocaleDateString()}
-                    </Badge>
-                  )}
-                  
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={resetFilters} 
-                    className="ml-auto text-xs h-7 px-2 text-[#29696B]"
-                  >
-                    Limpiar filtros
-                  </Button>
-                </div>
-              )}
-            </CardHeader>
-            <CardContent className="p-0">
-              {/* Vista de tabla para escritorio */}
-              <div className="hidden md:block rounded-md border border-[#91BEAD]/20">
-                <Table>
-                  <TableHeader className="bg-[#DFEFE6]/30">
-                    <TableRow>
-                      <TableHead className="text-[#29696B]">Nº</TableHead>
-                      <TableHead className="text-[#29696B]">Fecha</TableHead>
-                      <TableHead className="text-[#29696B]">Servicio</TableHead>
-                      <TableHead className="hidden md:table-cell text-[#29696B]">Sección</TableHead>
-                      <TableHead className="text-right text-[#29696B]">Productos</TableHead>
-                      <TableHead className="text-right text-[#29696B]">Acciones</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {loadingPedidos ? (
-                      // Esqueleto de carga
-                      Array.from({ length: 5 }).map((_, index) => (
-                        <TableRow key={index}>
-                          {Array.from({ length: 6 }).map((_, cellIndex) => (
-                            <TableCell key={cellIndex}>
-                              <Skeleton className="h-6 w-full bg-[#DFEFE6]/40" />
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      ))
-                    ) : filteredPedidos.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center py-10 text-[#7AA79C]">
-                          No se encontraron pedidos con los filtros seleccionados
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      currentPedidos.map((pedido) => (
-                        <TableRow 
-                          key={pedido._id} 
-                          className="hover:bg-[#DFEFE6]/10 transition-colors"
+                    </DialogTrigger>
+                    <DialogContent className="bg-white border border-[#91BEAD]/20">
+                      <DialogHeader>
+                        <DialogTitle className="text-[#29696B]">Filtrar Pedidos</DialogTitle>
+                        <DialogDescription className="text-[#7AA79C]">
+                          Ajusta los filtros para encontrar pedidos específicos
+                        </DialogDescription>
+                      </DialogHeader>
+                      
+                      <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="servicio-filter" className="text-[#29696B]">Servicio</Label>
+                          <Select 
+                            value={tempFilterOptions.servicio} 
+                            onValueChange={(value) => setTempFilterOptions({...tempFilterOptions, servicio: value})}
+                          >
+                            <SelectTrigger 
+                              id="servicio-filter" 
+                              className="border-[#91BEAD] focus:ring-[#29696B]/20"
+                            >
+                              <SelectValue placeholder="Todos los servicios" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="todos">Todos los servicios</SelectItem>
+                              {serviciosUnicos.map((servicio) => (
+                                <SelectItem key={servicio} value={servicio}>
+                                  {servicio}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="fecha-inicio-filter" className="text-[#29696B]">Desde</Label>
+                            <Input
+                              id="fecha-inicio-filter"
+                              type="date"
+                              value={tempFilterOptions.fechaInicio}
+                              onChange={(e) => setTempFilterOptions({...tempFilterOptions, fechaInicio: e.target.value})}
+                              className="border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
+                            />
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <Label htmlFor="fecha-fin-filter" className="text-[#29696B]">Hasta</Label>
+                            <Input
+                              id="fecha-fin-filter"
+                              type="date"
+                              value={tempFilterOptions.fechaFin}
+                              onChange={(e) => setTempFilterOptions({...tempFilterOptions, fechaFin: e.target.value})}
+                              className="border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="flex justify-between">
+                        <Button 
+                          variant="outline" 
+                          onClick={() => {
+                            setTempFilterOptions({
+                              servicio: 'todos',
+                              fechaInicio: '',
+                              fechaFin: '',
+                            });
+                          }}
+                          className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/40"
                         >
-                          <TableCell className="text-[#29696B] font-medium">
-                            <div className="flex items-center">
-                              <Hash className="w-4 h-4 text-[#7AA79C] mr-2" />
-                              {pedido.nPedido || pedido.numero || 'S/N'}
+                          Restablecer
+                        </Button>
+                        <Button
+                          type="button"
+                          onClick={handleApplyFilters}
+                          className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
+                        >
+                          Aplicar filtros
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+                
+                {/* Barra de filtros activos */}
+                {(filterOptions.servicio && filterOptions.servicio !== 'todos' || filterOptions.fechaInicio || filterOptions.fechaFin) && (
+                  <div className="flex flex-wrap items-center gap-2 mt-2 p-2 bg-[#DFEFE6]/30 rounded-md border border-[#91BEAD]/20">
+                    <span className="text-xs text-[#29696B] font-medium">Filtros activos:</span>
+                    
+                    {filterOptions.servicio && filterOptions.servicio !== 'todos' && (
+                      <Badge variant="outline" className="bg-[#DFEFE6]/40 border-[#91BEAD] text-[#29696B]">
+                        Servicio: {filterOptions.servicio}
+                      </Badge>
+                    )}
+                    
+                    {filterOptions.fechaInicio && (
+                      <Badge variant="outline" className="bg-[#DFEFE6]/40 border-[#91BEAD] text-[#29696B]">
+                        Desde: {new Date(filterOptions.fechaInicio).toLocaleDateString()}
+                      </Badge>
+                    )}
+                    
+                    {filterOptions.fechaFin && (
+                      <Badge variant="outline" className="bg-[#DFEFE6]/40 border-[#91BEAD] text-[#29696B]">
+                        Hasta: {new Date(filterOptions.fechaFin).toLocaleDateString()}
+                      </Badge>
+                    )}
+                    
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={resetFilters} 
+                      className="ml-auto text-xs h-7 px-2 text-[#29696B]"
+                    >
+                      Limpiar filtros
+                    </Button>
+                  </div>
+                )}
+              </CardHeader>
+              <CardContent className="p-0">
+                {/* Vista de tabla para escritorio */}
+                <div className="hidden md:block rounded-md border border-[#91BEAD]/20">
+                  <Table>
+                    <TableHeader className="bg-[#DFEFE6]/30">
+                      <TableRow>
+                        <TableHead className="text-[#29696B]">Nº</TableHead>
+                        <TableHead className="text-[#29696B]">Fecha</TableHead>
+                        <TableHead className="text-[#29696B]">Servicio</TableHead>
+                        <TableHead className="hidden md:table-cell text-[#29696B]">Sección</TableHead>
+                        <TableHead className="text-right text-[#29696B]">Productos</TableHead>
+                        <TableHead className="text-right text-[#29696B]">Acciones</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {loadingPedidos ? (
+                        // Esqueleto de carga
+                        Array.from({ length: 5 }).map((_, index) => (
+                          <TableRow key={index}>
+                            {Array.from({ length: 6 }).map((_, cellIndex) => (
+                              <TableCell key={cellIndex}>
+                                <Skeleton className="h-6 w-full bg-[#DFEFE6]/40" />
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        ))
+                      ) : filteredPedidos.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center py-10 text-[#7AA79C]">
+                            No se encontraron pedidos con los filtros seleccionados
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        currentPedidos.map((pedido) => (
+                          <TableRow 
+                            key={pedido._id} 
+                            className="hover:bg-[#DFEFE6]/10 transition-colors"
+                          >
+                            <TableCell className="text-[#29696B] font-medium">
+                              <div className="flex items-center">
+                                <Hash className="w-4 h-4 text-[#7AA79C] mr-2" />
+                                {pedido.nPedido || pedido.numero || 'S/N'}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-[#7AA79C]">{formatDisplayDate(pedido.fecha)}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/20">
+                                {pedido.servicio || 'N/A'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="hidden md:table-cell text-[#7AA79C]">
+                              {pedido.seccionDelServicio || '-'}
+                            </TableCell>
+                            <TableCell className="text-right text-[#29696B] font-medium">
+                              {pedido.productos?.length || 0}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRemitoDownload(pedido._id)}
+                                disabled={isLoading}
+                                className="text-[#29696B] hover:bg-[#DFEFE6]/30"
+                              >
+                                {isLoading ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Download className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Vista de tarjetas para móvil */}
+                <div ref={mobileListRef} className="md:hidden space-y-3 p-3">
+                  {/* Información de paginación para móvil */}
+                  {!loadingPedidos && filteredPedidos.length > 0 && (
+                    <div className="text-xs text-center text-[#7AA79C] py-1">
+                      Mostrando {showingFromTo}
+                    </div>
+                  )}
+
+                  {loadingPedidos ? (
+                    // Esqueleto de carga para móvil
+                    Array.from({ length: 3 }).map((_, index) => (
+                      <div key={index} className="rounded-lg border border-[#91BEAD]/20 bg-white p-4 space-y-2">
+                        <div className="flex justify-between">
+                          <Skeleton className="h-5 w-24 bg-[#DFEFE6]/40" />
+                          <Skeleton className="h-5 w-14 bg-[#DFEFE6]/40" />
+                        </div>
+                        <Skeleton className="h-4 w-36 bg-[#DFEFE6]/40" />
+                        <div className="flex justify-between items-center pt-2">
+                          <Skeleton className="h-4 w-20 bg-[#DFEFE6]/40" />
+                          <Skeleton className="h-8 w-8 rounded-full bg-[#DFEFE6]/40" />
+                        </div>
+                      </div>
+                    ))
+                  ) : filteredPedidos.length === 0 ? (
+                    <div className="text-center py-8 text-[#7AA79C] bg-white rounded-lg border border-[#91BEAD]/20">
+                      No se encontraron pedidos con los filtros seleccionados
+                    </div>
+                  ) : (
+                    currentPedidos.map((pedido) => (
+                      <div key={pedido._id} className="rounded-lg border border-[#91BEAD]/20 bg-white overflow-hidden">
+                        <div className="p-3 bg-[#DFEFE6]/20 border-b border-[#91BEAD]/20 flex justify-between items-center">
+                          <div className="flex items-center">
+                            <Hash className="w-4 h-4 text-[#7AA79C] mr-1.5" />
+                            <span className="font-medium text-sm text-[#29696B]">
+                              Pedido #{pedido.nPedido || pedido.numero || 'S/N'}
+                            </span>
+                          </div>
+                          <Badge variant="outline" className="border-[#91BEAD] text-xs text-[#29696B] bg-[#DFEFE6]/10">
+                            {pedido.servicio || 'N/A'}
+                          </Badge>
+                        </div>
+                        <div className="p-3 space-y-1.5">
+                          <div className="text-xs text-[#7AA79C] flex items-center">
+                            <Calendar className="w-3.5 h-3.5 mr-1" />
+                            {formatDisplayDate(pedido.fecha)}
+                          </div>
+                          {pedido.seccionDelServicio && (
+                            <div className="text-xs text-[#7AA79C] flex items-center">
+                              <MapPin className="w-3.5 h-3.5 mr-1" />
+                              {pedido.seccionDelServicio}
                             </div>
-                          </TableCell>
-                          <TableCell className="text-[#7AA79C]">{formatDisplayDate(pedido.fecha)}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/20">
-                              {pedido.servicio || 'N/A'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="hidden md:table-cell text-[#7AA79C]">
-                            {pedido.seccionDelServicio || '-'}
-                          </TableCell>
-                          <TableCell className="text-right text-[#29696B] font-medium">
-                            {pedido.productos?.length || 0}
-                          </TableCell>
-                          <TableCell className="text-right">
+                          )}
+                          <div className="pt-1.5 flex justify-between items-center">
+                            <div className="text-xs text-[#29696B]">
+                              <span className="font-medium">{pedido.productos?.length || 0}</span> productos
+                            </div>
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => handleRemitoDownload(pedido._id)}
                               disabled={isLoading}
-                              className="text-[#29696B] hover:bg-[#DFEFE6]/30"
+                              className="h-8 w-8 p-0 text-[#29696B] hover:bg-[#DFEFE6]/30"
                             >
                               {isLoading ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -955,93 +1035,33 @@ const DownloadsManagement: React.FC = () => {
                                 <Download className="h-4 w-4" />
                               )}
                             </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-
-              {/* Vista de tarjetas para móvil */}
-              <div ref={mobileListRef} className="md:hidden space-y-3 p-3">
-                {/* Información de paginación para móvil */}
-                {!loadingPedidos && filteredPedidos.length > 0 && (
-                  <div className="text-xs text-center text-[#7AA79C] py-1">
-                    Mostrando {showingFromTo}
-                  </div>
-                )}
-
-                {loadingPedidos ? (
-                  // Esqueleto de carga para móvil
-                  Array.from({ length: 3 }).map((_, index) => (
-                    <div key={index} className="rounded-lg border border-[#91BEAD]/20 bg-white p-4 space-y-2">
-                      <div className="flex justify-between">
-                        <Skeleton className="h-5 w-24 bg-[#DFEFE6]/40" />
-                        <Skeleton className="h-5 w-14 bg-[#DFEFE6]/40" />
-                      </div>
-                      <Skeleton className="h-4 w-36 bg-[#DFEFE6]/40" />
-                      <div className="flex justify-between items-center pt-2">
-                        <Skeleton className="h-4 w-20 bg-[#DFEFE6]/40" />
-                        <Skeleton className="h-8 w-8 rounded-full bg-[#DFEFE6]/40" />
-                      </div>
-                    </div>
-                  ))
-                ) : filteredPedidos.length === 0 ? (
-                  <div className="text-center py-8 text-[#7AA79C] bg-white rounded-lg border border-[#91BEAD]/20">
-                    No se encontraron pedidos con los filtros seleccionados
-                  </div>
-                ) : (
-                  currentPedidos.map((pedido) => (
-                    <div key={pedido._id} className="rounded-lg border border-[#91BEAD]/20 bg-white overflow-hidden">
-                      <div className="p-3 bg-[#DFEFE6]/20 border-b border-[#91BEAD]/20 flex justify-between items-center">
-                        <div className="flex items-center">
-                          <Hash className="w-4 h-4 text-[#7AA79C] mr-1.5" />
-                          <span className="font-medium text-sm text-[#29696B]">
-                            Pedido #{pedido.nPedido || pedido.numero || 'S/N'}
-                          </span>
-                        </div>
-                        <Badge variant="outline" className="border-[#91BEAD] text-xs text-[#29696B] bg-[#DFEFE6]/10">
-                          {pedido.servicio || 'N/A'}
-                        </Badge>
-                      </div>
-                      <div className="p-3 space-y-1.5">
-                        <div className="text-xs text-[#7AA79C] flex items-center">
-                          <Calendar className="w-3.5 h-3.5 mr-1" />
-                          {formatDisplayDate(pedido.fecha)}
-                        </div>
-                        {pedido.seccionDelServicio && (
-                          <div className="text-xs text-[#7AA79C] flex items-center">
-                            <MapPin className="w-3.5 h-3.5 mr-1" />
-                            {pedido.seccionDelServicio}
                           </div>
-                        )}
-                        <div className="pt-1.5 flex justify-between items-center">
-                          <div className="text-xs text-[#29696B]">
-                            <span className="font-medium">{pedido.productos?.length || 0}</span> productos
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemitoDownload(pedido._id)}
-                            disabled={isLoading}
-                            className="h-8 w-8 p-0 text-[#29696B] hover:bg-[#DFEFE6]/30"
-                          >
-                            {isLoading ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Download className="h-4 w-4" />
-                            )}
-                          </Button>
                         </div>
                       </div>
-                    </div>
-                  ))
-                )}
+                    ))
+                  )}
 
-                {/* Paginación para móvil */}
+                  {/* Paginación para móvil */}
+                  {!loadingPedidos && filteredPedidos.length > itemsPerPage && (
+                    <div className="mt-4">
+                      <Pagination
+                        totalItems={filteredPedidos.length}
+                        itemsPerPage={itemsPerPage}
+                        currentPage={currentPage}
+                        onPageChange={handlePageChange}
+                      />
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+              <CardFooter className="bg-[#DFEFE6]/10 border-t border-[#91BEAD]/20 justify-between">
+                <div className="text-sm text-[#7AA79C]">
+                  Mostrando {currentPedidos.length} de {filteredPedidos.length} pedidos
+                </div>
+
+                {/* Paginación para escritorio */}
                 {!loadingPedidos && filteredPedidos.length > itemsPerPage && (
-                  <div className="mt-4">
+                  <div className="hidden md:block">
                     <Pagination
                       totalItems={filteredPedidos.length}
                       itemsPerPage={itemsPerPage}
@@ -1050,28 +1070,11 @@ const DownloadsManagement: React.FC = () => {
                     />
                   </div>
                 )}
-              </div>
-            </CardContent>
-            <CardFooter className="bg-[#DFEFE6]/10 border-t border-[#91BEAD]/20 justify-between">
-              <div className="text-sm text-[#7AA79C]">
-                Mostrando {currentPedidos.length} de {filteredPedidos.length} pedidos
-              </div>
-
-              {/* Paginación para escritorio */}
-              {!loadingPedidos && filteredPedidos.length > itemsPerPage && (
-                <div className="hidden md:block">
-                  <Pagination
-                    totalItems={filteredPedidos.length}
-                    itemsPerPage={itemsPerPage}
-                    currentPage={currentPage}
-                    onPageChange={handlePageChange}
-                  />
-                </div>
-              )}
-            </CardFooter>
-          </Card>
-        </TabsContent>
-      </Tabs>
+              </CardFooter>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   );
 };

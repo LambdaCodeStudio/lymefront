@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { getAuthToken } from '@/utils/inventoryUtils';
 import { motion } from 'framer-motion';
-import { 
-  Search, 
-  Filter, 
-  Heart, 
-  ShoppingCart, 
+import {
+  Search,
+  Filter,
+  Heart,
+  ShoppingCart,
   Sparkles,
   Tag,
   Package,
@@ -32,10 +32,10 @@ try {
 } catch (e) {
   console.warn('NotificationContext no disponible, las notificaciones estarán desactivadas');
   // Crear un hook de reemplazo que devuelve un objeto con una función vacía
-  useNotification = () => ({ 
+  useNotification = () => ({
     addNotification: (message, type) => {
       console.log(`Notificación (${type}): ${message}`);
-    } 
+    }
   });
 }
 
@@ -58,7 +58,7 @@ interface Product {
 export const ShopHome: React.FC = () => {
   // Usar exactamente el mismo hook que funciona
   const { addItem } = useCartContext();
-  
+
   // Uso seguro de notificaciones
   let notificationHook;
   try {
@@ -67,9 +67,9 @@ export const ShopHome: React.FC = () => {
     console.warn('Error al usar useNotification:', e);
     notificationHook = { addNotification: null };
   }
-  
+
   const { addNotification } = notificationHook;
-  
+
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,7 +82,7 @@ export const ShopHome: React.FC = () => {
   // Efecto para cargar productos
   useEffect(() => {
     fetchProducts();
-    
+
     // Cargar favoritos de localStorage
     const storedFavorites = localStorage.getItem('favorites');
     if (storedFavorites) {
@@ -93,14 +93,14 @@ export const ShopHome: React.FC = () => {
         localStorage.removeItem('favorites');
       }
     }
-    
+
     // Verificar si hay filtro por categoría en la URL
     const params = new URLSearchParams(window.location.search);
     const categoryParam = params.get('category');
     if (categoryParam) {
       setSelectedCategory(categoryParam);
     }
-    
+
     const viewParam = params.get('view');
     if (viewParam === 'favorites') {
       setShowFavorites(true);
@@ -110,34 +110,34 @@ export const ShopHome: React.FC = () => {
   // Efecto para filtrar productos
   useEffect(() => {
     if (!products.length) return;
-    
+
     let result = [...products];
-    
+
     // Filtrar por búsqueda
     if (searchTerm) {
-      result = result.filter(product => 
+      result = result.filter(product =>
         product.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
         product.descripcion?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         product.subCategoria.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
-    
+
     // Filtrar por categoría
     if (selectedCategory !== 'all') {
-      result = result.filter(product => 
-        product.categoria === selectedCategory || 
+      result = result.filter(product =>
+        product.categoria === selectedCategory ||
         product.subCategoria === selectedCategory
       );
     }
-    
+
     // Filtrar por favoritos
     if (showFavorites) {
       result = result.filter(product => favorites.includes(product._id));
     }
-    
+
     // Solo productos con stock
     result = result.filter(product => product.stock > 0);
-    
+
     setFilteredProducts(result);
   }, [products, searchTerm, selectedCategory, showFavorites, favorites]);
 
@@ -155,7 +155,7 @@ export const ShopHome: React.FC = () => {
           'Authorization': `Bearer ${token}`
         }
       });
-      
+
       if (!response.ok) {
         if (response.status === 401) {
           // Token expirado o inválido
@@ -166,7 +166,7 @@ export const ShopHome: React.FC = () => {
         }
         throw new Error('Error al cargar productos');
       }
-      
+
       const data = await response.json();
       setProducts(data);
       setFilteredProducts(data.filter(product => product.stock > 0));
@@ -183,7 +183,7 @@ export const ShopHome: React.FC = () => {
     const newFavorites = favorites.includes(productId)
       ? favorites.filter(id => id !== productId)
       : [...favorites, productId];
-    
+
     setFavorites(newFavorites);
     localStorage.setItem('favorites', JSON.stringify(newFavorites));
   };
@@ -199,7 +199,7 @@ export const ShopHome: React.FC = () => {
       category: product.categoria,
       subcategory: product.subCategoria
     });
-    
+
     // Mostrar notificación si está disponible
     if (typeof addNotification === 'function') {
       try {
@@ -232,44 +232,44 @@ export const ShopHome: React.FC = () => {
             </div>
           ) : (
             <>
-              {/* Hero section */}
-              <section className="relative mb-6 overflow-hidden rounded-2xl">
-                <motion.div 
+              <section className="relative mb-4 sm:mb-6 overflow-hidden rounded-lg sm:rounded-xl md:rounded-2xl mx-2 sm:mx-0">
+                <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="relative h-48 md:h-64 lg:h-80 flex items-center z-10 p-8"
+                  className="relative h-40 sm:h-48 md:h-64 lg:h-80 flex items-center z-10 p-4 sm:p-6 md:p-8"
                 >
-                  {/* Fondo con gradiente */}
+                  {/* Fondo con gradiente - mejorado para responsividad */}
                   <div className="absolute inset-0 bg-gradient-to-r from-[#00888A] to-[#50C3AD] overflow-hidden">
                     <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-5"></div>
                     <div className="absolute -inset-[10px] bg-[#80CFB0]/30 blur-3xl animate-pulse"></div>
                   </div>
-                  
-                  <div className="relative z-10 max-w-3xl">
-                    <motion.h1 
+
+                  <div className="relative z-10 w-full max-w-xs sm:max-w-lg md:max-w-2xl lg:max-w-3xl">
+                    <motion.h1
                       initial={{ y: 20, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
                       transition={{ delay: 0.2 }}
-                      className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4 text-white"
+                      className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-2 sm:mb-3 md:mb-4 text-white leading-tight"
                     >
                       Bienvenido a la tienda de <span className="text-[#D4F5E6]">Lyme</span>
                     </motion.h1>
-                    <motion.p 
+                    <motion.p
                       initial={{ y: 20, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
                       transition={{ delay: 0.3 }}
-                      className="text-white/90 text-lg mb-6"
+                      className="text-white/90 text-sm sm:text-base md:text-lg mb-3 sm:mb-4 md:mb-6 max-w-sm md:max-w-md lg:max-w-lg"
                     >
                       Encuentra todo lo que necesitas para limpieza y mantenimiento en un solo lugar.
                     </motion.p>
-                    <motion.div 
+                    <motion.div
                       initial={{ y: 20, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
                       transition={{ delay: 0.4 }}
+                      className="flex"
                     >
-                      <Button className="bg-white hover:bg-[#D4F5E6] text-[#00888A] border-0 font-medium">
+                      <Button className="bg-white hover:bg-[#D4F5E6] text-[#00888A] border-0 font-medium text-xs sm:text-sm md:text-base py-1 sm:py-2 px-3 sm:px-4">
                         Explorar productos
-                        <ArrowRight className="ml-2 h-4 w-4" />
+                        <ArrowRight className="ml-1 sm:ml-2 h-3 w-3 sm:h-4 sm:w-4" />
                       </Button>
                     </motion.div>
                   </div>
@@ -289,7 +289,7 @@ export const ShopHome: React.FC = () => {
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
                   </div>
-                  
+
                   <div className="flex-shrink-0">
                     <select
                       className="w-full md:w-auto bg-white/10 border-[#50C3AD] focus:border-[#80CFB0] rounded-md text-white py-2 px-3"
@@ -311,16 +311,15 @@ export const ShopHome: React.FC = () => {
                     </select>
                   </div>
                 </div>
-                
+
                 <div className="flex items-center gap-2">
-                  <Button 
-                    variant={showFavorites ? "default" : "outline"} 
+                  <Button
+                    variant={showFavorites ? "default" : "outline"}
                     size="sm"
-                    className={`${
-                      showFavorites 
-                        ? "bg-[#50C3AD] hover:bg-[#00888A] text-white" 
+                    className={`${showFavorites
+                        ? "bg-[#50C3AD] hover:bg-[#00888A] text-white"
                         : "bg-white/10 hover:bg-white/20 border-[#50C3AD] text-white"
-                    }`}
+                      }`}
                     onClick={() => setShowFavorites(!showFavorites)}
                   >
                     <Heart className={`w-4 h-4 mr-2 ${showFavorites ? "fill-white" : ""}`} />
@@ -337,8 +336,8 @@ export const ShopHome: React.FC = () => {
                       <div>
                         <h3 className="text-xl font-semibold mb-1">Limpieza</h3>
                         <p className="text-[#D4F5E6] mb-4">Productos para mantener todo impecable</p>
-                        <Button 
-                          size="sm" 
+                        <Button
+                          size="sm"
                           className="bg-white hover:bg-[#D4F5E6] text-[#00888A]"
                           onClick={() => setSelectedCategory('limpieza')}
                         >
@@ -350,14 +349,14 @@ export const ShopHome: React.FC = () => {
                       </div>
                     </CardContent>
                   </Card>
-                  
+
                   <Card className="bg-gradient-to-br from-[#50C3AD] to-[#75D0E0] border-[#80CFB0] hover:shadow-lg hover:shadow-[#50C3AD]/20 transition-all cursor-pointer group overflow-hidden text-white">
                     <CardContent className="p-6 flex items-center justify-between">
                       <div>
                         <h3 className="text-xl font-semibold mb-1">Mantenimiento</h3>
                         <p className="text-[#D4F5E6] mb-4">Todo para reparaciones y proyectos</p>
-                        <Button 
-                          size="sm" 
+                        <Button
+                          size="sm"
                           className="bg-white hover:bg-[#D4F5E6] text-[#50C3AD]"
                           onClick={() => setSelectedCategory('mantenimiento')}
                         >
@@ -369,14 +368,14 @@ export const ShopHome: React.FC = () => {
                       </div>
                     </CardContent>
                   </Card>
-                  
+
                   <Card className="bg-gradient-to-br from-[#75D0E0] to-[#50C3AD] border-[#80CFB0] hover:shadow-lg hover:shadow-[#75D0E0]/20 transition-all cursor-pointer group overflow-hidden text-white">
                     <CardContent className="p-6 flex items-center justify-between">
                       <div>
                         <h3 className="text-xl font-semibold mb-1">Mi carrito</h3>
                         <p className="text-[#D4F5E6] mb-4">Revisa tus productos seleccionados</p>
-                        <Button 
-                          size="sm" 
+                        <Button
+                          size="sm"
                           className="bg-white hover:bg-[#D4F5E6] text-[#75D0E0]"
                           onClick={() => window.location.href = '/cart'}
                         >
@@ -403,7 +402,7 @@ export const ShopHome: React.FC = () => {
                       Todos nuestros productos cumplen con los más altos estándares de calidad.
                     </p>
                   </div>
-                  
+
                   <div className="bg-white/10 backdrop-blur-sm p-6 rounded-lg border border-[#80CFB0]/30 text-center">
                     <div className="inline-flex items-center justify-center w-12 h-12 bg-[#00888A]/20 rounded-full mb-4">
                       <Truck className="h-6 w-6 text-[#D4F5E6]" />
@@ -413,7 +412,7 @@ export const ShopHome: React.FC = () => {
                       Coordinamos la entrega de tus productos en el menor tiempo posible.
                     </p>
                   </div>
-                  
+
                   <div className="bg-white/10 backdrop-blur-sm p-6 rounded-lg border border-[#80CFB0]/30 text-center">
                     <div className="inline-flex items-center justify-center w-12 h-12 bg-[#00888A]/20 rounded-full mb-4">
                       <Clock className="h-6 w-6 text-[#D4F5E6]" />
@@ -437,7 +436,7 @@ export const ShopHome: React.FC = () => {
                     <p className="text-[#D4F5E6]/80 mb-6">
                       Agrega productos a tus favoritos para encontrarlos rápidamente
                     </p>
-                    <Button 
+                    <Button
                       onClick={() => setShowFavorites(false)}
                       className="bg-[#00888A] hover:bg-[#50C3AD] text-white"
                     >
@@ -451,11 +450,11 @@ export const ShopHome: React.FC = () => {
                     </div>
                     <h2 className="text-xl md:text-2xl font-bold mb-2 text-[#D4F5E6]">No se encontraron productos</h2>
                     <p className="text-[#75D0E0] mb-6 max-w-lg mx-auto">
-                      {showFavorites 
-                        ? "No tienes productos favoritos guardados. Explora nuestra tienda y agrega algunos." 
+                      {showFavorites
+                        ? "No tienes productos favoritos guardados. Explora nuestra tienda y agrega algunos."
                         : "No hay productos que coincidan con tu búsqueda. Intenta con otros términos o categorías."}
                     </p>
-                    <Button 
+                    <Button
                       onClick={() => {
                         setSearchTerm('');
                         setSelectedCategory('all');
@@ -483,9 +482,9 @@ export const ShopHome: React.FC = () => {
                           ) : (
                             <Package className="w-5 h-5 mr-2 text-[#D4F5E6]" />
                           )}
-                          Productos: {selectedCategory === 'limpieza' ? 'Limpieza' : 
-                                     selectedCategory === 'mantenimiento' ? 'Mantenimiento' : 
-                                     selectedCategory}
+                          Productos: {selectedCategory === 'limpieza' ? 'Limpieza' :
+                            selectedCategory === 'mantenimiento' ? 'Mantenimiento' :
+                              selectedCategory}
                         </>
                       ) : (
                         <>Todos los Productos</>
