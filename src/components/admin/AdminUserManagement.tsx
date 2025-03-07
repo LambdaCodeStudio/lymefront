@@ -1,19 +1,19 @@
 /**
- * AdminUserManagement Component - Enhanced with pagination and showing all users
+ * Componente para gestión de usuarios en el panel de administración
  * Permite crear, editar, activar/desactivar y eliminar usuarios del sistema
+ * Incluye paginación para manejar grandes cantidades de usuarios
  */
 import React from 'react';
 import {
   Plus,
   AlertCircle,
+  CheckCircle,
   Search,
   Filter,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
   Users,
   Loader2,
+  RefreshCw,
+  Settings,
 } from 'lucide-react';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -22,29 +22,34 @@ import { NotificationsContainer } from '@/components/ui/Notifications';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from '@/components/ui/label';
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // Importar componentes modularizados
 import UserTable from './components/UserTable';
 import UserCard from './components/UserCard';
 import UserForm from './components/UserForm';
-import Pagination from './components/Pagination';
+import Pagination from '@/components/ui/Pagination'; // Ajusta esta ruta a donde hayas puesto el componente
 
 // Importar hook personalizado de gestión de usuarios
-import { useUserManagement } from './hooks/useUserManagement';
+import { useUserManagement } from '../hooks/useUserManagement';
 
 // Componente de paginación simple para móvil
-const MobilePaginationControls: React.FC = ({ currentPage, totalPages, onPageChange }) => {
+const MobilePaginationControls = ({ currentPage, totalPages, onPageChange }) => {
+  if (!totalPages || totalPages <= 1) return null;
+  
   return (
     <div className="flex items-center justify-center gap-2 my-2">
       <Button
         variant="outline"
         size="sm"
-        onClick={() => onPageChange(currentPage - 1)}
+        onClick={() => onPageChange(Math.max(1, currentPage - 1))}
         disabled={currentPage <= 1}
         className="h-8 w-8 p-0 border-[#91BEAD]"
       >
-        <ChevronLeft className="h-4 w-4" />
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+          <path d="m15 18-6-6 6-6"/>
+        </svg>
       </Button>
       
       <span className="text-sm text-[#7AA79C]">
@@ -54,11 +59,13 @@ const MobilePaginationControls: React.FC = ({ currentPage, totalPages, onPageCha
       <Button
         variant="outline"
         size="sm"
-        onClick={() => onPageChange(currentPage + 1)}
+        onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
         disabled={currentPage >= totalPages}
         className="h-8 w-8 p-0 border-[#91BEAD]"
       >
-        <ChevronRight className="h-4 w-4" />
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+          <path d="m9 18 6-6-6-6"/>
+        </svg>
       </Button>
     </div>
   );
@@ -67,44 +74,58 @@ const MobilePaginationControls: React.FC = ({ currentPage, totalPages, onPageCha
 /**
  * Componente interno que usa el hook useUserManagement
  */
-const UserManagementContent: React.FC = () => {
+const UserManagementContent = () => {
   // Usar el hook de gestión de usuarios que centraliza toda la lógica
   const {
     // Datos y estados
-    paginatedUsers,
-    totalItems,
-    loading,
-    error,
-    showModal,
-    editingUser,
-    searchTerm,
-    showInactiveUsers,
-    roleFilter,
-    formData,
-    availableRoles,
+    users = [],
+    loading = false,
+    error = '',
+    showModal = false,
+    editingUser = null,
+    searchTerm = '',
+    showInactiveUsers = true,
+    roleFilter = 'all',
+    formData = {},
+    availableRoles = [],
     
     // Estados de paginación
-    currentPage,
-    itemsPerPage,
-    totalPages,
+    filteredUsers = [],
+    paginatedUsers = [],
+    currentPage = 1,
+    itemsPerPage = 10,
+    totalPages = 1,
+    totalItems = 0,
     
     // Setters
-    setSearchTerm,
-    setShowInactiveUsers,
-    setRoleFilter,
-    setShowModal,
-    setFormData,
+    setSearchTerm = () => {},
+    setShowInactiveUsers = () => {},
+    setRoleFilter = () => {},
+    setShowModal = () => {},
+    setFormData = () => {},
     
     // Métodos
-    handlePageChange,
-    handleItemsPerPageChange,
-    handleSubmit,
-    handleDelete,
-    handleToggleStatus,
-    handleEdit,
-    resetForm,
-    refreshUsers
-  } = useUserManagement();
+    handlePageChange = () => {},
+    handleItemsPerPageChange = () => {},
+    handleSubmit = () => {},
+    handleDelete = () => {},
+    handleToggleStatus = () => {},
+    handleEdit = () => {},
+    resetForm = () => {},
+    fetchUsers = () => {}
+  } = useUserManagement ? useUserManagement() : {};
+
+  // Si no hay hook disponible o aún no está listo
+  if (!useUserManagement) {
+    return (
+      <div className="p-4 md:p-6">
+        <Alert className="bg-red-50 border border-red-200 text-red-800 rounded-lg">
+          <AlertCircle className="h-4 w-4 text-red-600" />
+          <AlertDescription className="ml-2">Error: No se pudo cargar el módulo de gestión de usuarios</AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 md:p-6 space-y-6">
@@ -209,7 +230,7 @@ const UserManagementContent: React.FC = () => {
             <div className="flex items-center space-x-2">
               <Label className="text-[#7AA79C] whitespace-nowrap text-sm">Por página:</Label>
               <Select 
-                value={itemsPerPage.toString()} 
+                value={String(itemsPerPage)} 
                 onValueChange={(value) => handleItemsPerPageChange(parseInt(value))}
               >
                 <SelectTrigger className="w-16 h-8 border-[#91BEAD] focus:ring-[#29696B]/20">
@@ -228,7 +249,7 @@ const UserManagementContent: React.FC = () => {
       </div>
 
       {/* Vista de Carga */}
-      {loading && paginatedUsers.length === 0 && (
+      {loading && (!paginatedUsers || paginatedUsers.length === 0) && (
         <div className="flex justify-center items-center py-8 bg-white rounded-xl shadow-sm border border-[#91BEAD]/20 p-6">
           <div className="w-8 h-8 border-4 border-[#8DB3BA] border-t-[#29696B] rounded-full animate-spin"></div>
           <span className="ml-3 text-[#29696B]">Cargando usuarios...</span>
@@ -236,7 +257,7 @@ const UserManagementContent: React.FC = () => {
       )}
 
       {/* Mensaje cuando no hay usuarios */}
-      {!loading && totalItems === 0 && (
+      {!loading && (!filteredUsers || filteredUsers.length === 0) && (
         <div className="bg-white rounded-xl shadow-sm p-8 text-center border border-[#91BEAD]/20">
           <div className="inline-flex items-center justify-center w-12 h-12 bg-[#DFEFE6] rounded-full mb-4">
             <Search className="w-6 h-6 text-[#29696B]" />
@@ -254,7 +275,7 @@ const UserManagementContent: React.FC = () => {
 
       {/* Tabla para pantallas medianas y grandes */}
       <div className="hidden md:block bg-white rounded-xl shadow-sm overflow-hidden border border-[#91BEAD]/20">
-        {!loading && paginatedUsers.length > 0 && (
+        {!loading && Array.isArray(paginatedUsers) && paginatedUsers.length > 0 && (
           <>
             <UserTable 
               users={paginatedUsers}
@@ -264,26 +285,71 @@ const UserManagementContent: React.FC = () => {
             />
             
             {/* Información y controles de paginación */}
-            <div className="bg-[#DFEFE6]/10 border-t border-[#91BEAD]/20 p-4 flex justify-between items-center">
-              <div className="text-sm text-[#7AA79C]">
-                Mostrando {Math.min(totalItems, (currentPage - 1) * itemsPerPage + 1)}-{Math.min(currentPage * itemsPerPage, totalItems)} de {totalItems} usuarios
+            {totalPages > 1 && (
+              <div className="bg-[#DFEFE6]/10 border-t border-[#91BEAD]/20 p-4 flex justify-between items-center">
+                <div className="text-sm text-[#7AA79C]">
+                  Mostrando {Math.min(totalItems, (currentPage - 1) * itemsPerPage + 1)}-{Math.min(currentPage * itemsPerPage, totalItems)} de {totalItems} usuarios
+                </div>
+                
+                {/* Paginación desktop */}
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(1)}
+                    disabled={currentPage === 1}
+                    className="h-8 px-3 border-[#91BEAD]"
+                  >
+                    Primera
+                  </Button>
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="h-8 w-8 p-0 border-[#91BEAD]"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                      <path d="m15 18-6-6 6-6"/>
+                    </svg>
+                  </Button>
+                  
+                  <span className="text-sm text-[#29696B] px-2">
+                    {currentPage} / {totalPages}
+                  </span>
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="h-8 w-8 p-0 border-[#91BEAD]"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                      <path d="m9 18 6-6-6-6"/>
+                    </svg>
+                  </Button>
+                  
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(totalPages)}
+                    disabled={currentPage === totalPages}
+                    className="h-8 px-3 border-[#91BEAD]"
+                  >
+                    Última
+                  </Button>
+                </div>
               </div>
-              
-              {/* Paginación desktop */}
-              <Pagination
-                totalItems={totalItems}
-                itemsPerPage={itemsPerPage}
-                currentPage={currentPage}
-                onPageChange={handlePageChange}
-              />
-            </div>
+            )}
           </>
         )}
       </div>
 
       {/* Vista de Tarjetas para dispositivos móviles */}
       <div className="md:hidden space-y-4">
-        {!loading && paginatedUsers.length > 0 && (
+        {!loading && Array.isArray(paginatedUsers) && paginatedUsers.length > 0 && (
           <>
             {paginatedUsers.map(user => (
               <UserCard 
@@ -296,57 +362,47 @@ const UserManagementContent: React.FC = () => {
             ))}
             
             {/* Paginación para móvil */}
-            <div className="mt-4">
-              <MobilePaginationControls
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={handlePageChange}
-              />
-            </div>
+            {totalPages > 1 && (
+              <div className="mt-4">
+                <MobilePaginationControls
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={handlePageChange}
+                />
+              </div>
+            )}
           </>
         )}
       </div>
 
       {/* Modal de Usuario */}
-      <UserForm 
-        isOpen={showModal}
-        onClose={() => {
-          setShowModal(false);
-          resetForm();
-        }}
-        onSubmit={handleSubmit}
-        availableRoles={availableRoles}
-        formData={formData}
-        setFormData={setFormData}
-        editingUser={editingUser}
-        loading={loading}
-        error={error}
-      />
+      {UserForm && (
+        <UserForm 
+          isOpen={showModal}
+          onClose={() => {
+            setShowModal(false);
+            resetForm();
+          }}
+          onSubmit={handleSubmit}
+          availableRoles={availableRoles}
+          formData={formData}
+          setFormData={setFormData}
+          editingUser={editingUser}
+          loading={loading}
+          error={error}
+        />
+      )}
       
       {/* Botón flotante de actualización */}
       <div className="fixed bottom-6 right-6">
         <Button
-          onClick={refreshUsers}
+          onClick={fetchUsers}
           className="rounded-full bg-[#29696B] hover:bg-[#29696B]/90 shadow-lg h-12 w-12 flex items-center justify-center"
         >
           {loading ? (
             <Loader2 className="h-5 w-5 animate-spin text-white" />
           ) : (
-            <svg 
-              className="h-5 w-5 text-white" 
-              xmlns="http://www.w3.org/2000/svg" 
-              viewBox="0 0 24 24" 
-              fill="none" 
-              stroke="currentColor" 
-              strokeWidth="2" 
-              strokeLinecap="round" 
-              strokeLinejoin="round"
-            >
-              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-              <path d="M3 3v5h5" />
-              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-              <path d="M16 21h5v-5" />
-            </svg>
+            <RefreshCw className="h-5 w-5 text-white" />
           )}
         </Button>
       </div>
@@ -357,7 +413,7 @@ const UserManagementContent: React.FC = () => {
 /**
  * Componente principal que envuelve el contenido con NotificationProvider
  */
-const AdminUserManagement: React.FC = () => {
+const AdminUserManagement = () => {
   return (
     <NotificationProvider>
       <UserManagementContent />
