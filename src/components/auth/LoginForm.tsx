@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AtSign, Lock, ArrowRight, User } from 'lucide-react';
+import { Lock, ArrowRight, User } from 'lucide-react';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from '@/hooks/useAuth';
 import LoadingScreen from '@/components/ui/loading-screen';
@@ -80,7 +80,7 @@ export const InputField: React.FC<InputFieldProps> = ({
 export const LoginForm: React.FC<LoginFormProps> = ({ redirectPath }) => {
   // Estado del formulario
   const [formData, setFormData] = useState({
-    email: '',
+    usuario: '',
     password: '',
     rememberMe: false
   });
@@ -92,11 +92,11 @@ export const LoginForm: React.FC<LoginFormProps> = ({ redirectPath }) => {
 
   // Cargar credenciales guardadas al montar el componente
   useEffect(() => {
-    const savedIdentifier = localStorage.getItem('rememberedIdentifier');
-    if (savedIdentifier) {
+    const savedUsuario = localStorage.getItem('rememberedUsuario');
+    if (savedUsuario) {
       setFormData(prev => ({
         ...prev,
-        email: savedIdentifier,
+        usuario: savedUsuario,
         rememberMe: true
       }));
     }
@@ -106,7 +106,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ redirectPath }) => {
   const handleRememberMe = (checked: boolean) => {
     setFormData(prev => ({ ...prev, rememberMe: checked }));
     if (!checked) {
-      localStorage.removeItem('rememberedIdentifier');
+      localStorage.removeItem('rememberedUsuario');
     }
   };
 
@@ -116,12 +116,13 @@ export const LoginForm: React.FC<LoginFormProps> = ({ redirectPath }) => {
     
     const rolePaths: Record<string, string> = {
       'admin': '/admin',
-      'supervisor': '/admin',
-      'basic': '/shop',
-      'temporal': '/shop'
+      'supervisor_de_supervisores': '/admin',
+      'supervisor': '/shop',
+      'operario': '/shop',
+      'temporario': '/shop'
     };
     
-    return rolePaths[role];
+    return rolePaths[role] || '/shop';
   };
 
   // Manejar envío del formulario
@@ -130,17 +131,17 @@ export const LoginForm: React.FC<LoginFormProps> = ({ redirectPath }) => {
 
     try {
       // Usar el hook de login
-      const response = await login(formData.email, formData.password);
+      const response = await login(formData.usuario, formData.password);
 
       // Si recordar está activado, guardar el identificador
       if (formData.rememberMe) {
-        localStorage.setItem('rememberedIdentifier', formData.email);
+        localStorage.setItem('rememberedUsuario', formData.usuario);
       } else {
-        localStorage.removeItem('rememberedIdentifier');
+        localStorage.removeItem('rememberedUsuario');
       }
 
       // Obtener el rol desde response.role o response.user.role
-      const userRole = response.role || (response.user && response.user.role) || 'basic';
+      const userRole = response.role || (response.user && response.user.role) || 'operario';
       
       // Redireccionar según el rol
       const redirectPath = getRedirectPath(userRole);
@@ -162,9 +163,9 @@ export const LoginForm: React.FC<LoginFormProps> = ({ redirectPath }) => {
           <div className="space-y-4">
             <InputField
               type="text"
-              value={formData.email}
-              onChange={(e) => setFormData(prev => ({...prev, email: e.target.value}))}
-              placeholder="Email o nombre de usuario"
+              value={formData.usuario}
+              onChange={(e) => setFormData(prev => ({...prev, usuario: e.target.value}))}
+              placeholder="Nombre de usuario"
               icon={User}
               error={error}
               required
