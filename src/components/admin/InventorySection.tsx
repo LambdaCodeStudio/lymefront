@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { useQuery, useQueryClient } from 'react-query';
+import { useQuery, useQueryClient, useMutation } from 'react-query';
 // import { FixedSizeList } from 'react-window';
 import debounce from 'lodash/debounce';
 import {
@@ -85,7 +85,7 @@ interface PagedResponse<T> {
 }
 
 interface ComboItem {
-  productoId: string;
+  productoId: string | any; // Permitir objetos para facilitar la manipulación
   cantidad: number;
 }
 
@@ -127,6 +127,8 @@ const subCategorias: Record<string, Array<{value: string, label: string}>> = {
 
 // Definir umbral de stock bajo
 const LOW_STOCK_THRESHOLD = 10;
+// Clave para cache de productos
+const PRODUCTS_CACHE_KEY = 'products';
 
 // Componente para input de stock con límite máximo
 const ProductStockInput: React.FC<{
@@ -378,6 +380,9 @@ const InventorySection: React.FC = () => {
   // Creamos caché para evitar peticiones repetidas al API de imágenes
   const imageCache = useRef<Map<string, boolean>>(new Map());
 
+  // Referencia al controlador de aborto para cancelar solicitudes pendientes
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   const [formData, setFormData] = useState<FormData>({
     nombre: '',
     descripcion: '',
@@ -392,17 +397,24 @@ const InventorySection: React.FC = () => {
     imagenPreview: null
   });
 
-  // Debounced search
-  const debouncedSearch = useCallback(
-    debounce((value: string) => {
-      setDebouncedSearchTerm(value);
-      setCurrentPage(1); // Reset a primera página
-    }, 300),
-    []
+  // Obtener auth token
+  const getAuthToken = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('token');
+    }
+    return null;
+  }, []);
+
+  // Función para generar clave de caché de productos
+  const getProductsCacheKey = useCallback(
+    (page: number, category: string, search: string) => {
+      return [PRODUCTS_CACHE_KEY, page, itemsPerPage, category, search];
+    },
+    [itemsPerPage]
   );
 
   // Función para obtener productos con React Query
-  const fetchProductsData = async (
+  const fetchProductsData = useCallback(async (
     page: number, 
     limit: number, 
     category: string, 
@@ -413,6 +425,14 @@ const InventorySection: React.FC = () => {
       if (!token) {
         throw new Error('No hay token de autenticación');
       }
+
+      // Abortar solicitud anterior si existe
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      
+      // Crear nuevo controlador de aborto
+      abortControllerRef.current = new AbortController();
 
       // Parámetros de paginación y filtros
       const params = new URLSearchParams({
@@ -430,7 +450,7 @@ const InventorySection: React.FC = () => {
             'Authorization': `Bearer ${token}`
           },
           cache: 'no-store',
-          signal: AbortSignal.timeout(15000)
+          signal: abortControllerRef.current.signal
         },
         3
       );
@@ -441,9 +461,72 @@ const InventorySection: React.FC = () => {
       
       return await response.json();
     } catch (error: any) {
+      // No reportar error si fue cancelado
+      if (error.name === 'AbortError') {
+        console.log('Solicitud cancelada');
+        // Devolvemos un estado vacío en lugar de lanzar un error
+        return {
+          items: [],
+          page,
+          limit,
+          totalItems: 0,
+          totalPages: 0,
+          hasNextPage: false,
+          hasPrevPage: false
+        };
+      }
+      
       console.error('Error fetching products:', error);
       throw new Error(`Error al cargar productos: ${error.message}`);
+    } finally {
+      // Limpiar controlador de aborto si la solicitud se completó o falló
+      if (abortControllerRef.current?.signal.aborted) {
+        abortControllerRef.current = null;
+      }
     }
+  }, [getAuthToken]);
+
+  // Mejorar la función fetch con reintentos para manejar "failed to fetch"
+  const fetchWithRetry = async (url: string, options: RequestInit, maxRetries = 3) => {
+    let retries = 0;
+    
+    while (retries < maxRetries) {
+      try {
+        const response = await fetch(url, options);
+        
+        if (!response.ok) {
+          // Si es un error de autenticación, no reintentar
+          if (response.status === 401) {
+            throw new Error('Error de autenticación');
+          }
+          
+          throw new Error(`Error HTTP: ${response.status}`);
+        }
+        
+        return response;
+      } catch (error: any) {
+        // Si la solicitud fue cancelada, no reintentar
+        if (error.name === 'AbortError') {
+          throw error;
+        }
+        
+        retries++;
+        console.warn(`Intento ${retries}/${maxRetries} fallido: ${error.message}`);
+        
+        // Si es el último intento, lanzar el error
+        if (retries >= maxRetries) {
+          throw error;
+        }
+        
+        // Esperar antes de reintentar (espera exponencial)
+        const delay = Math.min(1000 * Math.pow(2, retries), 10000);
+        console.log(`Esperando ${delay}ms antes de reintentar...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+    
+    // Por seguridad, aunque nunca debería llegar aquí
+    throw new Error(`Failed after ${maxRetries} retries`);
   };
 
   // Usar React Query para cargar productos
@@ -454,11 +537,12 @@ const InventorySection: React.FC = () => {
     error: queryError,
     refetch
   } = useQuery(
-    ['products', currentPage, itemsPerPage, selectedCategory, debouncedSearchTerm],
+    getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm),
     () => fetchProductsData(currentPage, itemsPerPage, selectedCategory, debouncedSearchTerm),
     {
       keepPreviousData: true,
       staleTime: 60000, // 1 minuto
+      cacheTime: 300000, // 5 minutos
       refetchOnWindowFocus: false,
       onSuccess: (data) => {
         setProducts(data.items);
@@ -475,12 +559,15 @@ const InventorySection: React.FC = () => {
         // Pre-fetch siguiente página si existe
         if (data.hasNextPage) {
           queryClient.prefetchQuery(
-            ['products', currentPage + 1, itemsPerPage, selectedCategory, debouncedSearchTerm],
+            getProductsCacheKey(currentPage + 1, selectedCategory, debouncedSearchTerm),
             () => fetchProductsData(currentPage + 1, itemsPerPage, selectedCategory, debouncedSearchTerm)
           );
         }
       },
       onError: (err: any) => {
+        // No mostrar errores si la solicitud fue cancelada
+        if (err.name === 'AbortError') return;
+        
         const errorMsg = `Error al cargar productos: ${err.message}`;
         setError(errorMsg);
         
@@ -489,6 +576,252 @@ const InventorySection: React.FC = () => {
         }
       }
     }
+  );
+
+  // Mutation para eliminar producto
+  const deleteProductMutation = useMutation(
+    async (id: string) => {
+      const token = getAuthToken();
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
+      
+      const response = await fetch(`https://lyme-back.vercel.app/api/producto/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Error al eliminar producto');
+      }
+      
+      return id;
+    },
+    {
+      // Actualización optimista del caché
+      onMutate: async (deletedId) => {
+        // Cancelar consultas en curso
+        await queryClient.cancelQueries(getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm));
+        
+        // Guardar el estado anterior
+        const previousProducts = queryClient.getQueryData(
+          getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm)
+        );
+        
+        // Actualizar la caché con optimistic update
+        queryClient.setQueryData(
+          getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm),
+          (old: any) => {
+            const newData = { ...old };
+            newData.items = old.items.filter((p: ProductExtended) => p._id !== deletedId);
+            newData.totalItems = (old.totalItems || 0) - 1;
+            newData.totalPages = Math.ceil(newData.totalItems / itemsPerPage);
+            return newData;
+          }
+        );
+        
+        // Retornar el estado anterior para rollback si es necesario
+        return { previousProducts };
+      },
+      onError: (err, id, context: any) => {
+        // Restaurar el estado anterior en caso de error
+        if (context?.previousProducts) {
+          queryClient.setQueryData(
+            getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm),
+            context.previousProducts
+          );
+        }
+        
+        const errorMsg = `Error al eliminar producto: ${err instanceof Error ? err.message : 'Error desconocido'}`;
+        setError(errorMsg);
+        addNotification(errorMsg, 'error');
+      },
+      onSuccess: (deletedId) => {
+        // Invalidar todas las consultas de productos para asegurar sincronización
+        queryClient.invalidateQueries({
+          predicate: (query) => query.queryKey[0] === PRODUCTS_CACHE_KEY,
+        });
+        
+        // Eliminar imagen de las cachés de imágenes
+        imageService.invalidateCache(deletedId);
+        imageCache.current.delete(deletedId);
+        
+        const successMsg = 'Producto eliminado correctamente';
+        setSuccessMessage(successMsg);
+        addNotification(successMsg, 'success');
+        
+        // Limpiar mensaje después de unos segundos
+        setTimeout(() => setSuccessMessage(''), 5000);
+      },
+      onSettled: () => {
+        // Cerrar diálogo
+        setDeleteDialogOpen(false);
+        setProductToDelete(null);
+      }
+    }
+  );
+
+  // Mutation para eliminar imagen
+  const deleteImageMutation = useMutation(
+    async (productId: string) => {
+      return await imageService.deleteImage(productId);
+    },
+    {
+      // Actualización optimista del caché para la imagen
+      onMutate: async (productId) => {
+        // Cancelar consultas en curso
+        await queryClient.cancelQueries(getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm));
+        
+        // Guardar el estado anterior
+        const previousProducts = queryClient.getQueryData(
+          getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm)
+        );
+        
+        // Actualizar optimistamente el caché para mostrar que la imagen se eliminó
+        queryClient.setQueryData(
+          getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm),
+          (old: any) => {
+            const newData = { ...old };
+            newData.items = old.items.map((p: ProductExtended) => {
+              if (p._id === productId) {
+                // Marcar que ya no tiene imagen
+                return { ...p, hasImage: false };
+              }
+              return p;
+            });
+            return newData;
+          }
+        );
+        
+        // Limpiar cualquier caché de imagen existente
+        imageService.invalidateCache(productId);
+        imageCache.current.delete(productId);
+        
+        // Actualizar formulario si está abierto
+        if (editingProduct && editingProduct._id === productId) {
+          setFormData(prev => ({
+            ...prev,
+            imagen: null,
+            imagenPreview: null
+          }));
+        }
+        
+        return { previousProducts };
+      },
+      onError: (err, productId, context: any) => {
+        // Restaurar el estado anterior en caso de error
+        if (context?.previousProducts) {
+          queryClient.setQueryData(
+            getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm),
+            context.previousProducts
+          );
+        }
+        
+        // Mostrar error
+        console.error('Error al eliminar la imagen:', err);
+        addNotification('Error al eliminar la imagen', 'error');
+      },
+      onSuccess: (_, productId) => {
+        // Limpiar referencias a la imagen
+        if (editingProduct && editingProduct._id === productId) {
+          setFormData(prev => ({
+            ...prev,
+            imagen: null,
+            imagenPreview: null
+          }));
+        }
+        
+        // Invalidar cachés de imágenes
+        imageService.invalidateCache(productId);
+        imageCache.current.delete(productId);
+        
+        // Invalidar todas las consultas de productos para asegurar sincronización
+        queryClient.invalidateQueries({
+          predicate: (query) => query.queryKey[0] === PRODUCTS_CACHE_KEY,
+        });
+        
+        addNotification('Imagen eliminada correctamente', 'success');
+      },
+      onSettled: () => {
+        setDeleteImageDialogOpen(false);
+        setImageLoading(false);
+      }
+    }
+  );
+
+  // Mutation para crear/actualizar producto
+  const productMutation = useMutation(
+    async (data: { id?: string; payload: any; image?: File }) => {
+      const token = getAuthToken();
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
+
+      const url = data.id
+        ? `https://lyme-back.vercel.app/api/producto/${data.id}`
+        : 'https://lyme-back.vercel.app/api/producto';
+      
+      const method = data.id ? 'PUT' : 'POST';
+      
+      // Realizar solicitud para crear/actualizar producto
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(data.payload),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Error al procesar la solicitud');
+      }
+      
+      const savedProduct = await response.json();
+      
+      // Si hay imagen, subirla
+      if (data.image) {
+        await handleImageUpload(savedProduct._id, data.image);
+      }
+      
+      return savedProduct;
+    },
+    {
+      onSuccess: (savedProduct) => {
+        setShowModal(false);
+        resetForm();
+        
+        // Invalidar todas las consultas de productos para asegurar sincronización
+        queryClient.invalidateQueries({
+          predicate: (query) => query.queryKey[0] === PRODUCTS_CACHE_KEY,
+        });
+        
+        const successMsg = `Producto ${editingProduct ? 'actualizado' : 'creado'} correctamente`;
+        setSuccessMessage(successMsg);
+        addNotification(successMsg, 'success');
+        
+        // Limpiar mensaje después de unos segundos
+        setTimeout(() => setSuccessMessage(''), 5000);
+      },
+      onError: (error: any) => {
+        const errorMsg = 'Error al guardar producto: ' + error.message;
+        setError(errorMsg);
+        addNotification(errorMsg, 'error');
+      }
+    }
+  );
+
+  // Debounced search
+  const debouncedSearch = useCallback(
+    debounce((value: string) => {
+      setDebouncedSearchTerm(value);
+      setCurrentPage(1); // Reset a primera página
+    }, 300),
+    []
   );
 
   // Verificar productos con stock bajo y enviar notificación - optimizado con useMemo
@@ -665,7 +998,7 @@ const InventorySection: React.FC = () => {
     };
     
     fetchCurrentUser();
-  }, []);
+  }, [getAuthToken]);
 
   // Efecto para manejar búsqueda
   useEffect(() => {
@@ -690,51 +1023,15 @@ const InventorySection: React.FC = () => {
     }
   }, [windowWidth]);
 
-  // Obtener auth token
-  const getAuthToken = () => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('token');
-    }
-    return null;
-  };
-
-  // Mejorar la función fetch con reintentos para manejar "failed to fetch"
-  const fetchWithRetry = async (url: string, options: RequestInit, maxRetries = 3) => {
-    let retries = 0;
-    
-    while (retries < maxRetries) {
-      try {
-        const response = await fetch(url, options);
-        
-        if (!response.ok) {
-          // Si es un error de autenticación, no reintentar
-          if (response.status === 401) {
-            throw new Error('Error de autenticación');
-          }
-          
-          throw new Error(`Error HTTP: ${response.status}`);
-        }
-        
-        return response;
-      } catch (error: any) {
-        retries++;
-        console.warn(`Intento ${retries}/${maxRetries} fallido: ${error.message}`);
-        
-        // Si es el último intento, lanzar el error
-        if (retries >= maxRetries) {
-          throw error;
-        }
-        
-        // Esperar antes de reintentar (espera exponencial)
-        const delay = Math.min(1000 * Math.pow(2, retries), 10000);
-        console.log(`Esperando ${delay}ms antes de reintentar...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
+  // Limpiar controladores de aborto al desmontar
+  useEffect(() => {
+    return () => {
+      // Abortar cualquier solicitud pendiente
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
       }
-    }
-    
-    // Por seguridad, aunque nunca debería llegar aquí
-    throw new Error(`Failed after ${maxRetries} retries`);
-  };
+    };
+  }, []);
 
   // Refrescar datos manualmente
   const handleRefreshData = async () => {
@@ -803,43 +1100,21 @@ const InventorySection: React.FC = () => {
   };
 
   // Eliminar imagen del producto ya guardado
-  const handleDeleteProductImage = async (productId: string) => {
-    try {
-      setImageLoading(true);
-      await imageService.deleteImage(productId);
-      
-      // Actualizar la vista del formulario para permitir subir una nueva imagen
-      setFormData(prev => ({
-        ...prev,
-        imagen: null,
-        imagenPreview: null
-      }));
-      
-      // Invalidar cualquier caché de imagen que pueda existir
-      imageService.invalidateCache(productId);
-      
-      // Invalidar la caché de React Query
-      queryClient.invalidateQueries(['products']);
-      
-      addNotification('Imagen eliminada correctamente', 'success');
-      setDeleteImageDialogOpen(false);
-    } catch (error: any) {
-      console.error('Error al eliminar la imagen:', error);
-      addNotification('Error al eliminar la imagen', 'error');
-    } finally {
-      setImageLoading(false);
-    }
+  const handleDeleteProductImage = (productId: string) => {
+    // Usar la mutación en lugar de la implementación directa
+    deleteImageMutation.mutate(productId);
   };
 
   // Manejar subida de imagen después de crear/editar producto con compresión y reintentos
-  const handleImageUpload = async (productId: string) => {
-    if (!formData.imagen) return true;
+  const handleImageUpload = async (productId: string, imageFile?: File) => {
+    const imageToProcess = imageFile || formData.imagen;
+    if (!imageToProcess) return true;
     
     try {
       setImageLoading(true);
       
       // Comprimir imagen antes de convertir a base64
-      let imageToUpload = formData.imagen;
+      let imageToUpload = imageToProcess;
       
       if (imageToUpload.size > 1024 * 1024) {
         console.log(`Comprimiendo imagen grande (${formatFileSize(imageToUpload.size)})...`);
@@ -875,8 +1150,36 @@ const InventorySection: React.FC = () => {
           await imageService.uploadImageBase64(productId, base64Data);
           success = true;
           
+          // Actualizar el caché directamente después de subir imagen
+          queryClient.setQueryData(
+            getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm),
+            (old: any) => {
+              if (!old) return old;
+              
+              return {
+                ...old,
+                items: old.items.map((p: ProductExtended) => {
+                  if (p._id === productId) {
+                    // Actualizar el producto para indicar que ahora tiene imagen
+                    return {
+                      ...p,
+                      hasImage: true
+                    };
+                  }
+                  return p;
+                })
+              };
+            }
+          );
+          
+          // Invalidar caché de imágenes para forzar una recarga
+          imageService.invalidateCache(productId);
+          imageCache.current.delete(productId);
+          
           // Invalidar la caché de React Query
-          queryClient.invalidateQueries(['products']);
+          queryClient.invalidateQueries({
+            predicate: (query) => query.queryKey[0] === PRODUCTS_CACHE_KEY,
+          });
         } catch (error: any) {
           retryCount++;
           
@@ -922,17 +1225,6 @@ const InventorySection: React.FC = () => {
         }
       }
       
-      const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-
-      const url = editingProduct
-        ? `https://lyme-back.vercel.app/api/producto/${editingProduct._id}`
-        : 'https://lyme-back.vercel.app/api/producto';
-      
-      const method = editingProduct ? 'PUT' : 'POST';
-      
       // IMPORTANTE: Asegurarnos de que los productoId sean cadenas válidas
       let itemsComboFixed = [];
       if (formData.esCombo && formData.itemsCombo && formData.itemsCombo.length > 0) {
@@ -958,49 +1250,15 @@ const InventorySection: React.FC = () => {
         itemsCombo: formData.esCombo ? itemsComboFixed : []
       };
       
-      console.log('Enviando datos:', JSON.stringify(payload));
-      
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(payload),
+      // Usar mutation para crear/editar producto
+      productMutation.mutate({
+        id: editingProduct?._id,
+        payload,
+        image: formData.imagen || undefined
       });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Error al procesar la solicitud');
-      }
-      
-      const savedProduct = await response.json();
-      
-      // Manejar la subida de imagen si hay una imagen nueva
-      if (formData.imagen) {
-        const imageUploaded = await handleImageUpload(savedProduct._id);
-        if (!imageUploaded) {
-          console.log('Hubo un problema al subir la imagen, pero el producto se guardó correctamente');
-        }
-      }
-      
-      setShowModal(false);
-      resetForm();
-      
-      // Invalidar la caché de React Query
-      queryClient.invalidateQueries(['products']);
-      
-      const successMsg = `Producto ${editingProduct ? 'actualizado' : 'creado'} correctamente`;
-      setSuccessMessage(successMsg);
-      
-      addNotification(successMsg, 'success');
-      
-      // Limpiar mensaje después de unos segundos
-      setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err: any) {
       const errorMsg = 'Error al guardar producto: ' + err.message;
       setError(errorMsg);
-      
       addNotification(errorMsg, 'error');
     }
   };
@@ -1018,55 +1276,30 @@ const InventorySection: React.FC = () => {
   };
 
   // Eliminar producto (después de confirmación)
-  const handleDelete = async (id: string) => {
-    try {
-      const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-      
-      // Verificar si este producto está en algún combo
-      const combosWithProduct = products.filter(
-        p => p.esCombo && p.itemsCombo?.some(item => item.productoId === id)
-      );
-      
-      if (combosWithProduct.length > 0) {
-        const comboNames = combosWithProduct.map(c => c.nombre).join(', ');
-        throw new Error(`No se puede eliminar este producto porque está incluido en los siguientes combos: ${comboNames}`);
-      }
-      
-      const response = await fetch(`https://lyme-back.vercel.app/api/producto/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Error al eliminar producto');
-      }
-      
-      // Invalidar la caché de React Query
-      queryClient.invalidateQueries(['products']);
-      
-      const successMsg = 'Producto eliminado correctamente';
-      setSuccessMessage(successMsg);
-      
-      addNotification(successMsg, 'success');
-      
-      // Limpiar mensaje después de unos segundos
-      setTimeout(() => setSuccessMessage(''), 5000);
-    } catch (err: any) {
-      const errorMsg = 'Error al eliminar producto: ' + err.message;
+  const handleDelete = (id: string) => {
+    // Verificar si este producto está en algún combo antes de intentar eliminar
+    const combosWithProduct = products.filter(
+      p => p.esCombo && p.itemsCombo?.some(item => {
+        // Manejar tanto si productoId es un string como si es un objeto
+        const itemId = typeof item.productoId === 'object' 
+          ? item.productoId._id 
+          : item.productoId;
+        return itemId === id;
+      })
+    );
+    
+    if (combosWithProduct.length > 0) {
+      const comboNames = combosWithProduct.map(c => c.nombre).join(', ');
+      const errorMsg = `No se puede eliminar este producto porque está incluido en los siguientes combos: ${comboNames}`;
       setError(errorMsg);
-      
       addNotification(errorMsg, 'error');
-    } finally {
-      // Cerrar diálogo de confirmación
       setDeleteDialogOpen(false);
       setProductToDelete(null);
+      return;
     }
+    
+    // Usar la mutación para eliminar
+    deleteProductMutation.mutate(id);
   };
 
   // Preparar edición de producto
@@ -1120,7 +1353,7 @@ const InventorySection: React.FC = () => {
       imagenPreview: null
     });
     
-    // Intentamos cargar la imagen si existe - Optimizado: solo si está en caché
+    // Intentamos cargar la imagen si existe
     if (product.hasImage) {
       try {
         // Cargar imagen para vista previa
@@ -1268,10 +1501,38 @@ const InventorySection: React.FC = () => {
   }, [windowWidth]);
 
   // Manejar la subida de imagen con el nuevo componente
-  const handleImageUploaded = (success: boolean) => {
-    if (success) {
+  const handleImageUploaded = (success: boolean, productId?: string) => {
+    if (success && productId) {
+      // Actualizar el caché directamente
+      queryClient.setQueryData(
+        getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm),
+        (old: any) => {
+          if (!old) return old;
+          
+          return {
+            ...old,
+            items: old.items.map((p: ProductExtended) => {
+              if (p._id === productId) {
+                // Actualizar el producto para indicar que ahora tiene imagen
+                return {
+                  ...p,
+                  hasImage: true
+                };
+              }
+              return p;
+            })
+          };
+        }
+      );
+      
+      // Invalidar caché de imágenes para forzar una recarga
+      imageService.invalidateCache(productId);
+      imageCache.current.delete(productId);
+      
       // Invalidar la caché de React Query
-      queryClient.invalidateQueries(['products']);
+      queryClient.invalidateQueries({
+        predicate: (query) => query.queryKey[0] === PRODUCTS_CACHE_KEY,
+      });
     }
   };
 
@@ -1308,7 +1569,13 @@ const InventorySection: React.FC = () => {
     
     return formData.itemsCombo.reduce((total, item) => {
       if (!Array.isArray(products)) return total;
-      const product = products.find(p => p._id === item.productoId);
+      
+      // Manejar tanto si productoId es un string como si es un objeto
+      const productId = typeof item.productoId === 'object'
+        ? item.productoId._id
+        : item.productoId;
+        
+      const product = products.find(p => p._id === productId);
       if (!product) return total;
       
       return total + (product.precio * item.cantidad);
@@ -1869,15 +2136,19 @@ const InventorySection: React.FC = () => {
                           size="sm"
                           onClick={() => confirmDeleteImage(editingProduct._id)}
                           className="absolute top-2 right-2 h-8 w-8 p-0 bg-red-500 hover:bg-red-600"
+                          disabled={deleteImageMutation.isLoading}
                         >
-                          <X className="h-4 w-4" />
+                          {deleteImageMutation.isLoading ? 
+                            <Loader2 className="h-4 w-4 animate-spin" /> : 
+                            <X className="h-4 w-4" />
+                          }
                         </Button>
                       </div>
                     ) : (
                       <ImageUpload 
                         productId={editingProduct._id}
                         useBase64={false}
-                        onImageUploaded={handleImageUploaded}
+                        onImageUploaded={(success) => handleImageUploaded(success, editingProduct._id)}
                       />
                     )}
                   </div>
@@ -1937,18 +2208,19 @@ const InventorySection: React.FC = () => {
                   resetForm();
                 }}
                 className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
+                disabled={productMutation.isLoading || imageLoading}
               >
                 Cancelar
               </Button>
               <Button 
                 type="submit"
                 className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
-                disabled={imageLoading}
+                disabled={productMutation.isLoading || imageLoading}
               >
-                {imageLoading ? (
+                {productMutation.isLoading || imageLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Procesando imagen...
+                    {imageLoading ? 'Procesando imagen...' : 'Guardando...'}
                   </>
                 ) : (
                   editingProduct ? 'Guardar Cambios' : 'Crear Producto'
