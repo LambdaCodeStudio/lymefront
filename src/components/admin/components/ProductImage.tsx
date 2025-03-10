@@ -1,206 +1,151 @@
-// src/components/ProductImage.tsx
-import React, { useState, useEffect, useCallback } from 'react';
-import { imageService } from '@/services/imageService';
-import { PackageOpen, Loader2, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ImageIcon } from 'lucide-react';
 
 interface ProductImageProps {
   productId: string;
-  alt: string;
+  alt?: string;
   width?: number;
   height?: number;
   quality?: number;
   className?: string;
-  containerClassName?: string;
   fallbackClassName?: string;
-  checkExistence?: boolean;
-  placeholderText?: string;
-  retryOnError?: boolean;
+  containerClassName?: string;
+  useBase64?: boolean;
 }
 
-/**
- * Componente para mostrar imágenes de productos con estados de carga y error
- */
 const ProductImage: React.FC<ProductImageProps> = ({
   productId,
-  alt,
-  width = 200,
-  height = 200,
+  alt = 'Product image',
+  width = 80,
+  height = 80,
   quality = 80,
-  className = "",
-  containerClassName = "",
-  fallbackClassName = "",
-  checkExistence = true,
-  placeholderText = "Sin imagen",
-  retryOnError = true
+  className = '',
+  fallbackClassName = '',
+  containerClassName = '',
+  useBase64 = false
 }) => {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [imageExists, setImageExists] = useState<boolean | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
-  const [imageUrl, setImageUrl] = useState<string>('');
-  const [imageBase64, setImageBase64] = useState<string | null>(null); // Estado para almacenar la imagen en base64
-  
-  // Función para cargar la imagen
-  const loadImage = useCallback(async () => {
-    if (!productId) {
-      setError(true);
-      setLoading(false);
-      return;
-    }
-    
-    setLoading(true);
-    setError(false);
-    
-    try {
-      // Verificar existencia si es necesario
-      if (checkExistence) {
-        const exists = await imageService.checkImageExists(productId);
-        setImageExists(exists);
-        
-        if (!exists) {
-          setError(true);
-          setLoading(false);
-          return;
-        }
-      }
-      
-      // Intentar cargar la imagen en base64
-      try {
-        const base64Data = await imageService.getImageBase64(productId);
-        if (base64Data) {
-          setImageBase64(base64Data);
-          setLoading(false);
-          return;
-        } else {
-          // Si no se pudo obtener la imagen en base64, intentar con URL normal
-          console.log(`No se pudo obtener imagen base64 para ${productId}, usando URL normal`);
-        }
-      } catch (error) {
-        console.error('Error al cargar imagen base64:', error);
-        // Fallback a URL normal
-      }
-      
-      // Si hubo un error al cargarla, usar URL normal
-      const url = imageService.getImageUrl(productId, { 
-        width, 
-        height, 
-        quality,
-        timestamp: true
-      });
-      
-      setImageUrl(url);
-      
-      // El estado de loading cambiará cuando la imagen se cargue o falle
-    } catch (err) {
-      console.error('Error al cargar imagen:', err);
-      setError(true);
-      setLoading(false);
-    }
-  }, [productId, checkExistence, width, height, quality]);
-  
-  // Iniciar carga de imagen
+  const [loaded, setLoaded] = useState<boolean>(false);
+  const [error, setError] = useState<boolean>(false);
+  const [imageSrc, setImageSrc] = useState<string>('');
+  const imgRef = useRef<HTMLImageElement>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+
   useEffect(() => {
-    loadImage();
-  }, [loadImage, productId, retryCount]);
+    // Si no hay ID de producto, no hacer nada
+    if (!productId) return;
 
-  // Manejadores de eventos
-  const handleLoad = () => {
-    setLoading(false);
+    const loadImage = () => {
+      // Construir URL de la imagen
+      const imageUrl = useBase64 
+        ? `https://lyme-back.vercel.app/api/producto/${productId}/imagen-base64`
+        : `https://lyme-back.vercel.app/api/producto/${productId}/imagen?quality=${quality}&width=${width}&height=${height}`;
+      
+      if (useBase64) {
+        // Para imágenes base64, necesitamos hacer un fetch
+        setLoaded(false);
+        fetch(imageUrl)
+          .then(response => {
+            if (!response.ok) {
+              if (response.status === 204) {
+                // El producto no tiene imagen
+                throw new Error('No image');
+              }
+              throw new Error('Failed to load image');
+            }
+            return response.json();
+          })
+          .then(data => {
+            setImageSrc(data.image);
+            setLoaded(true);
+          })
+          .catch(err => {
+            console.log(`Error loading image for product ${productId}:`, err.message);
+            setError(true);
+          });
+      } else {
+        // Para imágenes directas, establecer la URL
+        setImageSrc(imageUrl);
+      }
+    };
+
+    // Usar IntersectionObserver para carga diferida
+    if ('IntersectionObserver' in window && imgRef.current) {
+      // Destruir observer anterior si existe
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+
+      // Crear nuevo observer
+      observerRef.current = new IntersectionObserver(
+        (entries) => {
+          const [entry] = entries;
+          if (entry.isIntersecting) {
+            // Cargar imagen cuando sea visible
+            loadImage();
+            // Dejar de observar este elemento
+            if (observerRef.current) {
+              observerRef.current.disconnect();
+              observerRef.current = null;
+            }
+          }
+        },
+        {
+          rootMargin: '100px', // Precargar cuando esté a 100px de ser visible
+          threshold: 0.1 // Cuando al menos el 10% del elemento sea visible
+        }
+      );
+
+      // Empezar a observar
+      observerRef.current.observe(imgRef.current);
+    } else {
+      // Fallback para navegadores sin IntersectionObserver
+      loadImage();
+    }
+
+    // Cleanup
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+        observerRef.current = null;
+      }
+    };
+  }, [productId, quality, width, height, useBase64]);
+
+  // Manejar carga correcta de la imagen
+  const handleImageLoad = () => {
+    setLoaded(true);
     setError(false);
   };
 
-  const handleError = () => {
-    console.log(`Error cargando imagen para producto ${productId}`);
-    setLoading(false);
+  // Manejar error de carga
+  const handleImageError = () => {
     setError(true);
-    
-    // Auto-retry una vez en caso de error (puede ser timeout o problema de red)
-    if (retryOnError && retryCount === 0) {
-      setTimeout(() => {
-        // Invalidar caché y reintentar
-        imageService.invalidateCache(productId);
-        setRetryCount(prev => prev + 1);
-      }, 2000);
-    }
-  };
-  
-  // Reintentar cargar la imagen manualmente
-  const handleRetry = () => {
-    imageService.invalidateCache(productId);
-    setRetryCount(prev => prev + 1);
+    setLoaded(false);
   };
 
+  // Renderizar componente
   return (
-    <div 
-      className={`relative overflow-hidden ${containerClassName}`} 
-      style={{ minHeight: '40px', minWidth: '40px' }}
-    >
-      {/* Estado de carga */}
-      {loading && !error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-[#DFEFE6]/20">
-          <Loader2 className="w-6 h-6 text-[#29696B] animate-spin" />
+    <div className={`relative ${containerClassName}`}>
+      {/* Fallback/Placeholder mientras carga o si hay error */}
+      {(!loaded || error) && (
+        <div className={`flex items-center justify-center ${fallbackClassName || 'bg-gray-100 rounded-md'}`}>
+          <ImageIcon className="w-6 h-6 text-gray-400" />
         </div>
       )}
       
-      {/* Imagen en formato base64 */}
-      {!error && imageBase64 && (
-        <img 
-          src={`data:image/jpeg;base64,${imageBase64}`}
+      {/* Imagen real (visible solo cuando está cargada) */}
+      {imageSrc && (
+        <img
+          ref={imgRef}
+          src={imageSrc}
           alt={alt}
-          className={`${className} ${loading ? 'opacity-0' : 'opacity-100 transition-opacity duration-300'}`}
-          onLoad={handleLoad}
-          onError={handleError}
+          width={width}
+          height={height}
+          onLoad={handleImageLoad}
+          onError={handleImageError}
+          className={`${className} ${loaded ? 'opacity-100' : 'opacity-0'} transition-opacity duration-300`}
           loading="lazy"
-          style={{ 
-            width: width ? `${width}px` : 'auto', 
-            height: height ? `${height}px` : 'auto',
-            objectFit: 'cover' 
-          }}
         />
-      )}
-      
-      {/* Imagen URL normal */}
-      {!error && !imageBase64 && imageUrl && (
-        <img 
-          src={imageUrl}
-          alt={alt}
-          className={`${className} ${loading ? 'opacity-0' : 'opacity-100 transition-opacity duration-300'}`}
-          onLoad={handleLoad}
-          onError={handleError}
-          loading="lazy"
-          style={{ 
-            width: width ? `${width}px` : 'auto', 
-            height: height ? `${height}px` : 'auto',
-            objectFit: 'cover' 
-          }}
-        />
-      )}
-      
-      {/* Estado de error o sin imagen */}
-      {error && (
-        <div 
-          className={`flex flex-col items-center justify-center ${fallbackClassName}`}
-          style={{ 
-            width: width ? `${width}px` : '100%', 
-            height: height ? `${height}px` : '100%',
-            minHeight: '40px'
-          }}
-        >
-          <PackageOpen className="w-8 h-8 text-[#91BEAD] mb-1" />
-          <span className="text-xs text-[#7AA79C]">{placeholderText}</span>
-          
-          {/* Botón de reintentar solo visible cuando hay error pero se espera que haya imagen */}
-          {imageExists !== false && retryOnError && (
-            <button 
-              onClick={handleRetry} 
-              className="mt-2 text-xs text-[#29696B] hover:underline focus:outline-none flex items-center"
-              type="button"
-            >
-              <RefreshCw className="w-3 h-3 mr-1" />
-              Reintentar
-            </button>
-          )}
-        </div>
       )}
     </div>
   );
