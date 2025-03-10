@@ -3,7 +3,7 @@ import axios from 'axios';
 import type { User, LoginResponse, CreateUserDTO, UpdateUserDTO } from '@/types/users';
 
 // API URL desde variables de entorno
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://lyme-back.vercel.app/api';
 
 // Interceptor para agregar token a las peticiones
 axios.interceptors.request.use(
