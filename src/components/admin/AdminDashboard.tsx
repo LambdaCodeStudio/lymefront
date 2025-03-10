@@ -6,6 +6,7 @@ import {
   Download
 } from 'lucide-react';
 
+import { QueryClient, QueryClientProvider } from 'react-query';
 import InventorySection from './InventorySection';
 import AdminUserManagement from './AdminUserManagement';
 import ClientsSection from './ClientSection';
@@ -17,6 +18,9 @@ import { InventoryProvider } from '@/context/InventoryProvider';
 import { NotificationProvider } from '@/context/NotificationContext';
 import NotificationsContainer from '@/components/ui/Notifications';
 import DownloadsManagement from './DownloadsManagement';
+
+// Crea una instancia de QueryClient (fuera del componente para que no se reinicie en cada render)
+const queryClient = new QueryClient();
 
 // Definición de las secciones
 interface Section {
@@ -116,6 +120,7 @@ const AdminDashboard: React.FC = () => {
   }
 
   return (
+    <QueryClientProvider client={queryClient}>
     <InventoryProvider>
       <DashboardContext.Provider value={dashboardState}>
         <NotificationProvider>
@@ -171,6 +176,7 @@ const AdminDashboard: React.FC = () => {
         </NotificationProvider>
       </DashboardContext.Provider>
     </InventoryProvider>
+    </QueryClientProvider>
   );
 };
 
