@@ -493,6 +493,7 @@ const InventorySection: React.FC = () => {
 
   // Verificar productos con stock bajo y enviar notificación - optimizado con useMemo
   const lowStockProducts = useMemo(() => {
+    if (!Array.isArray(products)) return [];
     return products.filter(product => 
       product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD
     );
@@ -1306,6 +1307,7 @@ const InventorySection: React.FC = () => {
     if (!formData.itemsCombo || formData.itemsCombo.length === 0) return 0;
     
     return formData.itemsCombo.reduce((total, item) => {
+      if (!Array.isArray(products)) return total;
       const product = products.find(p => p._id === item.productoId);
       if (!product) return total;
       
@@ -1322,6 +1324,7 @@ const InventorySection: React.FC = () => {
 
   // Obtener productos no combo para selector de combo - Optimizado con useMemo
   const nonComboProducts = useMemo(() => {
+    if (!Array.isArray(productOptions)) return [];
     return productOptions.filter(p => !p.esCombo);
   }, [productOptions]);
 
