@@ -2,7 +2,7 @@
  * Configuración de roles de usuario y sus permisos
  * Define los tipos de roles y las funciones para gestionar permisos
  */
-export type RoleType = 'admin' | 'supervisor' | 'basic' | 'temporal';
+export type RoleType = 'admin' | 'supervisor_de_supervisores' | 'supervisor' | 'operario' | 'temporario';
 
 export interface RoleOption {
   value: RoleType;
@@ -20,22 +20,25 @@ export function getAvailableRoles(userRole: RoleType | null): RoleOption[] {
     case 'admin':
       return [
         { value: 'admin', label: 'Administrador' },
+        { value: 'supervisor_de_supervisores', label: 'Supervisor de Supervisores' },
         { value: 'supervisor', label: 'Supervisor' },
-        { value: 'basic', label: 'Básico' },
-        { value: 'temporal', label: 'Temporal' }
+        { value: 'operario', label: 'Operario' },
+        { value: 'temporario', label: 'Temporario' }
+      ];
+    case 'supervisor_de_supervisores':
+      return [
+        { value: 'supervisor', label: 'Supervisor' },
+        { value: 'operario', label: 'Operario' },
+        { value: 'temporario', label: 'Temporario' }
       ];
     case 'supervisor':
       return [
-        { value: 'basic', label: 'Básico' },
-        { value: 'temporal', label: 'Temporal' }
-      ];
-    case 'basic':
-      return [
-        { value: 'temporal', label: 'Temporal' }
+        { value: 'operario', label: 'Operario' },
+        { value: 'temporario', label: 'Temporario' }
       ];
     default:
       return [
-        { value: 'basic', label: 'Básico' }
+        { value: 'temporario', label: 'Temporario' }
       ];
   }
 }
@@ -59,9 +62,10 @@ export function canCreateRole(creatorRole: RoleType, targetRole: RoleType): bool
 export function getRoleName(role: RoleType): string {
   const roleMap: Record<RoleType, string> = {
     'admin': 'Administrador',
+    'supervisor_de_supervisores': 'Supervisor de Supervisores',
     'supervisor': 'Supervisor',
-    'basic': 'Básico',
-    'temporal': 'Temporal'
+    'operario': 'Operario',
+    'temporario': 'Temporario'
   };
   
   return roleMap[role] || role;

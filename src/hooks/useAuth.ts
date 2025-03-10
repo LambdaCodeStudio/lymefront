@@ -1,6 +1,6 @@
 // src/hooks/useAuth.ts
 import { useState, useEffect, useCallback } from 'react';
-import { userService } from '@/services/userService';
+import  userService from '@/services/userService';
 import type { User, LoginResponse, UserRole, CreateUserDTO } from '@/types/users';
 
 interface AuthState {
@@ -70,12 +70,12 @@ export const useAuth = () => {
     checkAuth();
   }, [checkAuth]);
 
-  // Función de login actualizada para usar usuario en lugar de email
-  const login = async (usuario: string, password: string): Promise<LoginResponse> => {
+  // Función de login actualizada para manejar la respuesta de la API
+  const login = async (email: string, password: string): Promise<LoginResponse> => {
     try {
       setAuth(prev => ({ ...prev, loading: true, error: null }));
       
-      const response = await userService.login(usuario, password);
+      const response = await userService.login(email, password);
       
       // Verificar si tenemos token
       if (!response.token) {
@@ -152,12 +152,12 @@ export const useAuth = () => {
     window.location.href = '/login';
   };
 
-  // Función para registrar nuevo usuario actualizada para usar usuario en lugar de email
-  const register = async (usuario: string, password: string, role: UserRole = 'supervisor'): Promise<User> => {
+  // Función para registrar nuevo usuario
+  const register = async (email: string, password: string, role: UserRole = 'basic'): Promise<User> => {
     try {
       setAuth(prev => ({ ...prev, loading: true, error: null }));
       
-      const userData: CreateUserDTO = { usuario, password, role };
+      const userData: CreateUserDTO = { email, password, role };
       const user = await userService.register(userData);
 
       // No autenticamos automáticamente tras el registro
