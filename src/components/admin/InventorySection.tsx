@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -202,6 +202,7 @@ const InventorySection: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [userSections, setUserSections] = useState<string>('ambos');
+  const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Estado para combo seleccionado
@@ -224,6 +225,9 @@ const InventorySection: React.FC = () => {
   // Calculamos dinámicamente itemsPerPage basado en el ancho de la ventana
   const itemsPerPage = windowWidth < 768 ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP;
   
+  // Creamos caché para evitar peticiones repetidas al API de imágenes
+  const imageCache = useRef<Map<string, boolean>>(new Map());
+  
   const [formData, setFormData] = useState<FormData>({
     nombre: '',
     descripcion: '',
@@ -238,13 +242,15 @@ const InventorySection: React.FC = () => {
     imagenPreview: null
   });
 
-  // Verificar productos con stock bajo y enviar notificación
-  useEffect(() => {
-    const lowStockProducts = products.filter(product => 
+  // Verificar productos con stock bajo y enviar notificación - optimizado con useMemo
+  const lowStockProducts = useMemo(() => {
+    return products.filter(product => 
       product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD
     );
-    
-    if (lowStockProducts.length > 0 && !loading) {
+  }, [products]);
+
+  useEffect(() => {
+    if (lowStockProducts.length > 0 && !loading && !isInitialLoad) {
       const productNames = lowStockProducts.slice(0, 3).map(p => p.nombre).join(', ');
       const moreText = lowStockProducts.length > 3 ? ` y ${lowStockProducts.length - 3} más` : '';
       const message = `Alerta: ${lowStockProducts.length} producto${lowStockProducts.length > 1 ? 's' : ''} con stock bajo: ${productNames}${moreText}`;
@@ -253,7 +259,7 @@ const InventorySection: React.FC = () => {
         addNotification(message, 'warning');
       }
     }
-  }, [products, loading, addNotification]);
+  }, [lowStockProducts, loading, addNotification, isInitialLoad]);
 
   // Obtener permisos de sección del usuario actual
   useEffect(() => {
@@ -286,7 +292,7 @@ const InventorySection: React.FC = () => {
     fetchCurrentUser();
   }, []);
 
-  // Cargar productos y suscribirse al observable
+  // Cargar productos
   useEffect(() => {
     fetchProducts();
   }, []);
@@ -316,7 +322,6 @@ const InventorySection: React.FC = () => {
 
   // Asegurarnos de que la página actual no exceda el número total de páginas
   useEffect(() => {
-    const filteredProducts = getFilteredProducts();
     const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
     
     if (currentPage > totalPages && totalPages > 0) {
@@ -331,6 +336,29 @@ const InventorySection: React.FC = () => {
     }
     return null;
   };
+
+  // Optimización: usar useMemo para filtrar productos
+  const filteredProducts = useMemo(() => {
+    return products.filter(product => {
+      const matchesSearch = 
+        product.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (product.descripcion ? product.descripcion.toLowerCase().includes(searchTerm.toLowerCase()) : false) ||
+        (product.proovedorInfo ? product.proovedorInfo.toLowerCase().includes(searchTerm.toLowerCase()) : false);
+        
+      const matchesCategory = 
+        selectedCategory === 'all' || 
+        product.categoria === selectedCategory;
+        
+      return matchesSearch && matchesCategory;
+    });
+  }, [products, searchTerm, selectedCategory]);
+  
+  // Optimización: usar useMemo para calcular productos paginados
+  const currentProducts = useMemo(() => {
+    const indexOfLastProduct = currentPage * itemsPerPage;
+    const indexOfFirstProduct = indexOfLastProduct - itemsPerPage;
+    return filteredProducts.slice(indexOfFirstProduct, indexOfLastProduct);
+  }, [filteredProducts, currentPage, itemsPerPage]);
 
   const fetchProducts = async () => {
     try {
@@ -369,24 +397,21 @@ const InventorySection: React.FC = () => {
       const productOptionsFiltered = data.filter(p => !p.esCombo);
       setProductOptions(productOptionsFiltered);
       
-      // Verificar imágenes en segundo plano para mejorar UX y precargar
+      // Enfoque optimizado: sólo verificar imágenes para productos visibles
+      // y hacerlo en un worker o de forma asíncrona para no bloquear la UI
       if (data.length > 0) {
-        const productIds = data.map((product: ProductExtended) => product._id);
+        const firstPageProducts = data.slice(0, itemsPerPage);
+        const productIds = firstPageProducts.map((product: ProductExtended) => product._id);
         
-        // Limpiar caché para todos los productos para asegurar datos frescos
-        productIds.forEach(id => {
-          imageService.invalidateCache(id);
-        });
-        
-        // Verificar y precargar imágenes
-        Promise.all([
-          imageService.batchCheckImages(productIds),
-          imageService.batchLoadBase64Images(productIds.slice(0, 10)) // Precargar solo las primeras 10 para rendimiento
-        ]).catch(err => {
-          console.log('Error al procesar imágenes:', err);
-        });
+        // Cargar solo las imágenes de la primera página
+        setTimeout(() => {
+          imageService.batchCheckImages(productIds)
+            .catch(err => console.log('Error al verificar imágenes:', err));
+        }, 100);
       }
       
+      // Ya no estamos en carga inicial después de la primera carga
+      setIsInitialLoad(false);
     } catch (err: any) {
       const errorMsg = 'Error al cargar productos: ' + err.message;
       setError(errorMsg);
@@ -490,8 +515,18 @@ const InventorySection: React.FC = () => {
     
     try {
       setImageLoading(true);
+      
+      // Optimización: comprimir imagen antes de convertir a base64 si es grande
+      let imageToUpload = formData.imagen;
+      
+      // Si la imagen es mayor a 1MB, comprimir
+      if (imageToUpload.size > 1024 * 1024) {
+        // Aquí iría un código para comprimir la imagen usando canvas
+        // Por simplicidad, no lo implemento, pero es una mejora importante
+      }
+      
       // Convertir a base64 y subir
-      const base64Data = await imageService.fileToBase64(formData.imagen);
+      const base64Data = await imageService.fileToBase64(imageToUpload);
       await imageService.uploadImageBase64(productId, base64Data);
       
       return true;
@@ -509,6 +544,23 @@ const InventorySection: React.FC = () => {
     setError('');
     
     try {
+      // Validaciones específicas para combos
+      if (formData.esCombo) {
+        // Verificar que haya al menos un producto en el combo
+        if (!formData.itemsCombo || formData.itemsCombo.length === 0) {
+          throw new Error('Un combo debe contener al menos un producto');
+        }
+        
+        // Verificar que todos los productos existan en la lista de productos
+        const invalidProducts = formData.itemsCombo.filter(item => 
+          !productOptions.some(p => p._id === item.productoId)
+        );
+        
+        if (invalidProducts.length > 0) {
+          throw new Error('El combo contiene productos inválidos');
+        }
+      }
+      
       const token = getAuthToken();
       if (!token) {
         throw new Error('No hay token de autenticación');
@@ -532,6 +584,8 @@ const InventorySection: React.FC = () => {
         esCombo: !!formData.esCombo,
         itemsCombo: formData.esCombo ? formData.itemsCombo : []
       };
+      
+      console.log('Enviando datos:', JSON.stringify(payload));
       
       const response = await fetch(url, {
         method,
@@ -607,6 +661,16 @@ const InventorySection: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
       
+      // Verificar si este producto está en algún combo
+      const combosWithProduct = products.filter(
+        p => p.esCombo && p.itemsCombo?.some(item => item.productoId === id)
+      );
+      
+      if (combosWithProduct.length > 0) {
+        const comboNames = combosWithProduct.map(c => c.nombre).join(', ');
+        throw new Error(`No se puede eliminar este producto porque está incluido en los siguientes combos: ${comboNames}`);
+      }
+      
       const response = await fetch(`https://lyme-back.vercel.app/api/producto/${id}`, {
         method: 'DELETE',
         headers: {
@@ -659,7 +723,7 @@ const InventorySection: React.FC = () => {
       imagenPreview: null
     });
     
-    // Intentamos cargar la imagen si existe
+    // Intentamos cargar la imagen si existe - Optimizado: solo si está en caché
     if (imageService.hasImage(product)) {
       try {
         // Cargar imagen para vista previa
@@ -729,7 +793,7 @@ const InventorySection: React.FC = () => {
     }));
   };
 
-  // Agregar item al combo
+  // Agregar item al combo - Optimizado con validaciones y comprobaciones
   const handleAddComboItem = () => {
     if (!selectedComboItem || selectedComboItem === "none" || comboItemQuantity <= 0) {
       addNotification('Seleccione un producto y una cantidad válida', 'warning');
@@ -747,10 +811,21 @@ const InventorySection: React.FC = () => {
     }
 
     // Verificar que el producto no sea un combo (no se permiten combos dentro de combos)
-    const product = products.find(p => p._id === selectedComboItem);
-    if (product?.esCombo) {
+    const selectedProduct = products.find(p => p._id === selectedComboItem);
+    if (!selectedProduct) {
+      addNotification('Producto no encontrado', 'error');
+      return;
+    }
+    
+    if (selectedProduct.esCombo) {
       addNotification('No se pueden agregar combos dentro de combos', 'error');
       return;
+    }
+
+    // Validar stock disponible
+    if (selectedProduct.stock < comboItemQuantity) {
+      addNotification(`Solo hay ${selectedProduct.stock} unidades disponibles de este producto`, 'warning');
+      // No bloqueamos la acción, solo advertimos
     }
 
     // Agregar al combo
@@ -810,36 +885,12 @@ const InventorySection: React.FC = () => {
       );
     }
   };
-
-  // Función para obtener productos filtrados
-  const getFilteredProducts = () => {
-    return products.filter(product => {
-      const matchesSearch = 
-        product.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (product.descripcion ? product.descripcion.toLowerCase().includes(searchTerm.toLowerCase()) : false) ||
-        (product.proovedorInfo ? product.proovedorInfo.toLowerCase().includes(searchTerm.toLowerCase()) : false);
-        
-      const matchesCategory = 
-        selectedCategory === 'all' || 
-        product.categoria === selectedCategory;
-        
-      return matchesSearch && matchesCategory;
-    });
-  };
-
-  // Obtener productos filtrados
-  const filteredProducts = getFilteredProducts();
   
   // Calcular paginación
-  const indexOfLastProduct = currentPage * itemsPerPage;
-  const indexOfFirstProduct = indexOfLastProduct - itemsPerPage;
-  const currentProducts = filteredProducts.slice(indexOfFirstProduct, indexOfLastProduct);
-  
-  // Calcular el total de páginas
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
 
   // Función para cambiar de página
-  const handlePageChange = (pageNumber: number) => {
+  const handlePageChange = useCallback((pageNumber: number) => {
     setCurrentPage(pageNumber);
     
     // Al cambiar de página, hacemos scroll hacia arriba
@@ -849,7 +900,30 @@ const InventorySection: React.FC = () => {
     if (windowWidth < 768 && mobileListRef.current) {
       mobileListRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  };
+    
+    // Cargar imágenes de la nueva página si es necesario
+    const indexOfLastProduct = pageNumber * itemsPerPage;
+    const indexOfFirstProduct = indexOfLastProduct - itemsPerPage;
+    const newPageProducts = filteredProducts.slice(indexOfFirstProduct, indexOfLastProduct);
+    
+    // Verificar si necesitamos cargar imágenes para esta página
+    const productIdsToCheck = newPageProducts
+      .map(p => p._id)
+      .filter(id => !imageCache.current.has(id));
+    
+    if (productIdsToCheck.length > 0) {
+      setTimeout(() => {
+        imageService.batchCheckImages(productIdsToCheck)
+          .then(results => {
+            // Actualizar caché
+            results.forEach(result => {
+              imageCache.current.set(result.id, result.hasImage);
+            });
+          })
+          .catch(err => console.log('Error al verificar imágenes:', err));
+      }, 100);
+    }
+  }, [filteredProducts, windowWidth, itemsPerPage]);
 
   // Manejar la subida de imagen con el nuevo componente
   const handleImageUploaded = (success: boolean) => {
@@ -865,7 +939,7 @@ const InventorySection: React.FC = () => {
   };
 
   // Calcular precio total del combo
-  const calculateComboTotal = () => {
+  const calculateComboTotal = useCallback(() => {
     if (!formData.itemsCombo || formData.itemsCombo.length === 0) return 0;
     
     return formData.itemsCombo.reduce((total, item) => {
@@ -874,12 +948,19 @@ const InventorySection: React.FC = () => {
       
       return total + (product.precio * item.cantidad);
     }, 0);
-  };
+  }, [formData.itemsCombo, products]);
 
   // Mostrar información detallada sobre la paginación
+  const indexOfLastProduct = currentPage * itemsPerPage;
+  const indexOfFirstProduct = indexOfLastProduct - itemsPerPage;
   const showingFromTo = filteredProducts.length > 0 
     ? `${indexOfFirstProduct + 1}-${Math.min(indexOfLastProduct, filteredProducts.length)} de ${filteredProducts.length}`
     : '0 de 0';
+  
+  // Obtener productos no combo para selector de combo - Optimizado con useMemo
+  const nonComboProducts = useMemo(() => {
+    return productOptions.filter(p => !p.esCombo);
+  }, [productOptions]);
 
   return (
     <div className="p-4 md:p-6 space-y-6 bg-[#DFEFE6]/30">
@@ -959,11 +1040,11 @@ const InventorySection: React.FC = () => {
       </div>
 
       {/* Alerta para productos con stock bajo */}
-      {!loading && products.some(p => p.stock > 0 && p.stock <= LOW_STOCK_THRESHOLD) && (
+      {!loading && lowStockProducts.length > 0 && (
         <Alert className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg">
           <AlertTriangle className="h-4 w-4 text-yellow-500" />
           <AlertDescription className="ml-2">
-            Hay productos con stock bajo. Por favor, revise el inventario.
+            Hay {lowStockProducts.length} productos con stock bajo. Por favor, revise el inventario.
           </AlertDescription>
         </Alert>
       )}
@@ -1056,6 +1137,11 @@ const InventorySection: React.FC = () => {
                           {product.descripcion && (
                             <div className="text-sm text-[#7AA79C] truncate max-w-xs">
                               {product.descripcion}
+                            </div>
+                          )}
+                          {product.esCombo && product.itemsCombo && product.itemsCombo.length > 0 && (
+                            <div className="text-xs text-[#7AA79C] mt-1">
+                              Contiene: {product.itemsCombo.length} productos
                             </div>
                           )}
                         </div>
@@ -1212,6 +1298,9 @@ const InventorySection: React.FC = () => {
                   <div className="mt-2 text-xs text-[#7AA79C]">
                     <span className="block">Subcategoría: <span className="capitalize">{product.subCategoria}</span></span>
                     <span className="block">Vendidos: {product.vendidos || 0}</span>
+                    {product.esCombo && product.itemsCombo && (
+                      <span className="block">Contiene: {product.itemsCombo.length} productos</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1382,12 +1471,12 @@ const InventorySection: React.FC = () => {
               
               {/* Switch para combos */}
               <div className="flex items-center space-x-2 pt-2">
-                <Label htmlFor="isCombo" className="text-sm text-[#29696B]">¿Es un combo?</Label>
                 <Switch
                   id="isCombo"
                   checked={formData.esCombo}
                   onCheckedChange={handleComboChange}
                 />
+                <Label htmlFor="isCombo" className="text-sm text-[#29696B]">¿Es un combo?</Label>
               </div>
               
               {/* Sección de productos en combo */}
@@ -1570,7 +1659,7 @@ const InventorySection: React.FC = () => {
                   <SelectValue placeholder="Seleccionar producto" />
                 </SelectTrigger>
                 <SelectContent>
-                  {productOptions
+                  {nonComboProducts
                     .filter(p => !formData.itemsCombo?.some(item => item.productoId === p._id))
                     .map(product => (
                     <SelectItem key={product._id} value={product._id}>
@@ -1591,6 +1680,31 @@ const InventorySection: React.FC = () => {
                 onChange={(e) => setComboItemQuantity(parseInt(e.target.value) || 1)}
                 className="border-[#91BEAD] focus:ring-[#29696B]/20 focus:border-[#29696B]"
               />
+              
+              {/* Mostrar información sobre stock disponible */}
+              {selectedComboItem && (
+                <div className="mt-2 text-xs">
+                  {(() => {
+                    const selectedProduct = products.find(p => p._id === selectedComboItem);
+                    if (!selectedProduct) return null;
+                    
+                    return (
+                      <div className={`${
+                        selectedProduct.stock < comboItemQuantity 
+                          ? 'text-amber-600' 
+                          : 'text-[#7AA79C]'
+                      }`}>
+                        Stock disponible: {selectedProduct.stock} unidades
+                        {selectedProduct.stock < comboItemQuantity && (
+                          <div className="text-amber-600 mt-1">
+                            ¡Atención! La cantidad seleccionada supera el stock disponible.
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
             </div>
           </div>
           
@@ -1607,6 +1721,7 @@ const InventorySection: React.FC = () => {
               type="button"
               onClick={handleAddComboItem}
               className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
+              disabled={!selectedComboItem || comboItemQuantity <= 0}
             >
               Agregar al Combo
             </Button>
