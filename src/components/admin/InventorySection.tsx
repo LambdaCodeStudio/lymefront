@@ -368,9 +368,12 @@ const InventorySection: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('https://lyme-back.vercel.app/api/producto', {
+      // Añadimos un parámetro de cache-busting para forzar datos frescos
+      const cacheBuster = new Date().getTime();
+      const response = await fetch(`https://lyme-back.vercel.app/api/producto?_=${cacheBuster}`, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
         },
         cache: 'no-store'
       });
@@ -412,6 +415,20 @@ const InventorySection: React.FC = () => {
       
       // Ya no estamos en carga inicial después de la primera carga
       setIsInitialLoad(false);
+      
+      // Debug: Verificar si hay productos en combos
+      const combos = data.filter(p => p.esCombo && p.itemsCombo && p.itemsCombo.length > 0);
+      if (combos.length > 0) {
+        console.log(`Hay ${combos.length} combos en los datos cargados`);
+        // Depurar el primer combo para verificar la estructura
+        const firstCombo = combos[0];
+        console.log('Ejemplo de combo:', {
+          id: firstCombo._id,
+          nombre: firstCombo.nombre,
+          itemsCount: firstCombo.itemsCombo.length,
+          primerItem: firstCombo.itemsCombo[0]
+        });
+      }
     } catch (err: any) {
       const errorMsg = 'Error al cargar productos: ' + err.message;
       setError(errorMsg);
@@ -572,6 +589,18 @@ const InventorySection: React.FC = () => {
       
       const method = editingProduct ? 'PUT' : 'POST';
       
+      // IMPORTANTE: Asegurarnos de que los productoId sean cadenas válidas
+      let itemsComboFixed = [];
+      if (formData.esCombo && formData.itemsCombo && formData.itemsCombo.length > 0) {
+        itemsComboFixed = formData.itemsCombo.map(item => {
+          // Asegurar que el ID sea una cadena válida
+          return {
+            productoId: item.productoId.toString(), // Convertir explícitamente a string
+            cantidad: item.cantidad
+          };
+        });
+      }
+      
       // Datos básicos del producto (sin la imagen que se manejará por separado)
       const payload = {
         nombre: formData.nombre,
@@ -582,7 +611,7 @@ const InventorySection: React.FC = () => {
         stock: Number(formData.stock),
         proovedorInfo: formData.proovedorInfo,
         esCombo: !!formData.esCombo,
-        itemsCombo: formData.esCombo ? formData.itemsCombo : []
+        itemsCombo: formData.esCombo ? itemsComboFixed : []
       };
       
       console.log('Enviando datos:', JSON.stringify(payload));
@@ -614,17 +643,8 @@ const InventorySection: React.FC = () => {
       setShowModal(false);
       resetForm();
       
-      // Importante: damos un pequeño retraso antes de recargar los productos
-      // para asegurarnos de que el servidor haya procesado todo (especialmente las imágenes)
-      setTimeout(async () => {
-        // Invalidar cualquier caché de imagen que pueda existir
-        if (editingProduct) {
-          imageService.invalidateCache(editingProduct._id);
-        }
-        
-        // Recargar productos con datos frescos
-        await fetchProducts();
-      }, 500);
+      // Importante: Recargar productos INMEDIATAMENTE para asegurar que tengamos los datos actualizados
+      await fetchProducts();
       
       const successMsg = `Producto ${editingProduct ? 'actualizado' : 'creado'} correctamente`;
       setSuccessMessage(successMsg);
@@ -708,6 +728,38 @@ const InventorySection: React.FC = () => {
   const handleEdit = async (product: ProductExtended) => {
     setEditingProduct(product);
     
+    // Cuando editamos un combo existente, asegurémonos de que todas las referencias a productos
+    // en itemsCombo estén correctamente configuradas
+    let itemsComboFixed = [];
+    
+    if (product.esCombo && product.itemsCombo && product.itemsCombo.length > 0) {
+      // Verificar los IDs de productos dentro del combo y arreglarlos si es necesario
+      itemsComboFixed = product.itemsCombo.map(item => {
+        const productId = typeof item.productoId === 'object' 
+          ? item.productoId._id 
+          : item.productoId;
+          
+        // Validar que el ID exista en la lista de productos
+        const productExists = productOptions.some(p => p._id === productId);
+        
+        if (!productExists) {
+          console.warn(`Producto con ID ${productId} no encontrado en la lista de productos disponibles`);
+        }
+        
+        return {
+          productoId: productId,
+          cantidad: item.cantidad
+        };
+      });
+      
+      // Depurar para verificar
+      console.log('Combo a editar:', {
+        nombre: product.nombre,
+        itemsOriginal: product.itemsCombo,
+        itemsFixed: itemsComboFixed
+      });
+    }
+    
     // Configurar formData para edición
     setFormData({
       nombre: product.nombre,
@@ -718,7 +770,7 @@ const InventorySection: React.FC = () => {
       stock: product.stock.toString(),
       proovedorInfo: product.proovedorInfo || '',
       esCombo: !!product.esCombo,
-      itemsCombo: product.itemsCombo || [],
+      itemsCombo: product.esCombo ? itemsComboFixed : [],
       imagen: null,
       imagenPreview: null
     });
@@ -932,10 +984,31 @@ const InventorySection: React.FC = () => {
     }
   };
 
-  // Obtener nombre de producto por ID para combos
+  // Obtener nombre de producto por ID para combos - Mejorado con validación adicional
   const getProductNameById = (id: string) => {
+    if (!id) {
+      console.warn('ID de producto inválido en combo:', id);
+      return 'ID inválido';
+    }
+    
+    // Buscar por ID exacto
     const product = products.find(p => p._id === id);
-    return product ? product.nombre : 'Producto no encontrado';
+    if (product) {
+      return product.nombre;
+    }
+    
+    // Si no lo encuentra, intentar buscar sin importar el formato (para manejar posibles problemas de tipo de datos)
+    const productByStringComp = products.find(p => 
+      p._id.toString() === id.toString()
+    );
+    
+    if (productByStringComp) {
+      console.log(`Encontrado producto "${productByStringComp.nombre}" usando comparación de strings`);
+      return productByStringComp.nombre;
+    }
+    
+    console.warn('Producto no encontrado para ID:', id);
+    return 'Producto no encontrado';
   };
 
   // Calcular precio total del combo
@@ -1659,8 +1732,12 @@ const InventorySection: React.FC = () => {
                   <SelectValue placeholder="Seleccionar producto" />
                 </SelectTrigger>
                 <SelectContent>
-                  {nonComboProducts
-                    .filter(p => !formData.itemsCombo?.some(item => item.productoId === p._id))
+                  {/* Filtramos para excluir combos y también productos ya añadidos */}
+                  {products
+                    .filter(p => !p.esCombo) // Excluir combos
+                    .filter(p => !formData.itemsCombo?.some(item => 
+                      item.productoId.toString() === p._id.toString()
+                    )) // Excluir productos ya añadidos
                     .map(product => (
                     <SelectItem key={product._id} value={product._id}>
                       {product.nombre} - ${product.precio.toFixed(2)}
@@ -1668,6 +1745,13 @@ const InventorySection: React.FC = () => {
                   ))}
                 </SelectContent>
               </Select>
+              
+              {/* Contador de disponibilidad */}
+              <div className="mt-1 text-xs text-[#7AA79C]">
+                {products.filter(p => !p.esCombo).filter(p => !formData.itemsCombo?.some(item => 
+                  item.productoId.toString() === p._id.toString()
+                )).length} productos disponibles para agregar
+              </div>
             </div>
             
             <div>
