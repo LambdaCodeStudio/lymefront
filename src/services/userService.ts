@@ -50,7 +50,7 @@ export interface CreateUserData {
 /**
  * Obtener token de autenticación
  */
-const getAuthToken = (): string | null => {
+export const getAuthToken = (): string | null => {
   try {
     return localStorage.getItem('token');
   } catch (error) {
@@ -62,7 +62,7 @@ const getAuthToken = (): string | null => {
 /**
  * Función base para realizar peticiones al API
  */
-const fetchApi = async (endpoint: string, options: RequestInit = {}): Promise<any> => {
+export const fetchApi = async (endpoint: string, options: RequestInit = {}): Promise<any> => {
   const token = getAuthToken();
   
   if (!token) {
@@ -200,7 +200,8 @@ export const reactivateTemporaryUser = async (): Promise<{expiresAt: string}> =>
   });
 };
 
-export default {
+// Servicio de usuarios para exportar como objeto completo
+const userService = {
   getAllUsers,
   getUserById,
   createUser,
@@ -209,5 +210,8 @@ export default {
   toggleUserStatus,
   createTemporaryUser,
   getCurrentUser,
-  reactivateTemporaryUser
+  reactivateTemporaryUser,
+  getAuthToken
 };
+
+export default userService;
