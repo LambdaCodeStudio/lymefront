@@ -3,7 +3,7 @@
  * Implementa la nueva estructura de roles
  */
 import { useState, useEffect, useCallback } from 'react';
-import userService, { AdminUser, CreateUserData } from '../services/userService';
+import userService, {  type AdminUser, type CreateUserData } from '../../../services/userService';
 import { useNotification } from '@/context/NotificationContext';
 import { getAvailableRoles, ROLES } from '../shared/UserRolesConfig';
 
