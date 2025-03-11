@@ -42,7 +42,6 @@ import {
   X,
   Loader2,
   Package,
-  ShoppingBag,
   Filter,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -55,8 +54,8 @@ import ImageUpload from '@/components/admin/components/ImageUpload';
 import { Switch } from "@/components/ui/switch";
 import { getAuthToken } from '@/utils/inventoryUtils';
 
-// Define interfaces according to the backend
-interface ProductExtended {
+// Definir interfaces según el backend
+interface ProductoExtendido {
   _id: string;
   nombre: string;
   descripcion?: string;
@@ -70,10 +69,10 @@ interface ProductExtended {
   imageBase64?: string;
   proovedorInfo?: string;
   esCombo?: boolean;
-  itemsCombo?: ComboItem[];
+  itemsCombo?: ItemCombo[];
 }
 
-interface PagedResponse<T> {
+interface RespuestaPaginada<T> {
   items: T[];
   page: number;
   limit: number;
@@ -83,8 +82,8 @@ interface PagedResponse<T> {
   hasPrevPage: boolean;
 }
 
-interface ComboItem {
-  productoId: string | any; // Allow objects for easier manipulation
+interface ItemCombo {
+  productoId: string | any; // Permitir objetos para manipulación más fácil
   cantidad: number;
 }
 
@@ -97,12 +96,46 @@ interface FormData {
   stock: string;
   proovedorInfo: string;
   esCombo?: boolean;
-  itemsCombo?: ComboItem[];
+  itemsCombo?: ItemCombo[];
   imagen?: File | null;
   imagenPreview?: string | null;
 }
 
-// Subcategories organized by category
+// Definir interfaces para los props de los componentes
+interface FilaProductoProps {
+  producto: ProductoExtendido;
+  onEdit: (producto: ProductoExtendido) => void;
+  onDelete: (id: string) => void;
+  userSections: string;
+  isInViewport?: boolean;
+}
+
+interface TablaProductosVirtualizadaProps {
+  productos: ProductoExtendido[];
+  onEdit: (producto: ProductoExtendido) => void;
+  onDelete: (id: string) => void;
+  userSections: string;
+  tableContainerRef: React.RefObject<HTMLDivElement>;
+  onVisibleItemsChanged?: (elementos: ProductoExtendido[]) => void;
+}
+
+interface TarjetaProductoProps {
+  producto: ProductoExtendido;
+  onEdit: (producto: ProductoExtendido) => void;
+  onDelete: (id: string) => void;
+  userSections: string;
+  isInViewport?: boolean;
+}
+
+interface ListaProductosMobileProps {
+  productos: ProductoExtendido[];
+  onEdit: (producto: ProductoExtendido) => void;
+  onDelete: (id: string) => void;
+  userSections: string;
+  onVisibleItemsChanged?: (elementos: ProductoExtendido[]) => void;
+}
+
+// Subcategorías organizadas por categoría
 const subCategorias: Record<string, Array<{value: string, label: string}>> = {
   limpieza: [
     { value: 'accesorios', label: 'Accesorios' },
@@ -124,95 +157,19 @@ const subCategorias: Record<string, Array<{value: string, label: string}>> = {
   ]
 };
 
-// Define low stock threshold
-const LOW_STOCK_THRESHOLD = 10;
-// Key for products cache
-const PRODUCTS_CACHE_KEY = 'products';
+// Definir umbral de stock bajo
+const UMBRAL_STOCK_BAJO = 10;
 
-// Caché de memoria global para optimizar el rendimiento entre componentes
-// Evita volver a verificar imágenes que ya sabemos que existen o no
-const imageStatusCache = new Map<string, 'loading' | 'loaded' | 'error' | 'notExists'>();
+// Clave para caché de productos
+const CLAVE_CACHE_PRODUCTOS = 'productos';
 
-// Extended imageService con funciones mejoradas para evitar errores CORS
-const imageServiceExt = {
-  ...imageService,
-  
-  /**
-   * Verifica si un producto tiene imagen de manera compatible con CORS
-   */
-  async checkImageExists(productId: string): Promise<boolean> {
-    try {
-      // Si ya está en caché, no verificar de nuevo
-      if (imageStatusCache.has(productId)) {
-        return imageStatusCache.get(productId) === 'loaded';
-      }
-      
-      // En lugar de usar una solicitud HEAD que puede causar problemas CORS,
-      // usamos una solicitud GET normal con tratamiento de errores
-      const token = getAuthToken();
-      if (!token) return false;
-      
-      const response = await fetch(
-        `https://lyme-back.vercel.app/api/producto/${productId}/imagen?width=1&height=1&quality=1&v=${Date.now()}`,
-        {
-          headers: { 'Authorization': `Bearer ${token}` },
-          credentials: 'include', // Incluir credenciales para CORS
-          mode: 'cors' // Forzar modo CORS
-        }
-      );
-      
-      const hasImage = response.ok && response.status !== 204;
-      imageStatusCache.set(productId, hasImage ? 'loaded' : 'notExists');
-      return hasImage;
-    } catch (error) {
-      console.warn(`Error verificando imagen para ${productId}:`, error);
-      // En caso de error CORS, asumimos que la imagen podría existir
-      // para evitar errores falsos negativos en móviles
-      return true; // Retornar true para intentar cargar la imagen de todos modos
-    }
-  },
-  
-   /**
-   * Precarga imágenes para productos visibles para mejorar experiencia
-   */
-   preloadImages(productIds: string[]): void {
-    if (!productIds || !Array.isArray(productIds) || productIds.length === 0) return;
-    
-    try {
-      // Limitar a primeros 8 productos para evitar sobrecarga
-      const idsToPreload = productIds.slice(0, 8);
-      
-      idsToPreload.forEach(id => {
-        if (!id) return; // Saltar IDs inválidos
-        
-        // Verificar si ya está en caché
-        if (imageStatusCache.has(id) && imageStatusCache.get(id) !== 'loading') {
-          return;
-        }
-        
-        // Marcar como cargando para evitar solicitudes duplicadas
-        imageStatusCache.set(id, 'loading');
-        
-        // Precarga directa sin verificación previa para evitar errores CORS
-        const img = new Image();
-        img.onload = () => {
-          imageStatusCache.set(id, 'loaded');
-        };
-        img.onerror = () => {
-          imageStatusCache.set(id, 'notExists');
-        };
-        
-        // Añadir un timestamp aleatorio para evitar problemas de caché
-        img.src = `https://lyme-back.vercel.app/api/producto/${id}/imagen?quality=60&width=64&height=64&v=${Date.now()}`;
-      });
-    } catch (error) {
-      console.warn("Error en preloadImages:", error);
-    }
-  }
-};
+// Caché de estados de imágenes - versión global para reutilización
+const cacheEstadoImagen = new Map<string, boolean>();
 
-// Enhanced OptimizedProductImage component with onLoadComplete callback
-interface ProductImageProps {
+/**
+ * Componente de imagen de producto optimizado con carga diferida y cacheo
+ */
+interface PropiedadesImagenProducto {
   productId: string;
   alt?: string;
   width?: number;
@@ -227,9 +184,9 @@ interface ProductImageProps {
   onLoadComplete?: () => void;
 }
 
-const OptimizedProductImage: React.FC<ProductImageProps> = ({
+const ImagenProductoOptimizada: React.FC<PropiedadesImagenProducto> = ({
   productId,
-  alt = 'Product image',
+  alt = 'Imagen del producto',
   width = 80,
   height = 80,
   quality = 75,
@@ -241,86 +198,50 @@ const OptimizedProductImage: React.FC<ProductImageProps> = ({
   placeholderText,
   onLoadComplete
 }) => {
-  // Usar el estado de la caché global si existe, o 'loading' por defecto
-  const [loadState, setLoadState] = useState<'loading' | 'loaded' | 'error' | 'notExists'>(
-    imageStatusCache.get(productId) || 'loading'
-  );
-  
-  const [imageSrc, setImageSrc] = useState<string>('');
+  const [cargando, setCargando] = useState<boolean>(true);
+  const [error, setError] = useState<boolean>(false);
   const imgRef = useRef<HTMLImageElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
-  const [timestamp, setTimestamp] = useState<number>(Date.now());
+  const timestamp = useRef<number>(Date.now());
   
-  // Crear URL de la imagen con parámetro de versión para evitar cachés obsoletas
-  const imageUrl = useBase64 
-    ? `https://lyme-back.vercel.app/api/producto/${productId}/imagen-base64`
-    : `https://lyme-back.vercel.app/api/producto/${productId}/imagen?quality=${quality}&width=${width}&height=${height}&v=${timestamp}`;
+  // URL de la imagen con parámetro para evitar caché del navegador
+  const imageUrl = `https://lyme-back.vercel.app/api/producto/${productId}/imagen?quality=${quality}&width=${width}&height=${height}&v=${timestamp.current}`;
 
   useEffect(() => {
     // Si no hay ID de producto, no hacer nada
     if (!productId) return;
 
-    // Si ya tenemos el estado en caché y no está cargando, simplemente usarlo
-    if (imageStatusCache.has(productId) && imageStatusCache.get(productId) !== 'loading') {
-      const cachedState = imageStatusCache.get(productId)!;
-      setLoadState(cachedState);
-      
-      // Si la imagen ya se conoce como cargada desde caché, notificar al padre
-      if (cachedState === 'loaded' && onLoadComplete) {
-        onLoadComplete();
+    // Si ya comprobamos esta imagen antes, usar el resultado en caché
+    if (cacheEstadoImagen.has(productId)) {
+      if (!cacheEstadoImagen.get(productId)) {
+        setCargando(false);
+        setError(true);
       }
       return;
     }
 
-    const loadImage = () => {
-      // Para imágenes base64, necesitamos hacer un fetch
-      if (useBase64) {
-        setLoadState('loading');
-        fetch(imageUrl, {
-          credentials: 'include', // Incluir credenciales para CORS
-          mode: 'cors', // Forzar modo CORS
-          headers: {
-            'Authorization': `Bearer ${getAuthToken() || ''}`
-          }
-        })
-          .then(response => {
-            if (!response.ok) {
-              if (response.status === 204) {
-                // El producto no tiene imagen
-                imageStatusCache.set(productId, 'notExists');
-                setLoadState('notExists');
-                return;
-              }
-              throw new Error('Error cargando imagen');
-            }
-            return response.json();
-          })
-          .then(data => {
-            if (data && data.image) {
-              setImageSrc(data.image);
-              imageStatusCache.set(productId, 'loaded');
-              setLoadState('loaded');
-              if (onLoadComplete) onLoadComplete();
-            } else {
-              throw new Error('Datos de imagen inválidos');
-            }
-          })
-          .catch(err => {
-            console.error(`Error cargando imagen base64 para ${productId}:`, err);
-            imageStatusCache.set(productId, 'error');
-            setLoadState('error');
-          });
-      } else {
-        // Para imágenes directas, establecer la URL
-        setImageSrc(imageUrl);
-        setLoadState('loading');
-      }
+    const cargarImagen = () => {
+      setCargando(true);
+      
+      const imgElement = new Image();
+      imgElement.onload = () => {
+        setCargando(false);
+        cacheEstadoImagen.set(productId, true);
+        if (onLoadComplete) onLoadComplete();
+      };
+      
+      imgElement.onerror = () => {
+        setCargando(false);
+        setError(true);
+        cacheEstadoImagen.set(productId, false);
+      };
+      
+      imgElement.src = imageUrl;
     };
 
     // Si es prioritaria, cargar inmediatamente
     if (priority) {
-      loadImage();
+      cargarImagen();
       return;
     }
 
@@ -337,7 +258,7 @@ const OptimizedProductImage: React.FC<ProductImageProps> = ({
           const [entry] = entries;
           if (entry.isIntersecting) {
             // Cargar imagen cuando sea visible
-            loadImage();
+            cargarImagen();
             // Dejar de observar este elemento
             if (observerRef.current) {
               observerRef.current.disconnect();
@@ -355,7 +276,7 @@ const OptimizedProductImage: React.FC<ProductImageProps> = ({
       observerRef.current.observe(imgRef.current);
     } else {
       // Fallback para navegadores sin IntersectionObserver
-      loadImage();
+      cargarImagen();
     }
 
     // Cleanup
@@ -365,31 +286,7 @@ const OptimizedProductImage: React.FC<ProductImageProps> = ({
         observerRef.current = null;
       }
     };
-  }, [productId, imageUrl, priority, useBase64, onLoadComplete]);
-
-  // Manejar carga correcta de la imagen
-  const handleImageLoad = () => {
-    imageStatusCache.set(productId, 'loaded');
-    setLoadState('loaded');
-    setRetryCount(0); // Resetear contador de reintentos
-    // Notificar al componente padre que la imagen está cargada
-    if (onLoadComplete) onLoadComplete();
-  };
-
-  // Manejar error de carga con reintento
-  const handleImageError = () => {
-    if (retryCount < 2) { // Aumentar max reintentos para mejor probabilidad de éxito
-      // Reintentar una vez con un nuevo timestamp para evitar caché
-      setRetryCount(prev => prev + 1);
-      setTimestamp(Date.now());
-    } else {
-      imageStatusCache.set(productId, 'error');
-      setLoadState('error');
-    }
-  };
-
-  const isLoading = loadState === 'loading';
-  const hasError = loadState === 'error' || loadState === 'notExists';
+  }, [productId, imageUrl, priority, onLoadComplete]);
 
   return (
     <div 
@@ -397,8 +294,8 @@ const OptimizedProductImage: React.FC<ProductImageProps> = ({
       style={{ width: width, height: height }}
       ref={imgRef}
     >
-      {/* Placeholder/Fallback mientras carga o si hay error */}
-      {(isLoading || hasError) && (
+      {/* Placeholder mientras carga o si hay error */}
+      {(cargando || error) && (
         <div className={`flex items-center justify-center ${fallbackClassName || 'bg-gray-100 rounded-md'}`} 
           style={{ width: width, height: height }}>
           <div className="flex flex-col items-center justify-center">
@@ -408,37 +305,33 @@ const OptimizedProductImage: React.FC<ProductImageProps> = ({
         </div>
       )}
       
-      {/* Imagen real - para base64 */}
-      {useBase64 && imageSrc && loadState === 'loaded' && (
+      {/* Imagen real */}
+      {!error && (
         <img
-          src={imageSrc}
+          src={cargando ? undefined : imageUrl}
           alt={alt}
           width={width}
           height={height}
-          className={`${className} absolute top-0 left-0 transition-opacity duration-300 opacity-100`}
-        />
-      )}
-      
-      {/* Imagen real - para imagen directa */}
-      {!useBase64 && (
-        <img
-          src={loadState === 'loading' ? undefined : imageUrl}
-          alt={alt}
-          width={width}
-          height={height}
-          onLoad={handleImageLoad}
-          onError={handleImageError}
-          crossOrigin="anonymous" // Agregar crossOrigin para evitar problemas CORS
-          className={`${className} ${loadState === 'loaded' ? 'opacity-100' : 'opacity-0'} absolute top-0 left-0 transition-opacity duration-300`}
+          className={`${className} ${!cargando ? 'opacity-100' : 'opacity-0'} absolute top-0 left-0 transition-opacity duration-300`}
           loading="lazy"
+          onLoad={() => {
+            setCargando(false);
+            cacheEstadoImagen.set(productId, true);
+            if (onLoadComplete) onLoadComplete();
+          }}
+          onError={() => {
+            setCargando(false);
+            setError(true);
+            cacheEstadoImagen.set(productId, false);
+          }}
         />
       )}
     </div>
   );
 };
 
-// Component for stock input with maximum limit
-const ProductStockInput: React.FC<{
+// Componente para entrada de stock con límite máximo
+const EntradaStockProducto: React.FC<{
   value: string;
   onChange: (value: string) => void;
   id?: string;
@@ -467,7 +360,7 @@ const ProductStockInput: React.FC<{
       return;
     }
     
-    // For cleaning products, minimum stock is 1
+    // Para productos de limpieza, stock mínimo es 1
     if (categoria === 'limpieza' && numValue < 1) {
       onChange('1');
       return;
@@ -482,8 +375,8 @@ const ProductStockInput: React.FC<{
     }
   };
 
-  // Show warning for cleaning products
-  const minStockWarning = categoria === 'limpieza' ? (
+  // Mostrar advertencia para productos de limpieza
+  const advertenciaStockMinimo = categoria === 'limpieza' ? (
     <p className="mt-1 text-xs text-amber-600">
       Para productos de limpieza, el stock mínimo debe ser 1
     </p>
@@ -501,7 +394,7 @@ const ProductStockInput: React.FC<{
         required={required}
         className="mt-1"
       />
-      {minStockWarning}
+      {advertenciaStockMinimo}
       <p className="mt-1 text-xs text-[#7AA79C]">
         Máximo: {maxStock.toLocaleString()}
       </p>
@@ -509,8 +402,8 @@ const ProductStockInput: React.FC<{
   );
 };
 
-// Function to render stock indicator
-const renderStockIndicator = (stock: number) => {
+// Función para renderizar indicador de stock
+const renderizarIndicadorStock = (stock: number) => {
   if (stock <= 0) {
     return (
       <div className="flex items-center gap-1">
@@ -520,7 +413,7 @@ const renderStockIndicator = (stock: number) => {
         </span>
       </div>
     );
-  } else if (stock <= LOW_STOCK_THRESHOLD) {
+  } else if (stock <= UMBRAL_STOCK_BAJO) {
     return (
       <div className="flex items-center gap-1">
         <AlertTriangle className="w-4 h-4 text-yellow-500 animate-pulse" />
@@ -538,26 +431,26 @@ const renderStockIndicator = (stock: number) => {
   }
 };
 
-// IMPROVED PRODUCT ROW COMPONENT
-const ProductRow = React.memo(({ 
-  product, 
+// Fila de producto mejorada para rendimiento
+const FilaProducto: React.FC<FilaProductoProps> = ({ 
+  producto, 
   onEdit, 
   onDelete, 
   userSections,
   isInViewport = false 
 }) => {
-  // Check permissions
-  const canEdit = userSections === 'ambos' || product.categoria === userSections;
+  // Comprobar permisos
+  const puedeEditar = userSections === 'ambos' || producto.categoria === userSections;
   
-  // Track image load state
-  const [imageLoaded, setImageLoaded] = useState(false);
+  // Seguimiento de estado de carga de imagen
+  const [imagenCargada, setImagenCargada] = useState(false);
 
   return (
     <tr 
       className={`hover:bg-[#DFEFE6]/20 transition-colors ${
-        product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD 
+        producto.stock > 0 && producto.stock <= UMBRAL_STOCK_BAJO 
           ? 'bg-yellow-50 hover:bg-yellow-100' 
-          : product.stock <= 0 
+          : producto.stock <= 0 
             ? 'bg-red-50 hover:bg-red-100'
             : ''
       }`}
@@ -565,38 +458,37 @@ const ProductRow = React.memo(({
       <td className="px-6 py-4">
         <div className="flex items-center">
           <div className="flex-shrink-0 h-10 w-10 mr-3">
-            <OptimizedProductImage
-              productId={product._id}
-              alt={product.nombre}
+            <ImagenProductoOptimizada
+              productId={producto._id}
+              alt={producto.nombre}
               width={40}
               height={40}
               quality={75}
-              className={`h-10 w-10 rounded-full object-cover border border-[#91BEAD]/30 transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+              className={`h-10 w-10 rounded-full object-cover border border-[#91BEAD]/30 transition-opacity duration-300 ${imagenCargada ? 'opacity-100' : 'opacity-0'}`}
               fallbackClassName="h-10 w-10 rounded-full bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30"
               containerClassName="h-10 w-10"
-              useBase64={false}
               priority={isInViewport}
-              key={`img-${product._id}-${product.hasImage ? 'has-image' : 'no-image'}`}
-              onLoadComplete={() => setImageLoaded(true)}
+              key={`img-${producto._id}`}
+              onLoadComplete={() => setImagenCargada(true)}
             />
           </div>
           <div>
             <div className="text-sm font-medium text-[#29696B] flex items-center">
-              {product.nombre}
-              {product.esCombo && (
+              {producto.nombre}
+              {producto.esCombo && (
                 <Badge variant="outline" className="ml-2 text-xs border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/40">
                   Combo
                 </Badge>
               )}
             </div>
-            {product.descripcion && (
+            {producto.descripcion && (
               <div className="text-sm text-[#7AA79C] truncate max-w-xs">
-                {product.descripcion}
+                {producto.descripcion}
               </div>
             )}
-            {product.esCombo && product.itemsCombo && product.itemsCombo.length > 0 && (
+            {producto.esCombo && producto.itemsCombo && producto.itemsCombo.length > 0 && (
               <div className="text-xs text-[#7AA79C] mt-1">
-                Contiene: {product.itemsCombo.length} productos
+                Contiene: {producto.itemsCombo.length} productos
               </div>
             )}
           </div>
@@ -604,36 +496,36 @@ const ProductRow = React.memo(({
       </td>
       <td className="px-6 py-4 text-sm text-[#7AA79C]">
         <Badge variant="outline" className="capitalize border-[#91BEAD] text-[#29696B]">
-          {product.categoria}
+          {producto.categoria}
         </Badge>
-        <div className="text-xs mt-1 capitalize text-[#7AA79C]">{product.subCategoria}</div>
+        <div className="text-xs mt-1 capitalize text-[#7AA79C]">{producto.subCategoria}</div>
       </td>
       <td className="px-6 py-4 text-sm font-medium text-[#29696B]">
-        ${product.precio.toFixed(2)}
+        ${producto.precio.toFixed(2)}
       </td>
       <td className="px-6 py-4">
-        {renderStockIndicator(product.stock)}
+        {renderizarIndicadorStock(producto.stock)}
       </td>
       <td className="px-6 py-4 text-sm text-[#7AA79C]">
-        {product.vendidos || 0}
+        {producto.vendidos || 0}
       </td>
       <td className="px-6 py-4 text-right text-sm font-medium">
         <div className="flex justify-end space-x-2">
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => onEdit(product)}
+            onClick={() => onEdit(producto)}
             className="text-[#29696B] hover:text-[#29696B] hover:bg-[#DFEFE6]"
-            disabled={!canEdit}
+            disabled={!puedeEditar}
           >
             <Edit className="w-4 h-4" />
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => onDelete(product._id)}
+            onClick={() => onDelete(producto._id)}
             className="text-red-600 hover:text-red-800 hover:bg-red-50"
-            disabled={!canEdit}
+            disabled={!puedeEditar}
           >
             <Trash2 className="w-4 h-4" />
           </Button>
@@ -641,11 +533,11 @@ const ProductRow = React.memo(({
       </td>
     </tr>
   );
-});
+};
 
-// VIRTUALIZED TABLE COMPONENT
-const VirtualizedProductTable = ({ 
-  products, 
+// Componente de tabla virtualizada (mejora rendimiento con muchos productos)
+const TablaProductosVirtualizada: React.FC<TablaProductosVirtualizadaProps> = ({ 
+  productos, 
   onEdit, 
   onDelete, 
   userSections,
@@ -653,20 +545,19 @@ const VirtualizedProductTable = ({
   onVisibleItemsChanged
 }) => {
   const rowVirtualizer = useVirtualizer({
-    count: products.length,
+    count: productos.length,
     getScrollElement: () => tableContainerRef.current,
-    estimateSize: () => 70, // Estimated row height
-    overscan: 5, // How many items to render before/after the visible area
+    estimateSize: () => 70, // Altura estimada de fila
+    overscan: 5, // Cuántos elementos renderizar antes/después del área visible
     onChange: (instance) => {
-      // Verificar que instance.range no sea null antes de acceder a sus propiedades
       if (instance.range && onVisibleItemsChanged) {
         try {
-          // Notify parent when visible items change
-          const visibleItems = products.slice(
+          // Notificar al padre cuando cambian los elementos visibles
+          const elementosVisibles = productos.slice(
             instance.range.startIndex,
             instance.range.endIndex + 1
           );
-          onVisibleItemsChanged(visibleItems);
+          onVisibleItemsChanged(elementosVisibles);
         } catch (error) {
           console.warn("Error en virtualizador de tabla:", error);
         }
@@ -709,10 +600,10 @@ const VirtualizedProductTable = ({
               }}
             >
               {rowVirtualizer.getVirtualItems().map(virtualRow => {
-                const product = products[virtualRow.index];
+                const producto = productos[virtualRow.index];
                 return (
                   <div
-                    key={`${product._id}-${product.hasImage ? 'has-image' : 'no-image'}`}
+                    key={`${producto._id}-row`}
                     style={{
                       position: 'absolute',
                       top: 0,
@@ -723,8 +614,8 @@ const VirtualizedProductTable = ({
                     }}
                     className="contents"
                   >
-                    <ProductRow
-                      product={product}
+                    <FilaProducto
+                      producto={producto}
                       onEdit={onEdit}
                       onDelete={onDelete}
                       userSections={userSections}
@@ -741,19 +632,25 @@ const VirtualizedProductTable = ({
   );
 };
 
-// IMPROVED PRODUCT CARD COMPONENT FOR MOBILE
-const ProductCard = React.memo(({ product, onEdit, onDelete, userSections, isInViewport }) => {
+// Tarjeta de producto mejorada para móvil
+const TarjetaProducto: React.FC<TarjetaProductoProps> = ({ 
+  producto, 
+  onEdit, 
+  onDelete, 
+  userSections, 
+  isInViewport 
+}) => {
   // Verificar permisos
-  const canEdit = userSections === 'ambos' || product.categoria === userSections;
+  const puedeEditar = userSections === 'ambos' || producto.categoria === userSections;
   // Seguimiento del estado de carga de imagen
-  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imagenCargada, setImagenCargada] = useState(false);
 
   return (
     <Card 
       className={`overflow-hidden shadow-sm border ${
-        product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD 
+        producto.stock > 0 && producto.stock <= UMBRAL_STOCK_BAJO 
           ? 'border-yellow-300 bg-yellow-50' 
-          : product.stock <= 0 
+          : producto.stock <= 0 
             ? 'border-red-300 bg-red-50'
             : 'border-[#91BEAD]/20 bg-white'
       }`}
@@ -762,8 +659,8 @@ const ProductCard = React.memo(({ product, onEdit, onDelete, userSections, isInV
         <div className="flex justify-between items-center">
           <CardTitle className="text-base truncate mr-2 text-[#29696B]">
             <div className="flex items-center">
-              {product.nombre}
-              {product.esCombo && (
+              {producto.nombre}
+              {producto.esCombo && (
                 <Badge variant="outline" className="ml-2 text-xs border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/40">
                   Combo
                 </Badge>
@@ -771,60 +668,58 @@ const ProductCard = React.memo(({ product, onEdit, onDelete, userSections, isInV
             </div>
           </CardTitle>
           <Badge variant="outline" className="capitalize text-xs border-[#91BEAD] text-[#29696B]">
-            {product.categoria}
+            {producto.categoria}
           </Badge>
         </div>
       </CardHeader>
       <CardContent className="p-4 pt-2 pb-3">
         <div className="flex gap-4 mb-3">
           <div className="flex-shrink-0 h-16 w-16">
-            <OptimizedProductImage
-              productId={product._id}
-              alt={product.nombre}
+            <ImagenProductoOptimizada
+              productId={producto._id}
+              alt={producto.nombre}
               width={64}
               height={64}
-              quality={75}
-              className={`h-16 w-16 rounded-md object-cover border border-[#91BEAD]/30 transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+              quality={60}
+              className={`h-16 w-16 rounded-md object-cover border border-[#91BEAD]/30 transition-opacity duration-300 ${imagenCargada ? 'opacity-100' : 'opacity-0'}`}
               fallbackClassName="h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30"
               containerClassName="h-16 w-16"
-              useBase64={false}
               priority={isInViewport}
-              key={`img-${product._id}-${product.hasImage ? 'has-image' : 'no-image'}-${Date.now()}`} // Agregar timestamp para forzar recarga
-              onLoadComplete={() => setImageLoaded(true)}
+              onLoadComplete={() => setImagenCargada(true)}
             />
           </div>
           <div className="flex-1 min-w-0">
-            {product.descripcion && (
+            {producto.descripcion && (
               <p className="text-sm text-[#7AA79C] line-clamp-2 mb-2">
-                {product.descripcion}
+                {producto.descripcion}
               </p>
             )}
             <div className="grid grid-cols-2 gap-2 text-sm">
               <div className="flex items-center">
                 <DollarSign className="w-4 h-4 text-[#91BEAD] mr-1" />
-                <span className="font-medium text-[#29696B]">${product.precio.toFixed(2)}</span>
+                <span className="font-medium text-[#29696B]">${producto.precio.toFixed(2)}</span>
               </div>
               <div className="flex items-center">
                 <PackageOpen className="w-4 h-4 text-[#91BEAD] mr-1" />
                 <span className={`font-medium ${
-                  product.stock <= 0 
+                  producto.stock <= 0 
                     ? 'text-red-600' 
-                    : product.stock <= LOW_STOCK_THRESHOLD
+                    : producto.stock <= UMBRAL_STOCK_BAJO
                       ? 'text-yellow-600 flex items-center gap-1'
                       : 'text-[#29696B]'
                 }`}>
-                  {product.stock <= LOW_STOCK_THRESHOLD && product.stock > 0 && (
+                  {producto.stock <= UMBRAL_STOCK_BAJO && producto.stock > 0 && (
                     <AlertTriangle className="w-3 h-3 text-yellow-500 animate-pulse" />
                   )}
-                  {product.stock <= 0 ? 'Sin stock' : `${product.stock} unid.`}
+                  {producto.stock <= 0 ? 'Sin stock' : `${producto.stock} unid.`}
                 </span>
               </div>
             </div>
             <div className="mt-2 text-xs text-[#7AA79C]">
-              <span className="block">Subcategoría: <span className="capitalize">{product.subCategoria}</span></span>
-              <span className="block">Vendidos: {product.vendidos || 0}</span>
-              {product.esCombo && product.itemsCombo && (
-                <span className="block">Contiene: {product.itemsCombo.length} productos</span>
+              <span className="block">Subcategoría: <span className="capitalize">{producto.subCategoria}</span></span>
+              <span className="block">Vendidos: {producto.vendidos || 0}</span>
+              {producto.esCombo && producto.itemsCombo && (
+                <span className="block">Contiene: {producto.itemsCombo.length} productos</span>
               )}
             </div>
           </div>
@@ -834,45 +729,50 @@ const ProductCard = React.memo(({ product, onEdit, onDelete, userSections, isInV
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => onEdit(product)}
+          onClick={() => onEdit(producto)}
           className="text-[#29696B] hover:bg-[#DFEFE6]"
-          disabled={!canEdit}
+          disabled={!puedeEditar}
         >
           <Edit className="w-4 h-4" />
         </Button>
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => onDelete(product._id)}
+          onClick={() => onDelete(producto._id)}
           className="text-red-600 hover:text-red-800 hover:bg-red-50"
-          disabled={!canEdit}
+          disabled={!puedeEditar}
         >
           <Trash2 className="w-4 h-4" />
         </Button>
       </CardFooter>
     </Card>
   );
-});
+};
 
-// OPTIMIZED MOBILE VIEW COMPONENT
-const MobileProductList = React.memo(({ products, onEdit, onDelete, userSections, onVisibleItemsChanged }) => {
-  const parentRef = useRef(null);
+// Vista móvil optimizada
+const ListaProductosMobile: React.FC<ListaProductosMobileProps> = ({ 
+  productos, 
+  onEdit, 
+  onDelete, 
+  userSections, 
+  onVisibleItemsChanged 
+}) => {
+  const parentRef = useRef<HTMLDivElement>(null);
   
   const virtualizer = useVirtualizer({
-    count: products.length,
+    count: productos.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 200, // Estimated card height
+    estimateSize: () => 200, // Altura estimada de tarjeta
     overscan: 3,
     onChange: (instance) => {
-      // Verificar que instance.range no sea null antes de acceder a sus propiedades
       if (instance.range && onVisibleItemsChanged) {
         try {
-          // Notify parent component about visible items
-          const visibleItems = products.slice(
+          // Notificar al componente padre sobre elementos visibles
+          const elementosVisibles = productos.slice(
             instance.range.startIndex,
             instance.range.endIndex + 1
           );
-          onVisibleItemsChanged(visibleItems);
+          onVisibleItemsChanged(elementosVisibles);
         } catch (error) {
           console.warn("Error en virtualizador móvil:", error);
         }
@@ -890,10 +790,10 @@ const MobileProductList = React.memo(({ products, onEdit, onDelete, userSections
         }}
       >
         {virtualizer.getVirtualItems().map(virtualRow => {
-          const product = products[virtualRow.index];
+          const producto = productos[virtualRow.index];
           return (
             <div
-              key={`${product._id}-${product.hasImage ? 'has-image' : 'no-image'}-${Date.now() % 1000}`}
+              key={`${producto._id}-card`}
               style={{
                 position: 'absolute',
                 top: 0,
@@ -904,8 +804,8 @@ const MobileProductList = React.memo(({ products, onEdit, onDelete, userSections
                 padding: '4px',
               }}
             >
-              <ProductCard 
-                product={product} 
+              <TarjetaProducto 
+                producto={producto} 
                 onEdit={onEdit} 
                 onDelete={onDelete} 
                 userSections={userSections}
@@ -917,61 +817,59 @@ const MobileProductList = React.memo(({ products, onEdit, onDelete, userSections
       </div>
     </div>
   );
-});
+};
 
+// Componente principal SeccionInventario
 const InventorySection: React.FC = () => {
-  // Initialize React Query
+  // Inicializar React Query
   const queryClient = useQueryClient();
   
   const { addNotification } = useNotification();
-  const [products, setProducts] = useState<ProductExtended[]>([]);
-  const [productOptions, setProductOptions] = useState<ProductExtended[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [imageLoading, setImageLoading] = useState<boolean>(false);
+  const [productos, setProductos] = useState<ProductoExtendido[]>([]);
+  const [opcionesProductos, setOpcionesProductos] = useState<ProductoExtendido[]>([]);
+  const [cargando, setCargando] = useState<boolean>(true);
+  const [cargandoImagen, setCargandoImagen] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
-  const [successMessage, setSuccessMessage] = useState<string>('');
-  const [showModal, setShowModal] = useState<boolean>(false);
-  const [showComboModal, setShowComboModal] = useState<boolean>(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
-  const [deleteImageDialogOpen, setDeleteImageDialogOpen] = useState<boolean>(false);
-  const [productToDelete, setProductToDelete] = useState<string | null>(null);
-  const [editingProduct, setEditingProduct] = useState<ProductExtended | null>(null);
-  const [searchTerm, setSearchTerm] = useState<string>('');
-  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState<string>('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [userSections, setUserSections] = useState<string>('ambos');
-  const [isInitialLoad, setIsInitialLoad] = useState<boolean>(true);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [mensajeExito, setMensajeExito] = useState<string>('');
+  const [mostrarModal, setMostrarModal] = useState<boolean>(false);
+  const [mostrarModalCombo, setMostrarModalCombo] = useState<boolean>(false);
+  const [dialogoEliminarAbierto, setDialogoEliminarAbierto] = useState<boolean>(false);
+  const [dialogoEliminarImagenAbierto, setDialogoEliminarImagenAbierto] = useState<boolean>(false);
+  const [productoAEliminar, setProductoAEliminar] = useState<string | null>(null);
+  const [productoEditando, setProductoEditando] = useState<ProductoExtendido | null>(null);
+  const [terminoBusqueda, setTerminoBusqueda] = useState<string>('');
+  const [terminoBusquedaRetrasado, setTerminoBusquedaRetrasado] = useState<string>('');
+  const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<string>('all');
+  const [seccionesUsuario, setSeccionesUsuario] = useState<string>('ambos');
+  const [esCargaInicial, setEsCargaInicial] = useState<boolean>(true);
+  const refInputArchivo = useRef<HTMLInputElement>(null);
   const [totalItems, setTotalItems] = useState<number>(0);
-  const [totalPages, setTotalPages] = useState<number>(1);
-  const [isFetching, setIsFetching] = useState<boolean>(false);
+  const [totalPaginas, setTotalPaginas] = useState<number>(1);
+  const [estaCargando, setEstaCargando] = useState<boolean>(false);
 
-  // State for selected combo item
-  const [selectedComboItem, setSelectedComboItem] = useState<string>('');
-  const [comboItemQuantity, setComboItemQuantity] = useState<number>(1);
+  // Estado para item combo seleccionado
+  const [itemComboSeleccionado, setItemComboSeleccionado] = useState<string>('');
+  const [cantidadItemCombo, setCantidadItemCombo] = useState<number>(1);
 
-  // State for pagination
-  const [currentPage, setCurrentPage] = useState<number>(1);
+  // Estado para paginación
+  const [paginaActual, setPaginaActual] = useState<number>(1);
 
-  // References for scrolling in mobile
-  const mobileListRef = useRef<HTMLDivElement>(null);
-  const tableRef = useRef<HTMLDivElement>(null);
+  // Referencias para scroll en móvil
+  const refListaMobile = useRef<HTMLDivElement>(null);
+  const refTabla = useRef<HTMLDivElement>(null);
 
-  // Fixed sizes for each device type
-  const ITEMS_PER_PAGE_MOBILE = 5;
-  const ITEMS_PER_PAGE_DESKTOP = 10;
+  // Tamaños fijos para cada tipo de dispositivo
+  const ITEMS_POR_PAGINA_MOBILE = 5;
+  const ITEMS_POR_PAGINA_DESKTOP = 10;
 
-  // State to control window width
-  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
+  // Estado para controlar ancho de ventana
+  const [anchoVentana, setAnchoVentana] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
 
-  // Dynamically calculate itemsPerPage based on window width
-  const itemsPerPage = windowWidth < 768 ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP;
+  // Calcular dinámicamente itemsPorPagina basado en ancho de ventana
+  const itemsPorPagina = anchoVentana < 768 ? ITEMS_POR_PAGINA_MOBILE : ITEMS_POR_PAGINA_DESKTOP;
 
-  // Create cache to avoid repeated requests to image API
-  const imageCache = useRef<Map<string, boolean>>(new Map());
-
-  // Reference to abort controller to cancel pending requests
-  const abortControllerRef = useRef<AbortController | null>(null);
+  // Referencia al controlador de aborto para cancelar peticiones pendientes
+  const refControladorAborto = useRef<AbortController | null>(null);
 
   const [formData, setFormData] = useState<FormData>({
     nombre: '',
@@ -987,27 +885,15 @@ const InventorySection: React.FC = () => {
     imagenPreview: null
   });
 
-  // const safeGetVirtualItems = (virtualizer: { getVirtualItems: () => any; }) => {
-  //   try {
-  //     return virtualizer.getVirtualItems();
-  //   } catch (error) {
-  //     console.warn("Error al obtener elementos virtuales:", error);
-  //     return [];
-  //   }
-  // };
-
-  // Function to preload images for visible products
-  const preloadVisibleImages = useCallback((visibleProducts: ProductExtended[]) => {
-    if (!visibleProducts.length || isInitialLoad) return;
+  // Función para precargar imágenes de productos visibles
+  const precargarImagenesVisibles = useCallback((productosVisibles: ProductoExtendido[]) => {
+    if (!productosVisibles.length || esCargaInicial) return;
     
-    // Extract IDs from visible products
-    const visibleIds = visibleProducts.map(p => p._id);
-    
-    // Use the extended imageService to preload these images
-    imageServiceExt.preloadImages(visibleIds);
-  }, [isInitialLoad]);
+    // Con el nuevo sistema simplificado, las imágenes se cargan automáticamente
+    // cuando entran en el viewport gracias al IntersectionObserver
+  }, [esCargaInicial]);
 
-  // Get auth token
+  // Obtener token de autenticación
   const getAuthToken = useCallback(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('token');
@@ -1015,52 +901,52 @@ const InventorySection: React.FC = () => {
     return null;
   }, []);
 
-  // Function to generate products cache key
-  const getProductsCacheKey = useCallback(
-    (page: number, category: string, search: string) => {
-      return [PRODUCTS_CACHE_KEY, page, itemsPerPage, category, search];
+  // Función para generar clave de caché de productos
+  const getClaveProductosCache = useCallback(
+    (pagina: number, categoria: string, busqueda: string) => {
+      return [CLAVE_CACHE_PRODUCTOS, pagina, itemsPorPagina, categoria, busqueda];
     },
-    [itemsPerPage]
+    [itemsPorPagina]
   );
 
-  // Function to fetch products with React Query - Optimized
-  const fetchProductsData = useCallback(async (
-    page: number, 
-    limit: number, 
-    category: string, 
-    search: string
-  ): Promise<PagedResponse<ProductExtended>> => {
+  // Función para buscar productos con React Query - Optimizada
+  const buscarDatosProductos = useCallback(async (
+    pagina: number, 
+    limite: number, 
+    categoria: string, 
+    busqueda: string
+  ): Promise<RespuestaPaginada<ProductoExtendido>> => {
     try {
       const token = getAuthToken();
       if (!token) {
         throw new Error('No hay token de autenticación');
       }
 
-      // Abort previous request if exists
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
+      // Abortar solicitud anterior si existe
+      if (refControladorAborto.current) {
+        refControladorAborto.current.abort();
       }
       
-      // Create new abort controller
-      abortControllerRef.current = new AbortController();
+      // Crear nuevo controlador de aborto
+      refControladorAborto.current = new AbortController();
 
-      // Pagination and filter parameters
+      // Parámetros de paginación y filtro
       const params = new URLSearchParams({
-        page: page.toString(),
-        limit: limit.toString(),
-        category: category !== 'all' ? category : '',
-        search: search,
-        _: new Date().getTime().toString() // Cache-busting
+        page: pagina.toString(),
+        limit: limite.toString(),
+        category: categoria !== 'all' ? categoria : '',
+        search: busqueda,
+        _: new Date().getTime().toString() // Para evitar caché
       });
       
-      const response = await fetchWithRetry(
+      const response = await fetchConReintentos(
         `https://lyme-back.vercel.app/api/producto?${params}`, 
         {
           headers: {
             'Authorization': `Bearer ${token}`
           },
           cache: 'no-store',
-          signal: abortControllerRef.current.signal
+          signal: refControladorAborto.current.signal
         },
         3
       );
@@ -1071,14 +957,14 @@ const InventorySection: React.FC = () => {
       
       return await response.json();
     } catch (error: any) {
-      // Don't report error if it was cancelled
+      // No reportar error si fue cancelado
       if (error.name === 'AbortError') {
-        console.log('Request cancelled');
-        // Return empty state instead of throwing an error
+        console.log('Solicitud cancelada');
+        // Devolver estado vacío en lugar de lanzar error
         return {
           items: [],
-          page,
-          limit,
+          page: pagina,
+          limit: limite,
           totalItems: 0,
           totalPages: 0,
           hasNextPage: false,
@@ -1086,103 +972,103 @@ const InventorySection: React.FC = () => {
         };
       }
       
-      console.error('Error fetching products:', error);
-      throw new Error(`Error loading products: ${error.message}`);
+      console.error('Error buscando productos:', error);
+      throw new Error(`Error cargando productos: ${error.message}`);
     } finally {
-      // Clear abort controller if request completed or failed
-      if (abortControllerRef.current?.signal.aborted) {
-        abortControllerRef.current = null;
+      // Limpiar controlador de aborto si la solicitud se completó o falló
+      if (refControladorAborto.current?.signal.aborted) {
+        refControladorAborto.current = null;
       }
     }
   }, [getAuthToken]);
 
-  // Improve fetch function with retries to handle "failed to fetch"
-  const fetchWithRetry = async (url: string, options: RequestInit, maxRetries = 2) => {
-    let retries = 0;
+  // Mejorar función fetch con reintentos para manejar "failed to fetch"
+  const fetchConReintentos = async (url: string, opciones: RequestInit, maxReintentos = 2) => {
+    let reintentos = 0;
     
-    while (retries < maxRetries) {
+    while (reintentos < maxReintentos) {
       try {
-        const response = await fetch(url, options);
+        const response = await fetch(url, opciones);
         
         if (!response.ok) {
-          // If authentication error, don't retry
+          // Si error de autenticación, no reintentar
           if (response.status === 401) {
-            throw new Error('Authentication error');
+            throw new Error('Error de autenticación');
           }
           
-          throw new Error(`HTTP Error: ${response.status}`);
+          throw new Error(`Error HTTP: ${response.status}`);
         }
         
         return response;
       } catch (error: any) {
-        // If request was cancelled, don't retry
+        // Si la solicitud fue cancelada, no reintentar
         if (error.name === 'AbortError') {
           throw error;
         }
         
-        retries++;
-        console.warn(`Attempt ${retries}/${maxRetries} failed: ${error.message}`);
+        reintentos++;
+        console.warn(`Intento ${reintentos}/${maxReintentos} falló: ${error.message}`);
         
-        // If it's the last attempt, throw the error
-        if (retries >= maxRetries) {
+        // Si es el último intento, lanzar el error
+        if (reintentos >= maxReintentos) {
           throw error;
         }
         
-        // Wait before retrying (shorter and faster wait)
-        const delay = Math.min(500 * retries, 3000);
-        console.log(`Waiting ${delay}ms before retrying...`);
+        // Esperar antes de reintentar (espera más corta y rápida)
+        const delay = Math.min(500 * reintentos, 3000);
+        console.log(`Esperando ${delay}ms antes de reintentar...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
     
-    // For safety, although it should never get here
-    throw new Error(`Failed after ${maxRetries} retries`);
+    // Por seguridad, aunque nunca debería llegar aquí
+    throw new Error(`Falló después de ${maxReintentos} reintentos`);
   };
 
-  // Use React Query to load products - Optimized configuration
+  // Usar React Query para cargar productos - Configuración optimizada
   const { 
     data, 
     isLoading, 
     error: queryError,
     refetch
   } = useQuery(
-    getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm),
-    () => fetchProductsData(currentPage, itemsPerPage, selectedCategory, debouncedSearchTerm),
+    getClaveProductosCache(paginaActual, categoriaSeleccionada, terminoBusquedaRetrasado),
+    () => buscarDatosProductos(paginaActual, itemsPorPagina, categoriaSeleccionada, terminoBusquedaRetrasado),
     {
       keepPreviousData: true,
-      staleTime: 300000, // Increased to 5 minutes
-      cacheTime: 3600000, // 1 hour - to keep data in cache longer
+      staleTime: 300000, // Aumentado a 5 minutos
+      cacheTime: 3600000, // 1 hora - para mantener datos en caché más tiempo
       refetchOnWindowFocus: false,
       refetchOnMount: false,
-      refetchOnReconnect: false, // Disable auto refresh on reconnect
+      refetchOnReconnect: false, // Deshabilitar actualización automática al reconectar
       onSuccess: (data) => {
-        setProducts(data.items);
+        setProductos(data.items);
         setTotalItems(data.totalItems);
-        setTotalPages(data.totalPages);
+        setTotalPaginas(data.totalPages);
         
-        // Extract non-combo products for selector
-        const productOptionsFiltered = data.items.filter(p => !p.esCombo);
-        setProductOptions(productOptionsFiltered);
+        // Extraer productos no-combo para selector
+        const opcionesProductosFiltradas = data.items.filter(p => !p.esCombo);
+        setOpcionesProductos(opcionesProductosFiltradas);
         
-        // No longer in initial load after first load
-        setIsInitialLoad(false);
+        // Ya no está en carga inicial después de primera carga
+        setEsCargaInicial(false);
         
-        // Pre-fetch next page if it exists
+        // Pre-cargar siguiente página si existe
         if (data.hasNextPage) {
           queryClient.prefetchQuery(
-            getProductsCacheKey(currentPage + 1, selectedCategory, debouncedSearchTerm),
-            () => fetchProductsData(currentPage + 1, itemsPerPage, selectedCategory, debouncedSearchTerm)
+            getClaveProductosCache(paginaActual + 1, categoriaSeleccionada, terminoBusquedaRetrasado),
+            () => buscarDatosProductos(paginaActual + 1, itemsPorPagina, categoriaSeleccionada, terminoBusquedaRetrasado)
           );
         }
         
-        // Preload images for first page products
-        preloadVisibleImages(data.items);
+        // Precargar imágenes para productos de primera página
+        precargarImagenesVisibles(data.items);
       },
       onError: (err: any) => {
-        // Don't show errors if request was cancelled
+        // No mostrar errores si la solicitud fue cancelada
         if (err.name === 'AbortError') return;
         
-        const errorMsg = `Error loading products: ${err.message}`;
+        const errorMsg = `Error cargando productos: ${err.message}`;
         setError(errorMsg);
         
         if (typeof addNotification === 'function') {
@@ -1190,13 +1076,13 @@ const InventorySection: React.FC = () => {
         }
       },
       onSettled: () => {
-        setIsFetching(false);
+        setEstaCargando(false);
       }
     }
   );
 
-  // Mutation to delete product
-  const deleteProductMutation = useMutation(
+  // Mutación para eliminar producto
+  const eliminarProductoMutation = useMutation(
     async (id: string) => {
       const token = getAuthToken();
       if (!token) {
@@ -1212,104 +1098,102 @@ const InventorySection: React.FC = () => {
       
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Error deleting product');
+        throw new Error(error.error || 'Error al eliminar producto');
       }
       
       return id;
     },
     {
-      // Optimistic update of cache
+      // Actualización optimista de caché
       onMutate: async (deletedId) => {
-        // Cancel ongoing queries
-        await queryClient.cancelQueries(getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm));
+        // Cancelar consultas en curso
+        await queryClient.cancelQueries(getClaveProductosCache(paginaActual, categoriaSeleccionada, terminoBusquedaRetrasado));
         
-        // Save previous state
+        // Guardar estado anterior
         const previousProducts = queryClient.getQueryData(
-          getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm)
+          getClaveProductosCache(paginaActual, categoriaSeleccionada, terminoBusquedaRetrasado)
         );
         
-        // Update cache with optimistic update
+        // Actualizar caché con actualización optimista
         queryClient.setQueryData(
-          getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm),
+          getClaveProductosCache(paginaActual, categoriaSeleccionada, terminoBusquedaRetrasado),
           (old: any) => {
             const newData = { ...old };
-            newData.items = old.items.filter((p: ProductExtended) => p._id !== deletedId);
+            newData.items = old.items.filter((p: ProductoExtendido) => p._id !== deletedId);
             newData.totalItems = (old.totalItems || 0) - 1;
-            newData.totalPages = Math.ceil(newData.totalItems / itemsPerPage);
+            newData.totalPages = Math.ceil(newData.totalItems / itemsPorPagina);
             return newData;
           }
         );
         
-        // Return previous state for rollback if needed
+        // Devolver estado anterior para rollback si es necesario
         return { previousProducts };
       },
       onError: (err, id, context: any) => {
-        // Restore previous state in case of error
+        // Restaurar estado anterior en caso de error
         if (context?.previousProducts) {
           queryClient.setQueryData(
-            getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm),
+            getClaveProductosCache(paginaActual, categoriaSeleccionada, terminoBusquedaRetrasado),
             context.previousProducts
           );
         }
         
-        const errorMsg = `Error deleting product: ${err instanceof Error ? err.message : 'Unknown error'}`;
+        const errorMsg = `Error eliminando producto: ${err instanceof Error ? err.message : 'Error desconocido'}`;
         setError(errorMsg);
         addNotification(errorMsg, 'error');
       },
       onSuccess: (deletedId) => {
-        // Invalidate all product queries to ensure synchronization
+        // Invalidar todas las consultas de productos para asegurar sincronización
         queryClient.invalidateQueries({
-          predicate: (query) => query.queryKey[0] === PRODUCTS_CACHE_KEY,
+          predicate: (query) => query.queryKey[0] === CLAVE_CACHE_PRODUCTOS,
         });
         
-        // Remove image from image caches
-        imageService.invalidateCache(deletedId);
-        imageCache.current.delete(deletedId);
-        imageStatusCache.delete(deletedId);
+        // Eliminar imagen de cachés
+        cacheEstadoImagen.delete(deletedId);
         
-        const successMsg = 'Product deleted successfully';
-        setSuccessMessage(successMsg);
+        const successMsg = 'Producto eliminado exitosamente';
+        setMensajeExito(successMsg);
         addNotification(successMsg, 'success');
         
-        // Clear message after a few seconds
-        setTimeout(() => setSuccessMessage(''), 5000);
+        // Limpiar mensaje después de unos segundos
+        setTimeout(() => setMensajeExito(''), 5000);
       },
       onSettled: () => {
-        // Close dialog
-        setDeleteDialogOpen(false);
-        setProductToDelete(null);
+        // Cerrar diálogo
+        setDialogoEliminarAbierto(false);
+        setProductoAEliminar(null);
       }
     }
   );
 
-  // Mutation to delete image
-  const deleteImageMutation = useMutation(
+  // Mutación para eliminar imagen
+  const eliminarImagenMutation = useMutation(
     async (productId: string) => {
       return await imageService.deleteImage(productId);
     },
     {
-      // Optimistic update of cache for image
+      // Actualización optimista de caché para imagen
       onMutate: async (productId) => {
-        setIsFetching(true);
+        setEstaCargando(true);
         
-        // Cancel ongoing queries
-        await queryClient.cancelQueries(getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm));
+        // Cancelar consultas en curso
+        await queryClient.cancelQueries(getClaveProductosCache(paginaActual, categoriaSeleccionada, terminoBusquedaRetrasado));
         
-        // Save previous state
+        // Guardar estado anterior
         const previousProducts = queryClient.getQueryData(
-          getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm)
+          getClaveProductosCache(paginaActual, categoriaSeleccionada, terminoBusquedaRetrasado)
         );
         
-        // Optimistically update cache to show that image was deleted
+        // Actualizar caché optimistamente para mostrar que la imagen fue eliminada
         queryClient.setQueryData(
-          getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm),
+          getClaveProductosCache(paginaActual, categoriaSeleccionada, terminoBusquedaRetrasado),
           (old: any) => {
             if (!old || !old.items) return old;
             
             const newData = { ...old };
-            newData.items = old.items.map((p: ProductExtended) => {
+            newData.items = old.items.map((p: ProductoExtendido) => {
               if (p._id === productId) {
-                // Mark that it no longer has an image
+                // Marcar que ya no tiene una imagen
                 return {
                   ...p,
                   hasImage: false
@@ -1321,13 +1205,11 @@ const InventorySection: React.FC = () => {
           }
         );
         
-        // Clear any existing image cache
-        imageService.invalidateCache(productId);
-        imageCache.current.delete(productId);
-        imageStatusCache.delete(productId);
+        // Limpiar cualquier caché de imagen existente
+        cacheEstadoImagen.delete(productId);
         
-        // Update form if it's open
-        if (editingProduct && editingProduct._id === productId) {
+        // Actualizar formulario si está abierto
+        if (productoEditando && productoEditando._id === productId) {
           setFormData(prev => ({
             ...prev,
             imagen: null,
@@ -1338,62 +1220,60 @@ const InventorySection: React.FC = () => {
         return { previousProducts };
       },
       onError: (err, productId, context: any) => {
-        // Restore previous state in case of error
+        // Restaurar estado anterior en caso de error
         if (context?.previousProducts) {
           queryClient.setQueryData(
-            getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm),
+            getClaveProductosCache(paginaActual, categoriaSeleccionada, terminoBusquedaRetrasado),
             context.previousProducts
           );
         }
         
-        // Show error
-        console.error('Error deleting image:', err);
-        addNotification('Error deleting image', 'error');
+        // Mostrar error
+        console.error('Error eliminando imagen:', err);
+        addNotification('Error eliminando imagen', 'error');
       },
       onSuccess: (_, productId) => {
-        // Clear image references
-        if (editingProduct && editingProduct._id === productId) {
+        // Limpiar referencias de imagen
+        if (productoEditando && productoEditando._id === productId) {
           setFormData(prev => ({
             ...prev,
             imagen: null,
             imagenPreview: null
           }));
           
-          // Update editingProduct state to reflect image change
-          setEditingProduct(prev => prev ? {...prev, hasImage: false} : null);
+          // Actualizar estado de productoEditando para reflejar cambio de imagen
+          setProductoEditando(prev => prev ? {...prev, hasImage: false} : null);
         }
         
-        // Invalidate image caches
-        imageService.invalidateCache(productId);
-        imageCache.current.delete(productId);
-        imageStatusCache.delete(productId);
+        // Invalidar cachés de imágenes
+        cacheEstadoImagen.delete(productId);
         
-        // Update local products state to show change immediately
-        setProducts(prevProducts => 
-          prevProducts.map(p => 
+        // Actualizar estado local de productos para mostrar cambio inmediatamente
+        setProductos(prevProductos => 
+          prevProductos.map(p => 
             p._id === productId 
               ? {...p, hasImage: false} 
               : p
           )
         );
         
-        // Invalidate all product queries to ensure synchronization
+        // Invalidar todas las consultas de productos para asegurar sincronización
         queryClient.invalidateQueries({
-          predicate: (query) => query.queryKey[0] === PRODUCTS_CACHE_KEY,
+          predicate: (query) => query.queryKey[0] === CLAVE_CACHE_PRODUCTOS,
         });
         
-        addNotification('Image deleted successfully', 'success');
+        addNotification('Imagen eliminada exitosamente', 'success');
       },
       onSettled: () => {
-        setDeleteImageDialogOpen(false);
-        setImageLoading(false);
-        setIsFetching(false);
+        setDialogoEliminarImagenAbierto(false);
+        setCargandoImagen(false);
+        setEstaCargando(false);
       }
     }
   );
 
-  // Mutation to create/update product
-  const productMutation = useMutation(
+  // Mutación para crear/actualizar producto
+  const productoMutation = useMutation(
     async (data: { id?: string; payload: any; image?: File }) => {
       const token = getAuthToken();
       if (!token) {
@@ -1406,7 +1286,7 @@ const InventorySection: React.FC = () => {
       
       const method = data.id ? 'PUT' : 'POST';
       
-      // Make request to create/update product
+      // Hacer solicitud para crear/actualizar producto
       const response = await fetch(url, {
         method,
         headers: {
@@ -1418,76 +1298,76 @@ const InventorySection: React.FC = () => {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Error processing request');
+        throw new Error(error.error || 'Error procesando solicitud');
       }
       
-      const savedProduct = await response.json();
+      const productGuardado = await response.json();
       
-      // If there's an image, upload it
+      // Si hay una imagen, subirla
       if (data.image) {
-        await handleImageUpload(savedProduct._id, data.image);
+        await handleImageUpload(productGuardado._id, data.image);
       }
       
-      return savedProduct;
+      return productGuardado;
     },
     {
       onMutate: async (data) => {
-        setIsFetching(true);
+        setEstaCargando(true);
         return { data };
       },
-      onSuccess: (savedProduct) => {
-        setShowModal(false);
+      onSuccess: (productGuardado) => {
+        setMostrarModal(false);
         resetForm();
         
-        // Force immediate refresh of data
+        // Forzar actualización inmediata de datos
         refetch();
         
-        // Invalidate all product queries to ensure synchronization
+        // Invalidar todas las consultas de productos para asegurar sincronización
         queryClient.invalidateQueries({
-          predicate: (query) => query.queryKey[0] === PRODUCTS_CACHE_KEY,
+          predicate: (query) => query.queryKey[0] === CLAVE_CACHE_PRODUCTOS,
         });
         
-        const successMsg = `Product ${editingProduct ? 'updated' : 'created'} successfully`;
-        setSuccessMessage(successMsg);
+        const successMsg = `Producto ${productoEditando ? 'actualizado' : 'creado'} exitosamente`;
+        setMensajeExito(successMsg);
         addNotification(successMsg, 'success');
         
-        // Clear message after a few seconds
-        setTimeout(() => setSuccessMessage(''), 5000);
+        // Limpiar mensaje después de unos segundos
+        setTimeout(() => setMensajeExito(''), 5000);
       },
       onError: (error: any) => {
-        const errorMsg = 'Error saving product: ' + error.message;
+        const errorMsg = 'Error guardando producto: ' + error.message;
         setError(errorMsg);
         addNotification(errorMsg, 'error');
       },
       onSettled: () => {
-        setIsFetching(false);
+        setEstaCargando(false);
       }
     }
   );
 
-  // Debounced search - optimized with useCallback
-  const debouncedSearch = useCallback(
+  // Búsqueda con retraso - optimizada con useCallback
+  const busquedaRetrasada = useCallback(
     debounce((value: string) => {
-      setDebouncedSearchTerm(value);
-      setCurrentPage(1); // Reset to first page
-      setIsFetching(true);
+      setTerminoBusquedaRetrasado(value);
+      setPaginaActual(1); // Resetear a primera página
+      setEstaCargando(true);
     }, 300),
     []
   );
 
-  // Check for low stock products and send notification - optimized with useMemo
-  const lowStockProducts = useMemo(() => {
-    if (!Array.isArray(products)) return [];
-    return products.filter(product => 
-      product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD
+  // Verificar productos con stock bajo y enviar notificación - optimizado con useMemo
+  const productosStockBajo = useMemo(() => {
+    if (!Array.isArray(productos)) return [];
+    return productos.filter(producto => 
+      producto.stock > 0 && producto.stock <= UMBRAL_STOCK_BAJO
     );
-  }, [products]);
+  }, [productos]);
 
-  // Function to compress images using Canvas - optimized
-  const compressImage = (file: File, maxWidth = 800, maxHeight = 800, quality = 0.7): Promise<File> => {
+  // Función para comprimir imágenes usando Canvas - optimizada
+  const comprimirImagen = (file: File, maxWidth = 800, maxHeight = 800, quality = 0.7): Promise<File> => {
     return new Promise((resolve, reject) => {
       try {
-        // Create elements for image manipulation
+        // Crear elementos para manipulación de imagen
         const reader = new FileReader();
         const img = new Image();
         
@@ -1498,7 +1378,7 @@ const InventorySection: React.FC = () => {
           
           img.onload = () => {
             try {
-              // Use OffscreenCanvas if available for better performance
+              // Usar OffscreenCanvas si está disponible para mejor rendimiento
               let canvas: HTMLCanvasElement | OffscreenCanvas;
               let ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
               
@@ -1511,11 +1391,11 @@ const InventorySection: React.FC = () => {
               }
               
               if (!ctx) {
-                console.warn('Could not get 2D context from canvas');
+                console.warn('No se pudo obtener contexto 2D del canvas');
                 return resolve(file);
               }
 
-              // Calculate dimensions
+              // Calcular dimensiones
               let width = img.width;
               let height = img.height;
               
@@ -1534,28 +1414,28 @@ const InventorySection: React.FC = () => {
               width = Math.floor(width);
               height = Math.floor(height);
               
-              // Configure canvas with new dimensions
+              // Configurar canvas con nuevas dimensiones
               if (canvas instanceof HTMLCanvasElement) {
                 canvas.width = width;
                 canvas.height = height;
               } else {
-                // For OffscreenCanvas
+                // Para OffscreenCanvas
                 canvas.width = width;
                 canvas.height = height;
               }
               
-              // Draw image
+              // Dibujar imagen
               ctx.drawImage(img, 0, 0, width, height);
               
-              // Determine output type
+              // Determinar tipo de salida
               const outputType = file.type === 'image/png' ? 'image/png' : 'image/webp';
               
-              // Create blob
+              // Crear blob
               const canvasToBlob = (canvas: HTMLCanvasElement | OffscreenCanvas, callback: (blob: Blob | null) => void) => {
                 if (canvas instanceof HTMLCanvasElement) {
                   canvas.toBlob(callback, outputType, quality);
                 } else {
-                  // For OffscreenCanvas
+                  // Para OffscreenCanvas
                   canvas.convertToBlob({ type: outputType, quality }).then(callback);
                 }
               };
@@ -1565,7 +1445,7 @@ const InventorySection: React.FC = () => {
                   return resolve(file);
                 }
                 
-                // Create filename with appropriate extension
+                // Crear nombre de archivo con extensión apropiada
                 let fileName = file.name;
                 if (outputType === 'image/webp' && !fileName.toLowerCase().endsWith('.webp')) {
                   const nameParts = fileName.split('.');
@@ -1583,7 +1463,7 @@ const InventorySection: React.FC = () => {
               });
               
             } catch (err) {
-              console.error('Error during compression:', err);
+              console.error('Error durante compresión:', err);
               resolve(file);
             }
           };
@@ -1596,35 +1476,35 @@ const InventorySection: React.FC = () => {
         reader.readAsDataURL(file);
         
       } catch (err) {
-        console.error('General error in compression:', err);
+        console.error('Error general en compresión:', err);
         resolve(file);
       }
     });
   };
 
-  // Helper function to format file sizes
-  const formatFileSize = (bytes: number): string => {
+  // Formatear tamaños de archivo
+  const formatearTamañoArchivo = (bytes: number): string => {
     if (bytes < 1024) return bytes + ' bytes';
     else if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     else return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
 
-  // Show notification for products with low stock
+  // Mostrar notificación para productos con stock bajo
   useEffect(() => {
-    if (lowStockProducts.length > 0 && !loading && !isInitialLoad) {
-      const productNames = lowStockProducts.slice(0, 3).map(p => p.nombre).join(', ');
-      const moreText = lowStockProducts.length > 3 ? ` and ${lowStockProducts.length - 3} more` : '';
-      const message = `Alert: ${lowStockProducts.length} product${lowStockProducts.length > 1 ? 's' : ''} with low stock: ${productNames}${moreText}`;
+    if (productosStockBajo.length > 0 && !cargando && !esCargaInicial) {
+      const nombresProductos = productosStockBajo.slice(0, 3).map(p => p.nombre).join(', ');
+      const textoMas = productosStockBajo.length > 3 ? ` y ${productosStockBajo.length - 3} más` : '';
+      const mensaje = `Alerta: ${productosStockBajo.length} producto${productosStockBajo.length > 1 ? 's' : ''} con stock bajo: ${nombresProductos}${textoMas}`;
       
       if (addNotification) {
-        addNotification(message, 'warning');
+        addNotification(mensaje, 'warning');
       }
     }
-  }, [lowStockProducts, loading, addNotification, isInitialLoad]);
+  }, [productosStockBajo, cargando, addNotification, esCargaInicial]);
 
-  // Get user section permissions
+  // Obtener permisos de sección de usuario
   useEffect(() => {
-    const fetchCurrentUser = async () => {
+    const obtenerUsuarioActual = async () => {
       try {
         const token = getAuthToken();
         if (!token) {
@@ -1636,37 +1516,37 @@ const InventorySection: React.FC = () => {
         });
 
         if (!response.ok) {
-          throw new Error('Error getting user information');
+          throw new Error('Error obteniendo información de usuario');
         }
 
         const data = await response.json();
-        // Save the sections the user has access to
+        // Guardar las secciones a las que el usuario tiene acceso
         if (data.secciones) {
-          setUserSections(data.secciones);
-          console.log(`User with access to sections: ${data.secciones}`);
+          setSeccionesUsuario(data.secciones);
+          console.log(`Usuario con acceso a secciones: ${data.secciones}`);
         }
       } catch (err) {
-        console.error('Error getting user sections:', err);
+        console.error('Error obteniendo secciones de usuario:', err);
       }
     };
     
-    fetchCurrentUser();
+    obtenerUsuarioActual();
   }, [getAuthToken]);
 
-  // Effect for handling search
+  // Efecto para manejar búsqueda
   useEffect(() => {
-    debouncedSearch(searchTerm);
-  }, [searchTerm, debouncedSearch]);
+    busquedaRetrasada(terminoBusqueda);
+  }, [terminoBusqueda, busquedaRetrasada]);
 
-  // Effect to detect window size
+  // Efecto para detectar tamaño de ventana
   useEffect(() => {
     const handleResize = () => {
-      const newWidth = window.innerWidth;
-      setWindowWidth(newWidth);
+      const nuevoAncho = window.innerWidth;
+      setAnchoVentana(nuevoAncho);
       
-      // If we change between mobile and desktop, go back to first page
-      if ((newWidth < 768 && windowWidth >= 768) || (newWidth >= 768 && windowWidth < 768)) {
-        setCurrentPage(1);
+      // Si cambiamos entre móvil y escritorio, volver a primera página
+      if ((nuevoAncho < 768 && anchoVentana >= 768) || (nuevoAncho >= 768 && anchoVentana < 768)) {
+        setPaginaActual(1);
       }
     };
     
@@ -1674,52 +1554,52 @@ const InventorySection: React.FC = () => {
       window.addEventListener('resize', handleResize);
       return () => window.removeEventListener('resize', handleResize);
     }
-  }, [windowWidth]);
+  }, [anchoVentana]);
 
-  // Clean up abort controllers when unmounting
+  // Limpiar controladores de aborto al desmontar
   useEffect(() => {
     return () => {
-      // Abort any pending requests
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
+      // Abortar cualquier solicitud pendiente
+      if (refControladorAborto.current) {
+        refControladorAborto.current.abort();
       }
     };
   }, []);
 
-  // Handle image change with automatic compression
+  // Manejar cambio de imagen con compresión automática
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       
-      // Validate file size (5MB maximum)
+      // Validar tamaño de archivo (5MB máximo)
       if (file.size > 5 * 1024 * 1024) {
-        console.log('Image must not exceed 5MB');
-        addNotification('Image must not exceed 5MB', 'error');
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
+        console.log('La imagen no debe exceder los 5MB');
+        addNotification('La imagen no debe exceder los 5MB', 'error');
+        if (refInputArchivo.current) {
+          refInputArchivo.current.value = '';
         }
         return;
       }
 
-      // Validate file type
+      // Validar tipo de archivo
       if (!file.type.startsWith('image/')) {
-        console.log('File must be an image');
-        addNotification('File must be an image', 'error');
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
+        console.log('El archivo debe ser una imagen');
+        addNotification('El archivo debe ser una imagen', 'error');
+        if (refInputArchivo.current) {
+          refInputArchivo.current.value = '';
         }
         return;
       }
       
-      // Show message if we will compress
+      // Mostrar mensaje si vamos a comprimir
       if (file.size > 1024 * 1024) {
         addNotification(
-          `Image will be optimized for better performance (${formatFileSize(file.size)})`,
+          `La imagen será optimizada para mejor rendimiento (${formatearTamañoArchivo(file.size)})`,
           'info'
         );
       }
       
-      // Create URL for preview
+      // Crear URL para vista previa
       const reader = new FileReader();
       reader.onloadend = () => {
         setFormData({
@@ -1733,81 +1613,81 @@ const InventorySection: React.FC = () => {
     }
   };
 
-  // Remove image from form
+  // Eliminar imagen del formulario
   const handleRemoveImage = () => {
     setFormData({
       ...formData,
       imagen: null,
       imagenPreview: null
     });
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+    if (refInputArchivo.current) {
+      refInputArchivo.current.value = '';
     }
   };
 
-  // Delete image from already saved product
+  // Eliminar imagen de producto ya guardado
   const handleDeleteProductImage = (productId: string) => {
-    // Use mutation instead of direct implementation
-    deleteImageMutation.mutate(productId);
+    // Usar mutación en lugar de implementación directa
+    eliminarImagenMutation.mutate(productId);
   };
 
-  // Handle image upload after creating/editing product with compression and retries
+  // Manejar subida de imagen después de crear/editar producto con compresión y reintentos
   const handleImageUpload = async (productId: string, imageFile?: File) => {
     const imageToProcess = imageFile || formData.imagen;
     if (!imageToProcess) return true;
     
     try {
-      setImageLoading(true);
-      setIsFetching(true);
+      setCargandoImagen(true);
+      setEstaCargando(true);
       
-      // Compress image before converting to base64
+      // Comprimir imagen antes de convertir a base64
       let imageToUpload = imageToProcess;
       
       if (imageToUpload.size > 1024 * 1024) {
-        console.log(`Compressing large image (${formatFileSize(imageToUpload.size)})...`);
+        console.log(`Comprimiendo imagen grande (${formatearTamañoArchivo(imageToUpload.size)})...`);
         
-        // Quality level based on file size
-        let quality = 0.7; // Default value
+        // Nivel de calidad basado en tamaño de archivo
+        let quality = 0.7; // Valor por defecto
         
-        // Adjust quality based on size
-        if (imageToUpload.size > 3 * 1024 * 1024) quality = 0.5; // Very large images
-        else if (imageToUpload.size > 2 * 1024 * 1024) quality = 0.6; // Large images
+        // Ajustar calidad basado en tamaño
+        if (imageToUpload.size > 3 * 1024 * 1024) quality = 0.5; // Imágenes muy grandes
+        else if (imageToUpload.size > 2 * 1024 * 1024) quality = 0.6; // Imágenes grandes
         
-        // Compress image
-        imageToUpload = await compressImage(imageToUpload, 1200, 1200, quality);
+        // Comprimir imagen
+        imageToUpload = await comprimirImagen(imageToUpload, 1200, 1200, quality);
       }
       
-      // Convert to base64 and upload
+      // Convertir a base64 y subir
       const base64Data = await imageService.fileToBase64(imageToUpload);
       
-      // Implement retry system to handle "failed to fetch"
-      const MAX_RETRIES = 3;
-      let retryCount = 0;
-      let success = false;
+      // Implementar sistema de reintento para manejar "failed to fetch"
+      const MAX_REINTENTOS = 3;
+      let contadorReintentos = 0;
+      let exito = false;
       
-      while (retryCount < MAX_RETRIES && !success) {
+      while (contadorReintentos < MAX_REINTENTOS && !exito) {
         try {
-          // If not the first attempt, wait before retrying
-          if (retryCount > 0) {
-            const waitTime = Math.pow(2, retryCount) * 1000; // Exponential wait
-            console.log(`Retrying image upload (attempt ${retryCount + 1}/${MAX_RETRIES}) after ${waitTime}ms...`);
-            await new Promise(resolve => setTimeout(resolve, waitTime));
+          // Si no es el primer intento, esperar antes de reintentar
+          if (contadorReintentos > 0) {
+            const tiempoEspera = Math.pow(2, contadorReintentos) * 1000; // Espera exponencial
+            console.log(`Reintentando subida de imagen (intento ${contadorReintentos + 1}/${MAX_REINTENTOS}) después de ${tiempoEspera}ms...`);
+            await new Promise(resolve => setTimeout(resolve, tiempoEspera));
           }
           
           await imageService.uploadImageBase64(productId, base64Data);
-          success = true;
+          exito = true;
           
-          // Update cache directly after uploading image
+          // Actualizar caché directamente después de subir imagen
           queryClient.setQueryData(
-            getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm),
+            getClaveProductosCache(paginaActual, categoriaSeleccionada, terminoBusquedaRetrasado),
             (old: any) => {
               if (!old || !old.items) return old;
               
               return {
                 ...old,
-                items: old.items.map((p: ProductExtended) => {
+                items: old.items.map((p: ProductoExtendido) => {
                   if (p._id === productId) {
-                    // Update product to indicate it now has an image
+                    // Actualizar producto para indicar que ahora tiene una imagen
                     return {
                       ...p,
                       hasImage: true
@@ -1819,88 +1699,86 @@ const InventorySection: React.FC = () => {
             }
           );
           
-          // Update local products state to show change immediately
-          setProducts(prevProducts => 
-            prevProducts.map(p => 
+          // Actualizar estado local de productos para mostrar cambio inmediatamente
+          setProductos(prevProductos => 
+            prevProductos.map(p => 
               p._id === productId 
                 ? {...p, hasImage: true} 
                 : p
             )
           );
           
-          // If we're editing this product, update its state
-          if (editingProduct && editingProduct._id === productId) {
-            setEditingProduct(prev => prev ? {...prev, hasImage: true} : null);
+          // Si estamos editando este producto, actualizar su estado
+          if (productoEditando && productoEditando._id === productId) {
+            setProductoEditando(prev => prev ? {...prev, hasImage: true} : null);
           }
           
-          // Invalidate image cache to force a reload
-          imageService.invalidateCache(productId);
-          imageCache.current.delete(productId);
-          imageStatusCache.delete(productId);
+          // Invalidar caché de imagen para forzar recarga
+          cacheEstadoImagen.delete(productId);
           
-          // Force data refresh
+          // Forzar actualización de datos
           queryClient.invalidateQueries({
-            predicate: (query) => query.queryKey[0] === PRODUCTS_CACHE_KEY,
+            predicate: (query) => query.queryKey[0] === CLAVE_CACHE_PRODUCTOS,
           });
         } catch (error: any) {
-          retryCount++;
+          contadorReintentos++;
           
-          if (retryCount >= MAX_RETRIES) {
-            console.error(`Error after ${MAX_RETRIES} attempts:`, error);
+          if (contadorReintentos >= MAX_REINTENTOS) {
+            console.error(`Error después de ${MAX_REINTENTOS} intentos:`, error);
             throw error;
           } else {
-            console.warn(`Error uploading image (attempt ${retryCount}/${MAX_RETRIES}):`, error.message);
+            console.warn(`Error subiendo imagen (intento ${contadorReintentos}/${MAX_REINTENTOS}):`, error.message);
           }
         }
       }
       
-      return success;
+      return exito;
     } catch (error: any) {
-      console.error('Error uploading image:', error);
-      addNotification(`Error uploading image: ${error.message || 'Unknown error'}`, 'error');
+      console.error('Error subiendo imagen:', error);
+      addNotification(`Error subiendo imagen: ${error.message || 'Error desconocido'}`, 'error');
       return false;
     } finally {
-      setImageLoading(false);
-      setIsFetching(false);
+      setCargandoImagen(false);
+      setEstaCargando(false);
     }
   };
 
-  // Handle form submission (create/edit)
+  // Manejar envío de formulario (crear/editar)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     
     try {
-      // Specific validations for combos
+      // Validaciones específicas para combos
       if (formData.esCombo) {
-        // Verify that there is at least one product in the combo
+        // Verificar que haya al menos un producto en el combo
         if (!formData.itemsCombo || formData.itemsCombo.length === 0) {
-          throw new Error('A combo must contain at least one product');
+          throw new Error('Un combo debe contener al menos un producto');
         }
         
-        // Verify that all products exist in the product list
-        const invalidProducts = formData.itemsCombo.filter(item => 
-          !productOptions.some(p => p._id === item.productoId)
+        // Verificar que todos los productos existan en la lista de productos
+        const productosInvalidos = formData.itemsCombo.filter(item => 
+          !opcionesProductos.some(p => p._id === item.productoId)
         );
         
-        if (invalidProducts.length > 0) {
-          throw new Error('The combo contains invalid products');
+        if (productosInvalidos.length > 0) {
+          throw new Error('El combo contiene productos inválidos');
         }
       }
       
-      // IMPORTANT: Make sure productoId are valid strings
-      let itemsComboFixed = [];
+      // IMPORTANTE: Asegurarse de que productoId sean strings válidos
+      let itemsComboArreglados = [];
       if (formData.esCombo && formData.itemsCombo && formData.itemsCombo.length > 0) {
-        itemsComboFixed = formData.itemsCombo.map(item => {
-          // Explicitly ensure ID is a valid string
+        itemsComboArreglados = formData.itemsCombo.map(item => {
+          // Explícitamente asegurar que ID es un string válido
           return {
-            productoId: item.productoId.toString(), // Explicitly convert to string
+            productoId: item.productoId.toString(), // Explícitamente convertir a string
             cantidad: item.cantidad
           };
         });
       }
       
-      // Basic product data (without the image which will be handled separately)
+      // Datos básicos del producto (sin la imagen que se manejará por separado)
       const payload = {
         nombre: formData.nombre,
         descripcion: formData.descripcion,
@@ -1910,40 +1788,40 @@ const InventorySection: React.FC = () => {
         stock: Number(formData.stock),
         proovedorInfo: formData.proovedorInfo,
         esCombo: !!formData.esCombo,
-        itemsCombo: formData.esCombo ? itemsComboFixed : []
+        itemsCombo: formData.esCombo ? itemsComboArreglados : []
       };
       
-      // Use mutation to create/edit product
-      productMutation.mutate({
-        id: editingProduct?._id,
+      // Usar mutación para crear/editar producto
+      productoMutation.mutate({
+        id: productoEditando?._id,
         payload,
         image: formData.imagen || undefined
       });
     } catch (err: any) {
-      const errorMsg = 'Error saving product: ' + err.message;
+      const errorMsg = 'Error guardando producto: ' + err.message;
       setError(errorMsg);
       addNotification(errorMsg, 'error');
     }
   };
 
-  // Start deletion process by showing confirmation dialog
-  const confirmDelete = (id: string) => {
-    setProductToDelete(id);
-    setDeleteDialogOpen(true);
+  // Iniciar proceso de eliminación mostrando diálogo de confirmación
+  const confirmarEliminar = (id: string) => {
+    setProductoAEliminar(id);
+    setDialogoEliminarAbierto(true);
   };
 
-  // Confirm image deletion
-  const confirmDeleteImage = (id: string) => {
-    setProductToDelete(id);
-    setDeleteImageDialogOpen(true);
+  // Confirmar eliminación de imagen
+  const confirmarEliminarImagen = (id: string) => {
+    setProductoAEliminar(id);
+    setDialogoEliminarImagenAbierto(true);
   };
 
-  // Delete product (after confirmation)
+  // Eliminar producto (después de confirmación)
   const handleDelete = (id: string) => {
-    // Check if this product is in any combo before trying to delete
-    const combosWithProduct = products.filter(
+    // Comprobar si este producto está en algún combo antes de intentar eliminar
+    const combosConProducto = productos.filter(
       p => p.esCombo && p.itemsCombo?.some(item => {
-        // Handle both if productoId is a string or an object
+        // Manejar tanto si productoId es un string o un objeto
         const itemId = typeof item.productoId === 'object' 
           ? item.productoId._id 
           : item.productoId;
@@ -1951,84 +1829,84 @@ const InventorySection: React.FC = () => {
       })
     );
     
-    if (combosWithProduct.length > 0) {
-      const comboNames = combosWithProduct.map(c => c.nombre).join(', ');
-      const errorMsg = `Cannot delete this product because it is included in the following combos: ${comboNames}`;
+    if (combosConProducto.length > 0) {
+      const nombresCombo = combosConProducto.map(c => c.nombre).join(', ');
+      const errorMsg = `No se puede eliminar este producto porque está incluido en los siguientes combos: ${nombresCombo}`;
       setError(errorMsg);
       addNotification(errorMsg, 'error');
-      setDeleteDialogOpen(false);
-      setProductToDelete(null);
+      setDialogoEliminarAbierto(false);
+      setProductoAEliminar(null);
       return;
     }
     
-    // Use mutation to delete
-    deleteProductMutation.mutate(id);
+    // Usar mutación para eliminar
+    eliminarProductoMutation.mutate(id);
   };
 
-  // Prepare product editing
-  const handleEdit = async (product: ProductExtended) => {
-    setEditingProduct(product);
+  // Preparar edición de producto
+  const handleEdit = async (producto: ProductoExtendido) => {
+    setProductoEditando(producto);
     
-    // When editing an existing combo, make sure all references to products
-    // in itemsCombo are correctly configured
-    let itemsComboFixed = [];
+    // Al editar un combo existente, asegurarse de que todas las referencias a productos
+    // en itemsCombo estén correctamente configuradas
+    let itemsComboArreglados = [];
     
-    if (product.esCombo && product.itemsCombo && product.itemsCombo.length > 0) {
-      // Verify product IDs inside the combo and fix them if necessary
-      itemsComboFixed = product.itemsCombo.map(item => {
-        const productId = typeof item.productoId === 'object' 
+    if (producto.esCombo && producto.itemsCombo && producto.itemsCombo.length > 0) {
+      // Verificar IDs de producto dentro del combo y arreglarlos si es necesario
+      itemsComboArreglados = producto.itemsCombo.map(item => {
+        const productoId = typeof item.productoId === 'object' 
           ? item.productoId._id 
           : item.productoId;
           
-        // Validate that ID exists in product list
-        const productExists = productOptions.some(p => p._id === productId);
+        // Validar que ID existe en lista de productos
+        const productoExiste = opcionesProductos.some(p => p._id === productoId);
         
-        if (!productExists) {
-          console.warn(`Product with ID ${productId} not found in list of available products`);
+        if (!productoExiste) {
+          console.warn(`Producto con ID ${productoId} no encontrado en la lista de productos disponibles`);
         }
         
         return {
-          productoId: productId,
+          productoId: productoId,
           cantidad: item.cantidad
         };
       });
     }
     
-    // Configure formData for editing
+    // Configurar formData para edición
     setFormData({
-      nombre: product.nombre,
-      descripcion: product.descripcion || '',
-      categoria: product.categoria,
-      subCategoria: product.subCategoria,
-      precio: product.precio.toString(),
-      stock: product.stock.toString(),
-      proovedorInfo: product.proovedorInfo || '',
-      esCombo: !!product.esCombo,
-      itemsCombo: product.esCombo ? itemsComboFixed : [],
+      nombre: producto.nombre,
+      descripcion: producto.descripcion || '',
+      categoria: producto.categoria,
+      subCategoria: producto.subCategoria,
+      precio: producto.precio.toString(),
+      stock: producto.stock.toString(),
+      proovedorInfo: producto.proovedorInfo || '',
+      esCombo: !!producto.esCombo,
+      itemsCombo: producto.esCombo ? itemsComboArreglados : [],
       imagen: null,
       imagenPreview: null
     });
     
-    // Try to load image if it exists
-    if (product.hasImage) {
+    // Tratar de cargar imagen si existe
+    if (producto.hasImage) {
       try {
-        // Load image for preview
-        // Add version parameter to force reload
+        // Cargar imagen para vista previa
+        // Agregar parámetro de versión para forzar recarga
         const timestamp = new Date().getTime();
-        const imageUrl = `${imageService.getImageUrl(product._id)}?v=${timestamp}`;
+        const imageUrl = `${imageService.getImageUrl(producto._id)}?v=${timestamp}`;
         setFormData(prev => ({
           ...prev,
           imagenPreview: imageUrl
         }));
       } catch (error) {
-        console.error('Error loading image for preview:', error);
+        console.error('Error cargando imagen para vista previa:', error);
       }
     }
     
-    setShowModal(true);
+    setMostrarModal(true);
   };
 
-  // Reset form
+  // Resetear formulario
   const resetForm = () => {
     setFormData({
       nombre: '',
@@ -2043,18 +1921,18 @@ const InventorySection: React.FC = () => {
       imagen: null,
       imagenPreview: null
     });
-    setEditingProduct(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+    setProductoEditando(null);
+    if (refInputArchivo.current) {
+      refInputArchivo.current.value = '';
     }
   };
 
-  // Handle category change
+  // Manejar cambio de categoría
   const handleCategoryChange = (value: 'limpieza' | 'mantenimiento') => {
     try {
       if (!subCategorias[value]) {
-        console.error(`Invalid category: ${value}`);
-        addNotification(`Error: Category '${value}' not valid`, 'error');
+        console.error(`Categoría inválida: ${value}`);
+        addNotification(`Error: Categoría '${value}' no válida`, 'error');
         return;
       }
       
@@ -2066,115 +1944,115 @@ const InventorySection: React.FC = () => {
         subCategoria: defaultSubcategoria
       }));
     } catch (error) {
-      console.error("Error changing category:", error);
-      addNotification("Error changing category", 'error');
+      console.error("Error cambiando categoría:", error);
+      addNotification("Error cambiando categoría", 'error');
     }
   };
 
-  // Handle esCombo state change
+  // Manejar cambio de estado esCombo
   const handleComboChange = (checked: boolean) => {
     setFormData(prev => ({
       ...prev,
       esCombo: checked,
-      // If not combo, empty the product list
+      // Si no es combo, vaciar la lista de productos
       itemsCombo: checked ? prev.itemsCombo : []
     }));
   };
 
-  // Add item to combo - Optimized with validations and checks
+  // Agregar item a combo - Optimizado con validaciones y comprobaciones
   const handleAddComboItem = () => {
-    if (!selectedComboItem || selectedComboItem === "none" || comboItemQuantity <= 0) {
-      addNotification('Select a product and valid quantity', 'warning');
+    if (!itemComboSeleccionado || itemComboSeleccionado === "none" || cantidadItemCombo <= 0) {
+      addNotification('Seleccione un producto y cantidad válida', 'warning');
       return;
     }
 
-    // Check if product is already in the combo
-    const productExists = formData.itemsCombo?.some(
-      item => item.productoId === selectedComboItem
+    // Verificar si el producto ya está en el combo
+    const productoExiste = formData.itemsCombo?.some(
+      item => item.productoId === itemComboSeleccionado
     );
 
-    if (productExists) {
-      addNotification('This product is already in the combo', 'warning');
+    if (productoExiste) {
+      addNotification('Este producto ya está en el combo', 'warning');
       return;
     }
 
-    // Check that product is not a combo (combos inside combos not allowed)
-    const selectedProduct = products.find(p => p._id === selectedComboItem);
-    if (!selectedProduct) {
-      addNotification('Product not found', 'error');
+    // Verificar que el producto no sea un combo (no se permiten combos dentro de combos)
+    const productoSeleccionado = productos.find(p => p._id === itemComboSeleccionado);
+    if (!productoSeleccionado) {
+      addNotification('Producto no encontrado', 'error');
       return;
     }
     
-    if (selectedProduct.esCombo) {
-      addNotification('Cannot add combos inside combos', 'error');
+    if (productoSeleccionado.esCombo) {
+      addNotification('No se pueden agregar combos dentro de combos', 'error');
       return;
     }
 
-    // Validate available stock
-    if (selectedProduct.stock < comboItemQuantity) {
-      addNotification(`Only ${selectedProduct.stock} units available for this product`, 'warning');
-      // Don't block action, just warn
+    // Validar stock disponible
+    if (productoSeleccionado.stock < cantidadItemCombo) {
+      addNotification(`Solo hay ${productoSeleccionado.stock} unidades disponibles para este producto`, 'warning');
+      // No bloquear acción, solo avisar
     }
 
-    // Add to combo
+    // Agregar al combo
     setFormData(prev => ({
       ...prev,
       itemsCombo: [
         ...(prev.itemsCombo || []),
         {
-          productoId: selectedComboItem,
-          cantidad: comboItemQuantity
+          productoId: itemComboSeleccionado,
+          cantidad: cantidadItemCombo
         }
       ]
     }));
 
-    // Reset selection
-    setSelectedComboItem('');
-    setComboItemQuantity(1);
-    setShowComboModal(false);
+    // Resetear selección
+    setItemComboSeleccionado('');
+    setCantidadItemCombo(1);
+    setMostrarModalCombo(false);
   };
 
-  // Remove item from combo
+  // Eliminar item del combo
   const handleRemoveComboItem = (index: number) => {
-    const updatedItems = [...(formData.itemsCombo || [])];
-    updatedItems.splice(index, 1);
+    const itemsActualizados = [...(formData.itemsCombo || [])];
+    itemsActualizados.splice(index, 1);
     
     setFormData(prev => ({
       ...prev,
-      itemsCombo: updatedItems
+      itemsCombo: itemsActualizados
     }));
   };
 
-  // Function to change page
+  // Función para cambiar página
   const handlePageChange = useCallback((pageNumber: number) => {
-    setCurrentPage(pageNumber);
-    setIsFetching(true);
+    setPaginaActual(pageNumber);
+    setEstaCargando(true);
     
-    // When changing page, scroll to top
+    // Al cambiar de página, hacer scroll hacia arriba
     window.scrollTo({ top: 0, behavior: 'smooth' });
     
-    // Scroll to beginning of list on mobile
-    if (windowWidth < 768 && mobileListRef.current) {
-      mobileListRef.current.scrollIntoView({ behavior: 'smooth' });
+    // Hacer scroll al inicio de la lista en móvil
+    if (anchoVentana < 768 && refListaMobile.current) {
+      refListaMobile.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [windowWidth]);
+  }, [anchoVentana]);
 
-  // Handle image upload with new component
+  // Manejar subida de imagen con nuevo componente
   const handleImageUploaded = (success: boolean, productId?: string) => {
     if (success && productId) {
-      setIsFetching(true);
+      setEstaCargando(true);
       
-      // Update cache directly
+      // Actualizar caché directamente
       queryClient.setQueryData(
-        getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm),
+        getClaveProductosCache(paginaActual, categoriaSeleccionada, terminoBusquedaRetrasado),
         (old: any) => {
           if (!old || !old.items) return old;
           
           return {
             ...old,
-            items: old.items.map((p: ProductExtended) => {
+            items: old.items.map((p: ProductoExtendido) => {
               if (p._id === productId) {
-                // Update product to indicate it now has an image
+                // Actualizar producto para indicar que ahora tiene una imagen
                 return {
                   ...p,
                   hasImage: true
@@ -2186,107 +2064,100 @@ const InventorySection: React.FC = () => {
         }
       );
       
-      // Update local products state to show change immediately
-      setProducts(prevProducts => 
-        prevProducts.map(p => 
+      // Actualizar estado local de productos para mostrar cambio inmediatamente
+      setProductos(prevProductos => 
+        prevProductos.map(p => 
           p._id === productId 
             ? {...p, hasImage: true} 
             : p
         )
       );
       
-      // Invalidate image cache to force a reload
-      imageService.invalidateCache(productId);
-      imageCache.current.delete(productId);
-      imageStatusCache.delete(productId);
+      // Invalidar caché de imagen para forzar recarga
+      cacheEstadoImagen.delete(productId);
       
-      // Force refresh to ensure updated data
+      // Forzar actualización para asegurar datos actualizados
       refetch().then(() => {
-        setIsFetching(false);
+        setEstaCargando(false);
       });
     }
   };
 
-  // Get product name by ID for combos - Improved with additional validation
-  const getProductNameById = (id: string) => {
+  // Obtener nombre de producto por ID para combos - Mejorado con validación adicional
+  const getNombreProductoPorId = (id: string) => {
     if (!id) {
-      console.warn('Invalid product ID in combo:', id);
-      return 'Invalid ID';
+      console.warn('ID de producto inválido en combo:', id);
+      return 'ID inválido';
     }
     
-    // Search by exact ID
-    const product = products.find(p => p._id === id);
-    if (product) {
-      return product.nombre;
+    // Buscar por ID exacto
+    const producto = productos.find(p => p._id === id);
+    if (producto) {
+      return producto.nombre;
     }
     
-    // If not found, try searching regardless of format (to handle possible data type problems)
-    const productByStringComp = products.find(p => 
+    // Si no se encuentra, intentar buscar independientemente del formato (para manejar posibles problemas de tipo de dato)
+    const productoPorComparacionString = productos.find(p => 
       p._id.toString() === id.toString()
     );
     
-    if (productByStringComp) {
-      return productByStringComp.nombre;
+    if (productoPorComparacionString) {
+      return productoPorComparacionString.nombre;
     }
     
-    console.warn('Product not found for ID:', id);
-    return 'Product not found';
+    console.warn('Producto no encontrado para ID:', id);
+    return 'Producto no encontrado';
   };
 
-  // Calculate total combo price
-  const calculateComboTotal = useCallback(() => {
+  // Calcular precio total del combo
+  const calcularTotalCombo = useCallback(() => {
     if (!formData.itemsCombo || formData.itemsCombo.length === 0) return 0;
     
     return formData.itemsCombo.reduce((total, item) => {
-      if (!Array.isArray(products)) return total;
+      if (!Array.isArray(productos)) return total;
       
-      // Handle both if productoId is a string or an object
-      const productId = typeof item.productoId === 'object'
+      // Manejar tanto si productoId es un string o un objeto
+      const productoId = typeof item.productoId === 'object'
         ? item.productoId._id
         : item.productoId;
         
-      const product = products.find(p => p._id === productId);
-      if (!product) return total;
+      const producto = productos.find(p => p._id === productoId);
+      if (!producto) return total;
       
-      return total + (product.precio * item.cantidad);
+      return total + (producto.precio * item.cantidad);
     }, 0);
-  }, [formData.itemsCombo, products]);
+  }, [formData.itemsCombo, productos]);
 
-  // Show detailed information about pagination
-  const indexOfLastProduct = currentPage * itemsPerPage;
-  const indexOfFirstProduct = indexOfLastProduct - itemsPerPage;
-  const showingFromTo = totalItems > 0 
-    ? `${indexOfFirstProduct + 1}-${Math.min(indexOfLastProduct, totalItems)} of ${totalItems}`
-    : '0 of 0';
+  // Mostrar información detallada sobre paginación
+  const indexUltimoProducto = paginaActual * itemsPorPagina;
+  const indexPrimerProducto = indexUltimoProducto - itemsPorPagina;
+  const mostrandoDesdeHasta = totalItems > 0 
+    ? `${indexPrimerProducto + 1}-${Math.min(indexUltimoProducto, totalItems)} de ${totalItems}`
+    : '0 de 0';
 
-  // Get non-combo products for selector - Optimized with useMemo
-  const nonComboProducts = useMemo(() => {
-    if (!Array.isArray(productOptions)) return [];
-    return productOptions.filter(p => !p.esCombo);
-  }, [productOptions]);
+  // Obtener productos no-combo para selector - Optimizado con useMemo
+  const productosNoCombo = useMemo(() => {
+    if (!Array.isArray(opcionesProductos)) return [];
+    return opcionesProductos.filter(p => !p.esCombo);
+  }, [opcionesProductos]);
 
-  // Handler for visible items changed - This improves performance by preloading only what's visible
-  const handleVisibleItemsChanged = useCallback((visibleItems: ProductExtended[]) => {
-    if (visibleItems && visibleItems.length > 0) {
-      try {
-        // Usar método de precarga directo sin verificaciones CORS previas
-        const visibleIds = visibleItems.map(p => p._id);
-        imageServiceExt.preloadImages(visibleIds);
-      } catch (error) {
-        console.warn("Error al precargar imágenes:", error);
-      }
+  // Controlador para cambio de elementos visibles - Mejora rendimiento precargando solo lo visible
+  const handleElementosVisiblesChanged = useCallback((elementosVisibles: ProductoExtendido[]) => {
+    if (elementosVisibles && elementosVisibles.length > 0) {
+      // Con el nuevo sistema optimizado, no necesitamos hacer nada extra aquí
+      // ya que las imágenes se cargan automáticamente cuando entran en el viewport
     }
   }, []);
   
 
-  // When selected category changes, update UI
+  // Cuando cambia la categoría seleccionada, actualizar UI
   useEffect(() => {
-    setIsFetching(true);
-  }, [selectedCategory]);
+    setEstaCargando(true);
+  }, [categoriaSeleccionada]);
 
   return (
     <div className="p-4 md:p-6 space-y-6 bg-[#DFEFE6]/30">
-      {/* Alerts */}
+      {/* Alertas */}
       {error && (
         <Alert className="bg-red-50 border border-red-200 text-red-800 rounded-lg">
           <AlertCircle className="h-4 w-4 text-red-600" />
@@ -2294,31 +2165,31 @@ const InventorySection: React.FC = () => {
         </Alert>
       )}
       
-      {successMessage && (
+      {mensajeExito && (
         <Alert className="bg-[#DFEFE6] border border-[#91BEAD] text-[#29696B] rounded-lg">
           <CheckCircle className="h-4 w-4 text-[#29696B]" />
-          <AlertDescription className="ml-2">{successMessage}</AlertDescription>
+          <AlertDescription className="ml-2">{mensajeExito}</AlertDescription>
         </Alert>
       )}
 
-      {/* Toolbar */}
+      {/* Barra de herramientas */}
       <div className="flex flex-col md:flex-row justify-between items-start gap-4 bg-white rounded-xl shadow-sm p-4 border border-[#91BEAD]/20">
         <div className="w-full md:w-64">
           <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
             <Input
               type="text"
-              placeholder="Search products..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar productos..."
+              value={terminoBusqueda}
+              onChange={(e) => setTerminoBusqueda(e.target.value)}
               className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
             />
           </div>
           
           <Tabs 
             defaultValue="all" 
-            value={selectedCategory}
-            onValueChange={setSelectedCategory}
+            value={categoriaSeleccionada}
+            onValueChange={setCategoriaSeleccionada}
             className="w-full"
           >
             <TabsList className="w-full mb-2 flex flex-wrap h-auto bg-[#DFEFE6]/50">
@@ -2326,21 +2197,21 @@ const InventorySection: React.FC = () => {
                 value="all" 
                 className="flex-1 data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
               >
-                All
+                Todos
               </TabsTrigger>
               <TabsTrigger 
                 value="limpieza" 
                 className="flex-1 data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
-                disabled={userSections === 'mantenimiento'}
+                disabled={seccionesUsuario === 'mantenimiento'}
               >
-                Cleaning
+                Limpieza
               </TabsTrigger>
               <TabsTrigger 
                 value="mantenimiento" 
                 className="flex-1 data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
-                disabled={userSections === 'limpieza'}
+                disabled={seccionesUsuario === 'limpieza'}
               >
-                Maintenance
+                Mantenimiento
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -2350,164 +2221,163 @@ const InventorySection: React.FC = () => {
           <Button 
             onClick={() => {
               resetForm();
-              setShowModal(true);
+              setMostrarModal(true);
             }}
             className="w-full md:w-auto bg-[#29696B] hover:bg-[#29696B]/90 text-white"
-            disabled={userSections !== 'ambos' && selectedCategory !== 'all' && selectedCategory !== userSections}
+            disabled={seccionesUsuario !== 'ambos' && categoriaSeleccionada !== 'all' && categoriaSeleccionada !== seccionesUsuario}
           >
             <Plus className="w-4 h-4 mr-2" />
-            New Product
+            Nuevo Producto
           </Button>
         </div>
       </div>
 
-      {/* Alert for products with low stock */}
-      {!isLoading && lowStockProducts.length > 0 && (
+      {/* Alerta para productos con stock bajo */}
+      {!isLoading && productosStockBajo.length > 0 && (
         <Alert className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg">
           <AlertTriangle className="h-4 w-4 text-yellow-500" />
           <AlertDescription className="ml-2">
-            There are {lowStockProducts.length} products with low stock. Please review the inventory.
+            Hay {productosStockBajo.length} productos con stock bajo. Por favor, revise el inventario.
           </AlertDescription>
         </Alert>
       )}
 
-      {/* Message when there are no products */}
-      {!isLoading && products.length === 0 && (
+      {/* Mensaje cuando no hay productos */}
+      {!isLoading && productos.length === 0 && (
         <div className="bg-white rounded-xl shadow-sm p-8 text-center border border-[#91BEAD]/20">
           <div className="inline-flex items-center justify-center w-12 h-12 bg-[#DFEFE6] rounded-full mb-4">
-            {isFetching ? (
+            {estaCargando ? (
               <Loader2 className="w-6 h-6 text-[#29696B] animate-spin" />
             ) : (
               <Search className="w-6 h-6 text-[#29696B]" />
             )}
           </div>
           <p className="text-[#7AA79C]">
-            {isFetching 
-              ? 'Loading products...'
-              : 'No products found matching the search'
+            {estaCargando 
+              ? 'Cargando productos...'
+              : 'No se encontraron productos que coincidan con la búsqueda'
             }
           </p>
         </div>
       )}
 
-      {/* Results counter with detailed information */}
-      {!isLoading && products.length > 0 && (
+      {/* Contador de resultados con información detallada */}
+      {!isLoading && productos.length > 0 && (
         <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm text-[#29696B] flex flex-col sm:flex-row sm:justify-between items-center">
           <span>
-            Total: {totalItems} {totalItems === 1 ? 'product' : 'products'}
+            Total: {totalItems} {totalItems === 1 ? 'producto' : 'productos'}
           </span>
           <span className="text-[#29696B] font-medium">
-            Showing: {showingFromTo}
+          Mostrando: {mostrandoDesdeHasta}
           </span>
         </div>
       )}
 
-      {/* Loading state */}
+      {/* Estado de carga */}
       {isLoading && (
         <div className="bg-white rounded-xl shadow-sm p-8 text-center border border-[#91BEAD]/20">
           <div className="inline-flex items-center justify-center w-12 h-12 bg-[#DFEFE6] rounded-full mb-4">
             <Loader2 className="w-6 h-6 text-[#29696B] animate-spin" />
           </div>
-          <p className="text-[#7AA79C]">Loading products...</p>
+          <p className="text-[#7AA79C]">Cargando productos...</p>
         </div>
       )}
 
-      {/* Table for medium and large screens - VIRTUALIZED IMPLEMENTATION */}
-      <div ref={tableRef} className="hidden md:block bg-white rounded-xl shadow-sm overflow-hidden border border-[#91BEAD]/20 h-[70vh]">
-        {!isLoading && products.length > 0 && (
+      {/* Tabla para pantallas medianas y grandes - IMPLEMENTACIÓN VIRTUALIZADA */}
+      <div ref={refTabla} className="hidden md:block bg-white rounded-xl shadow-sm overflow-hidden border border-[#91BEAD]/20 h-[70vh]">
+        {!isLoading && productos.length > 0 && (
           <div className="overflow-auto h-full">
-            <VirtualizedProductTable
-              products={products}
+            <TablaProductosVirtualizada
+              productos={productos}
               onEdit={handleEdit}
-              onDelete={confirmDelete}
-              userSections={userSections}
-              tableContainerRef={tableRef}
-              onVisibleItemsChanged={handleVisibleItemsChanged}
+              onDelete={confirmarEliminar}
+              userSections={seccionesUsuario}
+              tableContainerRef={refTabla}
+              onVisibleItemsChanged={handleElementosVisiblesChanged}
             />
           </div>
         )}
         
-        {/* Pagination for table */}
-        {!isLoading && totalPages > 1 && (
+        {/* Paginación para tabla */}
+        {!isLoading && totalPaginas > 1 && (
           <div className="py-4 border-t border-[#91BEAD]/20">
             <Pagination
               totalItems={totalItems}
-              itemsPerPage={itemsPerPage}
-              currentPage={currentPage}
+              itemsPerPage={itemsPorPagina}
+              currentPage={paginaActual}
               onPageChange={handlePageChange}
-              className="px-6"
             />
           </div>
         )}
       </div>
 
-      {/* Card View for mobile devices - VIRTUALIZED IMPLEMENTATION */}
-      <div ref={mobileListRef} id="mobile-products-list" className="md:hidden">
-        {/* Pagination visible at top for mobile */}
-        {!isLoading && totalPages > 1 && (
+      {/* Vista de tarjetas para dispositivos móviles - IMPLEMENTACIÓN VIRTUALIZADA */}
+      <div ref={refListaMobile} id="lista-productos-mobile" className="md:hidden">
+        {/* Paginación visible en la parte superior para móvil */}
+        {!isLoading && totalPaginas > 1 && (
           <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20">
             <Pagination
               totalItems={totalItems}
-              itemsPerPage={itemsPerPage}
-              currentPage={currentPage}
+              itemsPerPage={itemsPorPagina}
+              currentPage={paginaActual}
               onPageChange={handlePageChange}
             />
           </div>
         )}
         
-        {!isLoading && products.length > 0 && (
-          <MobileProductList
-            products={products}
+        {!isLoading && productos.length > 0 && (
+          <ListaProductosMobile
+            productos={productos}
             onEdit={handleEdit}
-            onDelete={confirmDelete}
-            userSections={userSections}
-            onVisibleItemsChanged={handleVisibleItemsChanged}
+            onDelete={confirmarEliminar}
+            userSections={seccionesUsuario}
+            onVisibleItemsChanged={handleElementosVisiblesChanged}
           />
         )}
         
-        {/* Loading indicator on mobile */}
-        {isFetching && (
+        {/* Indicador de carga en móvil */}
+        {estaCargando && (
           <div className="flex justify-center items-center py-4">
             <Loader2 className="w-5 h-5 text-[#29696B] animate-spin mr-2" />
-            <span className="text-[#29696B] text-sm">Updating...</span>
+            <span className="text-[#29696B] text-sm">Actualizando...</span>
           </div>
         )}
         
-        {/* Message showing current page and total */}
-        {!isLoading && totalPages > 1 && (
+        {/* Mensaje que muestra página actual y total */}
+        {!isLoading && totalPaginas > 1 && (
           <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm">
             <span className="text-[#29696B] font-medium">
-              Page {currentPage} of {totalPages}
+              Página {paginaActual} de {totalPaginas}
             </span>
           </div>
         )}
         
-        {/* Duplicated pagination at end of list for better visibility */}
-        {!isLoading && totalPages > 1 && (
+        {/* Paginación duplicada al final de la lista para mejor visibilidad */}
+        {!isLoading && totalPaginas > 1 && (
           <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20 mt-2">
             <Pagination
               totalItems={totalItems}
-              itemsPerPage={itemsPerPage}
-              currentPage={currentPage}
+              itemsPerPage={itemsPorPagina}
+              currentPage={paginaActual}
               onPageChange={handlePageChange}
             />
           </div>
         )}
       </div>
 
-      {/* Product Modal */}
-      <Dialog open={showModal} onOpenChange={setShowModal}>
+      {/* Modal de Producto */}
+      <Dialog open={mostrarModal} onOpenChange={setMostrarModal}>
         <DialogContent className="sm:max-w-md max-h-[90vh] overflow-auto bg-white border border-[#91BEAD]/20">
           <DialogHeader className="sticky top-0 bg-white pt-4 pb-2 z-10">
             <DialogTitle className="text-[#29696B]">
-              {editingProduct ? 'Edit Product' : 'New Product'}
+              {productoEditando ? 'Editar Producto' : 'Nuevo Producto'}
             </DialogTitle>
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4 py-2">
             <div className="grid gap-3">
               <div>
-                <Label htmlFor="nombre" className="text-sm text-[#29696B]">Name</Label>
+                <Label htmlFor="nombre" className="text-sm text-[#29696B]">Nombre</Label>
                 <Input
                   id="nombre"
                   value={formData.nombre}
@@ -2518,7 +2388,7 @@ const InventorySection: React.FC = () => {
               </div>
 
               <div>
-                <Label htmlFor="descripcion" className="text-sm text-[#29696B]">Description</Label>
+                <Label htmlFor="descripcion" className="text-sm text-[#29696B]">Descripción</Label>
                 <Textarea
                   id="descripcion"
                   value={formData.descripcion}
@@ -2530,33 +2400,33 @@ const InventorySection: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label htmlFor="categoria" className="text-sm text-[#29696B]">Category</Label>
+                  <Label htmlFor="categoria" className="text-sm text-[#29696B]">Categoría</Label>
                   <Select
                     value={formData.categoria}
                     onValueChange={(value: 'limpieza' | 'mantenimiento') => handleCategoryChange(value)}
                     disabled={
-                      // Disable if user doesn't have permission for this category
-                      userSections !== 'ambos' && formData.categoria !== userSections
+                      // Deshabilitar si el usuario no tiene permiso para esta categoría
+                      seccionesUsuario !== 'ambos' && formData.categoria !== seccionesUsuario
                     }
                   >
                     <SelectTrigger id="categoria" className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
-                      <SelectValue placeholder="Select category" />
+                      <SelectValue placeholder="Seleccionar categoría" />
                     </SelectTrigger>
                     <SelectContent className="border-[#91BEAD]">
-                    <SelectItem value="limpieza" disabled={userSections === 'mantenimiento'}>Cleaning</SelectItem>
-                      <SelectItem value="mantenimiento" disabled={userSections === 'limpieza'}>Maintenance</SelectItem>
+                      <SelectItem value="limpieza" disabled={seccionesUsuario === 'mantenimiento'}>Limpieza</SelectItem>
+                      <SelectItem value="mantenimiento" disabled={seccionesUsuario === 'limpieza'}>Mantenimiento</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div>
-                  <Label htmlFor="subCategoria" className="text-sm text-[#29696B]">Subcategory</Label>
+                  <Label htmlFor="subCategoria" className="text-sm text-[#29696B]">Subcategoría</Label>
                   <Select
                     value={formData.subCategoria}
                     onValueChange={(value) => setFormData({ ...formData, subCategoria: value })}
                   >
                     <SelectTrigger id="subCategoria" className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
-                      <SelectValue placeholder="Select subcategory" />
+                      <SelectValue placeholder="Seleccionar subcategoría" />
                     </SelectTrigger>
                     <SelectContent className="border-[#91BEAD]">
                       {subCategorias[formData.categoria]?.map((sub) => (
@@ -2571,7 +2441,7 @@ const InventorySection: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label htmlFor="precio" className="text-sm text-[#29696B]">Price</Label>
+                  <Label htmlFor="precio" className="text-sm text-[#29696B]">Precio</Label>
                   <Input
                     id="precio"
                     type="number"
@@ -2587,7 +2457,7 @@ const InventorySection: React.FC = () => {
 
                 <div>
                   <Label htmlFor="stock" className="text-sm text-[#29696B]">Stock</Label>
-                  <ProductStockInput
+                  <EntradaStockProducto
                     id="stock"
                     value={formData.stock}
                     onChange={(value) => setFormData({ ...formData, stock: value })}
@@ -2599,7 +2469,7 @@ const InventorySection: React.FC = () => {
               </div>
 
               <div>
-                <Label htmlFor="proovedorInfo" className="text-sm text-[#29696B]">Supplier Information</Label>
+                <Label htmlFor="proovedorInfo" className="text-sm text-[#29696B]">Información del Proveedor</Label>
                 <Input
                   id="proovedorInfo"
                   value={formData.proovedorInfo}
@@ -2608,29 +2478,29 @@ const InventorySection: React.FC = () => {
                 />
               </div>
               
-              {/* Switch for combos */}
+              {/* Switch para combos */}
               <div className="flex items-center space-x-2 pt-2">
                 <Switch
                   id="isCombo"
                   checked={formData.esCombo}
                   onCheckedChange={handleComboChange}
                 />
-                <Label htmlFor="isCombo" className="text-sm text-[#29696B]">Is this a combo?</Label>
+                <Label htmlFor="isCombo" className="text-sm text-[#29696B]">¿Es un combo?</Label>
               </div>
               
-              {/* Combo products section */}
+              {/* Sección de productos de combo */}
               {formData.esCombo && (
                 <div className="space-y-3 p-3 border border-[#91BEAD]/30 rounded-lg bg-[#DFEFE6]/10">
                   <div className="flex justify-between items-center">
-                    <Label className="text-sm text-[#29696B] font-medium">Products in combo</Label>
+                    <Label className="text-sm text-[#29696B] font-medium">Productos en el combo</Label>
                     <Button
                       type="button"
                       size="sm"
-                      onClick={() => setShowComboModal(true)}
+                      onClick={() => setMostrarModalCombo(true)}
                       className="bg-[#29696B] hover:bg-[#29696B]/90 text-white text-xs"
                     >
                       <Plus className="w-3 h-3 mr-1" />
-                      Add
+                      Agregar
                     </Button>
                   </div>
                   
@@ -2639,7 +2509,7 @@ const InventorySection: React.FC = () => {
                       {formData.itemsCombo.map((item, index) => (
                         <div key={index} className="flex justify-between items-center p-2 bg-white rounded border border-[#91BEAD]/20">
                           <div className="text-sm">
-                            <span className="font-medium text-[#29696B]">{getProductNameById(item.productoId)}</span>
+                            <span className="font-medium text-[#29696B]">{getNombreProductoPorId(item.productoId)}</span>
                             <span className="text-[#7AA79C] ml-2">x{item.cantidad}</span>
                           </div>
                           <Button
@@ -2655,44 +2525,44 @@ const InventorySection: React.FC = () => {
                       ))}
                       
                       <div className="mt-2 pt-2 border-t border-[#91BEAD]/20 flex justify-between items-center">
-                        <span className="text-sm text-[#7AA79C]">Calculated total:</span>
-                        <span className="font-medium text-[#29696B]">${calculateComboTotal().toFixed(2)}</span>
+                        <span className="text-sm text-[#7AA79C]">Total calculado:</span>
+                        <span className="font-medium text-[#29696B]">${calcularTotalCombo().toFixed(2)}</span>
                       </div>
                     </div>
                   ) : (
                     <div className="text-center py-3 text-sm text-[#7AA79C] bg-[#DFEFE6]/20 rounded">
-                      No products in combo
+                      No hay productos en el combo
                     </div>
                   )}
                   
                   <div className="text-xs text-amber-600">
-                    Remember that the combo price can be different from the calculated total.
+                    Recuerde que el precio del combo puede ser diferente del total calculado.
                   </div>
                 </div>
               )}
 
               <div>
-                <Label className="text-sm text-[#29696B] block mb-2">Product Image</Label>
+                <Label className="text-sm text-[#29696B] block mb-2">Imagen del Producto</Label>
                 
-                {/* Show image upload component when editing */}
-                {editingProduct ? (
+                {/* Mostrar componente de carga de imagen cuando se está editando */}
+                {productoEditando ? (
                   <div className="mt-2">
                     {formData.imagenPreview ? (
                       <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
                         <img 
                           src={formData.imagenPreview} 
-                          alt="Preview" 
+                          alt="Vista previa" 
                           className="w-full h-full object-contain" 
                         />
                         <Button
                           type="button"
                           variant="destructive"
                           size="sm"
-                          onClick={() => confirmDeleteImage(editingProduct._id)}
+                          onClick={() => confirmarEliminarImagen(productoEditando._id)}
                           className="absolute top-2 right-2 h-8 w-8 p-0 bg-red-500 hover:bg-red-600"
-                          disabled={deleteImageMutation.isLoading}
+                          disabled={eliminarImagenMutation.isLoading}
                         >
-                          {deleteImageMutation.isLoading ? 
+                          {eliminarImagenMutation.isLoading ? 
                             <Loader2 className="h-4 w-4 animate-spin" /> : 
                             <X className="h-4 w-4" />
                           }
@@ -2700,20 +2570,20 @@ const InventorySection: React.FC = () => {
                       </div>
                     ) : (
                       <ImageUpload 
-                        productId={editingProduct._id}
+                        productId={productoEditando._id}
                         useBase64={false}
-                        onImageUploaded={(success) => handleImageUploaded(success, editingProduct._id)}
+                        onImageUploaded={(success) => handleImageUploaded(success, productoEditando._id)}
                       />
                     )}
                   </div>
                 ) : (
-                  // For new products, keep original UI
+                  // Para productos nuevos, mantener UI original
                   <div className="mt-1 flex flex-col space-y-2">
                     {formData.imagenPreview ? (
                       <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
                         <img 
                           src={formData.imagenPreview} 
-                          alt="Preview" 
+                          alt="Vista previa" 
                           className="w-full h-full object-contain" 
                         />
                         <Button
@@ -2732,183 +2602,183 @@ const InventorySection: React.FC = () => {
                           <div className="flex flex-col items-center justify-center pt-3 pb-4">
                             <ImageIcon className="w-8 h-8 text-[#7AA79C] mb-1" />
                             <p className="text-xs text-[#7AA79C]">
-                              Click to upload an image
+                              Haga clic para subir una imagen
                             </p>
                             <p className="text-xs text-[#7AA79C]">
-                              Maximum 5MB
+                              Máximo 5MB
                             </p>
                           </div>
                           <input 
-                            ref={fileInputRef}
+                            ref={refInputArchivo}
                             type="file" 
                             accept="image/*" 
                             className="hidden" 
                             onChange={handleImageChange}
-                        />
-                      </label>
-                    </div>
-                  )}
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <DialogFooter className="sticky bottom-0 bg-white pt-2 pb-4 z-10 gap-2 mt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setMostrarModal(false);
+                  resetForm();
+                }}
+                className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
+                disabled={productoMutation.isLoading || cargandoImagen}
+              >
+                Cancelar
+              </Button>
+              <Button 
+                type="submit"
+                className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
+                disabled={productoMutation.isLoading || cargandoImagen}
+              >
+                {productoMutation.isLoading || cargandoImagen ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {cargandoImagen ? 'Procesando imagen...' : 'Guardando...'}
+                  </>
+                ) : (
+                  productoEditando ? 'Guardar Cambios' : 'Crear Producto'
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Modal para agregar producto al combo */}
+      <Dialog open={mostrarModalCombo} onOpenChange={setMostrarModalCombo}>
+        <DialogContent className="sm:max-w-md bg-white border border-[#91BEAD]/20">
+          <DialogHeader>
+            <DialogTitle className="text-[#29696B]">Agregar Producto al Combo</DialogTitle>
+          </DialogHeader>
+          
+          <div className="py-4 space-y-4">
+            <div>
+              <Label htmlFor="comboItem" className="text-sm text-[#29696B]">Producto</Label>
+              <Select 
+                value={itemComboSeleccionado}
+                onValueChange={setItemComboSeleccionado}
+              >
+                <SelectTrigger id="comboItem" className="border-[#91BEAD] focus:ring-[#29696B]/20">
+                  <SelectValue placeholder="Seleccionar producto" />
+                </SelectTrigger>
+                <SelectContent>
+                  {/* Filtramos para excluir combos y también productos ya añadidos */}
+                  {productos
+                    .filter(p => !p.esCombo) // Excluir combos
+                    .filter(p => !formData.itemsCombo?.some(item => 
+                      item.productoId.toString() === p._id.toString()
+                    )) // Excluir productos ya añadidos
+                    .map(producto => (
+                    <SelectItem key={producto._id} value={producto._id}>
+                      {producto.nombre} - ${producto.precio.toFixed(2)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              {/* Contador de disponibilidad */}
+              <div className="mt-1 text-xs text-[#7AA79C]">
+                {productos.filter(p => !p.esCombo).filter(p => !formData.itemsCombo?.some(item => 
+                  item.productoId.toString() === p._id.toString()
+                )).length} productos disponibles para agregar
+              </div>
+            </div>
+            
+            <div>
+              <Label htmlFor="comboQuantity" className="text-sm text-[#29696B]">Cantidad</Label>
+              <Input
+                id="comboQuantity"
+                type="number"
+                min="1"
+                value={cantidadItemCombo}
+                onChange={(e) => setCantidadItemCombo(parseInt(e.target.value) || 1)}
+                className="border-[#91BEAD] focus:ring-[#29696B]/20 focus:border-[#29696B]"
+              />
+              
+              {/* Mostrar información sobre stock disponible */}
+              {itemComboSeleccionado && (
+                <div className="mt-2 text-xs">
+                  {(() => {
+                    const productoSeleccionado = productos.find(p => p._id === itemComboSeleccionado);
+                    if (!productoSeleccionado) return null;
+                    
+                    return (
+                      <div className={`${
+                        productoSeleccionado.stock < cantidadItemCombo 
+                          ? 'text-amber-600' 
+                          : 'text-[#7AA79C]'
+                      }`}>
+                        Stock disponible: {productoSeleccionado.stock} unidades
+                        {productoSeleccionado.stock < cantidadItemCombo && (
+                          <div className="text-amber-600 mt-1">
+                            ¡Atención! La cantidad seleccionada supera el stock disponible.
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>
           </div>
-
-          <DialogFooter className="sticky bottom-0 bg-white pt-2 pb-4 z-10 gap-2 mt-4">
+          
+          <DialogFooter>
             <Button
               type="button"
               variant="outline"
-              onClick={() => {
-                setShowModal(false);
-                resetForm();
-              }}
+              onClick={() => setMostrarModalCombo(false)}
               className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
-              disabled={productMutation.isLoading || imageLoading}
             >
               Cancelar
             </Button>
-            <Button 
-              type="submit"
+            <Button
+              type="button"
+              onClick={handleAddComboItem}
               className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
-              disabled={productMutation.isLoading || imageLoading}
+              disabled={!itemComboSeleccionado || cantidadItemCombo <= 0}
             >
-              {productMutation.isLoading || imageLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {imageLoading ? 'Procesando imagen...' : 'Guardando...'}
-                </>
-              ) : (
-                editingProduct ? 'Guardar Cambios' : 'Crear Producto'
-              )}
+              Agregar al Combo
             </Button>
           </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-    
-    {/* Modal para agregar producto al combo */}
-    <Dialog open={showComboModal} onOpenChange={setShowComboModal}>
-      <DialogContent className="sm:max-w-md bg-white border border-[#91BEAD]/20">
-        <DialogHeader>
-          <DialogTitle className="text-[#29696B]">Agregar Producto al Combo</DialogTitle>
-        </DialogHeader>
-        
-        <div className="py-4 space-y-4">
-          <div>
-            <Label htmlFor="comboItem" className="text-sm text-[#29696B]">Producto</Label>
-            <Select 
-              value={selectedComboItem}
-              onValueChange={setSelectedComboItem}
-            >
-              <SelectTrigger id="comboItem" className="border-[#91BEAD] focus:ring-[#29696B]/20">
-                <SelectValue placeholder="Seleccionar producto" />
-              </SelectTrigger>
-              <SelectContent>
-                {/* Filtramos para excluir combos y también productos ya añadidos */}
-                {products
-                  .filter(p => !p.esCombo) // Excluir combos
-                  .filter(p => !formData.itemsCombo?.some(item => 
-                    item.productoId.toString() === p._id.toString()
-                  )) // Excluir productos ya añadidos
-                  .map(product => (
-                  <SelectItem key={product._id} value={product._id}>
-                    {product.nombre} - ${product.precio.toFixed(2)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            
-            {/* Contador de disponibilidad */}
-            <div className="mt-1 text-xs text-[#7AA79C]">
-              {products.filter(p => !p.esCombo).filter(p => !formData.itemsCombo?.some(item => 
-                item.productoId.toString() === p._id.toString()
-              )).length} productos disponibles para agregar
-            </div>
-          </div>
-          
-          <div>
-            <Label htmlFor="comboQuantity" className="text-sm text-[#29696B]">Cantidad</Label>
-            <Input
-              id="comboQuantity"
-              type="number"
-              min="1"
-              value={comboItemQuantity}
-              onChange={(e) => setComboItemQuantity(parseInt(e.target.value) || 1)}
-              className="border-[#91BEAD] focus:ring-[#29696B]/20 focus:border-[#29696B]"
-            />
-            
-            {/* Mostrar información sobre stock disponible */}
-            {selectedComboItem && (
-              <div className="mt-2 text-xs">
-                {(() => {
-                  const selectedProduct = products.find(p => p._id === selectedComboItem);
-                  if (!selectedProduct) return null;
-                  
-                  return (
-                    <div className={`${
-                      selectedProduct.stock < comboItemQuantity 
-                        ? 'text-amber-600' 
-                        : 'text-[#7AA79C]'
-                    }`}>
-                      Stock disponible: {selectedProduct.stock} unidades
-                      {selectedProduct.stock < comboItemQuantity && (
-                        <div className="text-amber-600 mt-1">
-                          ¡Atención! La cantidad seleccionada supera el stock disponible.
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
-          </div>
-        </div>
-        
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setShowComboModal(false)}
-            className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
-          >
-            Cancelar
-          </Button>
-          <Button
-            type="button"
-            onClick={handleAddComboItem}
-            className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
-            disabled={!selectedComboItem || comboItemQuantity <= 0}
-          >
-            Agregar al Combo
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
 
-    {/* Diálogo de confirmación de eliminación */}
-    <ConfirmationDialog
-      open={deleteDialogOpen}
-      onOpenChange={setDeleteDialogOpen}
-      title="Eliminar producto"
-      description="¿Está seguro de que desea eliminar este producto? Esta acción no se puede deshacer."
-      confirmText="Eliminar"
-      cancelText="Cancelar" 
-      onConfirm={() => productToDelete && handleDelete(productToDelete)}
-      variant="destructive"
-    />
+      {/* Diálogo de confirmación de eliminación */}
+      <ConfirmationDialog
+        open={dialogoEliminarAbierto}
+        onOpenChange={setDialogoEliminarAbierto}
+        title="Eliminar producto"
+        description="¿Está seguro de que desea eliminar este producto? Esta acción no se puede deshacer."
+        confirmText="Eliminar"
+        cancelText="Cancelar" 
+        onConfirm={() => productoAEliminar && handleDelete(productoAEliminar)}
+        variant="destructive"
+      />
 
-    {/* Diálogo de confirmación de eliminación de imagen */}
-    <ConfirmationDialog
-      open={deleteImageDialogOpen}
-      onOpenChange={setDeleteImageDialogOpen}
-      title="Eliminar imagen"
-      description="¿Está seguro de que desea eliminar la imagen de este producto?"
-      confirmText="Eliminar"
-      cancelText="Cancelar" 
-      onConfirm={() => productToDelete && handleDeleteProductImage(productToDelete)}
-      variant="destructive"
-    />
-  </div>
-);
+      {/* Diálogo de confirmación de eliminación de imagen */}
+      <ConfirmationDialog
+        open={dialogoEliminarImagenAbierto}
+        onOpenChange={setDialogoEliminarImagenAbierto}
+        title="Eliminar imagen"
+        description="¿Está seguro de que desea eliminar la imagen de este producto?"
+        confirmText="Eliminar"
+        cancelText="Cancelar" 
+        onConfirm={() => productoAEliminar && handleDeleteProductImage(productoAEliminar)}
+        variant="destructive"
+      />
+    </div>
+  );
 };
 
 export default InventorySection;
