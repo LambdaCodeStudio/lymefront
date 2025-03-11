@@ -10,8 +10,32 @@ class InventoryService extends BaseService<Product> {
   }
 
   // Método para obtener productos con filtros
-  async getProducts(filters?: ProductFilters): Promise<Product[]> {
-    return await api.get<Product[]>('/producto', filters);
+  async getProducts() {
+    try {
+      const response = await api.get('/producto');
+      
+      // Asegurarnos de que siempre devolvamos un array
+      if (Array.isArray(response)) {
+        return response;
+      } else if (response && typeof response === 'object') {
+        // Si es un objeto con propiedad items (paginación)
+        if (Array.isArray(response.items)) {
+          return response.items;
+        }
+        // Si solo tiene datos en otra propiedad
+        for (const key in response) {
+          if (Array.isArray(response[key])) {
+            return response[key];
+          }
+        }
+      }
+      
+      console.error('Formato de respuesta inesperado:', response);
+      return []; // Devolver array vacío en caso de formato desconocido
+    } catch (error) {
+      console.error('Error al obtener productos:', error);
+      throw error;
+    }
   }
 
   // Método para exportar a Excel

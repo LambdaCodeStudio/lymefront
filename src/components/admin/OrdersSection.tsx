@@ -979,39 +979,43 @@ const OrdersSection = () => {
   };
 
   // Prefetch de productos relevantes para los pedidos visibles
-  const prefetchProductsFromOrders = useCallback((ordersData) => {
-    // Si no hay pedidos, no hacer nada
-    if (!Array.isArray(ordersData) || ordersData.length === 0) return;
+ // Prefetch de productos relevantes para los pedidos visibles
+const prefetchProductsFromOrders = useCallback((ordersData) => {
+  // CORRECCIÓN: Verificar que ordersData sea un array
+  if (!Array.isArray(ordersData) || ordersData.length === 0) {
+    console.log('No hay pedidos para prefetch de productos');
+    return;
+  }
+  
+  // Recopilar todos los IDs de productos en los pedidos
+  const productIds = new Set();
+  
+  // Sólo prefetch para los primeros 50 pedidos (para no sobrecargar)
+  const ordersToProcess = ordersData.slice(0, 50);
+  
+  for (const order of ordersToProcess) {
+    if (!order || !Array.isArray(order.productos)) continue;
     
-    // Recopilar todos los IDs de productos en los pedidos
-    const productIds = new Set();
-    
-    // Sólo prefetch para los primeros 50 pedidos (para no sobrecargar)
-    const ordersToProcess = ordersData.slice(0, 50);
-    
-    for (const order of ordersToProcess) {
-      if (Array.isArray(order.productos)) {
-        for (const product of order.productos) {
-          if (!product) continue;
+    for (const product of order.productos) {
+      if (!product) continue;
+      
+      const productId = typeof product.productoId === 'object' && product.productoId 
+        ? product.productoId._id 
+        : typeof product.productoId === 'string'
+          ? product.productoId
+          : null;
           
-          const productId = typeof product.productoId === 'object' && product.productoId 
-            ? product.productoId._id 
-            : typeof product.productoId === 'string'
-              ? product.productoId
-              : null;
-              
-          if (productId) {
-            productIds.add(productId);
-          }
-        }
+      if (productId) {
+        productIds.add(productId);
       }
     }
-    
-    // Quedar a cargar productos que no están en caché ni en productos locales
-    for (const productId of productIds) {
-      queueProductForLoading(productId);
-    }
-  }, [queueProductForLoading]);
+  }
+  
+  // Quedar a cargar productos que no están en caché ni en productos locales
+  for (const productId of productIds) {
+    queueProductForLoading(productId);
+  }
+}, [queueProductForLoading]);
 
   // Obtener detalles de producto por ID - usando inventoryService
   const getProductDetails = useCallback(async (productId) => {
@@ -1215,17 +1219,26 @@ const OrdersSection = () => {
     
     try {
       // Usar inventoryService en lugar de fetch directo
-      const productsList = await inventoryService.getProducts();
+      const productData = await inventoryService.getProducts();
       
       if (!mountedRef.current) return products;
       
+      // CORRECCIÓN: Verificar que productData sea un array válido
+      const productsList = Array.isArray(productData) ? productData : 
+                          (productData && productData.items && Array.isArray(productData.items)) ? 
+                          productData.items : [];
+                          
+      console.log(`Datos de productos recibidos: ${productsList.length} items`);
+      
       // Filtrar productos con stock > 0
-      const availableProducts = productsList.filter(p => p.stock > 0);
+      const availableProducts = productsList.filter(p => p && typeof p === 'object' && p.stock > 0);
       setProducts(availableProducts);
-
+  
       // También añadirlos al caché (aunque estén fuera de stock)
       const productsCache = productsList.reduce((cache, product) => {
-        cache[product._id] = product;
+        if (product && product._id) {
+          cache[product._id] = product;
+        }
         return cache;
       }, {});
       
@@ -1240,7 +1253,7 @@ const OrdersSection = () => {
       
       // Actualizar timestamp de la última carga
       CacheManager.set(CACHE_KEYS.LAST_PRODUCTS_FETCH, Date.now());
-
+  
       console.log(`Productos cargados: ${productsList.length}, con stock > 0: ${availableProducts.length}`);
       
       // Notificación opcional para productos disponibles
@@ -1254,10 +1267,10 @@ const OrdersSection = () => {
       
       // Notificación para error crítico de carga de productos
       if (addNotification) {
-        addNotification('Error al cargar productos. Algunas funcionalidades pueden estar limitadas.', 'error');
+        addNotification(`Error al cargar productos: ${err.message || 'Error desconocido'}`, 'error');
       }
       
-      return products;
+      return [];  // CORRECCIÓN: Devolver array vacío en caso de error
     }
   };
 
@@ -1943,14 +1956,22 @@ const OrdersSection = () => {
   };
 
   // Filtrar pedidos por término de búsqueda - memoizado
-  const filteredOrders = useMemo(() => {
-    return orders.filter(order =>
-      order.servicio.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      String(order.nPedido).includes(searchTerm) ||
-      (order.seccionDelServicio || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+const filteredOrders = useMemo(() => {
+  // CORRECCIÓN: Verificar que orders sea un array
+  if (!Array.isArray(orders)) {
+    console.error('Orders no es un array:', orders);
+    return [];
+  }
+  
+  return orders.filter(order =>
+    order && typeof order === 'object' && (
+      (order.servicio && order.servicio.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (order.nPedido && String(order.nPedido).includes(searchTerm)) ||
+      (order.seccionDelServicio && order.seccionDelServicio.toLowerCase().includes(searchTerm.toLowerCase())) ||
       getUserEmail(order.userId).toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [orders, searchTerm, getUserEmail]);
+    )
+  );
+}, [orders, searchTerm, getUserEmail]);
 
   // Calcular paginación
   const indexOfLastOrder = currentPage * itemsPerPage;
