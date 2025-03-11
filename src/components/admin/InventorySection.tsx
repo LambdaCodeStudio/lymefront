@@ -2200,206 +2200,206 @@ const InventorySection: React.FC = () => {
                 ) : (
                   // Para nuevos productos, mantenemos la UI original
                   <div className="mt-1 flex flex-col space-y-2">
-                    {formData.imagenPreview ? (
-                      <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
-                        <img 
-                          src={formData.imagenPreview} 
-                          alt="Vista previa" 
-                          className="w-full h-full object-contain" 
+                  {formData.imagenPreview ? (
+                    <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
+                      <img 
+                        src={formData.imagenPreview} 
+                        alt="Vista previa" 
+                        className="w-full h-full object-contain" 
+                      />
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={handleRemoveImage}
+                        className="absolute top-2 right-2 h-8 w-8 p-0 bg-red-500 hover:bg-red-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center w-full">
+                      <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#91BEAD]/30 border-dashed rounded-md cursor-pointer bg-[#DFEFE6]/20 hover:bg-[#DFEFE6]/40 transition-colors">
+                        <div className="flex flex-col items-center justify-center pt-3 pb-4">
+                          <ImageIcon className="w-8 h-8 text-[#7AA79C] mb-1" />
+                          <p className="text-xs text-[#7AA79C]">
+                            Haz clic para subir una imagen
+                          </p>
+                          <p className="text-xs text-[#7AA79C]">
+                            Máximo 5MB
+                          </p>
+                        </div>
+                        <input 
+                          ref={fileInputRef}
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={handleImageChange}
                         />
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          onClick={handleRemoveImage}
-                          className="absolute top-2 right-2 h-8 w-8 p-0 bg-red-500 hover:bg-red-600"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-center w-full">
-                        <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#91BEAD]/30 border-dashed rounded-md cursor-pointer bg-[#DFEFE6]/20 hover:bg-[#DFEFE6]/40 transition-colors">
-                          <div className="flex flex-col items-center justify-center pt-3 pb-4">
-                            <ImageIcon className="w-8 h-8 text-[#7AA79C] mb-1" />
-                            <p className="text-xs text-[#7AA79C]">
-                              Haz clic para subir una imagen
-                            </p>
-                            <p className="text-xs text-[#7AA79C]">
-                              Máximo 5MB
-                            </p>
-                          </div>
-                          <input 
-                            ref={fileInputRef}
-                            type="file" 
-                            accept="image/*" 
-                            className="hidden" 
-                            onChange={handleImageChange}
-                          />
-                        </label>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <DialogFooter className="sticky bottom-0 bg-white pt-2 pb-4 z-10 gap-2 mt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setShowModal(false);
-                  resetForm();
-                }}
-                className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
-                disabled={productMutation.isLoading || imageLoading}
-              >
-                Cancelar
-              </Button>
-              <Button 
-                type="submit"
-                className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
-                disabled={productMutation.isLoading || imageLoading}
-              >
-                {productMutation.isLoading || imageLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {imageLoading ? 'Procesando imagen...' : 'Guardando...'}
-                  </>
-                ) : (
-                  editingProduct ? 'Guardar Cambios' : 'Crear Producto'
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-      
-      {/* Modal para agregar producto al combo */}
-      <Dialog open={showComboModal} onOpenChange={setShowComboModal}>
-        <DialogContent className="sm:max-w-md bg-white border border-[#91BEAD]/20">
-          <DialogHeader>
-            <DialogTitle className="text-[#29696B]">Agregar Producto al Combo</DialogTitle>
-          </DialogHeader>
-          
-          <div className="py-4 space-y-4">
-            <div>
-              <Label htmlFor="comboItem" className="text-sm text-[#29696B]">Producto</Label>
-              <Select 
-                value={selectedComboItem}
-                onValueChange={setSelectedComboItem}
-              >
-                <SelectTrigger id="comboItem" className="border-[#91BEAD] focus:ring-[#29696B]/20">
-                  <SelectValue placeholder="Seleccionar producto" />
-                </SelectTrigger>
-                <SelectContent>
-                  {/* Filtramos para excluir combos y también productos ya añadidos */}
-                  {products
-                    .filter(p => !p.esCombo) // Excluir combos
-                    .filter(p => !formData.itemsCombo?.some(item => 
-                      item.productoId.toString() === p._id.toString()
-                    )) // Excluir productos ya añadidos
-                    .map(product => (
-                    <SelectItem key={product._id} value={product._id}>
-                      {product.nombre} - ${product.precio.toFixed(2)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              
-              {/* Contador de disponibilidad */}
-              <div className="mt-1 text-xs text-[#7AA79C]">
-                {products.filter(p => !p.esCombo).filter(p => !formData.itemsCombo?.some(item => 
-                  item.productoId.toString() === p._id.toString()
-                )).length} productos disponibles para agregar
-              </div>
-            </div>
-            
-            <div>
-              <Label htmlFor="comboQuantity" className="text-sm text-[#29696B]">Cantidad</Label>
-              <Input
-                id="comboQuantity"
-                type="number"
-                min="1"
-                value={comboItemQuantity}
-                onChange={(e) => setComboItemQuantity(parseInt(e.target.value) || 1)}
-                className="border-[#91BEAD] focus:ring-[#29696B]/20 focus:border-[#29696B]"
-              />
-              
-              {/* Mostrar información sobre stock disponible */}
-              {selectedComboItem && (
-                <div className="mt-2 text-xs">
-                  {(() => {
-                    const selectedProduct = products.find(p => p._id === selectedComboItem);
-                    if (!selectedProduct) return null;
-                    
-                    return (
-                      <div className={`${
-                        selectedProduct.stock < comboItemQuantity 
-                          ? 'text-amber-600' 
-                          : 'text-[#7AA79C]'
-                      }`}>
-                        Stock disponible: {selectedProduct.stock} unidades
-                        {selectedProduct.stock < comboItemQuantity && (
-                          <div className="text-amber-600 mt-1">
-                            ¡Atención! La cantidad seleccionada supera el stock disponible.
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
+                      </label>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           </div>
-          
-          <DialogFooter>
+
+          <DialogFooter className="sticky bottom-0 bg-white pt-2 pb-4 z-10 gap-2 mt-4">
             <Button
               type="button"
               variant="outline"
-              onClick={() => setShowComboModal(false)}
+              onClick={() => {
+                setShowModal(false);
+                resetForm();
+              }}
               className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
+              disabled={productMutation.isLoading || imageLoading}
             >
               Cancelar
             </Button>
-            <Button
-              type="button"
-              onClick={handleAddComboItem}
+            <Button 
+              type="submit"
               className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
-              disabled={!selectedComboItem || comboItemQuantity <= 0}
+              disabled={productMutation.isLoading || imageLoading}
             >
-              Agregar al Combo
+              {productMutation.isLoading || imageLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {imageLoading ? 'Procesando imagen...' : 'Guardando...'}
+                </>
+              ) : (
+                editingProduct ? 'Guardar Cambios' : 'Crear Producto'
+              )}
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </form>
+      </DialogContent>
+    </Dialog>
+    
+    {/* Modal para agregar producto al combo */}
+    <Dialog open={showComboModal} onOpenChange={setShowComboModal}>
+      <DialogContent className="sm:max-w-md bg-white border border-[#91BEAD]/20">
+        <DialogHeader>
+          <DialogTitle className="text-[#29696B]">Agregar Producto al Combo</DialogTitle>
+        </DialogHeader>
+        
+        <div className="py-4 space-y-4">
+          <div>
+            <Label htmlFor="comboItem" className="text-sm text-[#29696B]">Producto</Label>
+            <Select 
+              value={selectedComboItem}
+              onValueChange={setSelectedComboItem}
+            >
+              <SelectTrigger id="comboItem" className="border-[#91BEAD] focus:ring-[#29696B]/20">
+                <SelectValue placeholder="Seleccionar producto" />
+              </SelectTrigger>
+              <SelectContent>
+                {/* Filtramos para excluir combos y también productos ya añadidos */}
+                {products
+                  .filter(p => !p.esCombo) // Excluir combos
+                  .filter(p => !formData.itemsCombo?.some(item => 
+                    item.productoId.toString() === p._id.toString()
+                  )) // Excluir productos ya añadidos
+                  .map(product => (
+                  <SelectItem key={product._id} value={product._id}>
+                    {product.nombre} - ${product.precio.toFixed(2)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            {/* Contador de disponibilidad */}
+            <div className="mt-1 text-xs text-[#7AA79C]">
+              {products.filter(p => !p.esCombo).filter(p => !formData.itemsCombo?.some(item => 
+                item.productoId.toString() === p._id.toString()
+              )).length} productos disponibles para agregar
+            </div>
+          </div>
+          
+          <div>
+            <Label htmlFor="comboQuantity" className="text-sm text-[#29696B]">Cantidad</Label>
+            <Input
+              id="comboQuantity"
+              type="number"
+              min="1"
+              value={comboItemQuantity}
+              onChange={(e) => setComboItemQuantity(parseInt(e.target.value) || 1)}
+              className="border-[#91BEAD] focus:ring-[#29696B]/20 focus:border-[#29696B]"
+            />
+            
+            {/* Mostrar información sobre stock disponible */}
+            {selectedComboItem && (
+              <div className="mt-2 text-xs">
+                {(() => {
+                  const selectedProduct = products.find(p => p._id === selectedComboItem);
+                  if (!selectedProduct) return null;
+                  
+                  return (
+                    <div className={`${
+                      selectedProduct.stock < comboItemQuantity 
+                        ? 'text-amber-600' 
+                        : 'text-[#7AA79C]'
+                    }`}>
+                      Stock disponible: {selectedProduct.stock} unidades
+                      {selectedProduct.stock < comboItemQuantity && (
+                        <div className="text-amber-600 mt-1">
+                          ¡Atención! La cantidad seleccionada supera el stock disponible.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
+        </div>
+        
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setShowComboModal(false)}
+            className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
+          >
+            Cancelar
+          </Button>
+          <Button
+            type="button"
+            onClick={handleAddComboItem}
+            className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
+            disabled={!selectedComboItem || comboItemQuantity <= 0}
+          >
+            Agregar al Combo
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
-      {/* Diálogo de confirmación de eliminación */}
-      <ConfirmationDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
-        title="Eliminar producto"
-        description="¿Está seguro de que desea eliminar este producto? Esta acción no se puede deshacer."
-        confirmText="Eliminar"
-        cancelText="Cancelar" 
-        onConfirm={() => productToDelete && handleDelete(productToDelete)}
-        variant="destructive"
-      />
+    {/* Diálogo de confirmación de eliminación */}
+    <ConfirmationDialog
+      open={deleteDialogOpen}
+      onOpenChange={setDeleteDialogOpen}
+      title="Eliminar producto"
+      description="¿Está seguro de que desea eliminar este producto? Esta acción no se puede deshacer."
+      confirmText="Eliminar"
+      cancelText="Cancelar" 
+      onConfirm={() => productToDelete && handleDelete(productToDelete)}
+      variant="destructive"
+    />
 
-      {/* Diálogo de confirmación de eliminación de imagen */}
-      <ConfirmationDialog
-        open={deleteImageDialogOpen}
-        onOpenChange={setDeleteImageDialogOpen}
-        title="Eliminar imagen"
-        description="¿Está seguro de que desea eliminar la imagen de este producto?"
-        confirmText="Eliminar"
-        cancelText="Cancelar" 
-        onConfirm={() => productToDelete && handleDeleteProductImage(productToDelete)}
-        variant="destructive"
-      />
-    </div>
-  );
+    {/* Diálogo de confirmación de eliminación de imagen */}
+    <ConfirmationDialog
+      open={deleteImageDialogOpen}
+      onOpenChange={setDeleteImageDialogOpen}
+      title="Eliminar imagen"
+      description="¿Está seguro de que desea eliminar la imagen de este producto?"
+      confirmText="Eliminar"
+      cancelText="Cancelar" 
+      onConfirm={() => productToDelete && handleDeleteProductImage(productToDelete)}
+      variant="destructive"
+    />
+  </div>
+);
 };
 
 export default InventorySection;
