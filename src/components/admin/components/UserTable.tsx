@@ -1,7 +1,7 @@
 /**
  * Componente de tabla para mostrar usuarios en pantallas medianas y grandes
  * Incluye todas las acciones disponibles para administración de usuarios
- * Actualizado para la nueva estructura de roles
+ * Actualizado para la nueva estructura de roles y mejorar visualización de "Creado por"
  */
 import React from 'react';
 import { UserCog, Trash2, CheckCircle, XCircle, Clock, ShieldAlert, Shield } from 'lucide-react';
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AdminUser } from '../services/userService';
+import { rolesDisplayNames } from '../shared/UserRolesConfig';
 
 // Constante con roles para usar en el componente
 const ROLES = {
@@ -17,24 +18,6 @@ const ROLES = {
   SUPERVISOR: 'supervisor',
   OPERARIO: 'operario',
   TEMPORARIO: 'temporario'
-};
-
-// Función auxiliar para renderizar el rol con un formato legible
-const getRoleDisplay = (role: string) => {
-  switch (role) {
-    case ROLES.ADMIN:
-      return 'Administrador';
-    case ROLES.SUPERVISOR_DE_SUPERVISORES:
-      return 'Sup. de Supervisores';
-    case ROLES.SUPERVISOR:
-      return 'Supervisor';
-    case ROLES.OPERARIO:
-      return 'Operario';
-    case ROLES.TEMPORARIO:
-      return 'Temporario';
-    default:
-      return role;
-  }
 };
 
 // Función para verificar si el usuario tiene fecha de expiración
@@ -55,6 +38,24 @@ const canModifyUser = (currentUserRole: string, targetUserRole: string) => {
   
   // Otros roles no pueden modificar usuarios
   return false;
+};
+
+// Función para obtener el nombre del creador de un usuario
+const getCreatorName = (user: AdminUser): string => {
+  if (!user.createdBy) return '-';
+  
+  // Priorizar el nombre completo
+  if (user.createdBy.nombre && user.createdBy.apellido) {
+    return `${user.createdBy.nombre} ${user.createdBy.apellido}`;
+  }
+  
+  // Si no hay nombre completo, usar el nombre de usuario
+  if (user.createdBy.usuario) {
+    return user.createdBy.usuario;
+  }
+  
+  // Como último recurso, usar el ID truncado
+  return `ID: ${user.createdBy._id.substring(0, 8)}`;
 };
 
 interface UserTableProps {
@@ -124,7 +125,7 @@ const UserTable: React.FC<UserTableProps> = ({
                 >
                   {user.role === ROLES.ADMIN && <ShieldAlert className="w-3 h-3 mr-1" />}
                   {user.role === ROLES.SUPERVISOR_DE_SUPERVISORES && <Shield className="w-3 h-3 mr-1" />}
-                  {getRoleDisplay(user.role)}
+                  {rolesDisplayNames[user.role] || user.role}
                 </Badge>
               </td>
               <td className="px-6 py-4">
@@ -158,9 +159,7 @@ const UserTable: React.FC<UserTableProps> = ({
                 )}
               </td>
               <td className="px-6 py-4 text-sm text-gray-500">
-                {user.createdBy ? 
-                  (user.createdBy.email || user.createdBy.usuario || `ID: ${user.createdBy._id.substring(0, 8)}`) 
-                  : '-'}
+                {getCreatorName(user)}
               </td>
               <td className="px-6 py-4 text-right">
                 <div className="flex justify-end space-x-2">

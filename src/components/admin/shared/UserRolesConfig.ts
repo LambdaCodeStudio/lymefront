@@ -1,6 +1,6 @@
 /**
  * Configuración de roles y permisos para el sistema
- * Actualizada con la nueva estructura de roles
+ * Actualizada con la nueva estructura de roles y corregida la disponibilidad
  */
 
 // Constantes de roles
@@ -18,22 +18,33 @@ export interface RoleOption {
   label: string;
 }
 
-// Opciones de roles para la UI
+// Opciones de roles para la UI (formato legible para humanos)
+export const rolesDisplayNames: Record<string, string> = {
+  [ROLES.ADMIN]: 'Administrador',
+  [ROLES.SUPERVISOR_DE_SUPERVISORES]: 'Supervisor de Supervisores',
+  [ROLES.SUPERVISOR]: 'Supervisor',
+  [ROLES.OPERARIO]: 'Operario',
+  [ROLES.TEMPORARIO]: 'Temporario'
+};
+
+// Opciones de roles para la UI por rol del usuario actual
 export const roleOptions: Record<string, RoleOption[]> = {
   // Opciones disponibles para administrador
   [ROLES.ADMIN]: [
-    { value: ROLES.ADMIN, label: 'Administrador' },
-    { value: ROLES.SUPERVISOR_DE_SUPERVISORES, label: 'Supervisor de Supervisores' },
-    { value: ROLES.SUPERVISOR, label: 'Supervisor' },
-    { value: ROLES.OPERARIO, label: 'Operario' },
-    { value: ROLES.TEMPORARIO, label: 'Temporario' }
+    { value: ROLES.ADMIN, label: rolesDisplayNames[ROLES.ADMIN] },
+    { value: ROLES.SUPERVISOR_DE_SUPERVISORES, label: rolesDisplayNames[ROLES.SUPERVISOR_DE_SUPERVISORES] },
+    { value: ROLES.SUPERVISOR, label: rolesDisplayNames[ROLES.SUPERVISOR] },
+    { value: ROLES.OPERARIO, label: rolesDisplayNames[ROLES.OPERARIO] },
+    { value: ROLES.TEMPORARIO, label: rolesDisplayNames[ROLES.TEMPORARIO] }
   ],
+  
   // Opciones disponibles para supervisor de supervisores
   [ROLES.SUPERVISOR_DE_SUPERVISORES]: [
-    { value: ROLES.SUPERVISOR, label: 'Supervisor' },
-    { value: ROLES.OPERARIO, label: 'Operario' },
-    { value: ROLES.TEMPORARIO, label: 'Temporario' }
+    { value: ROLES.SUPERVISOR, label: rolesDisplayNames[ROLES.SUPERVISOR] },
+    { value: ROLES.OPERARIO, label: rolesDisplayNames[ROLES.OPERARIO] },
+    { value: ROLES.TEMPORARIO, label: rolesDisplayNames[ROLES.TEMPORARIO] }
   ],
+  
   // Roles sin permisos de creación
   [ROLES.SUPERVISOR]: [],
   [ROLES.OPERARIO]: [],
@@ -59,6 +70,7 @@ export const canEditRole = (editorRole: string, targetRole: string): boolean => 
 
 // Función para obtener roles disponibles según el rol actual
 export const getAvailableRoles = (currentRole: string): RoleOption[] => {
+  // Asegurar que devolvemos un array válido
   return roleOptions[currentRole] || [];
 };
 
@@ -90,9 +102,11 @@ export const getRoleWeight = (role: string): number => {
   }
 };
 
+// Exportar un objeto con todas las funciones
 export default {
   ROLES,
   roleOptions,
+  rolesDisplayNames,
   canCreateRole,
   canEditRole,
   getAvailableRoles,

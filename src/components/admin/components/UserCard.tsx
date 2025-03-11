@@ -1,7 +1,7 @@
 /**
  * Componente para mostrar tarjetas de usuario en dispositivos móviles
  * Muestra información compacta de usuarios con acciones
- * Actualizado para la nueva estructura de roles
+ * Actualizado para la nueva estructura de roles y mejorar visualización de "Creado por"
  */
 import React from 'react';
 import { UserCog, Trash2, CheckCircle, XCircle, Clock, ShieldAlert, Shield } from 'lucide-react';
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AdminUser } from '../services/userService';
+import { rolesDisplayNames } from '../shared/UserRolesConfig';
 
 // Constante con roles para usar en el componente
 const ROLES = {
@@ -25,24 +26,6 @@ const ROLES = {
   SUPERVISOR: 'supervisor',
   OPERARIO: 'operario',
   TEMPORARIO: 'temporario'
-};
-
-// Función auxiliar para renderizar el rol con un formato legible
-const getRoleDisplay = (role: string) => {
-  switch (role) {
-    case ROLES.ADMIN:
-      return 'Administrador';
-    case ROLES.SUPERVISOR_DE_SUPERVISORES:
-      return 'Sup. de Supervisores';
-    case ROLES.SUPERVISOR:
-      return 'Supervisor';
-    case ROLES.OPERARIO:
-      return 'Operario';
-    case ROLES.TEMPORARIO:
-      return 'Temporario';
-    default:
-      return role;
-  }
 };
 
 // Función para verificar si el usuario tiene fecha de expiración
@@ -63,6 +46,24 @@ const canModifyUser = (currentUserRole: string, targetUserRole: string) => {
   
   // Otros roles no pueden modificar usuarios
   return false;
+};
+
+// Función para obtener el nombre del creador de un usuario
+const getCreatorName = (user: AdminUser): string => {
+  if (!user.createdBy) return '-';
+  
+  // Priorizar el nombre completo
+  if (user.createdBy.nombre && user.createdBy.apellido) {
+    return `${user.createdBy.nombre} ${user.createdBy.apellido}`;
+  }
+  
+  // Si no hay nombre completo, usar el nombre de usuario
+  if (user.createdBy.usuario) {
+    return user.createdBy.usuario;
+  }
+  
+  // Como último recurso, usar el ID truncado
+  return `ID: ${user.createdBy._id.substring(0, 8)}`;
 };
 
 interface UserCardProps {
@@ -134,7 +135,7 @@ const UserCard: React.FC<UserCardProps> = ({
             >
               {user.role === ROLES.ADMIN && <ShieldAlert className="w-3 h-3 mr-1" />}
               {user.role === ROLES.SUPERVISOR_DE_SUPERVISORES && <Shield className="w-3 h-3 mr-1" />}
-              {getRoleDisplay(user.role)}
+              {rolesDisplayNames[user.role] || user.role}
             </Badge>
           </div>
           <div>
@@ -157,7 +158,7 @@ const UserCard: React.FC<UserCardProps> = ({
           {user.createdBy && (
             <div className="col-span-2">
               <span className="text-gray-500">Creado por:</span>
-              <span className="ml-1">{user.createdBy.email || user.createdBy.usuario || user.createdBy._id.substring(0, 8)}</span>
+              <span className="ml-1">{getCreatorName(user)}</span>
             </div>
           )}
         </div>
