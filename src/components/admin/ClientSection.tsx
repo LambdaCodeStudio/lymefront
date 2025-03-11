@@ -1242,7 +1242,7 @@ const ClientsSection: React.FC = () => {
               {/* Agrupar por supervisores */}
               {users.filter(user => user.role === 'supervisor').length > 0 && (
                 <>
-                  <SelectItem value="" disabled className="font-semibold text-[#29696B] cursor-default bg-[#DFEFE6]/30">
+                  <SelectItem value="header-supervisors" disabled className="font-semibold text-[#29696B] cursor-default bg-[#DFEFE6]/30">
                     -- Supervisores --
                   </SelectItem>
                   {users
@@ -1260,7 +1260,7 @@ const ClientsSection: React.FC = () => {
               {/* Agrupar por operarios */}
               {users.filter(user => user.role === 'operario').length > 0 && (
                 <>
-                  <SelectItem value="" disabled className="font-semibold text-[#29696B] cursor-default bg-[#DFEFE6]/30">
+                  <SelectItem value="header-operarios" disabled className="font-semibold text-[#29696B] cursor-default bg-[#DFEFE6]/30">
                     -- Operarios --
                   </SelectItem>
                   {users
@@ -1897,7 +1897,7 @@ const ClientsSection: React.FC = () => {
                       {/* Agrupar por supervisores */}
                       {users.filter(user => user.role === 'supervisor').length > 0 && (
                         <>
-                          <SelectItem value="" disabled className="font-semibold text-[#29696B] cursor-default bg-[#DFEFE6]/30">
+                          <SelectItem value="header-supervisors" disabled className="font-semibold text-[#29696B] cursor-default bg-[#DFEFE6]/30">
                             -- Supervisores --
                           </SelectItem>
                           {users
@@ -1915,7 +1915,7 @@ const ClientsSection: React.FC = () => {
                       {/* Agrupar por operarios */}
                       {users.filter(user => user.role === 'operario').length > 0 && (
                         <>
-                          <SelectItem value="" disabled className="font-semibold text-[#29696B] cursor-default bg-[#DFEFE6]/30">
+                          <SelectItem value="header-operarios" disabled className="font-semibold text-[#29696B] cursor-default bg-[#DFEFE6]/30">
                             -- Operarios --
                           </SelectItem>
                           {users
