@@ -12,6 +12,9 @@ const API_CONFIG = {
 
 // Clase base para el cliente API
 export class ApiClient {
+  getBaseUrl() {
+    throw new Error('Method not implemented.');
+  }
   private client: AxiosInstance;
 
   constructor(config: AxiosRequestConfig = {}) {

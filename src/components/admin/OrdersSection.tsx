@@ -1,11 +1,5 @@
-// OrdersSection.tsx - VERSIÓN OPTIMIZADA
-// Cambios principales implementados:
-// 1. Sistema de caché persistente usando localStorage
-// 2. Carga en lotes de detalles de productos
-// 3. Prefetching inteligente
-// 4. Reducción de solicitudes redundantes
-// 5. Optimización de filtros usando el backend directamente
-
+// OrdersSection.tsx - VERSIÓN COMPLETA CORREGIDA
+// Integrada con servicios existentes
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNotification } from '@/context/NotificationContext';
 import {
@@ -23,8 +17,6 @@ import {
   Check,
   X,
   Eye,
-  ChevronDown,
-  ChevronUp,
   Calendar,
   User,
   DollarSign,
@@ -68,8 +60,13 @@ import {
 } from "@/components/ui/accordion";
 import Pagination from "@/components/ui/pagination";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
-// Importamos la función de actualización del inventario
-import { refreshInventory, getAuthToken } from '@/utils/inventoryUtils';
+
+// Importamos los servicios en lugar de usar fetch directamente
+import { pedidoService } from '@/services/pedidoService';
+import { inventoryService } from '@/services/inventoryService';
+import api from '@/services/api';
+import eventService from '@/services/EventService';
+import { getAuthToken, refreshInventory } from '@/utils/inventoryUtils';
 
 // Tipos
 interface User {
@@ -588,39 +585,39 @@ const OrdersSection = () => {
   const { addNotification } = useNotification();
   
   // Estados
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
-  const [clientSections, setClientSections] = useState<{ [key: string]: Client[] }>({});
-  const [products, setProducts] = useState<Product[]>([]);
-  const [cachedProducts, setCachedProducts] = useState<{ [key: string]: Product }>({});
-  const [users, setUsers] = useState<User[]>([]);
+  const [orders, setOrders] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [clientSections, setClientSections] = useState({});
+  const [products, setProducts] = useState([]);
+  const [cachedProducts, setCachedProducts] = useState({});
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string>('');
+  const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
-  const [orderDetailsOpen, setOrderDetailsOpen] = useState<string | null>(null);
-  const [mobileOrderDetailsOpen, setMobileOrderDetailsOpen] = useState<string | null>(null);
+  const [currentOrder, setCurrentOrder] = useState(null);
+  const [orderDetailsOpen, setOrderDetailsOpen] = useState(null);
+  const [mobileOrderDetailsOpen, setMobileOrderDetailsOpen] = useState(null);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [orderToDelete, setOrderToDelete] = useState<string | null>(null);
+  const [orderToDelete, setOrderToDelete] = useState(null);
 
   // Estados para paginación
-  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [currentPage, setCurrentPage] = useState(1);
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
 
   // Referencias para el scroll en móvil
-  const mobileListRef = useRef<HTMLDivElement>(null);
+  const mobileListRef = useRef(null);
   
   // Referencia para control de montaje/desmontaje
   const mountedRef = useRef(true);
   
   // Referencia para la solicitud pendiente de productos
-  const pendingProductsRequest = useRef<boolean>(false);
+  const pendingProductsRequest = useRef(false);
   
   // Cola de productos a cargar
-  const productLoadQueue = useRef<Set<string>>(new Set());
+  const productLoadQueue = useRef(new Set());
 
   // IMPORTANTE: Tamaños fijos para cada tipo de dispositivo
   const ITEMS_PER_PAGE_MOBILE = 5;
@@ -641,7 +638,7 @@ const OrdersSection = () => {
   const [showSectionModal, setShowSectionModal] = useState(false);
 
   // Estados para el formulario de pedido
-  const [orderForm, setOrderForm] = useState<CreateOrderData>({
+  const [orderForm, setOrderForm] = useState({
     servicio: '',
     seccionDelServicio: '',
     userId: '',
@@ -649,14 +646,37 @@ const OrdersSection = () => {
   });
 
   // Estados para selección de productos
-  const [selectedProduct, setSelectedProduct] = useState<string>("none");
-  const [productQuantity, setProductQuantity] = useState<number>(1);
+  const [selectedProduct, setSelectedProduct] = useState("none");
+  const [productQuantity, setProductQuantity] = useState(1);
 
   // Estados para el usuario actual
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState(null);
   
   // Flag de primera carga completada
   const initialLoadComplete = useRef(false);
+  
+  // Suscripciones a eventos
+  useEffect(() => {
+    // Suscribirse a los eventos de pedidos
+    const unsubscribeUpdated = eventService.subscribe('pedido_updated', () => {
+      fetchOrders(true);
+    });
+    
+    const unsubscribeCreated = eventService.subscribe('pedido_created', () => {
+      fetchOrders(true);
+    });
+    
+    const unsubscribeDeleted = eventService.subscribe('pedido_deleted', () => {
+      fetchOrders(true);
+    });
+    
+    return () => {
+      // Limpiar suscripciones
+      unsubscribeUpdated();
+      unsubscribeCreated();
+      unsubscribeDeleted();
+    };
+  }, []);
 
   // Función memoizada para cargar productos en lotes desde la cola
   const processProductQueue = useCallback(async () => {
@@ -685,9 +705,6 @@ const OrdersSection = () => {
       for (const batch of batches) {
         if (!mountedRef.current) break;
         
-        const token = getAuthToken();
-        if (!token) break;
-        
         // Filtrar IDs ya en caché o productos locales
         const idsToFetch = batch.filter(id => {
           return !cachedProducts[id] && !products.find(p => p._id === id);
@@ -695,15 +712,15 @@ const OrdersSection = () => {
         
         if (idsToFetch.length === 0) continue;
         
-        // Hacer una sola petición por lote - idealmente el backend tendría un endpoint para obtener múltiples productos
-        // De momento, hacemos solicitudes en paralelo
-        const promises = idsToFetch.map(id => 
-          fetch(`https://lyme-back.vercel.app/api/producto/${id}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          }).then(resp => resp.ok ? resp.json() : null)
+        // Hacer solicitudes en paralelo para cada ID
+        const productPromises = idsToFetch.map(id => 
+          inventoryService.getById(id).catch(err => {
+            console.error(`Error al cargar producto ${id}:`, err);
+            return null;
+          })
         );
         
-        const results = await Promise.allSettled(promises);
+        const results = await Promise.allSettled(productPromises);
         
         // Procesar resultados y actualizar caché
         const newCachedProducts = { ...cachedProducts };
@@ -741,7 +758,7 @@ const OrdersSection = () => {
   }, [cachedProducts, products]);
 
   // Agregar a la cola de carga de productos
-  const queueProductForLoading = useCallback((productId: string) => {
+  const queueProductForLoading = useCallback((productId) => {
     if (!productId || cachedProducts[productId] || products.find(p => p._id === productId)) {
       return;
     }
@@ -756,6 +773,8 @@ const OrdersSection = () => {
 
   // Cargar datos de caché al montar el componente
   useEffect(() => {
+    mountedRef.current = true;
+    
     // Cargar productos de caché
     const cachedProductsData = CacheManager.get(CACHE_KEYS.PRODUCTS, CACHE_EXPIRATION.PRODUCTS);
     if (cachedProductsData) {
@@ -808,9 +827,6 @@ const OrdersSection = () => {
     // Cargar productos del backend
     fetchProducts();
     
-    // Configurar flag de componente montado
-    mountedRef.current = true;
-    
     // Limpieza al desmontar
     return () => {
       mountedRef.current = false;
@@ -857,7 +873,7 @@ const OrdersSection = () => {
     setCurrentPage(1);
   }, [searchTerm, dateFilter.fechaInicio, dateFilter.fechaFin]);
 
-  // Cargar usuario actual - optimizado para usar caché
+  // Cargar usuario actual
   const fetchCurrentUser = async () => {
     // Si ya tenemos el usuario actual en caché y no está expirado, no lo volvemos a cargar
     if (currentUser && !CacheManager.isExpired(CACHE_KEYS.CURRENT_USER, CACHE_EXPIRATION.CURRENT_USER)) {
@@ -865,20 +881,8 @@ const OrdersSection = () => {
     }
     
     try {
-      const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-
-      const response = await fetch('https://lyme-back.vercel.app/api/auth/me', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!response.ok) {
-        throw new Error('Error al obtener información del usuario');
-      }
-
-      const userData = await response.json();
+      // Cargar usuario actual usando api
+      const userData = await api.get('/auth/me');
       
       if (!mountedRef.current) return null;
       
@@ -920,40 +924,24 @@ const OrdersSection = () => {
     }
   };
 
-  // Cargar pedidos - optimizado para reducir peticiones
+  // Cargar pedidos - usando pedidoService en lugar de fetch directo
   const fetchOrders = async (force = false) => {
-    if (loading && !force) return; // Evitar solicitudes múltiples
+    if (loading && !force) return []; // Evitar solicitudes múltiples
     
     try {
       setLoading(true);
       setRefreshing(true);
       
-      const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-
       // Verificar si estamos filtrando por fecha
-      let url = 'https://lyme-back.vercel.app/api/pedido';
-      
+      let data;
       if (dateFilter.fechaInicio && dateFilter.fechaFin) {
-        url = `https://lyme-back.vercel.app/api/pedido/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
+        data = await pedidoService.getPedidosByDate(
+          dateFilter.fechaInicio,
+          dateFilter.fechaFin
+        );
+      } else {
+        data = await pedidoService.getPedidos();
       }
-
-      const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          localStorage.removeItem('token');
-          window.location.href = '/login';
-          return [];
-        }
-        throw new Error('Error al cargar los pedidos');
-      }
-
-      const data = await response.json();
       
       if (!mountedRef.current) return [];
       
@@ -991,12 +979,12 @@ const OrdersSection = () => {
   };
 
   // Prefetch de productos relevantes para los pedidos visibles
-  const prefetchProductsFromOrders = useCallback((ordersData: Order[]) => {
+  const prefetchProductsFromOrders = useCallback((ordersData) => {
     // Si no hay pedidos, no hacer nada
     if (!Array.isArray(ordersData) || ordersData.length === 0) return;
     
     // Recopilar todos los IDs de productos en los pedidos
-    const productIds = new Set<string>();
+    const productIds = new Set();
     
     // Sólo prefetch para los primeros 50 pedidos (para no sobrecargar)
     const ordersToProcess = ordersData.slice(0, 50);
@@ -1025,8 +1013,8 @@ const OrdersSection = () => {
     }
   }, [queueProductForLoading]);
 
-  // Obtener detalles de producto por ID - versión optimizada
-  const getProductDetails = useCallback(async (productId: string | { _id: string;[key: string]: any }) => {
+  // Obtener detalles de producto por ID - usando inventoryService
+  const getProductDetails = useCallback(async (productId) => {
     // Extraer el ID de manera segura
     const id = typeof productId === 'object' ? productId._id : productId;
 
@@ -1058,22 +1046,8 @@ const OrdersSection = () => {
     }
 
     try {
-      const token = getAuthToken();
-      if (!token) return null;
-
-      const response = await fetch(`https://lyme-back.vercel.app/api/producto/${id}`, {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Cache-Control': 'no-cache' 
-        }
-      });
-
-      if (!response.ok) {
-        console.error(`Error al obtener producto. Status: ${response.status}`);
-        return null;
-      }
-
-      const product = await response.json();
+      // Usar inventoryService en lugar de fetch directo
+      const product = await inventoryService.getById(id);
       
       if (!mountedRef.current) return null;
 
@@ -1102,7 +1076,7 @@ const OrdersSection = () => {
   }, [cachedProducts, products, addNotification]);
 
   // Función para toggleOrderDetails - versión escritorio (optimizada)
-  const toggleOrderDetails = useCallback(async (orderId: string) => {
+  const toggleOrderDetails = useCallback(async (orderId) => {
     if (orderDetailsOpen === orderId) {
       setOrderDetailsOpen(null);
     } else {
@@ -1129,7 +1103,7 @@ const OrdersSection = () => {
   }, [orderDetailsOpen, orders, queueProductForLoading]);
 
   // Función para toggleMobileOrderDetails - versión móvil (optimizada)
-  const toggleMobileOrderDetails = useCallback(async (orderId: string) => {
+  const toggleMobileOrderDetails = useCallback(async (orderId) => {
     if (mobileOrderDetailsOpen === orderId) {
       setMobileOrderDetailsOpen(null);
     } else {
@@ -1155,18 +1129,7 @@ const OrdersSection = () => {
     }
   }, [mobileOrderDetailsOpen, orders, queueProductForLoading]);
 
-  // Función para formatear fecha
-  const formatDateForAPI = (dateString) => {
-    const d = new Date(dateString);
-    if (isNaN(d.getTime())) return dateString; // Si la fecha no es válida, devolver el string original
-    
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  // Cargar pedidos por rango de fechas
+  // Cargar pedidos por rango de fechas usando el servicio
   const fetchOrdersByDate = async () => {
     if (!dateFilter.fechaInicio || !dateFilter.fechaFin) {
       const errorMsg = 'Por favor seleccione ambas fechas';
@@ -1182,74 +1145,12 @@ const OrdersSection = () => {
 
     try {
       setLoading(true);
-      const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
 
-      // Obtenemos las fechas del input del usuario
-      let fechaInicio = dateFilter.fechaInicio;
-      let fechaFin = dateFilter.fechaFin;
-      
-      console.log("Fechas originales del formulario:", fechaInicio, fechaFin);
-      
-      try {
-        // Los input type="date" ya proporcionan fechas en formato YYYY-MM-DD, 
-        // que es justo lo que necesitamos para el backend
-        // Verificamos si necesitamos hacer algún ajuste en la zona horaria
-        const fechaInicioObj = new Date(fechaInicio);
-        const fechaFinObj = new Date(fechaFin);
-        
-        if (!isNaN(fechaInicioObj.getTime()) && !isNaN(fechaFinObj.getTime())) {
-          console.log("Objetos de fecha parseados correctamente:",
-            fechaInicioObj.toISOString(), fechaFinObj.toISOString());
-        } else {
-          console.warn("No se pudieron parsear las fechas como objetos Date válidos");
-        }
-      } catch (e) {
-        console.error("Error al manipular fechas:", e);
-      }
-
-      console.log(`Filtrando pedidos desde ${fechaInicio} hasta ${fechaFin}`);
-      
-      // Construimos la URL con las fechas originales del formulario
-      // Los inputs type="date" ya dan el formato YYYY-MM-DD que necesitamos
-      const url = `https://lyme-back.vercel.app/api/pedido/fecha?fechaInicio=${encodeURIComponent(fechaInicio)}&fechaFin=${encodeURIComponent(fechaFin)}`;
-      console.log("URL de solicitud:", url);
-      
-      // Opciones de la solicitud con el token de autenticación
-      const requestOptions = {
-        method: 'GET',
-        headers: { 
-          'Authorization': `Bearer ${token}`
-        }
-      };
-
-      console.log("Enviando solicitud GET a la API...");
-      const response = await fetch(url, requestOptions);
-
-      if (!response.ok) {
-        // Intentar obtener el mensaje de error del cuerpo de la respuesta
-        try {
-          const errorText = await response.text();
-          console.error("Respuesta de error completa:", errorText);
-          
-          try {
-            // Intentar parsear como JSON si es posible
-            const errorData = JSON.parse(errorText);
-            console.error("Datos de error:", errorData);
-            throw new Error(errorData.mensaje || errorData.error || `Error al filtrar pedidos por fecha (status: ${response.status})`);
-          } catch (jsonError) {
-            // Si no es JSON, usar el texto como está
-            throw new Error(`Error al filtrar pedidos por fecha (status: ${response.status}): ${errorText.substring(0, 100)}`);
-          }
-        } catch (e) {
-          console.error("Error al procesar la respuesta:", e);
-          throw new Error(`Error al filtrar pedidos por fecha (status: ${response.status})`);
-        }
-      }
-
-      const data = await response.json();
+      // Usar el servicio para obtener pedidos por fecha
+      const data = await pedidoService.getPedidosByDate(
+        dateFilter.fechaInicio,
+        dateFilter.fechaFin
+      );
       
       if (!mountedRef.current) return;
       
@@ -1302,7 +1203,7 @@ const OrdersSection = () => {
     }
   };
 
-  // Cargar productos - optimizado con caché
+  // Cargar productos - usando el servicio en lugar de fetch directo
   const fetchProducts = async (forceRefresh = false) => {
     // Si ya tenemos productos en caché y no está expirado, no volvemos a cargar
     const cachedLastFetch = CacheManager.get(CACHE_KEYS.LAST_PRODUCTS_FETCH);
@@ -1313,40 +1214,17 @@ const OrdersSection = () => {
     }
     
     try {
-      const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-
-      const response = await fetch('https://lyme-back.vercel.app/api/producto', {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Cache-Control': 'no-cache'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Error al cargar productos');
-      }
-
-      const productsData = await response.json();
+      // Usar inventoryService en lugar de fetch directo
+      const productsList = await inventoryService.getProducts();
       
       if (!mountedRef.current) return products;
       
-      // Determinar el formato de la respuesta
-      let productsList = [];
-      if (Array.isArray(productsData)) {
-        productsList = productsData;
-      } else if (productsData && Array.isArray(productsData.items)) {
-        productsList = productsData.items;
-      }
-      
       // Filtrar productos con stock > 0
-      const availableProducts = productsList.filter((p: Product) => p.stock > 0);
+      const availableProducts = productsList.filter(p => p.stock > 0);
       setProducts(availableProducts);
 
       // También añadirlos al caché (aunque estén fuera de stock)
-      const productsCache = productsList.reduce((cache: { [key: string]: Product }, product: Product) => {
+      const productsCache = productsList.reduce((cache, product) => {
         cache[product._id] = product;
         return cache;
       }, {});
@@ -1383,7 +1261,7 @@ const OrdersSection = () => {
     }
   };
 
-  // Cargar usuarios - optimizado con caché
+  // Cargar usuarios
   const fetchUsers = async (forceRefresh = false) => {
     // Si ya tenemos usuarios en caché y no está expirado, no volvemos a cargar
     const cachedLastFetch = CacheManager.get(CACHE_KEYS.LAST_USERS_FETCH);
@@ -1394,23 +1272,8 @@ const OrdersSection = () => {
     }
     
     try {
-      const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-
-      const response = await fetch('https://lyme-back.vercel.app/api/auth/users', {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Cache-Control': 'no-cache'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Error al cargar usuarios');
-      }
-
-      const data = await response.json();
+      // Usar api en lugar de fetch directo
+      const data = await api.get('/auth/users');
       
       if (!mountedRef.current) return users;
       
@@ -1435,8 +1298,8 @@ const OrdersSection = () => {
     }
   };
 
-  // Cargar clientes del usuario - optimizado con caché
-  const fetchClients = async (userId: string, forceRefresh = false) => {
+  // Cargar clientes del usuario
+  const fetchClients = async (userId, forceRefresh = false) => {
     // Si ya tenemos clientes en caché y no está expirado, no volvemos a cargar
     const cachedClientsKey = `${CACHE_KEYS.CLIENTS}_${userId}`;
     const cachedLastFetch = CacheManager.get(`${cachedClientsKey}_last_fetch`);
@@ -1447,24 +1310,8 @@ const OrdersSection = () => {
     }
     
     try {
-      const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-
-      console.log(`Cargando clientes para usuario ID: ${userId}`);
-      const response = await fetch(`https://lyme-back.vercel.app/api/cliente/user/${userId}`, {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Cache-Control': 'no-cache'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error al cargar clientes del usuario (status: ${response.status})`);
-      }
-
-      const clientsData = await response.json();
+      // Usar api en lugar de fetch directo
+      const clientsData = await api.get(`/cliente/user/${userId}`);
       
       if (!mountedRef.current) return clients;
       
@@ -1472,7 +1319,7 @@ const OrdersSection = () => {
       setClients(clientsData);
 
       // Agrupar clientes por servicio (para las secciones)
-      const grouped = clientsData.reduce((acc: { [key: string]: Client[] }, client: Client) => {
+      const grouped = clientsData.reduce((acc, client) => {
         if (!acc[client.servicio]) {
           acc[client.servicio] = [];
         }
@@ -1499,7 +1346,7 @@ const OrdersSection = () => {
     }
   };
 
-  // Crear pedido
+  // Crear pedido - usando el servicio en lugar de fetch directo
   const handleCreateOrder = async () => {
     // Validaciones
     if (!orderForm.servicio) {
@@ -1530,13 +1377,7 @@ const OrdersSection = () => {
     setError(null);
 
     try {
-      const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-
-      // Preparar datos del pedido - Enviamos solo lo que requiere la API
-      // IMPORTANTE: Solo enviamos productoId y cantidad en el array de productos
+      // Preparar datos del pedido
       const pedidoData = {
         userId: orderForm.userId || (currentUser?._id || currentUser?.id || ""),
         servicio: orderForm.servicio,
@@ -1550,23 +1391,12 @@ const OrdersSection = () => {
 
       console.log("Enviando pedido:", JSON.stringify(pedidoData));
 
-      const response = await fetch('https://lyme-back.vercel.app/api/pedido', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(pedidoData)
-      });
+      // Usar el servicio para crear el pedido
+      await pedidoService.createPedido(pedidoData);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.mensaje || `Error al crear el pedido (status: ${response.status})`);
-      }
-
-      // Éxito
+      // Éxito - recargar datos
       await fetchOrders(true);
-      await fetchProducts(true); // Recargar productos para actualizar stock
+      await fetchProducts(true);
       
       // Notificar a todos los componentes sobre el cambio en el inventario
       await refreshInventory();
@@ -1604,7 +1434,7 @@ const OrdersSection = () => {
     }
   };
 
-  // Actualizar pedido
+  // Actualizar pedido - usando el servicio en lugar de fetch directo
   const handleUpdateOrder = async () => {
     if (!currentOrder?._id) return;
 
@@ -1612,11 +1442,6 @@ const OrdersSection = () => {
     setError(null);
 
     try {
-      const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-
       // Solo enviamos los campos necesarios y en el formato correcto
       const updateData = {
         servicio: orderForm.servicio,
@@ -1631,22 +1456,12 @@ const OrdersSection = () => {
 
       console.log("Actualizando pedido:", currentOrder._id, "con datos:", updateData);
 
-      const response = await fetch(`https://lyme-back.vercel.app/api/pedido/${currentOrder._id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(updateData)
-      });
+      // Usar el servicio para actualizar el pedido
+      await pedidoService.updatePedido(currentOrder._id, updateData);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.mensaje || 'Error al actualizar el pedido');
-      }
-
+      // Recargar datos
       await fetchOrders(true);
-      await fetchProducts(true); // Recargar productos para actualizar stock
+      await fetchProducts(true);
       
       // Notificar a todos los componentes sobre el cambio en el inventario
       await refreshInventory();
@@ -1684,29 +1499,23 @@ const OrdersSection = () => {
     }
   };
 
-  // Eliminar pedido
-  const handleDeleteOrder = async (id: string) => {
+  // Preparar eliminación de pedido
+  const confirmDeleteOrder = (id) => {
+    setOrderToDelete(id);
+    setDeleteConfirmOpen(true);
+  };
+
+  // Eliminar pedido - usando el servicio en lugar de fetch directo
+  const handleDeleteOrder = async (id) => {
     try {
       setLoading(true);
-      const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
 
-      const response = await fetch(`https://lyme-back.vercel.app/api/pedido/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      // Usar el servicio para eliminar el pedido
+      await pedidoService.deletePedido(id);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.mensaje || 'Error al eliminar el pedido');
-      }
-
+      // Recargar datos
       await fetchOrders(true);
-      await fetchProducts(true); // Recargar productos para actualizar stock
+      await fetchProducts(true);
       
       // Notificar a todos los componentes sobre el cambio en el inventario
       await refreshInventory();
@@ -1743,14 +1552,8 @@ const OrdersSection = () => {
     }
   };
 
-  // Preparar eliminación de pedido
-  const confirmDeleteOrder = (id: string) => {
-    setOrderToDelete(id);
-    setDeleteConfirmOpen(true);
-  };
-
   // Preparar edición de pedido
-  const handleEditOrder = (order: Order) => {
+  const handleEditOrder = (order) => {
     setCurrentOrder(order);
 
     // Preparar los productos para edición
@@ -1810,7 +1613,7 @@ const OrdersSection = () => {
   };
 
   // Manejar selección de cliente
-  const handleClientChange = (clienteId: string) => {
+  const handleClientChange = (clienteId) => {
     if (clienteId === "none") return;
 
     const selectedClient = clients.find(c => c._id === clienteId);
@@ -1851,7 +1654,7 @@ const OrdersSection = () => {
   };
 
   // Manejar selección de sección
-  const handleSectionSelect = (seccion: string) => {
+  const handleSectionSelect = (seccion) => {
     setOrderForm(prev => ({
       ...prev,
       seccionDelServicio: seccion
@@ -1957,7 +1760,7 @@ const OrdersSection = () => {
   };
 
   // Eliminar producto del pedido
-  const handleRemoveProduct = (index: number) => {
+  const handleRemoveProduct = (index) => {
     // Guardar una referencia al producto antes de eliminarlo para mostrar en la notificación
     const product = orderForm.productos[index];
     const productName = product.nombre || 
@@ -1990,7 +1793,7 @@ const OrdersSection = () => {
   };
 
   // Calcular total del pedido
-  const calculateTotal = useCallback((productos: OrderProduct[]) => {
+  const calculateTotal = useCallback((productos) => {
     return productos.reduce((total, item) => {
       let precio = 0;
       
@@ -2018,19 +1821,19 @@ const OrdersSection = () => {
   }, [cachedProducts, products]);
 
   // Obtener nombre de producto por ID - memoizado
-  const getProductName = useCallback((id: string) => {
+  const getProductName = useCallback((id) => {
     const product = cachedProducts[id] || products.find(p => p._id === id);
     return product?.nombre || 'Producto no encontrado';
   }, [cachedProducts, products]);
 
   // Obtener precio de producto por ID - memoizado
-  const getProductPrice = useCallback((id: string) => {
+  const getProductPrice = useCallback((id) => {
     const product = cachedProducts[id] || products.find(p => p._id === id);
     return product?.precio || 0;
   }, [cachedProducts, products]);
 
   // Obtener email de usuario por ID - memoizado
-  const getUserEmail = useCallback((userId: any) => {
+  const getUserEmail = useCallback((userId) => {
     // Si userId es un objeto con email
     if (typeof userId === 'object' && userId !== null && userId.email) {
       return userId.email;
@@ -2046,7 +1849,7 @@ const OrdersSection = () => {
   }, [users]);
   
   // Obtener nombre completo del usuario - memoizado
-  const getUserFullName = useCallback((userId: string) => {
+  const getUserFullName = useCallback((userId) => {
     if (!userId) return 'No asignado';
     
     const user = users.find(u => u._id === userId);
@@ -2087,7 +1890,7 @@ const OrdersSection = () => {
   };
 
   // Función para cambiar de página
-  const handlePageChange = (pageNumber: number) => {
+  const handlePageChange = (pageNumber) => {
     setCurrentPage(pageNumber);
     
     // Al cambiar de página, hacemos scroll hacia arriba
@@ -2100,20 +1903,15 @@ const OrdersSection = () => {
   };
   
   // Función para descargar recibo en PDF
-  const handleDownloadRemito = async (pedidoId: string) => {
+  const handleDownloadRemito = async (pedidoId) => {
     try {
-      const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-      
       // Notificación para indicar que se está generando
       if (addNotification) {
         addNotification('Generando recibo PDF, por favor espere...', 'info');
       }
       
-      // Generar URL para descargar remito
-      const url = `https://lyme-back.vercel.app/api/downloads/remito/${pedidoId}`;
+      // Obtener URL del remito usando el servicio
+      const url = await pedidoService.downloadRemito(pedidoId);
       
       // Abrir en una nueva pestaña
       window.open(url, '_blank');
@@ -2563,7 +2361,7 @@ const OrdersSection = () => {
                                 <table className="min-w-full divide-y divide-[#91BEAD]/20">
                                   <thead className="bg-[#DFEFE6]/50">
                                     <tr>
-                                      <th className="px-4 py-2 text-left text-xs font-medium text-[#29696B]">Producto</th>
+                                    <th className="px-4 py-2 text-left text-xs font-medium text-[#29696B]">Producto</th>
                                       <th className="px-4 py-2 text-left text-xs font-medium text-[#29696B]">Cantidad</th>
                                       <th className="px-4 py-2 text-left text-xs font-medium text-[#29696B]">Precio</th>
                                       <th className="px-4 py-2 text-left text-xs font-medium text-[#29696B]">Total</th>
@@ -3061,3 +2859,4 @@ const OrdersSection = () => {
 };
 
 export default OrdersSection;
+                                      
