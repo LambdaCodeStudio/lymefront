@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -52,24 +52,19 @@ import { imageService } from '@/services/imageService';
 import ProductImage from '@/components/admin/components/ProductImage';
 // Importar el nuevo componente de carga de imágenes
 import ImageUpload from '@/components/admin/components/ImageUpload';
-// Importar lodash para debounce
-import debounce from 'lodash/debounce';
+
+// Definir umbral de stock bajo
+const LOW_STOCK_THRESHOLD = 10;
 
 // Componente para input de stock con límite máximo
-const ProductStockInput: React.FC<{
-  value: string;
-  onChange: (value: string) => void;
-  id?: string;
-  required?: boolean;
-  maxStock?: number;
-}> = ({
+const ProductStockInput = ({
   value,
   onChange,
   id = "stock",
   required = true,
   maxStock = 999999999
 }) => {
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e) => {
     const inputValue = e.target.value;
     
     if (inputValue === '') {
@@ -111,68 +106,28 @@ const ProductStockInput: React.FC<{
   );
 };
 
-interface ProductExtended extends Product {
-  imagen?: string | Buffer | null;
-  vendidos?: number;
-  hasImage?: boolean;
-  imageBase64?: string;
-}
-
-interface FormData {
-  nombre: string;
-  descripcion: string;
-  categoria: string; 
-  subCategoria: string;
-  precio: string;
-  stock: string;
-  proovedorInfo: string;
-  imagen?: File | null;
-  imagenPreview?: string | null;
-}
-
-// Definir umbral de stock bajo
-const LOW_STOCK_THRESHOLD = 10;
-
-// Tiempo mínimo entre recargas completas (ms)
-const MIN_RELOAD_INTERVAL = 30000; // 30 segundos
-
-// Estructura para guardar datos en caché
-interface CacheItem<T> {
-  data: T;
-  timestamp: number;
-  etag?: string;
-  lastModified?: string;
-}
-
-const InventorySection: React.FC = () => {
+const InventorySection = () => {
   const { addNotification } = useNotification();
-  const [products, setProducts] = useState<ProductExtended[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [refreshing, setRefreshing] = useState<boolean>(false);
-  const [imageLoading, setImageLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string>('');
-  const [successMessage, setSuccessMessage] = useState<string>('');
-  const [showModal, setShowModal] = useState<boolean>(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
-  const [deleteImageDialogOpen, setDeleteImageDialogOpen] = useState<boolean>(false);
-  const [productToDelete, setProductToDelete] = useState<string | null>(null);
-  const [editingProduct, setEditingProduct] = useState<ProductExtended | null>(null);
-  const [searchTerm, setSearchTerm] = useState<string>('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [filters, setFilters] = useState<ProductFilters>({
-    search: '',
-    category: 'all',
-    stockStatus: 'all',
-    sortBy: 'name',
-    sortOrder: 'asc'
-  });
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [imageLoading, setImageLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteImageDialogOpen, setDeleteImageDialogOpen] = useState(false);
+  const [productToDelete, setProductToDelete] = useState(null);
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const fileInputRef = useRef(null);
   
   // Estado para la paginación
-  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [currentPage, setCurrentPage] = useState(1);
   
   // Referencias para el scroll en móvil
-  const mobileListRef = useRef<HTMLDivElement>(null);
+  const mobileListRef = useRef(null);
   
   // IMPORTANTE: Tamaños fijos para cada tipo de dispositivo
   const ITEMS_PER_PAGE_MOBILE = 5;
@@ -181,21 +136,13 @@ const InventorySection: React.FC = () => {
   // Estado para controlar el ancho de la ventana
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
   
-  // Caché para almacenar los productos y los metadatos de caché
-  const cacheRef = useRef<{
-    products: CacheItem<ProductExtended[]> | null,
-    pages: Record<number, ProductExtended[]>,
-    lastFetchTime: number
-  }>({
-    products: null,
-    pages: {},
-    lastFetchTime: 0
-  });
+  // Caché simple en memoria usando useRef (sin estructuras complejas)
+  const lastFetchTimeRef = useRef(0);
   
   // Calculamos dinámicamente itemsPerPage basado en el ancho de la ventana
   const itemsPerPage = windowWidth < 768 ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP;
   
-  const [formData, setFormData] = useState<FormData>({
+  const [formData, setFormData] = useState({
     nombre: '',
     descripcion: '',
     categoria: 'limpieza',
@@ -208,7 +155,7 @@ const InventorySection: React.FC = () => {
   });
 
   // Subcategorías organizadas por categoría
-  const subCategorias: Record<string, Array<{value: string, label: string}>> = {
+  const subCategorias = {
     limpieza: [
       { value: 'accesorios', label: 'Accesorios' },
       { value: 'aerosoles', label: 'Aerosoles' },
@@ -229,150 +176,26 @@ const InventorySection: React.FC = () => {
     ]
   };
 
-  // Función para verificar si debemos recargar los productos
-  const shouldRefreshProducts = () => {
-    // Si no hay caché, siempre debemos cargar
-    if (!cacheRef.current.products) return true;
-
-    // Verificar el tiempo transcurrido desde la última carga
-    const now = Date.now();
-    const timeSinceLastFetch = now - cacheRef.current.lastFetchTime;
-    return timeSinceLastFetch > MIN_RELOAD_INTERVAL;
-  };
-
-  // Verificar productos con stock bajo y enviar notificación
-  useEffect(() => {
-    if (loading || !products.length) return;
-    
-    const lowStockProducts = products.filter(product => 
-      product && product.stock !== undefined && 
-      product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD
-    );
-    
-    if (lowStockProducts.length > 0) {
-      const productNames = lowStockProducts.map(p => p.nombre).join(', ');
-      const message = `Alerta: ${lowStockProducts.length} producto${lowStockProducts.length > 1 ? 's' : ''} con stock bajo: ${productNames}`;
-      
-      if (addNotification) {
-        addNotification(message, 'warning');
-      }
-    }
-  }, [products, loading, addNotification]);
-
-  // Función para actualizar un producto específico en el estado sin recargar todo
-  const updateProductInState = useCallback((updatedProduct: ProductExtended) => {
-    setProducts(prevProducts => {
-      if (!Array.isArray(prevProducts)) return [updatedProduct];
-      
-      return prevProducts.map(product => 
-        product._id === updatedProduct._id ? {...product, ...updatedProduct} : product
-      );
-    });
-    
-    // También actualizar en caché si existe
-    if (cacheRef.current.products) {
-      cacheRef.current.products.data = cacheRef.current.products.data.map(product => 
-        product._id === updatedProduct._id ? {...product, ...updatedProduct} : product
-      );
-    }
-    
-    // Actualizar en las páginas cacheadas
-    Object.keys(cacheRef.current.pages).forEach(pageKey => {
-      const page = Number(pageKey);
-      cacheRef.current.pages[page] = cacheRef.current.pages[page].map(product => 
-        product._id === updatedProduct._id ? {...product, ...updatedProduct} : product
-      );
-    });
-  }, []);
-
-  // Función para agregar un nuevo producto al estado sin recargar todo
-  const addProductToState = useCallback((newProduct: ProductExtended) => {
-    setProducts(prevProducts => {
-      if (!Array.isArray(prevProducts)) return [newProduct];
-      return [newProduct, ...prevProducts];
-    });
-    
-    // También actualizar en caché si existe
-    if (cacheRef.current.products) {
-      cacheRef.current.products.data = [newProduct, ...cacheRef.current.products.data];
-    }
-    
-    // Invalidar las páginas cacheadas porque el orden habría cambiado
-    cacheRef.current.pages = {};
-  }, []);
-
-  // Función para eliminar un producto del estado sin recargar todo
-  const removeProductFromState = useCallback((productId: string) => {
-    setProducts(prevProducts => {
-      if (!Array.isArray(prevProducts)) return [];
-      return prevProducts.filter(product => product._id !== productId);
-    });
-    
-    // También actualizar en caché si existe
-    if (cacheRef.current.products) {
-      cacheRef.current.products.data = cacheRef.current.products.data.filter(
-        product => product._id !== productId
-      );
-    }
-    
-    // Actualizar en las páginas cacheadas
-    Object.keys(cacheRef.current.pages).forEach(pageKey => {
-      const page = Number(pageKey);
-      cacheRef.current.pages[page] = cacheRef.current.pages[page].filter(
-        product => product._id !== productId
-      );
-    });
-  }, []);
-
-  // Función optimizada para cargar productos con caché y validación condicional
-  const fetchProducts = useCallback(async (forceRefresh = false) => {
+  // Función básica para cargar productos
+  const fetchProducts = async (forceRefresh = false) => {
     try {
       // Si ya estamos cargando, no iniciar otra carga
       if (loading && !forceRefresh) return;
       
-      // Si no es una recarga forzada y no ha pasado suficiente tiempo, usar caché
-      if (!forceRefresh && !shouldRefreshProducts() && cacheRef.current.products) {
-        setProducts(cacheRef.current.products.data);
-        setLoading(false);
-        return;
-      }
-      
       setLoading(true);
-      setRefreshing(forceRefresh); // Indicador visual para refrescos manuales
+      setRefreshing(forceRefresh);
       
       const token = getAuthToken();
       if (!token) {
         throw new Error('No hay token de autenticación');
       }
 
-      const headers: HeadersInit = {
-        'Authorization': `Bearer ${token}`,
-        'Cache-Control': 'no-cache'
-      };
-      
-      // Añadir headers de validación condicional si tenemos datos en caché
-      if (cacheRef.current.products) {
-        if (cacheRef.current.products.etag) {
-          headers['If-None-Match'] = cacheRef.current.products.etag;
-        }
-        if (cacheRef.current.products.lastModified) {
-          headers['If-Modified-Since'] = cacheRef.current.products.lastModified;
-        }
-      }
-
       const response = await fetch('https://lyme-back.vercel.app/api/producto', {
-        headers,
-        cache: 'no-store'
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
+        }
       });
-      
-      // Si el servidor responde 304 Not Modified, usamos la caché
-      if (response.status === 304 && cacheRef.current.products) {
-        console.log('Servidor indica que no hay cambios, usando caché local');
-        setProducts(cacheRef.current.products.data);
-        setLoading(false);
-        setRefreshing(false);
-        return;
-      }
       
       if (!response.ok) {
         if (response.status === 401) {
@@ -386,52 +209,19 @@ const InventorySection: React.FC = () => {
         throw new Error('Error al cargar productos');
       }
       
-      // Guardar headers de caché para validación condicional futura
-      const etag = response.headers.get('ETag');
-      const lastModified = response.headers.get('Last-Modified');
-      
       const data = await response.json();
       console.log(`Productos actualizados: ${data.length}`);
       
-      // Asegurarse que data sea un array
-      const productsArray = Array.isArray(data) ? data : (data.items || []);
-      
-      // Guardar en el caché con la información de validación
-      cacheRef.current.products = {
-        data: productsArray,
-        timestamp: Date.now(),
-        etag: etag || undefined,
-        lastModified: lastModified || undefined
-      };
+      // Asegurarnos que la respuesta sea un array
+      const productsArray = Array.isArray(data) ? data : [];
       
       // Actualizar el tiempo de la última carga
-      cacheRef.current.lastFetchTime = Date.now();
-      
-      // Limpiar el caché de páginas al recargar todo
-      cacheRef.current.pages = {};
+      lastFetchTimeRef.current = Date.now();
       
       // Establecer productos
       setProducts(productsArray);
       
-      // Verificar imágenes en segundo plano para mejorar UX y precargar
-      if (productsArray.length > 0) {
-        const productIds = productsArray.map((product: ProductExtended) => product._id);
-        
-        // Limpiar caché para todos los productos para asegurar datos frescos
-        productIds.forEach(id => {
-          imageService.invalidateCache(id);
-        });
-        
-        // Verificar y precargar imágenes
-        Promise.all([
-          imageService.batchCheckImages(productIds),
-          imageService.batchLoadBase64Images(productIds.slice(0, 10)) // Precargar solo las primeras 10 para rendimiento
-        ]).catch(err => {
-          console.log('Error al procesar imágenes:', err);
-        });
-      }
-      
-    } catch (err: any) {
+    } catch (err) {
       const errorMsg = 'Error al cargar productos: ' + err.message;
       setError(errorMsg);
       
@@ -444,12 +234,30 @@ const InventorySection: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [loading, addNotification]);
+  };
 
-  // Implementación de recarga con debounce para evitar múltiples solicitudes
-  const debouncedFetchProducts = useRef(
-    debounce((forceRefresh: boolean) => fetchProducts(forceRefresh), 300)
-  ).current;
+  // Verificar productos con stock bajo y enviar notificación
+  useEffect(() => {
+    if (loading || !products || !products.length) return;
+    
+    try {
+      const lowStockProducts = products.filter(product => 
+        product && typeof product.stock === 'number' && 
+        product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD
+      );
+      
+      if (lowStockProducts.length > 0) {
+        const productNames = lowStockProducts.map(p => p.nombre).join(', ');
+        const message = `Alerta: ${lowStockProducts.length} producto${lowStockProducts.length > 1 ? 's' : ''} con stock bajo: ${productNames}`;
+        
+        if (addNotification) {
+          addNotification(message, 'warning');
+        }
+      }
+    } catch (err) {
+      console.error('Error al procesar alerta de stock bajo:', err);
+    }
+  }, [products, loading, addNotification]);
 
   // Cargar productos y suscribirse al observable
   useEffect(() => {
@@ -457,14 +265,13 @@ const InventorySection: React.FC = () => {
     
     const unsubscribe = inventoryObservable.subscribe(() => {
       console.log('InventorySection: Actualización de inventario notificada por observable');
-      debouncedFetchProducts(true);
+      fetchProducts(true);
     });
     
     return () => {
       unsubscribe();
-      debouncedFetchProducts.cancel();
     };
-  }, [fetchProducts, debouncedFetchProducts]);
+  }, []);
 
   // Efecto para detectar el tamaño de la ventana
   useEffect(() => {
@@ -475,8 +282,6 @@ const InventorySection: React.FC = () => {
       // Si cambiamos entre móvil y escritorio, volvemos a la primera página
       if ((newWidth < 768 && windowWidth >= 768) || (newWidth >= 768 && windowWidth < 768)) {
         setCurrentPage(1);
-        // Invalidar caché de páginas al cambiar el tamaño
-        cacheRef.current.pages = {};
       }
     };
     
@@ -489,22 +294,37 @@ const InventorySection: React.FC = () => {
   // Resetear la página actual cuando cambian los filtros
   useEffect(() => {
     setCurrentPage(1);
-    // Invalidar caché de páginas cuando cambian los filtros
-    cacheRef.current.pages = {};
   }, [searchTerm, selectedCategory]);
 
-  // Asegurarnos de que la página actual no exceda el número total de páginas
-  useEffect(() => {
-    const filteredProducts = getFilteredProducts();
-    const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
-    
-    if (currentPage > totalPages && totalPages > 0) {
-      setCurrentPage(totalPages);
+  // Función segura para obtener productos filtrados
+  const getFilteredProducts = () => {
+    // Protección contra productos indefinidos o no array
+    if (!products || !Array.isArray(products)) {
+      return [];
     }
-  }, [currentPage, searchTerm, selectedCategory, products, itemsPerPage]);
+    
+    return products.filter(product => {
+      // Verificación de seguridad para producto
+      if (!product) return false;
+      
+      // Buscar coincidencias en nombre, descripción y proveedor (con verificación)
+      const matchesSearch = 
+        (product.nombre && product.nombre.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (product.descripcion && product.descripcion.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (product.proovedorInfo && product.proovedorInfo.toLowerCase().includes(searchTerm.toLowerCase()));
+        
+      // Verificar categoría
+      const matchesCategory = 
+        selectedCategory === 'all' || 
+        (product.categoria && product.categoria === selectedCategory) ||
+        (product.subCategoria && product.subCategoria === selectedCategory);
+        
+      return matchesSearch && matchesCategory;
+    });
+  };
 
   // Cargar la imagen en Base64 para productos específicos
-  const fetchProductImageBase64 = async (productId: string) => {
+  const fetchProductImageBase64 = async (productId) => {
     try {
       const base64Image = await imageService.getImageBase64(productId);
       return base64Image;
@@ -515,7 +335,7 @@ const InventorySection: React.FC = () => {
   };
 
   // Manejar cambio de imagen
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = (e) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       
@@ -545,7 +365,7 @@ const InventorySection: React.FC = () => {
         setFormData({
           ...formData,
           imagen: file,
-          imagenPreview: reader.result as string
+          imagenPreview: reader.result
         });
       };
       
@@ -566,7 +386,7 @@ const InventorySection: React.FC = () => {
   };
 
   // Eliminar imagen del producto ya guardado
-  const handleDeleteProductImage = async (productId: string) => {
+  const handleDeleteProductImage = async (productId) => {
     try {
       setImageLoading(true);
       await imageService.deleteImage(productId);
@@ -581,15 +401,12 @@ const InventorySection: React.FC = () => {
       // Invalidar cualquier caché de imagen que pueda existir
       imageService.invalidateCache(productId);
       
-      // Actualizar el producto específico en el estado
-      if (editingProduct) {
-        const updatedProduct = {...editingProduct, hasImage: false};
-        updateProductInState(updatedProduct);
-      }
+      // Actualizar productos
+      fetchProducts(true);
       
       addNotification('Imagen eliminada correctamente', 'success');
       setDeleteImageDialogOpen(false);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error al eliminar la imagen:', error);
       addNotification('Error al eliminar la imagen', 'error');
     } finally {
@@ -598,7 +415,7 @@ const InventorySection: React.FC = () => {
   };
 
   // Manejar subida de imagen después de crear/editar producto
-  const handleImageUpload = async (productId: string) => {
+  const handleImageUpload = async (productId) => {
     if (!formData.imagen) return true;
     
     try {
@@ -608,7 +425,7 @@ const InventorySection: React.FC = () => {
       await imageService.uploadImageBase64(productId, base64Data);
       
       return true;
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error al subir imagen:', error);
       return false;
     } finally {
@@ -617,7 +434,7 @@ const InventorySection: React.FC = () => {
   };
 
   // Manejar envío del formulario (crear/editar)
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     
@@ -665,28 +482,14 @@ const InventorySection: React.FC = () => {
         const imageUploaded = await handleImageUpload(savedProduct._id);
         if (!imageUploaded) {
           console.log('Hubo un problema al subir la imagen, pero el producto se guardó correctamente');
-        } else {
-          // Si la imagen se subió correctamente, marcar que tiene imagen
-          savedProduct.hasImage = true;
         }
       }
       
       setShowModal(false);
       resetForm();
       
-      // Actualizar el estado de manera más eficiente sin recargar todos los productos
-      if (editingProduct) {
-        // Si estamos editando, actualizar solo ese producto
-        updateProductInState(savedProduct);
-      } else {
-        // Si es nuevo, añadirlo al inicio
-        addProductToState(savedProduct);
-      }
-      
-      // Invalidar cualquier caché de imagen que pueda existir
-      if (editingProduct) {
-        imageService.invalidateCache(editingProduct._id);
-      }
+      // Recargar productos después de guardar
+      fetchProducts(true);
       
       // Notificar a otros componentes que deben actualizarse
       inventoryObservable.notify();
@@ -698,7 +501,7 @@ const InventorySection: React.FC = () => {
       
       // Limpiar mensaje después de unos segundos
       setTimeout(() => setSuccessMessage(''), 5000);
-    } catch (err: any) {
+    } catch (err) {
       const errorMsg = 'Error al guardar producto: ' + err.message;
       setError(errorMsg);
       
@@ -707,19 +510,19 @@ const InventorySection: React.FC = () => {
   };
 
   // Iniciar el proceso de eliminación mostrando el diálogo de confirmación
-  const confirmDelete = (id: string) => {
+  const confirmDelete = (id) => {
     setProductToDelete(id);
     setDeleteDialogOpen(true);
   };
 
   // Confirmar eliminación de imagen
-  const confirmDeleteImage = (id: string) => {
+  const confirmDeleteImage = (id) => {
     setProductToDelete(id);
     setDeleteImageDialogOpen(true);
   };
 
   // Eliminar producto (después de confirmación)
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id) => {
     try {
       const token = getAuthToken();
       if (!token) {
@@ -738,20 +541,17 @@ const InventorySection: React.FC = () => {
         throw new Error(error.error || 'Error al eliminar producto');
       }
       
-      // Eliminar del estado sin necesidad de recargar todos los productos
-      removeProductFromState(id);
+      // Recargar productos
+      fetchProducts(true);
       
       const successMsg = 'Producto eliminado correctamente';
       setSuccessMessage(successMsg);
       
       addNotification(successMsg, 'success');
       
-      // Notificar a otros componentes
-      inventoryObservable.notify();
-      
       // Limpiar mensaje después de unos segundos
       setTimeout(() => setSuccessMessage(''), 5000);
-    } catch (err: any) {
+    } catch (err) {
       const errorMsg = 'Error al eliminar producto: ' + err.message;
       setError(errorMsg);
       
@@ -764,12 +564,12 @@ const InventorySection: React.FC = () => {
   };
 
   // Preparar edición de producto
-  const handleEdit = async (product: ProductExtended) => {
+  const handleEdit = async (product) => {
     setEditingProduct(product);
     
     // Intentamos cargar la imagen en formato base64
     let imagePreview = null;
-    if (imageService.hasImage(product)) {
+    if (product.hasImage) {
       try {
         // Cargar imagen base64 para vista previa
         const base64Image = await fetchProductImageBase64(product._id);
@@ -781,18 +581,18 @@ const InventorySection: React.FC = () => {
         }
       } catch (error) {
         console.error('Error al cargar imagen:', error);
-        // Fallback a la URL normal
-        imagePreview = imageService.getImageUrl(product._id);
+        // No establecer imagen si hay error
+        imagePreview = null;
       }
     }
     
     setFormData({
-      nombre: product.nombre,
+      nombre: product.nombre || '',
       descripcion: product.descripcion || '',
-      categoria: product.categoria,
-      subCategoria: product.subCategoria,
-      precio: product.precio.toString(),
-      stock: product.stock.toString(),
+      categoria: product.categoria || 'limpieza',
+      subCategoria: product.subCategoria || 'aerosoles',
+      precio: product.precio ? product.precio.toString() : '',
+      stock: product.stock ? product.stock.toString() : '',
       proovedorInfo: product.proovedorInfo || '',
       imagen: null,
       imagenPreview: imagePreview
@@ -821,7 +621,7 @@ const InventorySection: React.FC = () => {
   };
 
   // Manejar cambio de categoría
-  const handleCategoryChange = (value: string) => {
+  const handleCategoryChange = (value) => {
     try {
       if (!subCategorias[value]) {
         console.error(`Categoría no válida: ${value}`);
@@ -849,7 +649,7 @@ const InventorySection: React.FC = () => {
   };
 
   // Función para renderizar indicador de stock
-  const renderStockIndicator = (stock: number) => {
+  const renderStockIndicator = (stock) => {
     if (stock <= 0) {
       return (
         <div className="flex items-center gap-1">
@@ -877,60 +677,19 @@ const InventorySection: React.FC = () => {
     }
   };
 
-  // Función optimizada para obtener productos filtrados 
-  const getFilteredProducts = useCallback(() => {
-    if (!Array.isArray(products)) {
-      console.error("Error: products no es un array", products);
-      return [];
-    }
-    
-    return products.filter(product => {
-      // Verificar que product sea un objeto válido
-      if (!product || typeof product !== 'object') return false;
-      
-      const matchesSearch = 
-        (product.nombre && product.nombre.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (product.descripcion && product.descripcion.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (product.proovedorInfo && product.proovedorInfo.toLowerCase().includes(searchTerm.toLowerCase()));
-        
-      const matchesCategory = 
-        selectedCategory === 'all' || 
-        product.categoria === selectedCategory ||
-        (product.subCategoria === selectedCategory);
-        
-      return matchesSearch && matchesCategory;
-    });
-  }, [products, searchTerm, selectedCategory]);
-
-  // Obtener productos filtrados de manera eficiente
+  // Obtener productos filtrados de manera segura
   const filteredProducts = getFilteredProducts();
   
-  // Función para obtener los productos de la página actual con caché
-  const getCurrentPageProducts = useCallback(() => {
-    // Verificar si tenemos esta página en caché
-    if (cacheRef.current.pages[currentPage]) {
-      return cacheRef.current.pages[currentPage];
-    }
-    
-    // Calcular paginación
-    const indexOfLastProduct = currentPage * itemsPerPage;
-    const indexOfFirstProduct = indexOfLastProduct - itemsPerPage;
-    const pageProducts = filteredProducts.slice(indexOfFirstProduct, indexOfLastProduct);
-    
-    // Guardar en caché
-    cacheRef.current.pages[currentPage] = pageProducts;
-    
-    return pageProducts;
-  }, [currentPage, filteredProducts, itemsPerPage]);
-  
-  // Obtener productos de la página actual
-  const currentProducts = getCurrentPageProducts();
+  // Calcular paginación
+  const indexOfLastProduct = currentPage * itemsPerPage;
+  const indexOfFirstProduct = indexOfLastProduct - itemsPerPage;
+  const currentProducts = filteredProducts.slice(indexOfFirstProduct, indexOfLastProduct);
   
   // Calcular el total de páginas
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
 
   // Función para cambiar de página
-  const handlePageChange = (pageNumber: number) => {
+  const handlePageChange = (pageNumber) => {
     setCurrentPage(pageNumber);
     
     // Al cambiar de página, hacemos scroll hacia arriba
@@ -943,16 +702,9 @@ const InventorySection: React.FC = () => {
   };
 
   // Manejar la subida de imagen con el nuevo componente
-  const handleImageUploaded = (success: boolean, productId?: string) => {
-    if (success && productId) {
-      // Actualizar solo el producto específico
-      const productToUpdate = products.find(p => p._id === productId);
-      if (productToUpdate) {
-        updateProductInState({...productToUpdate, hasImage: true});
-      } else {
-        // Si no encontramos el producto, recargamos todo
-        debouncedFetchProducts(true);
-      }
+  const handleImageUploaded = (success) => {
+    if (success) {
+      fetchProducts(true); // Recargar productos después de subir la imagen
     }
   };
 
@@ -965,10 +717,6 @@ const InventorySection: React.FC = () => {
   const showingFromTo = filteredProducts.length > 0 
     ? `${indexOfFirstProduct + 1}-${Math.min(indexOfLastProduct, filteredProducts.length)} de ${filteredProducts.length}`
     : '0 de 0';
-    
-  // Calcular posición para la paginación
-  const indexOfLastProduct = currentPage * itemsPerPage;
-  const indexOfFirstProduct = indexOfLastProduct - itemsPerPage;
 
   return (
     <div className="p-4 md:p-6 space-y-6 bg-[#DFEFE6]/30">
@@ -1055,7 +803,7 @@ const InventorySection: React.FC = () => {
       </div>
 
       {/* Alerta para productos con stock bajo */}
-      {!loading && products.some(p => p.stock > 0 && p.stock <= LOW_STOCK_THRESHOLD) && (
+      {!loading && products && products.some(p => p && p.stock > 0 && p.stock <= LOW_STOCK_THRESHOLD) && (
         <Alert className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg">
           <AlertTriangle className="h-4 w-4 text-yellow-500" />
           <AlertDescription className="ml-2">
@@ -1071,6 +819,16 @@ const InventorySection: React.FC = () => {
             <Search className="w-6 h-6 text-[#29696B]" />
           </div>
           <p className="text-[#7AA79C]">No se encontraron productos que coincidan con la búsqueda</p>
+        </div>
+      )}
+
+      {/* Indicador de carga */}
+      {loading && (
+        <div className="bg-white rounded-xl shadow-sm p-8 text-center border border-[#91BEAD]/20">
+          <div className="inline-flex items-center justify-center">
+            <Loader2 className="w-6 h-6 text-[#29696B] animate-spin mr-2" />
+            <p className="text-[#29696B]">Cargando productos...</p>
+          </div>
         </div>
       )}
 
@@ -1137,7 +895,7 @@ const InventorySection: React.FC = () => {
                             className="h-10 w-10 rounded-full object-cover border border-[#91BEAD]/30"
                             fallbackClassName="h-10 w-10 rounded-full bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30"
                             containerClassName="h-10 w-10"
-                            useBase64={true}
+                            useBase64={false}
                           />
                         </div>
                         <div>
@@ -1194,15 +952,6 @@ const InventorySection: React.FC = () => {
           </div>
         )}
         
-        {loading && (
-          <div className="py-8 text-center">
-            <div className="inline-flex items-center">
-              <Loader2 className="w-5 h-5 text-[#29696B] animate-spin mr-2" />
-              <span className="text-[#29696B]">Cargando productos...</span>
-            </div>
-          </div>
-        )}
-        
         {/* Paginación para la tabla */}
         {filteredProducts.length > itemsPerPage && (
           <div className="py-4 border-t border-[#91BEAD]/20">
@@ -1228,15 +977,6 @@ const InventorySection: React.FC = () => {
               currentPage={currentPage}
               onPageChange={handlePageChange}
             />
-          </div>
-        )}
-        
-        {loading && (
-          <div className="bg-white p-8 rounded-lg shadow-sm border border-[#91BEAD]/20 text-center">
-            <div className="inline-flex items-center">
-              <Loader2 className="w-5 h-5 text-[#29696B] animate-spin mr-2" />
-              <span className="text-[#29696B]">Cargando productos...</span>
-            </div>
           </div>
         )}
         
@@ -1271,7 +1011,7 @@ const InventorySection: React.FC = () => {
                     className="h-16 w-16 rounded-md object-cover border border-[#91BEAD]/30"
                     fallbackClassName="h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30"
                     containerClassName="h-16 w-16"
-                    useBase64={true}
+                    useBase64={false}
                   />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -1485,8 +1225,8 @@ const InventorySection: React.FC = () => {
                     ) : (
                       <ImageUpload 
                         productId={editingProduct._id}
-                        useBase64={true}
-                        onImageUploaded={(success) => handleImageUploaded(success, editingProduct._id)}
+                        useBase64={false}
+                        onImageUploaded={handleImageUploaded}
                       />
                     )}
                   </div>
