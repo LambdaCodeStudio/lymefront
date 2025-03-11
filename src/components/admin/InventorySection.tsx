@@ -140,6 +140,7 @@ const InventorySection = () => {
   
   // Estado para la paginación
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
   
   // Referencias para el scroll en móvil
   const mobileListRef = useRef(null);
@@ -188,7 +189,7 @@ const InventorySection = () => {
     ]
   };
 
-  // Función básica para cargar productos
+  // Función mejorada para cargar productos
   const fetchProducts = async (forceRefresh = false) => {
     try {
       // Si ya estamos cargando, no iniciar otra carga
@@ -223,33 +224,45 @@ const InventorySection = () => {
       }
       
       // Obtenemos el JSON de la respuesta
-      let data;
+      let responseData;
       try {
-        data = await response.json();
-        console.log(`Productos actualizados: ${data.length}`);
+        responseData = await response.json();
       } catch (jsonError) {
         console.error("Error al parsear JSON:", jsonError);
         throw new Error('Error al procesar datos de productos');
       }
       
-      // Validamos que la respuesta sea un array
-      if (!Array.isArray(data)) {
-        console.error("La respuesta no es un array:", data);
-        data = Array.isArray(data.items) ? data.items : [];
-        
-        if (data.length === 0) {
-          console.warn("No se encontraron productos o formato inesperado");
+      // Manejar correctamente el formato de respuesta paginada o array simple
+      let extractedProducts = [];
+      let totalItems = 0;
+      
+      if (responseData && typeof responseData === 'object') {
+        if (Array.isArray(responseData)) {
+          // Si es un array directamente
+          extractedProducts = responseData;
+          totalItems = responseData.length;
+          console.log(`Recibidos ${extractedProducts.length} productos en formato array`);
+        } else if (Array.isArray(responseData.items)) {
+          // Si es un objeto con paginación
+          extractedProducts = responseData.items;
+          totalItems = responseData.totalItems || responseData.items.length;
+          console.log(`Recibidos ${extractedProducts.length} productos en formato paginado (total: ${totalItems})`);
+        } else {
+          console.warn("Formato de respuesta no reconocido:", responseData);
+          extractedProducts = [];
+          totalItems = 0;
         }
       }
       
-      // Establecer productos
-      setProducts(data);
+      // Establecer productos y total
+      setProducts(extractedProducts);
+      setTotalCount(totalItems);
       
       // Marcar carga inicial como completada
       initialFetchDone.current = true;
       
       // Si hay pocos productos, mostrar una alerta
-      if (data.length === 0) {
+      if (extractedProducts.length === 0) {
         addNotification('No se encontraron productos', 'info');
       }
       
@@ -337,10 +350,8 @@ const InventorySection = () => {
 
   // Cargar productos al montar el componente y suscribirse al observable para actualizaciones
   useEffect(() => {
-    // Solo cargar productos si no se ha hecho aún
-    if (!initialFetchDone.current) {
-      fetchProducts();
-    }
+    // Cargar productos inmediatamente al montar el componente
+    fetchProducts();
     
     // Suscribirse a actualizaciones
     const unsubscribe = inventoryObservable.subscribe(() => {
@@ -612,7 +623,12 @@ const InventorySection = () => {
 
   // Calcular precio total del combo
   const calculateComboTotal = (items) => {
-    return items.reduce((total, item) => total + (item.precio * item.cantidad), 0);
+    if (!Array.isArray(items)) return 0;
+    return items.reduce((total, item) => {
+      const precio = item.precio || 0;
+      const cantidad = item.cantidad || 0;
+      return total + (precio * cantidad);
+    }, 0);
   };
 
   // Confirmar selección de ítems para el combo
@@ -1698,7 +1714,7 @@ const InventorySection = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de selección de productos para el combo */}
+      {/* Modal de selección de productos para el combo - Mejorado para responsividad */}
       <Dialog open={showComboSelectionModal} onOpenChange={setShowComboSelectionModal}>
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-auto">
           <DialogHeader>
@@ -1723,58 +1739,106 @@ const InventorySection = () => {
             
             {/* Lista de productos disponibles */}
             <div className="border rounded-md border-[#91BEAD]/30">
-              <Table>
-                <TableHeader className="bg-[#DFEFE6]/30">
-                  <TableRow>
-                    <TableHead className="w-[50%]">Producto</TableHead>
-                    <TableHead>Precio</TableHead>
-                    <TableHead>Stock</TableHead>
-                    <TableHead className="text-right">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+              {/* Vista para dispositivos móviles */}
+              <div className="md:hidden">
+                <div className="bg-[#DFEFE6]/30 p-3 text-[#29696B] font-medium text-sm">
+                  Productos disponibles
+                </div>
+                <div className="divide-y divide-[#91BEAD]/20 max-h-60 overflow-y-auto">
                   {comboProducts.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center py-8 text-[#7AA79C]">
-                        No hay productos disponibles para agregar al combo
-                      </TableCell>
-                    </TableRow>
+                    <div className="p-4 text-center text-[#7AA79C]">
+                      No hay productos disponibles
+                    </div>
                   ) : (
                     comboProducts.slice(0, 50).map((product) => (
-                      <TableRow key={product._id}>
-                        <TableCell className="font-medium truncate">{product.nombre}</TableCell>
-                        <TableCell>${product.precio.toFixed(2)}</TableCell>
-                        <TableCell>
-                          <span className={`inline-flex px-2 py-0.5 text-xs rounded-full ${
-                            product.stock <= 0 
-                              ? 'bg-red-100 text-red-800'
-                              : product.stock <= LOW_STOCK_THRESHOLD
-                                ? 'bg-yellow-100 text-yellow-800'
-                                : 'bg-[#DFEFE6] text-[#29696B]'
-                          }`}>
-                            {product.stock}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleAddComboItem(product)}
-                            className="h-8 text-[#29696B] hover:bg-[#DFEFE6]/50"
-                          >
-                            <Plus className="w-4 h-4 mr-1" />
-                            Agregar
-                          </Button>
-                        </TableCell>
-                      </TableRow>
+                      <div key={product._id} className="p-3 flex justify-between items-center">
+                        <div>
+                          <div className="font-medium text-sm text-[#29696B] truncate w-36">{product.nombre}</div>
+                          <div className="text-xs text-[#7AA79C] flex items-center gap-1">
+                            <span>${product.precio.toFixed(2)}</span>
+                            <span>•</span>
+                            <span className={`inline-flex px-1 py-0.5 text-xs rounded-full ${
+                              product.stock <= 0 
+                                ? 'bg-red-100 text-red-800'
+                                : product.stock <= LOW_STOCK_THRESHOLD
+                                  ? 'bg-yellow-100 text-yellow-800'
+                                  : 'bg-[#DFEFE6] text-[#29696B]'
+                            }`}>
+                              Stock: {product.stock}
+                            </span>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleAddComboItem(product)}
+                          className="h-8 text-[#29696B] border-[#91BEAD]"
+                        >
+                          <Plus className="w-3 h-3 mr-1" />
+                          Agregar
+                        </Button>
+                      </div>
                     ))
                   )}
-                </TableBody>
-              </Table>
+                </div>
+              </div>
+              
+              {/* Vista para tablets y desktop */}
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader className="bg-[#DFEFE6]/30">
+                    <TableRow>
+                      <TableHead className="w-[50%]">Producto</TableHead>
+                      <TableHead>Precio</TableHead>
+                      <TableHead>Stock</TableHead>
+                      <TableHead className="text-right">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {comboProducts.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center py-8 text-[#7AA79C]">
+                          No hay productos disponibles para agregar al combo
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      comboProducts.slice(0, 50).map((product) => (
+                        <TableRow key={product._id}>
+                          <TableCell className="font-medium truncate">{product.nombre}</TableCell>
+                          <TableCell>${product.precio.toFixed(2)}</TableCell>
+                          <TableCell>
+                            <span className={`inline-flex px-2 py-0.5 text-xs rounded-full ${
+                              product.stock <= 0 
+                                ? 'bg-red-100 text-red-800'
+                                : product.stock <= LOW_STOCK_THRESHOLD
+                                  ? 'bg-yellow-100 text-yellow-800'
+                                  : 'bg-[#DFEFE6] text-[#29696B]'
+                            }`}>
+                              {product.stock}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleAddComboItem(product)}
+                              className="h-8 text-[#29696B] hover:bg-[#DFEFE6]/50"
+                            >
+                              <Plus className="w-4 h-4 mr-1" />
+                              Agregar
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
             
-            {/* Productos seleccionados */}
+            {/* Productos seleccionados - Responsive para móvil y desktop */}
             <div>
               <h4 className="text-sm font-medium text-[#29696B] mb-2">Productos seleccionados</h4>
               {tempSelectedItems.length === 0 ? (
@@ -1783,65 +1847,119 @@ const InventorySection = () => {
                 </div>
               ) : (
                 <div className="border rounded-md border-[#91BEAD]/30">
-                  <Table>
-                    <TableHeader className="bg-[#DFEFE6]/30">
-                      <TableRow>
-                        <TableHead>Producto</TableHead>
-                        <TableHead>Precio</TableHead>
-                        <TableHead>Cantidad</TableHead>
-                        <TableHead>Subtotal</TableHead>
-                        <TableHead className="text-right">Acciones</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {tempSelectedItems.map((item, index) => (
-                        <TableRow key={index}>
-                          <TableCell className="font-medium truncate">{item.nombre}</TableCell>
-                          <TableCell>${item.precio.toFixed(2)}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center space-x-1">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleUpdateComboItemQuantity(item.productoId, item.cantidad - 1)}
-                                className="h-6 w-6 p-0 text-[#29696B]"
-                              >
-                                <Minus className="w-3 h-3" />
-                              </Button>
-                              <span className="w-8 text-center">{item.cantidad}</span>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleUpdateComboItemQuantity(item.productoId, item.cantidad + 1)}
-                                className="h-6 w-6 p-0 text-[#29696B]"
-                              >
-                                <Plus className="w-3 h-3" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                          <TableCell>${(item.precio * item.cantidad).toFixed(2)}</TableCell>
-                          <TableCell className="text-right">
+                  {/* Vista móvil para productos seleccionados */}
+                  <div className="md:hidden divide-y divide-[#91BEAD]/20">
+                    {tempSelectedItems.map((item, index) => (
+                      <div key={index} className="p-3">
+                        <div className="flex justify-between items-center mb-2">
+                          <div className="font-medium text-sm text-[#29696B] truncate max-w-[180px]">{item.nombre}</div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleUpdateComboItemQuantity(item.productoId, 0)}
+                            className="h-7 w-7 p-0 text-red-500 hover:bg-red-50"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <div className="text-xs text-[#7AA79C]">
+                            <span>${item.precio.toFixed(2)} x {item.cantidad}</span>
+                            <span className="ml-2 text-[#29696B] font-medium">= ${(item.precio * item.cantidad).toFixed(2)}</span>
+                          </div>
+                          <div className="flex items-center border rounded border-[#91BEAD]">
                             <Button
                               type="button"
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleUpdateComboItemQuantity(item.productoId, 0)}
-                              className="h-8 text-red-500 hover:bg-red-50 hover:text-red-700"
+                              onClick={() => handleUpdateComboItemQuantity(item.productoId, item.cantidad - 1)}
+                              className="h-7 w-7 p-0 text-[#29696B]"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Minus className="w-3 h-3" />
                             </Button>
-                          </TableCell>
+                            <span className="w-8 text-center text-sm">{item.cantidad}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleUpdateComboItemQuantity(item.productoId, item.cantidad + 1)}
+                              className="h-7 w-7 p-0 text-[#29696B]"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="p-3 bg-[#DFEFE6]/20 font-medium flex justify-between text-[#29696B]">
+                      <span>Total:</span>
+                      <span>${calculateComboTotal(tempSelectedItems).toFixed(2)}</span>
+                    </div>
+                  </div>
+                  
+                  {/* Vista desktop para productos seleccionados */}
+                  <div className="hidden md:block">
+                    <Table>
+                      <TableHeader className="bg-[#DFEFE6]/30">
+                        <TableRow>
+                          <TableHead>Producto</TableHead>
+                          <TableHead>Precio</TableHead>
+                          <TableHead>Cantidad</TableHead>
+                          <TableHead>Subtotal</TableHead>
+                          <TableHead className="text-right">Acciones</TableHead>
                         </TableRow>
-                      ))}
-                      <TableRow className="font-bold">
-                        <TableCell colSpan={3} className="text-right">Total:</TableCell>
-                        <TableCell>${calculateComboTotal(tempSelectedItems).toFixed(2)}</TableCell>
-                        <TableCell></TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {tempSelectedItems.map((item, index) => (
+                          <TableRow key={index}>
+                            <TableCell className="font-medium truncate">{item.nombre}</TableCell>
+                            <TableCell>${item.precio.toFixed(2)}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center space-x-1">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleUpdateComboItemQuantity(item.productoId, item.cantidad - 1)}
+                                  className="h-6 w-6 p-0 text-[#29696B]"
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </Button>
+                                <span className="w-8 text-center">{item.cantidad}</span>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleUpdateComboItemQuantity(item.productoId, item.cantidad + 1)}
+                                  className="h-6 w-6 p-0 text-[#29696B]"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                            <TableCell>${(item.precio * item.cantidad).toFixed(2)}</TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleUpdateComboItemQuantity(item.productoId, 0)}
+                                className="h-8 text-red-500 hover:bg-red-50 hover:text-red-700"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        <TableRow className="font-bold">
+                          <TableCell colSpan={3} className="text-right">Total:</TableCell>
+                          <TableCell>${calculateComboTotal(tempSelectedItems).toFixed(2)}</TableCell>
+                          <TableCell></TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
               )}
             </div>
