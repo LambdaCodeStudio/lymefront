@@ -1,12 +1,12 @@
 // OrdersSection.tsx - VERSIÓN OPTIMIZADA
-// Cambios principales implementados:
-// 1. Sistema de caché persistente usando localStorage
-// 2. Carga en lotes de detalles de productos
-// 3. Prefetching inteligente
-// 4. Reducción de solicitudes redundantes
-// 5. Optimización de filtros usando el backend directamente
+// Implementa:
+// 1. Sistema de caché avanzado con validación inteligente
+// 2. Carga de datos bajo demanda y prefetching inteligente
+// 3. Reducción de consultas redundantes
+// 4. UI totalmente responsive con optimizaciones específicas
+// 5. Componentes virtualizados para rendimiento en listas largas
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useReducer } from 'react';
 import { useNotification } from '@/context/NotificationContext';
 import {
   Plus,
@@ -30,9 +30,11 @@ import {
   DollarSign,
   Hash,
   Download,
-  RefreshCw
+  RefreshCw,
+  Info
 } from 'lucide-react';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -66,12 +68,20 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import Pagination from "@/components/ui/pagination";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
-// Importamos la función de actualización del inventario
 import { refreshInventory, getAuthToken } from '@/utils/inventoryUtils';
 
-// Tipos
+// ======== TIPOS Y INTERFACES ========
+
 interface User {
   _id: string;
   id?: string;
@@ -79,13 +89,14 @@ interface User {
   nombre?: string;
   apellido?: string;
   role: string;
+  isActive?: boolean;
 }
 
 interface Client {
   _id: string;
   servicio: string;
   seccionDelServicio: string;
-  userId: string;
+  userId: string | User;
 }
 
 interface Product {
@@ -117,7 +128,7 @@ interface Order {
   detalle?: string;
 }
 
-interface CreateOrderData {
+interface OrderForm {
   servicio: string;
   seccionDelServicio: string;
   userId: string;
@@ -125,1419 +136,983 @@ interface CreateOrderData {
   detalle?: string;
 }
 
-// Cache constants
-const CACHE_KEYS = {
+// ======== CONSTANTES DE CONFIGURACIÓN ========
+
+// Tiempo en MS para considerar que el cache necesita actualización
+const CACHE_EXPIRATION = {
+  ORDERS: 60 * 1000, // 1 minuto
+  PRODUCTS: 5 * 60 * 1000, // 5 minutos
+  USERS: 15 * 60 * 1000, // 15 minutos
+  CLIENTS: 15 * 60 * 1000, // 15 minutos
+  USER_DATA: 30 * 60 * 1000, // 30 minutos
+};
+
+// Claves para localStorage
+const STORAGE_KEYS = {
+  ORDERS: 'lyme_orders_cache',
   PRODUCTS: 'lyme_products_cache',
   USERS: 'lyme_users_cache',
   CLIENTS: 'lyme_clients_cache',
   CURRENT_USER: 'lyme_current_user',
-  LAST_PRODUCTS_FETCH: 'lyme_last_products_fetch',
-  LAST_USERS_FETCH: 'lyme_last_users_fetch',
-  LAST_CLIENTS_FETCH: 'lyme_last_clients_fetch'
+  LAST_FETCH: 'lyme_last_fetch_',
 };
 
-// Cache expiration times (in milliseconds)
-const CACHE_EXPIRATION = {
-  PRODUCTS: 15 * 60 * 1000, // 15 minutes
-  USERS: 30 * 60 * 1000, // 30 minutes
-  CLIENTS: 30 * 60 * 1000, // 30 minutes
-  CURRENT_USER: 60 * 60 * 1000 // 1 hour
+// Items por página según tamaño de pantalla
+const ITEMS_PER_PAGE = {
+  MOBILE: 4,
+  TABLET: 8,
+  DESKTOP: 12,
 };
 
-// Utility functions for cache management
-const CacheManager = {
-  // Store data in cache with timestamp
-  set: (key, data) => {
-    try {
-      const cacheItem = {
-        data,
-        timestamp: Date.now()
-      };
-      localStorage.setItem(key, JSON.stringify(cacheItem));
-      return true;
-    } catch (error) {
-      console.error(`Error storing cache for ${key}:`, error);
-      return false;
-    }
-  },
-
-  // Get data from cache if not expired
-  get: (key, expirationTime = 0) => {
-    try {
-      const cachedItem = localStorage.getItem(key);
-      if (!cachedItem) return null;
-
-      const { data, timestamp } = JSON.parse(cachedItem);
-      const now = Date.now();
-
-      // Return null if expired
-      if (expirationTime > 0 && now - timestamp > expirationTime) {
-        return null;
-      }
-
-      return data;
-    } catch (error) {
-      console.error(`Error retrieving cache for ${key}:`, error);
-      return null;
-    }
-  },
-
-  // Remove item from cache
-  remove: (key) => {
-    try {
-      localStorage.removeItem(key);
-      return true;
-    } catch (error) {
-      console.error(`Error removing cache for ${key}:`, error);
-      return false;
-    }
-  },
-
-  // Check if cache is expired
-  isExpired: (key, expirationTime) => {
-    try {
-      const cachedItem = localStorage.getItem(key);
-      if (!cachedItem) return true;
-
-      const { timestamp } = JSON.parse(cachedItem);
-      const now = Date.now();
-
-      return now - timestamp > expirationTime;
-    } catch (error) {
-      console.error(`Error checking expiration for ${key}:`, error);
-      return true;
-    }
-  }
+// Umbrales para tamaños de pantalla
+const SCREEN_SIZES = {
+  MOBILE: 640,
+  TABLET: 1024,
 };
 
-// Componente ProductDetail mejorado con mejor manejo de caché
-const ProductDetail = ({ item, cachedProducts, products, getProductDetails }) => {
-  const [productName, setProductName] = useState("Cargando...");
-  const [productPrice, setProductPrice] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const mountedRef = useRef(true);
+// ======== COMPONENTES AUXILIARES ========
 
-  useEffect(() => {
-    // Función para cargar detalles del producto con gestión de cancelación
-    const fetchProductDetails = async () => {
-      if (!mountedRef.current) return;
-      setIsLoading(true);
-      
-      try {
-        // Extraer el ID del producto de manera segura
-        const productId = typeof item.productoId === 'object' && item.productoId && item.productoId._id 
-          ? item.productoId._id 
-          : typeof item.productoId === 'string' 
-            ? item.productoId 
-            : null;
-            
-        if (!productId) {
-          if (mountedRef.current) {
-            setProductName("ID de producto inválido");
-            setProductPrice(0);
-            setIsLoading(false);
-          }
-          return;
-        }
-        
-        // Si ya tenemos nombre y precio en el item, usarlos
-        if (item.nombre && typeof item.precio === 'number') {
-          if (mountedRef.current) {
-            setProductName(item.nombre);
-            setProductPrice(item.precio);
-            setIsLoading(false);
-          }
-          return;
-        }
-
-        // Si el producto está en caché, usar esa información
-        if (cachedProducts[productId]) {
-          if (mountedRef.current) {
-            setProductName(cachedProducts[productId].nombre);
-            setProductPrice(cachedProducts[productId].precio);
-            setIsLoading(false);
-          }
-          return;
-        }
-
-        // Si el producto está en la lista de productos, usar esa información
-        const localProduct = products.find((p) => p._id === productId);
-        if (localProduct) {
-          if (mountedRef.current) {
-            setProductName(localProduct.nombre);
-            setProductPrice(localProduct.precio);
-            setIsLoading(false);
-          }
-          return;
-        }
-
-        // Si no tenemos la información, obtenerla del servidor
-        const productDetails = await getProductDetails(productId);
-        if (productDetails && mountedRef.current) {
-          setProductName(productDetails.nombre);
-          setProductPrice(productDetails.precio);
-        } else if (mountedRef.current) {
-          setProductName("Producto no encontrado");
-          setProductPrice(0);
-        }
-      } catch (error) {
-        console.error("Error al cargar detalles del producto:", error);
-        if (mountedRef.current) {
-          setProductName("Error al cargar");
-          setProductPrice(0);
-        }
-      } finally {
-        if (mountedRef.current) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    fetchProductDetails();
-
-    // Cleanup function to prevent memory leaks and state updates after unmount
-    return () => {
-      mountedRef.current = false;
-    };
-  }, [item, cachedProducts, products, getProductDetails]);
-
-  // Mostrar un indicador de carga mientras se obtienen los datos
-  if (isLoading) {
-    return (
-      <>
-        <td className="px-4 py-2 text-sm text-[#7AA79C]">Cargando...</td>
-        <td className="px-4 py-2 text-sm text-[#7AA79C]">{item.cantidad}</td>
-        <td className="px-4 py-2 text-sm text-[#7AA79C]">$0.00</td>
-        <td className="px-4 py-2 text-sm font-medium text-[#7AA79C]">$0.00</td>
-      </>
-    );
-  }
-
-  return (
-    <>
-      <td className="px-4 py-2 text-sm text-[#29696B]">{productName}</td>
-      <td className="px-4 py-2 text-sm text-[#7AA79C]">{item.cantidad}</td>
-      <td className="px-4 py-2 text-sm text-[#7AA79C]">${productPrice.toFixed(2)}</td>
-      <td className="px-4 py-2 text-sm font-medium text-[#29696B]">
-        ${(productPrice * item.cantidad).toFixed(2)}
-      </td>
-    </>
-  );
-};
-
-// Componente ProductDetailCard para visualización móvil
-const ProductDetailCard = ({ item, cachedProducts, products, getProductDetails }) => {
-  const [productName, setProductName] = useState("Cargando...");
-  const [productPrice, setProductPrice] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const mountedRef = useRef(true);
-
-  useEffect(() => {
-    const fetchProductDetails = async () => {
-      if (!mountedRef.current) return;
-      setIsLoading(true);
-      
-      try {
-        // Extraer el ID del producto de manera segura
-        const productId = typeof item.productoId === 'object' && item.productoId && item.productoId._id 
-          ? item.productoId._id 
-          : typeof item.productoId === 'string' 
-            ? item.productoId 
-            : null;
-            
-        if (!productId) {
-          if (mountedRef.current) {
-            setProductName("ID de producto inválido");
-            setProductPrice(0);
-            setIsLoading(false);
-          }
-          return;
-        }
-        
-        // Si ya tenemos nombre y precio en el item, usarlos
-        if (item.nombre && typeof item.precio === 'number') {
-          if (mountedRef.current) {
-            setProductName(item.nombre);
-            setProductPrice(item.precio);
-            setIsLoading(false);
-          }
-          return;
-        }
-
-        // Si el producto está en caché, usar esa información
-        if (cachedProducts[productId]) {
-          if (mountedRef.current) {
-            setProductName(cachedProducts[productId].nombre);
-            setProductPrice(cachedProducts[productId].precio);
-            setIsLoading(false);
-          }
-          return;
-        }
-
-        // Si el producto está en la lista de productos, usar esa información
-        const localProduct = products.find((p) => p._id === productId);
-        if (localProduct) {
-          if (mountedRef.current) {
-            setProductName(localProduct.nombre);
-            setProductPrice(localProduct.precio);
-            setIsLoading(false);
-          }
-          return;
-        }
-
-        // Si no tenemos la información, obtenerla del servidor
-        const productDetails = await getProductDetails(productId);
-        if (productDetails && mountedRef.current) {
-          setProductName(productDetails.nombre);
-          setProductPrice(productDetails.precio);
-        } else if (mountedRef.current) {
-          setProductName("Producto no encontrado");
-          setProductPrice(0);
-        }
-      } catch (error) {
-        console.error("Error al cargar detalles del producto:", error);
-        if (mountedRef.current) {
-          setProductName("Error al cargar");
-          setProductPrice(0);
-        }
-      } finally {
-        if (mountedRef.current) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    fetchProductDetails();
-
-    // Cleanup function
-    return () => {
-      mountedRef.current = false;
-    };
-  }, [item, cachedProducts, products, getProductDetails]);
-
-  if (isLoading) {
-    return (
-      <div className="py-2 flex justify-between items-center border-b border-[#91BEAD]/20">
-        <div>
-          <div className="font-medium text-[#7AA79C]">Cargando...</div>
-          <div className="text-xs text-[#91BEAD]">Cantidad: {item.cantidad}</div>
+// Esqueleto de carga para los pedidos
+const OrdersSkeleton = ({ count = 3 }) => (
+  <div className="space-y-4">
+    {Array(count).fill(0).map((_, i) => (
+      <div key={i} className="bg-white rounded-xl shadow-sm p-4 border border-[#91BEAD]/20">
+        <div className="flex justify-between items-start mb-4">
+          <Skeleton className="h-5 w-32" />
+          <Skeleton className="h-5 w-24" />
         </div>
-        <div className="text-sm font-medium text-[#7AA79C]">$0.00</div>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-4 w-4 rounded-full" />
+            <Skeleton className="h-4 w-48" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-4 w-4 rounded-full" />
+            <Skeleton className="h-4 w-36" />
+          </div>
+        </div>
       </div>
-    );
-  }
+    ))}
+  </div>
+);
 
-  return (
-    <div className="py-2 flex justify-between items-center border-b border-[#91BEAD]/20">
-      <div>
-        <div className="font-medium text-[#29696B]">{productName}</div>
-        <div className="text-xs text-[#7AA79C]">Cantidad: {item.cantidad} x ${productPrice.toFixed(2)}</div>
-      </div>
-      <div className="text-sm font-medium text-[#29696B]">${(productPrice * item.cantidad).toFixed(2)}</div>
-    </div>
-  );
-};
-
-// Componente para calcular el total del pedido, mejorado para ser más eficiente
-const OrderTotalCalculator = ({ order, cachedProducts, products, getProductDetails }) => {
-  const [total, setTotal] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const calculationCompleted = useRef(false);
-  const pendingProducts = useRef(new Set());
+// Componente para detalles de un producto en un pedido
+const ProductDetail = React.memo(({ 
+  item, 
+  productsMap,
+  onProductLoad 
+}: { 
+  item: OrderProduct; 
+  productsMap: Record<string, Product>; 
+  onProductLoad: (productId: string) => Promise<Product | null>; 
+}) => {
+  const [productDetail, setProductDetail] = useState<{
+    nombre: string;
+    precio: number;
+    loaded: boolean;
+  }>({
+    nombre: "Cargando...",
+    precio: 0,
+    loaded: false
+  });
+  
   const mountedRef = useRef(true);
-
-  // Usamos useEffect con mejor manejo del ciclo de vida
+  
   useEffect(() => {
-    pendingProducts.current = new Set();
-    calculationCompleted.current = false;
-    
-    const calculateTotal = async () => {
-      if (!mountedRef.current) return;
-      setIsLoading(true);
-      let calculatedTotal = 0;
+    const fetchProductDetails = async () => {
+      // Extraer el ID del producto
+      const productId = typeof item.productoId === 'object' 
+        ? item.productoId._id 
+        : item.productoId as string;
       
-      if (!order || !Array.isArray(order.productos)) {
+      // Si ya tenemos información directamente en el item
+      if (item.nombre && typeof item.precio === 'number') {
         if (mountedRef.current) {
-          setTotal(0);
-          setIsLoading(false);
-          calculationCompleted.current = true;
+          setProductDetail({
+            nombre: item.nombre,
+            precio: item.precio,
+            loaded: true
+          });
         }
         return;
       }
       
-      // Si no hay productos, establecer el total en 0
-      if (order.productos.length === 0) {
+      // Si el producto está en el mapa de productos
+      if (productsMap[productId]) {
         if (mountedRef.current) {
-          setTotal(0);
-          setIsLoading(false);
-          calculationCompleted.current = true;
+          setProductDetail({
+            nombre: productsMap[productId].nombre,
+            precio: productsMap[productId].precio,
+            loaded: true
+          });
         }
         return;
       }
       
-      // Lista de IDs de productos que necesitamos cargar
-      const productIdsToLoad = [];
-      
-      // Primero intentamos calcular con la información que ya tenemos
-      for (const item of order.productos) {
-        if (!item) continue;
-        
-        // Obtener el ID del producto de manera segura
-        const productId = typeof item.productoId === 'object' && item.productoId && item.productoId._id 
-          ? item.productoId._id 
-          : typeof item.productoId === 'string' 
-            ? item.productoId 
-            : null;
-            
-        if (!productId) continue;
-        
-        // Si ya tenemos el precio en el item, lo usamos
-        if (typeof item.precio === 'number') {
-          calculatedTotal += item.precio * (item.cantidad || 1);
-          continue;
+      // Si no lo tenemos, cargar del servidor
+      try {
+        const product = await onProductLoad(productId);
+        if (mountedRef.current && product) {
+          setProductDetail({
+            nombre: product.nombre,
+            precio: product.precio,
+            loaded: true
+          });
         }
-        
-        // Si el producto está en caché, usamos su precio
-        if (cachedProducts[productId] && typeof cachedProducts[productId].precio === 'number') {
-          calculatedTotal += cachedProducts[productId].precio * (item.cantidad || 1);
-          continue;
-        }
-        
-        // Si el producto está en la lista de productos, usamos su precio
-        const localProduct = products.find((p) => p._id === productId);
-        if (localProduct && typeof localProduct.precio === 'number') {
-          calculatedTotal += localProduct.precio * (item.cantidad || 1);
-          continue;
-        }
-        
-        // Si no tenemos el precio, agregamos el ID a la lista para cargar
-        productIdsToLoad.push(productId);
-        pendingProducts.current.add(productId);
-      }
-      
-      // Si ya calculamos todos los productos, actualizamos el estado
-      if (productIdsToLoad.length === 0) {
+      } catch (error) {
+        console.error("Error cargando detalles del producto:", error);
         if (mountedRef.current) {
-          setTotal(calculatedTotal);
-          setIsLoading(false);
-          calculationCompleted.current = true;
-        }
-        return;
-      }
-      
-      // Cargamos los productos que faltan en paralelo (pero en lotes para no sobrecargar)
-      const batchSize = 5;
-      for (let i = 0; i < productIdsToLoad.length; i += batchSize) {
-        const batch = productIdsToLoad.slice(i, i + batchSize);
-        const promises = batch.map(productId => getProductDetails(productId));
-        
-        try {
-          const results = await Promise.all(promises);
-          
-          // Actualizamos el total con los resultados
-          for (let j = 0; j < results.length; j++) {
-            const productDetails = results[j];
-            const productId = batch[j];
-            
-            if (productDetails && typeof productDetails.precio === 'number') {
-              // Encontrar la cantidad correcta para este producto
-              const item = order.productos.find(p => {
-                const itemId = typeof p.productoId === 'object' ? p.productoId._id : p.productoId;
-                return itemId === productId;
-              });
-              
-              if (item) {
-                calculatedTotal += productDetails.precio * (item.cantidad || 1);
-              }
-            }
-            
-            // Marcar este producto como procesado
-            pendingProducts.current.delete(productId);
-          }
-          
-          // Actualizamos el total parcial para mostrar progreso
-          if (mountedRef.current && pendingProducts.current.size === 0) {
-            setTotal(calculatedTotal);
-            setIsLoading(false);
-            calculationCompleted.current = true;
-          }
-        } catch (error) {
-          console.error(`Error al cargar lote de productos:`, error);
-        }
-      }
-    };
-    
-    calculateTotal();
-
-    // Cleanup function
-    return () => {
-      mountedRef.current = false;
-    };
-  }, [order, cachedProducts, products, getProductDetails]);
-  
-  if (isLoading) {
-    return <span className="text-[#7AA79C]">Calculando...</span>;
-  }
-  
-  return <span className="text-[#29696B]">${total.toFixed(2)}</span>;
-};
-
-// Componente principal
-const OrdersSection = () => {
-  // Usar el hook de notificaciones
-  const { addNotification } = useNotification();
-  
-  // Estados
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
-  const [clientSections, setClientSections] = useState<{ [key: string]: Client[] }>({});
-  const [products, setProducts] = useState<Product[]>([]);
-  const [cachedProducts, setCachedProducts] = useState<{ [key: string]: Product }>({});
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string>('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
-  const [orderDetailsOpen, setOrderDetailsOpen] = useState<string | null>(null);
-  const [mobileOrderDetailsOpen, setMobileOrderDetailsOpen] = useState<string | null>(null);
-  const [showMobileFilters, setShowMobileFilters] = useState(false);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [orderToDelete, setOrderToDelete] = useState<string | null>(null);
-
-  // Estados para paginación
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
-
-  // Referencias para el scroll en móvil
-  const mobileListRef = useRef<HTMLDivElement>(null);
-  
-  // Referencia para control de montaje/desmontaje
-  const mountedRef = useRef(true);
-  
-  // Referencia para la solicitud pendiente de productos
-  const pendingProductsRequest = useRef<boolean>(false);
-  
-  // Cola de productos a cargar
-  const productLoadQueue = useRef<Set<string>>(new Set());
-
-  // IMPORTANTE: Tamaños fijos para cada tipo de dispositivo
-  const ITEMS_PER_PAGE_MOBILE = 5;
-  const ITEMS_PER_PAGE_DESKTOP = 10;
-
-  // Calculamos dinámicamente itemsPerPage basado en el ancho de la ventana
-  const itemsPerPage = windowWidth < 768 ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP;
-
-  // Estados para filtros
-  const [dateFilter, setDateFilter] = useState({
-    fechaInicio: '',
-    fechaFin: ''
-  });
-
-  // Estados para modales
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showProductModal, setShowProductModal] = useState(false);
-  const [showSectionModal, setShowSectionModal] = useState(false);
-
-  // Estados para el formulario de pedido
-  const [orderForm, setOrderForm] = useState<CreateOrderData>({
-    servicio: '',
-    seccionDelServicio: '',
-    userId: '',
-    productos: []
-  });
-
-  // Estados para selección de productos
-  const [selectedProduct, setSelectedProduct] = useState<string>("none");
-  const [productQuantity, setProductQuantity] = useState<number>(1);
-
-  // Estados para el usuario actual
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  
-  // Flag de primera carga completada
-  const initialLoadComplete = useRef(false);
-
-  // Función memoizada para cargar productos en lotes desde la cola
-  const processProductQueue = useCallback(async () => {
-    // Si ya hay una solicitud pendiente o la cola está vacía, no hacer nada
-    if (pendingProductsRequest.current || productLoadQueue.current.size === 0) {
-      return;
-    }
-    
-    try {
-      pendingProductsRequest.current = true;
-      
-      // Convertir el Set a array
-      const productIds = Array.from(productLoadQueue.current);
-      // Limpiar la cola
-      productLoadQueue.current.clear();
-      
-      // Agrupar en lotes de 10 para no sobrecargar el servidor
-      const batchSize = 10;
-      const batches = [];
-      
-      for (let i = 0; i < productIds.length; i += batchSize) {
-        batches.push(productIds.slice(i, i + batchSize));
-      }
-      
-      // Procesar cada lote
-      for (const batch of batches) {
-        if (!mountedRef.current) break;
-        
-        const token = getAuthToken();
-        if (!token) break;
-        
-        // Filtrar IDs ya en caché o productos locales
-        const idsToFetch = batch.filter(id => {
-          return !cachedProducts[id] && !products.find(p => p._id === id);
-        });
-        
-        if (idsToFetch.length === 0) continue;
-        
-        // Hacer una sola petición por lote - idealmente el backend tendría un endpoint para obtener múltiples productos
-        // De momento, hacemos solicitudes en paralelo
-        const promises = idsToFetch.map(id => 
-          fetch(`https://lyme-back.vercel.app/api/producto/${id}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          }).then(resp => resp.ok ? resp.json() : null)
-        );
-        
-        const results = await Promise.allSettled(promises);
-        
-        // Procesar resultados y actualizar caché
-        const newCachedProducts = { ...cachedProducts };
-        let cacheUpdated = false;
-        
-        results.forEach((result, index) => {
-          if (result.status === 'fulfilled' && result.value) {
-            const product = result.value;
-            newCachedProducts[product._id] = product;
-            cacheUpdated = true;
-          }
-        });
-        
-        // Actualizar estado solo si hay cambios y el componente sigue montado
-        if (cacheUpdated && mountedRef.current) {
-          setCachedProducts(newCachedProducts);
-          
-          // Actualizar caché persistente
-          CacheManager.set(CACHE_KEYS.PRODUCTS, {
-            ...newCachedProducts,
-            ...Object.fromEntries(products.map(p => [p._id, p]))
+          setProductDetail({
+            nombre: "Error al cargar",
+            precio: 0,
+            loaded: true
           });
         }
       }
-    } catch (error) {
-      console.error('Error procesando cola de productos:', error);
-    } finally {
-      pendingProductsRequest.current = false;
-      
-      // Si quedan productos en la cola, procesarlos
-      if (mountedRef.current && productLoadQueue.current.size > 0) {
-        setTimeout(processProductQueue, 100);
-      }
-    }
-  }, [cachedProducts, products]);
-
-  // Agregar a la cola de carga de productos
-  const queueProductForLoading = useCallback((productId: string) => {
-    if (!productId || cachedProducts[productId] || products.find(p => p._id === productId)) {
-      return;
-    }
+    };
     
-    productLoadQueue.current.add(productId);
+    fetchProductDetails();
     
-    // Iniciar procesamiento si no hay solicitud pendiente
-    if (!pendingProductsRequest.current) {
-      processProductQueue();
-    }
-  }, [cachedProducts, products, processProductQueue]);
-
-  // Cargar datos de caché al montar el componente
-  useEffect(() => {
-    // Cargar productos de caché
-    const cachedProductsData = CacheManager.get(CACHE_KEYS.PRODUCTS, CACHE_EXPIRATION.PRODUCTS);
-    if (cachedProductsData) {
-      setCachedProducts(cachedProductsData);
-    }
-    
-    // Cargar usuarios de caché
-    const cachedUsers = CacheManager.get(CACHE_KEYS.USERS, CACHE_EXPIRATION.USERS);
-    if (cachedUsers) {
-      setUsers(cachedUsers);
-    }
-    
-    // Cargar usuario actual de caché
-    const cachedCurrentUser = CacheManager.get(CACHE_KEYS.CURRENT_USER, CACHE_EXPIRATION.CURRENT_USER);
-    if (cachedCurrentUser) {
-      setCurrentUser(cachedCurrentUser);
-      
-      // Actualizar el formulario con el userId correcto
-      setOrderForm(prev => ({
-        ...prev,
-        userId: cachedCurrentUser._id || cachedCurrentUser.id || ""
-      }));
-      
-      // Cargar clientes si tenemos el ID del usuario
-      const userId = cachedCurrentUser._id || cachedCurrentUser.id;
-      if (userId) {
-        // Cargar clientes de caché
-        const cachedClients = CacheManager.get(
-          `${CACHE_KEYS.CLIENTS}_${userId}`, 
-          CACHE_EXPIRATION.CLIENTS
-        );
-        
-        if (cachedClients) {
-          setClients(cachedClients);
-          
-          // Agrupar clientes por servicio
-          const grouped = cachedClients.reduce((acc, client) => {
-            if (!acc[client.servicio]) {
-              acc[client.servicio] = [];
-            }
-            acc[client.servicio].push(client);
-            return acc;
-          }, {});
-          
-          setClientSections(grouped);
-        }
-      }
-    }
-    
-    // Cargar productos del backend
-    fetchProducts();
-    
-    // Configurar flag de componente montado
-    mountedRef.current = true;
-    
-    // Limpieza al desmontar
     return () => {
       mountedRef.current = false;
     };
-  }, []);
+  }, [item, productsMap, onProductLoad]);
+  
+  if (!productDetail.loaded) {
+    return (
+      <>
+        <td className="px-4 py-2 whitespace-nowrap">
+          <Skeleton className="h-5 w-32" />
+        </td>
+        <td className="px-4 py-2 whitespace-nowrap text-center">
+          <Skeleton className="h-5 w-12 mx-auto" />
+        </td>
+        <td className="px-4 py-2 whitespace-nowrap text-right">
+          <Skeleton className="h-5 w-16 ml-auto" />
+        </td>
+        <td className="px-4 py-2 whitespace-nowrap text-right">
+          <Skeleton className="h-5 w-20 ml-auto" />
+        </td>
+      </>
+    );
+  }
+  
+  return (
+    <>
+      <td className="px-4 py-2 whitespace-nowrap text-[#29696B]">{productDetail.nombre}</td>
+      <td className="px-4 py-2 whitespace-nowrap text-center text-[#7AA79C]">{item.cantidad}</td>
+      <td className="px-4 py-2 whitespace-nowrap text-right text-[#7AA79C]">${productDetail.precio.toFixed(2)}</td>
+      <td className="px-4 py-2 whitespace-nowrap text-right font-medium text-[#29696B]">
+        ${(productDetail.precio * item.cantidad).toFixed(2)}
+      </td>
+    </>
+  );
+});
 
-  // Efecto para iniciar carga de datos después de obtener el usuario
+// Componente para detalles de un producto en la vista móvil
+const ProductDetailMobile = React.memo(({ 
+  item, 
+  productsMap,
+  onProductLoad 
+}: { 
+  item: OrderProduct; 
+  productsMap: Record<string, Product>; 
+  onProductLoad: (productId: string) => Promise<Product | null>; 
+}) => {
+  const [productDetail, setProductDetail] = useState<{
+    nombre: string;
+    precio: number;
+    loaded: boolean;
+  }>({
+    nombre: "Cargando...",
+    precio: 0,
+    loaded: false
+  });
+  
+  const mountedRef = useRef(true);
+  
   useEffect(() => {
-    // Solo ejecutar una vez
-    if (!initialLoadComplete.current && currentUser) {
+    const fetchProductDetails = async () => {
+      // Extraer el ID del producto
+      const productId = typeof item.productoId === 'object' 
+        ? item.productoId._id 
+        : item.productoId as string;
+      
+      // Si ya tenemos información directamente en el item
+      if (item.nombre && typeof item.precio === 'number') {
+        if (mountedRef.current) {
+          setProductDetail({
+            nombre: item.nombre,
+            precio: item.precio,
+            loaded: true
+          });
+        }
+        return;
+      }
+      
+      // Si el producto está en el mapa de productos
+      if (productsMap[productId]) {
+        if (mountedRef.current) {
+          setProductDetail({
+            nombre: productsMap[productId].nombre,
+            precio: productsMap[productId].precio,
+            loaded: true
+          });
+        }
+        return;
+      }
+      
+      // Si no lo tenemos, cargar del servidor
+      try {
+        const product = await onProductLoad(productId);
+        if (mountedRef.current && product) {
+          setProductDetail({
+            nombre: product.nombre,
+            precio: product.precio,
+            loaded: true
+          });
+        }
+      } catch (error) {
+        console.error("Error cargando detalles del producto:", error);
+        if (mountedRef.current) {
+          setProductDetail({
+            nombre: "Error al cargar",
+            precio: 0,
+            loaded: true
+          });
+        }
+      }
+    };
+    
+    fetchProductDetails();
+    
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [item, productsMap, onProductLoad]);
+  
+  if (!productDetail.loaded) {
+    return (
+      <div className="py-2 flex justify-between items-center border-b border-[#91BEAD]/20">
+        <div className="flex-1">
+          <Skeleton className="h-5 w-32 mb-1" />
+          <Skeleton className="h-4 w-24" />
+        </div>
+        <Skeleton className="h-5 w-16" />
+      </div>
+    );
+  }
+  
+  return (
+    <div className="py-2 flex justify-between items-center border-b border-[#91BEAD]/20">
+      <div>
+        <div className="font-medium text-[#29696B]">{productDetail.nombre}</div>
+        <div className="text-xs text-[#7AA79C]">
+          {item.cantidad} x ${productDetail.precio.toFixed(2)}
+        </div>
+      </div>
+      <div className="text-sm font-medium text-[#29696B]">
+        ${(productDetail.precio * item.cantidad).toFixed(2)}
+      </div>
+    </div>
+  );
+});
+
+// Componente para calcular el total de un pedido
+const OrderTotal = React.memo(({ 
+  order, 
+  productsMap,
+  onProductLoad 
+}: { 
+  order: Order; 
+  productsMap: Record<string, Product>; 
+  onProductLoad: (productId: string) => Promise<Product | null>; 
+}) => {
+  const [total, setTotal] = useState<number | null>(null);
+  const mountedRef = useRef(true);
+  
+  useEffect(() => {
+    const calculateTotal = async () => {
+      if (!order.productos || !Array.isArray(order.productos) || order.productos.length === 0) {
+        if (mountedRef.current) setTotal(0);
+        return;
+      }
+      
+      let sum = 0;
+      let pendingProducts = [];
+      
+      // Primero calcular con los datos que ya tenemos
+      for (const item of order.productos) {
+        const productId = typeof item.productoId === 'object' 
+          ? item.productoId._id 
+          : item.productoId as string;
+        
+        // Si el item ya tiene precio, usarlo
+        if (typeof item.precio === 'number') {
+          sum += item.precio * item.cantidad;
+          continue;
+        }
+        
+        // Si el producto está en el mapa, usar su precio
+        if (productsMap[productId]) {
+          sum += productsMap[productId].precio * item.cantidad;
+          continue;
+        }
+        
+        // Si no tenemos el precio, agregar a pendientes
+        pendingProducts.push(productId);
+      }
+      
+      // Si hay productos pendientes, cargarlos
+      if (pendingProducts.length > 0) {
+        // Cargamos en paralelo, pero con un límite de 5 a la vez
+        const batchSize = 5;
+        for (let i = 0; i < pendingProducts.length; i += batchSize) {
+          const batch = pendingProducts.slice(i, i + batchSize);
+          const productPromises = batch.map(id => onProductLoad(id));
+          
+          try {
+            const products = await Promise.all(productPromises);
+            
+            // Actualizar suma con productos cargados
+            for (let j = 0; j < products.length; j++) {
+              const product = products[j];
+              const productId = batch[j];
+              
+              if (product) {
+                // Encontrar el item correspondiente
+                const item = order.productos.find(p => {
+                  const itemId = typeof p.productoId === 'object' ? p.productoId._id : p.productoId;
+                  return itemId === productId;
+                });
+                
+                if (item) {
+                  sum += product.precio * item.cantidad;
+                }
+              }
+            }
+          } catch (error) {
+            console.error("Error cargando productos para cálculo:", error);
+          }
+        }
+      }
+      
+      if (mountedRef.current) setTotal(sum);
+    };
+    
+    calculateTotal();
+    
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [order, productsMap, onProductLoad]);
+  
+  if (total === null) {
+    return <Skeleton className="h-5 w-20 inline-block" />;
+  }
+  
+  return <span>${total.toFixed(2)}</span>;
+});
+
+// ======== COMPONENTE PRINCIPAL ========
+
+const OrdersSection = () => {
+  const { addNotification } = useNotification();
+  
+  // ======== ESTADOS ========
+  
+  // Estado de carga
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loadingActionId, setLoadingActionId] = useState<string | null>(null);
+  
+  // Datos principales
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  
+  // Mapas para acceso rápido (como índices)
+  const [productsMap, setProductsMap] = useState<Record<string, Product>>({});
+  const [usersMap, setUsersMap] = useState<Record<string, User>>({});
+  const [clientSections, setClientSections] = useState<Record<string, Client[]>>({});
+  
+  // Estados de UI
+  const [searchTerm, setSearchTerm] = useState('');
+  const [dateFilter, setDateFilter] = useState({ from: '', to: '' });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [orderDetailsOpen, setOrderDetailsOpen] = useState<Record<string, boolean>>({});
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+  
+  // Estados de modales
+  const [createOrderModalOpen, setCreateOrderModalOpen] = useState(false);
+  const [selectProductModalOpen, setSelectProductModalOpen] = useState(false);
+  const [selectSectionModalOpen, setSelectSectionModalOpen] = useState(false);
+  const [deleteConfirmModalOpen, setDeleteConfirmModalOpen] = useState(false);
+  const [orderToDelete, setOrderToDelete] = useState<string | null>(null);
+  
+  // Estados de formulario para crear/editar pedidos
+  const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
+  const [orderForm, setOrderForm] = useState<OrderForm>({
+    servicio: '',
+    seccionDelServicio: '',
+    userId: '',
+    productos: [],
+    detalle: ''
+  });
+  const [selectedProduct, setSelectedProduct] = useState('');
+  const [productQuantity, setProductQuantity] = useState(1);
+  
+  // Estado de error/éxito
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState('');
+  
+  // Referencias
+  const initialLoadComplete = useRef(false);
+  const mountedRef = useRef(true);
+  const lastFetchTimestamps = useRef<Record<string, number>>({});
+  const mobileListRef = useRef<HTMLDivElement>(null);
+  const productLoadQueue = useRef<Set<string>>(new Set());
+  const isProcessingQueue = useRef(false);
+  
+  // ======== CACHÉ Y PERSISTENCIA ========
+  
+  // Función para verificar si el caché ha expirado
+  const isCacheExpired = useCallback((key: string, expirationTime: number) => {
+    const lastFetch = lastFetchTimestamps.current[key] || 0;
+    return Date.now() - lastFetch > expirationTime;
+  }, []);
+  
+  // Guardar datos en localStorage con manejo de errores
+  const saveToLocalStorage = useCallback((key: string, data: any) => {
+    try {
+      localStorage.setItem(key, JSON.stringify({
+        data,
+        timestamp: Date.now()
+      }));
+      lastFetchTimestamps.current[key] = Date.now();
+      return true;
+    } catch (error) {
+      console.warn(`Error almacenando datos en localStorage (${key}):`, error);
+      return false;
+    }
+  }, []);
+  
+  // Cargar datos de localStorage con manejo de errores
+  const loadFromLocalStorage = useCallback((key: string) => {
+    try {
+      const stored = localStorage.getItem(key);
+      if (!stored) return null;
+      
+      const { data, timestamp } = JSON.parse(stored);
+      lastFetchTimestamps.current[key] = timestamp;
+      return data;
+    } catch (error) {
+      console.warn(`Error cargando datos de localStorage (${key}):`, error);
+      return null;
+    }
+  }, []);
+  
+  // ======== CARGA DE DATOS INICIAL ========
+  
+  // Inicializar datos desde localStorage al montar el componente
+  useEffect(() => {
+    // Función para cargar datos de localStorage
+    const loadCachedData = () => {
+      // Intentar cargar datos de usuario
+      const cachedUser = loadFromLocalStorage(STORAGE_KEYS.CURRENT_USER);
+      if (cachedUser) {
+        setCurrentUser(cachedUser);
+        
+        // Actualizar el ID de usuario en el formulario de pedido
+        setOrderForm(prev => ({
+          ...prev,
+          userId: cachedUser._id || cachedUser.id || ""
+        }));
+      }
+      
+      // Intentar cargar productos
+      const cachedProducts = loadFromLocalStorage(STORAGE_KEYS.PRODUCTS);
+      if (cachedProducts) {
+        setProducts(cachedProducts);
+        
+        // Crear mapa para acceso rápido
+        const productMap = cachedProducts.reduce((map: Record<string, Product>, product: Product) => {
+          map[product._id] = product;
+          return map;
+        }, {});
+        setProductsMap(productMap);
+      }
+      
+      // Intentar cargar usuarios
+      const cachedUsers = loadFromLocalStorage(STORAGE_KEYS.USERS);
+      if (cachedUsers) {
+        setUsers(cachedUsers);
+        
+        // Crear mapa para acceso rápido
+        const userMap = cachedUsers.reduce((map: Record<string, User>, user: User) => {
+          map[user._id] = user;
+          return map;
+        }, {});
+        setUsersMap(userMap);
+      }
+      
+      // Intentar cargar clientes
+      const cachedClients = loadFromLocalStorage(STORAGE_KEYS.CLIENTS);
+      if (cachedClients) {
+        setClients(cachedClients);
+        
+        // Agrupar por servicio
+        const sectionMap = cachedClients.reduce((map: Record<string, Client[]>, client: Client) => {
+          if (!map[client.servicio]) {
+            map[client.servicio] = [];
+          }
+          map[client.servicio].push(client);
+          return map;
+        }, {});
+        setClientSections(sectionMap);
+      }
+      
+      // Intentar cargar pedidos
+      const cachedOrders = loadFromLocalStorage(STORAGE_KEYS.ORDERS);
+      if (cachedOrders) {
+        setOrders(cachedOrders);
+      }
+    };
+    
+    // Cargar datos de caché
+    loadCachedData();
+    
+    // Marcar componente como montado y configurar efecto de cleanup
+    mountedRef.current = true;
+    
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [loadFromLocalStorage]);
+  
+  // Efecto para cargar datos después de la primera renderización
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      if (initialLoadComplete.current) return;
       initialLoadComplete.current = true;
       
-      // Fetch data in sequence to reduce concurrent requests
-      const loadData = async () => {
-        await fetchCurrentUser();
-        await fetchUsers();
-        await fetchOrders();
-      };
+      setIsLoading(true);
       
-      loadData();
-    }
-  }, [currentUser]);
-
-  // Efecto para detectar el tamaño de la ventana
+      try {
+        // Cargar datos en secuencia
+        await fetchUserData();
+        await fetchUsers();
+        await fetchProducts();
+        await fetchOrders();
+        
+        if (currentUser?._id) {
+          await fetchClients(currentUser._id);
+        }
+      } catch (error) {
+        console.error("Error cargando datos iniciales:", error);
+        setError("Error cargando los datos iniciales. Por favor, recargue la página.");
+        
+        if (addNotification) {
+          addNotification("Error cargando los datos iniciales", "error");
+        }
+      } finally {
+        if (mountedRef.current) {
+          setIsLoading(false);
+        }
+      }
+    };
+    
+    fetchInitialData();
+  }, []);
+  
+  // Efecto para detectar cambios de tamaño de ventana
   useEffect(() => {
     const handleResize = () => {
       const newWidth = window.innerWidth;
       setWindowWidth(newWidth);
-      
-      // Si cambiamos entre móvil y escritorio, volvemos a la primera página
-      if ((newWidth < 768 && windowWidth >= 768) || (newWidth >= 768 && windowWidth < 768)) {
-        setCurrentPage(1);
-      }
     };
     
     if (typeof window !== 'undefined') {
       window.addEventListener('resize', handleResize);
       return () => window.removeEventListener('resize', handleResize);
     }
+  }, []);
+  
+  // Determinar número de items por página según tamaño de pantalla
+  const itemsPerPage = useMemo(() => {
+    if (windowWidth < SCREEN_SIZES.MOBILE) return ITEMS_PER_PAGE.MOBILE;
+    if (windowWidth < SCREEN_SIZES.TABLET) return ITEMS_PER_PAGE.TABLET;
+    return ITEMS_PER_PAGE.DESKTOP;
   }, [windowWidth]);
-
-  // Resetear la página actual cuando cambian los filtros
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, dateFilter.fechaInicio, dateFilter.fechaFin]);
-
-  // Cargar usuario actual - optimizado para usar caché
-  const fetchCurrentUser = async () => {
-    // Si ya tenemos el usuario actual en caché y no está expirado, no lo volvemos a cargar
-    if (currentUser && !CacheManager.isExpired(CACHE_KEYS.CURRENT_USER, CACHE_EXPIRATION.CURRENT_USER)) {
+  
+  // ======== FUNCIONES DE CARGA DE DATOS ========
+  
+  // Cargar información del usuario actual
+  const fetchUserData = async (forceRefresh = false) => {
+    // Verificar si debemos recargar o usar caché
+    if (currentUser && !forceRefresh && !isCacheExpired(STORAGE_KEYS.CURRENT_USER, CACHE_EXPIRATION.USER_DATA)) {
       return currentUser;
     }
     
     try {
       const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-
+      if (!token) throw new Error("No hay token de autenticación");
+      
       const response = await fetch('https://lyme-back.vercel.app/api/auth/me', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-
+      
       if (!response.ok) {
-        throw new Error('Error al obtener información del usuario');
+        // Si es error de autenticación, redirigir a login
+        if (response.status === 401) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('userRole');
+          window.location.href = '/login';
+          return null;
+        }
+        
+        throw new Error(`Error al obtener datos del usuario: ${response.status}`);
       }
-
+      
       const userData = await response.json();
       
       if (!mountedRef.current) return null;
       
-      console.log("Usuario cargado:", userData);
+      // Actualizar estado
       setCurrentUser(userData);
       
-      // Guardar en caché
-      CacheManager.set(CACHE_KEYS.CURRENT_USER, userData);
-
-      // Usamos _id en lugar de id para cargar los clientes
-      if (userData._id) {
-        // Actualizamos también el formulario con el userId correcto
-        setOrderForm(prev => ({
-          ...prev,
-          userId: userData._id
-        }));
-        fetchClients(userData._id);
-      } else if (userData.id) {
-        // Por compatibilidad, si no hay _id pero sí id
-        setOrderForm(prev => ({
-          ...prev,
-          userId: userData.id
-        }));
-        fetchClients(userData.id);
+      // Actualizar caché
+      saveToLocalStorage(STORAGE_KEYS.CURRENT_USER, userData);
+      
+      // Actualizar ID de usuario en formulario
+      const userId = userData._id || userData.id;
+      if (userId) {
+        setOrderForm(prev => ({ ...prev, userId }));
+        
+        // Cargar clientes del usuario
+        await fetchClients(userId);
       }
       
       return userData;
-    } catch (err) {
-      const errorMsg = 'Error al cargar información del usuario: ' + 
-        (err instanceof Error ? err.message : String(err));
-      setError(errorMsg);
+    } catch (error) {
+      console.error("Error cargando datos del usuario:", error);
+      setError("Error al cargar la información del usuario");
       
-      // Notificación para error de información de usuario
       if (addNotification) {
-        addNotification(errorMsg, 'error');
+        addNotification("No se pudo cargar la información del usuario", "error");
       }
       
       return null;
     }
   };
-
-  // Cargar pedidos - optimizado para reducir peticiones
-  const fetchOrders = async (force = false) => {
-    if (loading && !force) return; // Evitar solicitudes múltiples
+  
+  // Cargar pedidos
+  const fetchOrders = async (forceRefresh = false) => {
+    // Verificar si debemos recargar o usar caché
+    if (orders.length > 0 && !forceRefresh && !isCacheExpired(STORAGE_KEYS.ORDERS, CACHE_EXPIRATION.ORDERS)) {
+      return orders;
+    }
     
     try {
-      setLoading(true);
-      setRefreshing(true);
+      setIsRefreshing(true);
       
       const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-
-      // Verificar si estamos filtrando por fecha
+      if (!token) throw new Error("No hay token de autenticación");
+      
+      // Determinar URL según filtros de fecha
       let url = 'https://lyme-back.vercel.app/api/pedido';
       
-      if (dateFilter.fechaInicio && dateFilter.fechaFin) {
-        url = `https://lyme-back.vercel.app/api/pedido/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
+      if (dateFilter.from && dateFilter.to) {
+        url = `https://lyme-back.vercel.app/api/pedido/fecha?fechaInicio=${encodeURIComponent(dateFilter.from)}&fechaFin=${encodeURIComponent(dateFilter.to)}`;
       }
-
+      
       const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          localStorage.removeItem('token');
-          window.location.href = '/login';
-          return [];
-        }
-        throw new Error('Error al cargar los pedidos');
-      }
-
-      const data = await response.json();
-      
-      if (!mountedRef.current) return [];
-      
-      console.log("Pedidos recibidos:", data);
-      setOrders(data);
-      setError(null);
-      setCurrentPage(1); // Resetear a la primera página al obtener nuevos datos
-      
-      // Notificación opcional para indicar que los pedidos se cargaron correctamente
-      if (addNotification && data.length > 0 && force) {
-        addNotification(`Se cargaron ${data.length} pedidos correctamente`, 'info');
-      }
-      
-      // Prefetch de productos relevantes
-      prefetchProductsFromOrders(data);
-      
-      return data;
-    } catch (err) {
-      const errorMsg = 'Error al cargar los pedidos: ' +
-        (err instanceof Error ? err.message : String(err));
-      setError(errorMsg);
-      
-      // Notificación para error de carga de pedidos
-      if (addNotification) {
-        addNotification(errorMsg, 'error');
-      }
-      
-      return [];
-    } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    }
-  };
-
-  // Prefetch de productos relevantes para los pedidos visibles
-  const prefetchProductsFromOrders = useCallback((ordersData: Order[]) => {
-    // Si no hay pedidos, no hacer nada
-    if (!Array.isArray(ordersData) || ordersData.length === 0) return;
-    
-    // Recopilar todos los IDs de productos en los pedidos
-    const productIds = new Set<string>();
-    
-    // Sólo prefetch para los primeros 50 pedidos (para no sobrecargar)
-    const ordersToProcess = ordersData.slice(0, 50);
-    
-    for (const order of ordersToProcess) {
-      if (Array.isArray(order.productos)) {
-        for (const product of order.productos) {
-          if (!product) continue;
-          
-          const productId = typeof product.productoId === 'object' && product.productoId 
-            ? product.productoId._id 
-            : typeof product.productoId === 'string'
-              ? product.productoId
-              : null;
-              
-          if (productId) {
-            productIds.add(productId);
-          }
-        }
-      }
-    }
-    
-    // Quedar a cargar productos que no están en caché ni en productos locales
-    for (const productId of productIds) {
-      queueProductForLoading(productId);
-    }
-  }, [queueProductForLoading]);
-
-  // Obtener detalles de producto por ID - versión optimizada
-  const getProductDetails = useCallback(async (productId: string | { _id: string;[key: string]: any }) => {
-    // Extraer el ID de manera segura
-    const id = typeof productId === 'object' ? productId._id : productId;
-
-    // Validar que el ID sea una cadena no vacía
-    if (!id || typeof id !== 'string') {
-      console.error("ID de producto inválido", productId);
-      return null;
-    }
-
-    // Primero revisar si ya tenemos este producto en caché
-    if (cachedProducts[id]) {
-      return cachedProducts[id];
-    }
-
-    // Luego revisar en la lista de productos cargados
-    const localProduct = products.find(p => p._id === id);
-    if (localProduct) {
-      // Agregar a caché
-      setCachedProducts(prev => {
-        const updated = { ...prev, [id]: localProduct };
-        // Actualizar caché persistente
-        CacheManager.set(CACHE_KEYS.PRODUCTS, {
-          ...updated,
-          ...Object.fromEntries(products.map(p => [p._id, p]))
-        });
-        return updated;
-      });
-      return localProduct;
-    }
-
-    try {
-      const token = getAuthToken();
-      if (!token) return null;
-
-      const response = await fetch(`https://lyme-back.vercel.app/api/producto/${id}`, {
         headers: { 
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache' 
         }
       });
-
+      
       if (!response.ok) {
-        console.error(`Error al obtener producto. Status: ${response.status}`);
-        return null;
-      }
-
-      const product = await response.json();
-      
-      if (!mountedRef.current) return null;
-
-      // Agregar a caché
-      setCachedProducts(prev => {
-        const updated = { ...prev, [id]: product };
-        // Actualizar caché persistente
-        CacheManager.set(CACHE_KEYS.PRODUCTS, {
-          ...updated,
-          ...Object.fromEntries(products.map(p => [p._id, p]))
-        });
-        return updated;
-      });
-
-      return product;
-    } catch (error) {
-      console.error("Error obteniendo producto:", error);
-      
-      // Notificación opcional para errores críticos
-      if (addNotification) {
-        addNotification(`Error al obtener detalles del producto: ${error instanceof Error ? error.message : 'Desconocido'}`, 'error');
-      }
-      
-      return null;
-    }
-  }, [cachedProducts, products, addNotification]);
-
-  // Función para toggleOrderDetails - versión escritorio (optimizada)
-  const toggleOrderDetails = useCallback(async (orderId: string) => {
-    if (orderDetailsOpen === orderId) {
-      setOrderDetailsOpen(null);
-    } else {
-      setOrderDetailsOpen(orderId);
-      
-      // Cargar los detalles de los productos en lote
-      const order = orders.find(o => o._id === orderId);
-      if (order && Array.isArray(order.productos)) {
-        // Recopilar IDs de productos a cargar
-        for (const item of order.productos) {
-          // Extraer ID de manera segura
-          const productId = typeof item.productoId === 'object' && item.productoId && item.productoId._id 
-            ? item.productoId._id 
-            : typeof item.productoId === 'string' 
-              ? item.productoId 
-              : null;
-              
-          if (productId) {
-            queueProductForLoading(productId);
-          }
+        // Si es error de autenticación, redirigir a login
+        if (response.status === 401) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('userRole');
+          window.location.href = '/login';
+          return [];
         }
-      }
-    }
-  }, [orderDetailsOpen, orders, queueProductForLoading]);
-
-  // Función para toggleMobileOrderDetails - versión móvil (optimizada)
-  const toggleMobileOrderDetails = useCallback(async (orderId: string) => {
-    if (mobileOrderDetailsOpen === orderId) {
-      setMobileOrderDetailsOpen(null);
-    } else {
-      setMobileOrderDetailsOpen(orderId);
-      
-      // Cargar los detalles de los productos en lote
-      const order = orders.find(o => o._id === orderId);
-      if (order && Array.isArray(order.productos)) {
-        // Recopilar IDs de productos a cargar
-        for (const item of order.productos) {
-          // Extraer ID de manera segura
-          const productId = typeof item.productoId === 'object' && item.productoId && item.productoId._id 
-            ? item.productoId._id 
-            : typeof item.productoId === 'string' 
-              ? item.productoId 
-              : null;
-              
-          if (productId) {
-            queueProductForLoading(productId);
-          }
-        }
-      }
-    }
-  }, [mobileOrderDetailsOpen, orders, queueProductForLoading]);
-
-  // Función para formatear fecha
-  const formatDateForAPI = (dateString) => {
-    const d = new Date(dateString);
-    if (isNaN(d.getTime())) return dateString; // Si la fecha no es válida, devolver el string original
-    
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  // Cargar pedidos por rango de fechas
-  const fetchOrdersByDate = async () => {
-    if (!dateFilter.fechaInicio || !dateFilter.fechaFin) {
-      const errorMsg = 'Por favor seleccione ambas fechas';
-      setError(errorMsg);
-      
-      // Notificación para campos faltantes
-      if (addNotification) {
-        addNotification(errorMsg, 'warning');
-      }
-      
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-
-      // Obtenemos las fechas del input del usuario
-      let fechaInicio = dateFilter.fechaInicio;
-      let fechaFin = dateFilter.fechaFin;
-      
-      console.log("Fechas originales del formulario:", fechaInicio, fechaFin);
-      
-      try {
-        // Los input type="date" ya proporcionan fechas en formato YYYY-MM-DD, 
-        // que es justo lo que necesitamos para el backend
-        // Verificamos si necesitamos hacer algún ajuste en la zona horaria
-        const fechaInicioObj = new Date(fechaInicio);
-        const fechaFinObj = new Date(fechaFin);
         
-        if (!isNaN(fechaInicioObj.getTime()) && !isNaN(fechaFinObj.getTime())) {
-          console.log("Objetos de fecha parseados correctamente:",
-            fechaInicioObj.toISOString(), fechaFinObj.toISOString());
-        } else {
-          console.warn("No se pudieron parsear las fechas como objetos Date válidos");
-        }
-      } catch (e) {
-        console.error("Error al manipular fechas:", e);
-      }
-
-      console.log(`Filtrando pedidos desde ${fechaInicio} hasta ${fechaFin}`);
-      
-      // Construimos la URL con las fechas originales del formulario
-      // Los inputs type="date" ya dan el formato YYYY-MM-DD que necesitamos
-      const url = `https://lyme-back.vercel.app/api/pedido/fecha?fechaInicio=${encodeURIComponent(fechaInicio)}&fechaFin=${encodeURIComponent(fechaFin)}`;
-      console.log("URL de solicitud:", url);
-      
-      // Opciones de la solicitud con el token de autenticación
-      const requestOptions = {
-        method: 'GET',
-        headers: { 
-          'Authorization': `Bearer ${token}`
-        }
-      };
-
-      console.log("Enviando solicitud GET a la API...");
-      const response = await fetch(url, requestOptions);
-
-      if (!response.ok) {
-        // Intentar obtener el mensaje de error del cuerpo de la respuesta
-        try {
-          const errorText = await response.text();
-          console.error("Respuesta de error completa:", errorText);
-          
-          try {
-            // Intentar parsear como JSON si es posible
-            const errorData = JSON.parse(errorText);
-            console.error("Datos de error:", errorData);
-            throw new Error(errorData.mensaje || errorData.error || `Error al filtrar pedidos por fecha (status: ${response.status})`);
-          } catch (jsonError) {
-            // Si no es JSON, usar el texto como está
-            throw new Error(`Error al filtrar pedidos por fecha (status: ${response.status}): ${errorText.substring(0, 100)}`);
-          }
-        } catch (e) {
-          console.error("Error al procesar la respuesta:", e);
-          throw new Error(`Error al filtrar pedidos por fecha (status: ${response.status})`);
-        }
-      }
-
-      const data = await response.json();
-      
-      if (!mountedRef.current) return;
-      
-      console.log(`Pedidos obtenidos en el rango de fechas: ${data.length}`);
-      setOrders(data);
-      setError(null);
-      setCurrentPage(1); // Resetear a la primera página al cambiar los datos
-
-      // Mensaje de éxito mostrando cuántos pedidos se encontraron
-      let successMsg = '';
-      if (data.length === 0) {
-        successMsg = 'No se encontraron pedidos en el rango de fechas seleccionado';
-      } else {
-        successMsg = `Se encontraron ${data.length} pedidos en el rango seleccionado`;
+        throw new Error(`Error al obtener pedidos: ${response.status}`);
       }
       
-      setSuccessMessage(successMsg);
+      const ordersData = await response.json();
       
-      // Notificación de filtro aplicado
+      if (!mountedRef.current) return [];
+      
+      // Actualizar estado
+      setOrders(ordersData);
+      
+      // Actualizar caché
+      saveToLocalStorage(STORAGE_KEYS.ORDERS, ordersData);
+      
+      // Volver a la primera página cuando se cargan nuevos datos
+      setCurrentPage(1);
+      
+      // Prefetch de productos en los pedidos
+      if (Array.isArray(ordersData) && ordersData.length > 0) {
+        prefetchProductsFromOrders(ordersData);
+      }
+      
+      return ordersData;
+    } catch (error) {
+      console.error("Error cargando pedidos:", error);
+      setError("Error al cargar los pedidos");
+      
       if (addNotification) {
-        addNotification(successMsg, data.length === 0 ? 'info' : 'success');
+        addNotification("No se pudieron cargar los pedidos", "error");
       }
       
-      // Eliminar mensaje después de 3 segundos
-      setTimeout(() => {
-        if (mountedRef.current) {
-          setSuccessMessage('');
-        }
-      }, 3000);
-      
-      // Cerrar filtros móviles si están abiertos
-      setShowMobileFilters(false);
-      
-      // Prefetch de productos para los pedidos
-      prefetchProductsFromOrders(data);
-    } catch (err) {
-      const errorMsg = 'Error al filtrar por fecha: ' +
-        (err instanceof Error ? err.message : String(err));
-      console.error(errorMsg, err);
-      setError(errorMsg);
-      
-      // Notificación para error de filtro por fecha
-      if (addNotification) {
-        addNotification(errorMsg, 'error');
-      }
+      return [];
     } finally {
       if (mountedRef.current) {
-        setLoading(false);
+        setIsRefreshing(false);
       }
     }
   };
-
-  // Cargar productos - optimizado con caché
+  
+  // Cargar productos
   const fetchProducts = async (forceRefresh = false) => {
-    // Si ya tenemos productos en caché y no está expirado, no volvemos a cargar
-    const cachedLastFetch = CacheManager.get(CACHE_KEYS.LAST_PRODUCTS_FETCH);
-    const hasRecentFetch = cachedLastFetch && Date.now() - cachedLastFetch < CACHE_EXPIRATION.PRODUCTS;
-    
-    if (!forceRefresh && products.length > 0 && hasRecentFetch) {
+    // Verificar si debemos recargar o usar caché
+    if (products.length > 0 && !forceRefresh && !isCacheExpired(STORAGE_KEYS.PRODUCTS, CACHE_EXPIRATION.PRODUCTS)) {
       return products;
     }
     
     try {
       const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-
+      if (!token) throw new Error("No hay token de autenticación");
+      
       const response = await fetch('https://lyme-back.vercel.app/api/producto', {
         headers: { 
           'Authorization': `Bearer ${token}`,
-          'Cache-Control': 'no-cache'
+          'Cache-Control': 'no-cache' 
         }
       });
-
+      
       if (!response.ok) {
-        throw new Error('Error al cargar productos');
+        throw new Error(`Error al obtener productos: ${response.status}`);
       }
-
-      const productsData = await response.json();
+      
+      let productsData: Product[] = [];
+      const responseData = await response.json();
+      
+      // Determinar formato de respuesta (array o paginado)
+      if (Array.isArray(responseData)) {
+        productsData = responseData;
+      } else if (responseData && Array.isArray(responseData.items)) {
+        productsData = responseData.items;
+      }
       
       if (!mountedRef.current) return products;
       
-      // Determinar el formato de la respuesta
-      let productsList = [];
-      if (Array.isArray(productsData)) {
-        productsList = productsData;
-      } else if (productsData && Array.isArray(productsData.items)) {
-        productsList = productsData.items;
-      }
+      // Actualizar estado
+      setProducts(productsData);
       
-      // Filtrar productos con stock > 0
-      const availableProducts = productsList.filter((p: Product) => p.stock > 0);
-      setProducts(availableProducts);
-
-      // También añadirlos al caché (aunque estén fuera de stock)
-      const productsCache = productsList.reduce((cache: { [key: string]: Product }, product: Product) => {
-        cache[product._id] = product;
-        return cache;
+      // Crear mapa para acceso rápido
+      const productMap = productsData.reduce((map: Record<string, Product>, product: Product) => {
+        map[product._id] = product;
+        return map;
       }, {});
+      setProductsMap(productMap);
       
-      setCachedProducts(prevCache => {
-        const combined = { ...prevCache, ...productsCache };
-        
-        // Actualizar caché persistente
-        CacheManager.set(CACHE_KEYS.PRODUCTS, combined);
-        
-        return combined;
-      });
+      // Actualizar caché
+      saveToLocalStorage(STORAGE_KEYS.PRODUCTS, productsData);
       
-      // Actualizar timestamp de la última carga
-      CacheManager.set(CACHE_KEYS.LAST_PRODUCTS_FETCH, Date.now());
-
-      console.log(`Productos cargados: ${productsList.length}, con stock > 0: ${availableProducts.length}`);
+      return productsData;
+    } catch (error) {
+      console.error("Error cargando productos:", error);
       
-      // Notificación opcional para productos disponibles
-      if (addNotification && availableProducts.length === 0) {
-        addNotification('No hay productos con stock disponible para crear pedidos', 'warning');
-      }
-      
-      return availableProducts;
-    } catch (err) {
-      console.error('Error al cargar productos:', err);
-      
-      // Notificación para error crítico de carga de productos
       if (addNotification) {
-        addNotification('Error al cargar productos. Algunas funcionalidades pueden estar limitadas.', 'error');
+        addNotification("No se pudieron cargar los productos", "warning");
       }
       
       return products;
     }
   };
-
-  // Cargar usuarios - optimizado con caché
+  
+  // Cargar usuarios
   const fetchUsers = async (forceRefresh = false) => {
-    // Si ya tenemos usuarios en caché y no está expirado, no volvemos a cargar
-    const cachedLastFetch = CacheManager.get(CACHE_KEYS.LAST_USERS_FETCH);
-    const hasRecentFetch = cachedLastFetch && Date.now() - cachedLastFetch < CACHE_EXPIRATION.USERS;
-    
-    if (!forceRefresh && users.length > 0 && hasRecentFetch) {
+    // Verificar si debemos recargar o usar caché
+    if (users.length > 0 && !forceRefresh && !isCacheExpired(STORAGE_KEYS.USERS, CACHE_EXPIRATION.USERS)) {
       return users;
     }
     
     try {
       const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-
+      if (!token) throw new Error("No hay token de autenticación");
+      
       const response = await fetch('https://lyme-back.vercel.app/api/auth/users', {
         headers: { 
           'Authorization': `Bearer ${token}`,
-          'Cache-Control': 'no-cache'
+          'Cache-Control': 'no-cache' 
         }
       });
-
+      
       if (!response.ok) {
-        throw new Error('Error al cargar usuarios');
+        throw new Error(`Error al obtener usuarios: ${response.status}`);
       }
-
-      const data = await response.json();
+      
+      const usersData = await response.json();
       
       if (!mountedRef.current) return users;
       
-      setUsers(data);
+      // Actualizar estado
+      setUsers(usersData);
       
-      // Guardar en caché
-      CacheManager.set(CACHE_KEYS.USERS, data);
-      CacheManager.set(CACHE_KEYS.LAST_USERS_FETCH, Date.now());
+      // Crear mapa para acceso rápido
+      const userMap = usersData.reduce((map: Record<string, User>, user: User) => {
+        map[user._id] = user;
+        return map;
+      }, {});
+      setUsersMap(userMap);
       
-      console.log("Usuarios cargados:", data.length);
+      // Actualizar caché
+      saveToLocalStorage(STORAGE_KEYS.USERS, usersData);
       
-      return data;
-    } catch (err) {
-      console.error('Error al cargar usuarios:', err);
+      return usersData;
+    } catch (error) {
+      console.error("Error cargando usuarios:", error);
       
-      // Notificación para error de carga de usuarios
       if (addNotification) {
-        addNotification('Error al cargar usuarios. Algunas funcionalidades pueden estar limitadas.', 'warning');
+        addNotification("No se pudieron cargar los usuarios", "warning");
       }
       
       return users;
     }
   };
-
-  // Cargar clientes del usuario - optimizado con caché
+  
+  // Cargar clientes de un usuario
   const fetchClients = async (userId: string, forceRefresh = false) => {
-    // Si ya tenemos clientes en caché y no está expirado, no volvemos a cargar
-    const cachedClientsKey = `${CACHE_KEYS.CLIENTS}_${userId}`;
-    const cachedLastFetch = CacheManager.get(`${cachedClientsKey}_last_fetch`);
-    const hasRecentFetch = cachedLastFetch && Date.now() - cachedLastFetch < CACHE_EXPIRATION.CLIENTS;
-    
-    if (!forceRefresh && clients.length > 0 && hasRecentFetch) {
+    // Verificar si debemos recargar o usar caché
+    const clientCacheKey = `${STORAGE_KEYS.CLIENTS}_${userId}`;
+    if (clients.length > 0 && !forceRefresh && !isCacheExpired(clientCacheKey, CACHE_EXPIRATION.CLIENTS)) {
       return clients;
     }
     
     try {
       const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-
-      console.log(`Cargando clientes para usuario ID: ${userId}`);
+      if (!token) throw new Error("No hay token de autenticación");
+      
       const response = await fetch(`https://lyme-back.vercel.app/api/cliente/user/${userId}`, {
         headers: { 
           'Authorization': `Bearer ${token}`,
-          'Cache-Control': 'no-cache'
+          'Cache-Control': 'no-cache' 
         }
       });
-
+      
       if (!response.ok) {
-        throw new Error(`Error al cargar clientes del usuario (status: ${response.status})`);
+        throw new Error(`Error al obtener clientes: ${response.status}`);
       }
-
+      
       const clientsData = await response.json();
       
       if (!mountedRef.current) return clients;
       
-      console.log(`Clientes cargados: ${clientsData.length}`);
+      // Actualizar estado
       setClients(clientsData);
-
-      // Agrupar clientes por servicio (para las secciones)
-      const grouped = clientsData.reduce((acc: { [key: string]: Client[] }, client: Client) => {
-        if (!acc[client.servicio]) {
-          acc[client.servicio] = [];
-        }
-        acc[client.servicio].push(client);
-        return acc;
-      }, {});
-
-      setClientSections(grouped);
       
-      // Guardar en caché
-      CacheManager.set(cachedClientsKey, clientsData);
-      CacheManager.set(`${cachedClientsKey}_last_fetch`, Date.now());
+      // Agrupar por servicio
+      const sectionMap = clientsData.reduce((map: Record<string, Client[]>, client: Client) => {
+        if (!map[client.servicio]) {
+          map[client.servicio] = [];
+        }
+        map[client.servicio].push(client);
+        return map;
+      }, {});
+      setClientSections(sectionMap);
+      
+      // Actualizar caché
+      saveToLocalStorage(clientCacheKey, clientsData);
       
       return clientsData;
-    } catch (err) {
-      console.error('Error al cargar clientes:', err);
+    } catch (error) {
+      console.error("Error cargando clientes:", error);
       
-      // Notificación para error de carga de clientes
       if (addNotification) {
-        addNotification('Error al cargar clientes. No podrá crear nuevos pedidos.', 'error');
+        addNotification("No se pudieron cargar los clientes", "warning");
       }
       
       return clients;
     }
   };
-
-  // Crear pedido
+  
+  // Cargar un producto específico
+  const fetchProductById = async (productId: string): Promise<Product | null> => {
+    // Si ya tenemos el producto en caché, devolverlo
+    if (productsMap[productId]) {
+      return productsMap[productId];
+    }
+    
+    try {
+      const token = getAuthToken();
+      if (!token) throw new Error("No hay token de autenticación");
+      
+      const response = await fetch(`https://lyme-back.vercel.app/api/producto/${productId}`, {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache' 
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Error al obtener producto: ${response.status}`);
+      }
+      
+      const product = await response.json();
+      
+      if (!mountedRef.current) return null;
+      
+      // Actualizar mapa de productos
+      setProductsMap(prev => {
+        const updated = { ...prev, [productId]: product };
+        return updated;
+      });
+      
+      return product;
+    } catch (error) {
+      console.error(`Error cargando producto ${productId}:`, error);
+      return null;
+    }
+  };
+  
+  // ======== FUNCIONES DE NEGOCIO ========
+  
+  // Crear un nuevo pedido
   const handleCreateOrder = async () => {
     // Validaciones
     if (!orderForm.servicio) {
-      const errorMsg = 'Debe seleccionar un cliente';
-      setError(errorMsg);
-      
-      // Notificación para validación
-      if (addNotification) {
-        addNotification(errorMsg, 'warning');
-      }
-      
+      setError("Debe seleccionar un cliente");
+      addNotification("Debe seleccionar un cliente", "warning");
       return;
     }
-
+    
     if (orderForm.productos.length === 0) {
-      const errorMsg = 'Debe agregar al menos un producto';
-      setError(errorMsg);
-      
-      // Notificación para validación
-      if (addNotification) {
-        addNotification(errorMsg, 'warning');
-      }
-      
+      setError("Debe agregar al menos un producto");
+      addNotification("Debe agregar al menos un producto", "warning");
       return;
     }
-
-    setLoading(true);
+    
+    setLoadingActionId("create-order");
     setError(null);
-
+    
     try {
       const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-
-      // Preparar datos del pedido - Enviamos solo lo que requiere la API
-      // IMPORTANTE: Solo enviamos productoId y cantidad en el array de productos
-      const pedidoData = {
+      if (!token) throw new Error("No hay token de autenticación");
+      
+      // Preparar datos del pedido
+      const orderData = {
         userId: orderForm.userId || (currentUser?._id || currentUser?.id || ""),
         servicio: orderForm.servicio,
         seccionDelServicio: orderForm.seccionDelServicio || "",
@@ -1547,91 +1122,72 @@ const OrdersSection = () => {
           cantidad: p.cantidad
         }))
       };
-
-      console.log("Enviando pedido:", JSON.stringify(pedidoData));
-
+      
       const response = await fetch('https://lyme-back.vercel.app/api/pedido', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(pedidoData)
+        body: JSON.stringify(orderData)
       });
-
+      
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.mensaje || `Error al crear el pedido (status: ${response.status})`);
+        throw new Error(errorData.mensaje || `Error al crear pedido: ${response.status}`);
       }
-
-      // Éxito
-      await fetchOrders(true);
-      await fetchProducts(true); // Recargar productos para actualizar stock
       
-      // Notificar a todos los componentes sobre el cambio en el inventario
+      // Recargar pedidos y productos
+      await Promise.all([
+        fetchOrders(true),
+        fetchProducts(true)
+      ]);
+      
+      // Notificar cambio de inventario
       await refreshInventory();
-      console.log("Notificación de actualización de inventario enviada después de crear pedido");
-
-      setShowCreateModal(false);
+      
+      // Resetear formulario y cerrar modal
       resetOrderForm();
+      setCreateOrderModalOpen(false);
       
-      const successMsg = 'Pedido creado correctamente';
-      setSuccessMessage(successMsg);
+      // Mostrar mensaje de éxito
+      setSuccessMessage("Pedido creado correctamente");
+      addNotification("Pedido creado correctamente", "success");
       
-      // Notificación de éxito para creación de pedido
-      if (addNotification) {
-        addNotification(successMsg, 'success');
-      }
-      
-      setTimeout(() => {
-        if (mountedRef.current) {
-          setSuccessMessage('');
-        }
-      }, 3000);
-    } catch (err) {
-      const errorMsg = 'Error al crear pedido: ' +
-        (err instanceof Error ? err.message : String(err));
-      setError(errorMsg);
-      
-      // Notificación para error de creación de pedido
-      if (addNotification) {
-        addNotification(errorMsg, 'error');
-      }
+      // Limpiar mensaje después de 3 segundos
+      setTimeout(() => setSuccessMessage(""), 3000);
+    } catch (error) {
+      console.error("Error creando pedido:", error);
+      setError(`Error al crear pedido: ${error instanceof Error ? error.message : String(error)}`);
+      addNotification(`Error al crear pedido: ${error instanceof Error ? error.message : String(error)}`, "error");
     } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-      }
+      setLoadingActionId(null);
     }
   };
-
-  // Actualizar pedido
+  
+  // Actualizar un pedido existente
   const handleUpdateOrder = async () => {
-    if (!currentOrder?._id) return;
-
-    setLoading(true);
+    if (!currentOrderId) return;
+    
+    setLoadingActionId("update-order");
     setError(null);
-
+    
     try {
       const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-
-      // Solo enviamos los campos necesarios y en el formato correcto
+      if (!token) throw new Error("No hay token de autenticación");
+      
+      // Preparar datos de actualización
       const updateData = {
         servicio: orderForm.servicio,
         seccionDelServicio: orderForm.seccionDelServicio || "",
         detalle: orderForm.detalle || " ",
-        // Importante: solo enviar productoId y cantidad
         productos: orderForm.productos.map(p => ({
           productoId: typeof p.productoId === 'object' ? p.productoId._id : p.productoId,
           cantidad: p.cantidad
         }))
       };
-
-      console.log("Actualizando pedido:", currentOrder._id, "con datos:", updateData);
-
-      const response = await fetch(`https://lyme-back.vercel.app/api/pedido/${currentOrder._id}`, {
+      
+      const response = await fetch(`https://lyme-back.vercel.app/api/pedido/${currentOrderId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -1639,296 +1195,239 @@ const OrdersSection = () => {
         },
         body: JSON.stringify(updateData)
       });
-
+      
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.mensaje || 'Error al actualizar el pedido');
+        throw new Error(errorData.mensaje || `Error al actualizar pedido: ${response.status}`);
       }
-
-      await fetchOrders(true);
-      await fetchProducts(true); // Recargar productos para actualizar stock
       
-      // Notificar a todos los componentes sobre el cambio en el inventario
+      // Recargar pedidos y productos
+      await Promise.all([
+        fetchOrders(true),
+        fetchProducts(true)
+      ]);
+      
+      // Notificar cambio de inventario
       await refreshInventory();
-      console.log("Notificación de actualización de inventario enviada después de actualizar pedido");
       
-      setShowCreateModal(false);
+      // Resetear formulario y cerrar modal
       resetOrderForm();
+      setCreateOrderModalOpen(false);
       
-      const successMsg = 'Pedido actualizado correctamente';
-      setSuccessMessage(successMsg);
+      // Mostrar mensaje de éxito
+      setSuccessMessage("Pedido actualizado correctamente");
+      addNotification("Pedido actualizado correctamente", "success");
       
-      // Notificación de éxito para actualización de pedido
-      if (addNotification) {
-        addNotification(successMsg, 'success');
-      }
-      
-      setTimeout(() => {
-        if (mountedRef.current) {
-          setSuccessMessage('');
-        }
-      }, 3000);
-    } catch (err) {
-      const errorMsg = 'Error al actualizar pedido: ' +
-        (err instanceof Error ? err.message : String(err));
-      setError(errorMsg);
-      
-      // Notificación para error de actualización de pedido
-      if (addNotification) {
-        addNotification(errorMsg, 'error');
-      }
+      // Limpiar mensaje después de 3 segundos
+      setTimeout(() => setSuccessMessage(""), 3000);
+    } catch (error) {
+      console.error("Error actualizando pedido:", error);
+      setError(`Error al actualizar pedido: ${error instanceof Error ? error.message : String(error)}`);
+      addNotification(`Error al actualizar pedido: ${error instanceof Error ? error.message : String(error)}`, "error");
     } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-      }
+      setLoadingActionId(null);
     }
   };
-
-  // Eliminar pedido
-  const handleDeleteOrder = async (id: string) => {
+  
+  // Eliminar un pedido
+  const handleDeleteOrder = async (orderId: string) => {
+    setLoadingActionId(`delete-${orderId}`);
+    
     try {
-      setLoading(true);
       const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-
-      const response = await fetch(`https://lyme-back.vercel.app/api/pedido/${id}`, {
+      if (!token) throw new Error("No hay token de autenticación");
+      
+      const response = await fetch(`https://lyme-back.vercel.app/api/pedido/${orderId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
-
+      
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.mensaje || 'Error al eliminar el pedido');
+        throw new Error(errorData.mensaje || `Error al eliminar pedido: ${response.status}`);
       }
-
-      await fetchOrders(true);
-      await fetchProducts(true); // Recargar productos para actualizar stock
       
-      // Notificar a todos los componentes sobre el cambio en el inventario
+      // Recargar pedidos y productos
+      await Promise.all([
+        fetchOrders(true),
+        fetchProducts(true)
+      ]);
+      
+      // Notificar cambio de inventario
       await refreshInventory();
-      console.log("Notificación de actualización de inventario enviada después de eliminar pedido");
       
-      const successMsg = 'Pedido eliminado correctamente';
-      setSuccessMessage(successMsg);
+      // Mostrar mensaje de éxito
+      setSuccessMessage("Pedido eliminado correctamente");
+      addNotification("Pedido eliminado correctamente", "success");
       
-      // Notificación de éxito para eliminación de pedido
-      if (addNotification) {
-        addNotification(successMsg, 'success');
-      }
-      
-      setTimeout(() => {
-        if (mountedRef.current) {
-          setSuccessMessage('');
-        }
-      }, 3000);
-    } catch (err) {
-      const errorMsg = 'Error al eliminar pedido: ' +
-        (err instanceof Error ? err.message : String(err));
-      setError(errorMsg);
-      
-      // Notificación para error de eliminación de pedido
-      if (addNotification) {
-        addNotification(errorMsg, 'error');
-      }
+      // Limpiar mensaje después de 3 segundos
+      setTimeout(() => setSuccessMessage(""), 3000);
+    } catch (error) {
+      console.error("Error eliminando pedido:", error);
+      setError(`Error al eliminar pedido: ${error instanceof Error ? error.message : String(error)}`);
+      addNotification(`Error al eliminar pedido: ${error instanceof Error ? error.message : String(error)}`, "error");
     } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-        setOrderToDelete(null);
-        setDeleteConfirmOpen(false);
-      }
+      setLoadingActionId(null);
+      setOrderToDelete(null);
+      setDeleteConfirmModalOpen(false);
     }
   };
-
-  // Preparar eliminación de pedido
-  const confirmDeleteOrder = (id: string) => {
-    setOrderToDelete(id);
-    setDeleteConfirmOpen(true);
+  
+  // Preparar eliminar pedido
+  const confirmDeleteOrder = (orderId: string) => {
+    setOrderToDelete(orderId);
+    setDeleteConfirmModalOpen(true);
   };
-
-  // Preparar edición de pedido
-  const handleEditOrder = (order: Order) => {
-    setCurrentOrder(order);
-
-    // Preparar los productos para edición
-    const preppedProductos = Array.isArray(order.productos)
-      ? order.productos.map(async (p) => {
-        // Intentar obtener nombre y precio si no están en el producto
-        try {
-          const productId = typeof p.productoId === 'object' && p.productoId 
-            ? p.productoId._id 
-            : p.productoId;
-            
-          if (!p.nombre || !p.precio) {
-            const details = await getProductDetails(productId);
-            return {
-              productoId: productId,
-              cantidad: p.cantidad,
-              nombre: p.nombre || (details?.nombre || "Producto no encontrado"),
-              precio: p.precio || (details?.precio || 0)
-            };
+  
+  // Preparar editar pedido
+  const handleEditOrder = async (order: Order) => {
+    setCurrentOrderId(order._id);
+    
+    // Preparar productos con nombres y precios
+    const productos = await Promise.all(
+      order.productos.map(async (p) => {
+        const productId = typeof p.productoId === 'object' ? p.productoId._id : p.productoId;
+        let nombre = p.nombre;
+        let precio = p.precio;
+        
+        // Si falta nombre o precio, intentar obtenerlos
+        if (!nombre || typeof precio !== 'number') {
+          // Primero buscar en el mapa de productos
+          if (productsMap[productId]) {
+            nombre = nombre || productsMap[productId].nombre;
+            precio = precio || productsMap[productId].precio;
+          } else {
+            // Si no está en el mapa, cargar del servidor
+            try {
+              const product = await fetchProductById(productId as string);
+              if (product) {
+                nombre = nombre || product.nombre;
+                precio = precio || product.precio;
+              }
+            } catch (error) {
+              console.error(`Error cargando producto ${productId}:`, error);
+            }
           }
-          return {
-            productoId: productId,
-            cantidad: p.cantidad,
-            nombre: p.nombre,
-            precio: p.precio
-          };
-        } catch (err) {
-          console.error("Error al obtener detalles del producto:", err);
-          return {
-            productoId: typeof p.productoId === 'object' ? p.productoId._id : p.productoId,
-            cantidad: p.cantidad,
-            nombre: p.nombre || "Error al cargar",
-            precio: p.precio || 0
-          };
         }
+        
+        return {
+          productoId: productId,
+          cantidad: p.cantidad,
+          nombre: nombre || "Producto no encontrado",
+          precio: typeof precio === 'number' ? precio : 0
+        };
       })
-      : [];
-
-    // Resolver las promesas para obtener los productos con sus detalles
-    Promise.all(preppedProductos).then(productos => {
-      setOrderForm({
-        servicio: order.servicio,
-        seccionDelServicio: order.seccionDelServicio || '',
-        userId: typeof order.userId === 'object' ? order.userId._id : order.userId,
-        productos: productos,
-        detalle: order.detalle || " "
-      });
-
-      setShowCreateModal(true);
-      console.log("Editando orden:", order);
-      
-      // Notificación informativa opcional para edición
-      if (addNotification) {
-        addNotification(`Editando pedido #${order.nPedido}`, 'info');
-      }
+    );
+    
+    // Actualizar formulario
+    setOrderForm({
+      servicio: order.servicio,
+      seccionDelServicio: order.seccionDelServicio || '',
+      userId: typeof order.userId === 'object' ? order.userId._id : order.userId as string,
+      productos: productos,
+      detalle: order.detalle || " "
     });
+    
+    // Abrir modal
+    setCreateOrderModalOpen(true);
   };
-
-  // Manejar selección de cliente
-  const handleClientChange = (clienteId: string) => {
-    if (clienteId === "none") return;
-
-    const selectedClient = clients.find(c => c._id === clienteId);
+  
+  // Seleccionar cliente
+  const handleClientChange = (clientId: string) => {
+    if (clientId === "none") return;
+    
+    const selectedClient = clients.find(c => c._id === clientId);
     if (!selectedClient) {
-      console.log(`Cliente no encontrado: ${clienteId}`);
-      
-      // Notificación para cliente no encontrado
-      if (addNotification) {
-        addNotification('Cliente seleccionado no encontrado', 'warning');
-      }
-      
+      console.error(`Cliente no encontrado: ${clientId}`);
+      addNotification("Cliente seleccionado no encontrado", "warning");
       return;
     }
-
-    console.log(`Cliente seleccionado: ${selectedClient.servicio}, ID: ${selectedClient._id}`);
-
-    // Actualizar el formulario con el cliente seleccionado
+    
+    // Actualizar formulario con cliente seleccionado
     setOrderForm(prev => ({
       ...prev,
       servicio: selectedClient.servicio,
-      seccionDelServicio: selectedClient.seccionDelServicio || '',  // Usar sección del cliente por defecto
+      seccionDelServicio: '',
       userId: currentUser?._id || currentUser?.id || ""
     }));
-
-    // Si hay varias secciones para este servicio, verificamos
+    
+    // Verificar si hay varias secciones para este servicio
     const sections = clientSections[selectedClient.servicio] || [];
-    console.log(`Secciones encontradas: ${sections.length}`);
-
+    
     if (sections.length === 1) {
+      // Si solo hay una sección, usarla directamente
       setOrderForm(prev => ({
         ...prev,
-        seccionDelServicio: sections[0].seccionDelServicio
+        seccionDelServicio: sections[0].seccionDelServicio || ''
       }));
     } else if (sections.length > 1) {
-      // Si hay más de una sección, abrimos el modal para que elija
-      setShowSectionModal(true);
+      // Si hay múltiples secciones, abrir modal para seleccionar
+      setSelectSectionModalOpen(true);
     }
   };
-
-  // Manejar selección de sección
-  const handleSectionSelect = (seccion: string) => {
+  
+  // Seleccionar sección
+  const handleSectionSelect = (section: string) => {
     setOrderForm(prev => ({
       ...prev,
-      seccionDelServicio: seccion
+      seccionDelServicio: section
     }));
-    setShowSectionModal(false);
-    
-    // Notificación opcional para selección de sección
-    if (addNotification) {
-      addNotification(`Sección "${seccion}" seleccionada`, 'info');
-    }
+    setSelectSectionModalOpen(false);
   };
-
+  
   // Agregar producto al pedido
   const handleAddProduct = () => {
     if (!selectedProduct || selectedProduct === "none" || productQuantity <= 0) {
-      const errorMsg = 'Seleccione un producto y una cantidad válida';
-      setError(errorMsg);
-      
-      // Notificación para validación
-      if (addNotification) {
-        addNotification(errorMsg, 'warning');
-      }
-      
+      setError("Seleccione un producto y una cantidad válida");
+      addNotification("Seleccione un producto y una cantidad válida", "warning");
       return;
     }
-
-    const product = products.find(p => p._id === selectedProduct);
-    if (!product) return;
-
-    // Verificar si hay suficiente stock
+    
+    const product = productsMap[selectedProduct];
+    if (!product) {
+      setError("Producto no encontrado");
+      addNotification("Producto no encontrado", "warning");
+      return;
+    }
+    
+    // Verificar stock
     if (product.stock < productQuantity) {
-      const errorMsg = `Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`;
-      setError(errorMsg);
-      
-      // Notificación para stock insuficiente
-      if (addNotification) {
-        addNotification(errorMsg, 'warning');
-      }
-      
+      setError(`Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`);
+      addNotification(`Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`, "warning");
       return;
     }
-
-    // Verificar si ya existe este producto en el pedido
-    const existingProductIndex = orderForm.productos.findIndex(
-      item => (typeof item.productoId === 'object' ? item.productoId._id : item.productoId) === selectedProduct
-    );
-
-    if (existingProductIndex >= 0) {
-      // Verificar stock para la cantidad total
-      const currentQuantity = orderForm.productos[existingProductIndex].cantidad;
-      const newQuantity = currentQuantity + productQuantity;
+    
+    // Buscar si el producto ya está en el pedido
+    const existingIndex = orderForm.productos.findIndex(p => {
+      const id = typeof p.productoId === 'object' ? p.productoId._id : p.productoId;
+      return id === selectedProduct;
+    });
+    
+    if (existingIndex >= 0) {
+      // Actualizar cantidad
+      const newQuantity = orderForm.productos[existingIndex].cantidad + productQuantity;
       
+      // Verificar stock para la cantidad total
       if (product.stock < newQuantity) {
-        const errorMsg = `Stock insuficiente. Solo hay ${product.stock} unidades disponibles y ya tienes ${currentQuantity} en el pedido.`;
-        setError(errorMsg);
-        
-        // Notificación para stock insuficiente
-        if (addNotification) {
-          addNotification(errorMsg, 'warning');
-        }
-        
+        setError(`Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`);
+        addNotification(`Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`, "warning");
         return;
       }
       
-      // Actualizar cantidad si ya existe
       const updatedProducts = [...orderForm.productos];
-      updatedProducts[existingProductIndex].cantidad = newQuantity;
-
+      updatedProducts[existingIndex] = {
+        ...updatedProducts[existingIndex],
+        cantidad: newQuantity
+      };
+      
       setOrderForm(prev => ({
         ...prev,
         productos: updatedProducts
       }));
       
-      // Notificación para producto actualizado
-      if (addNotification) {
-        addNotification(`Cantidad actualizada: ${product.nombre} (${newQuantity})`, 'success');
-      }
+      addNotification(`Cantidad actualizada: ${product.nombre} (${newQuantity})`, "success");
     } else {
       // Agregar nuevo producto
       setOrderForm(prev => ({
@@ -1944,39 +1443,31 @@ const OrdersSection = () => {
         ]
       }));
       
-      // Notificación para producto agregado
-      if (addNotification) {
-        addNotification(`Producto agregado: ${product.nombre} (${productQuantity})`, 'success');
-      }
+      addNotification(`Producto agregado: ${product.nombre} (${productQuantity})`, "success");
     }
-
+    
     // Resetear selección
     setSelectedProduct("none");
     setProductQuantity(1);
-    setShowProductModal(false);
+    setSelectProductModalOpen(false);
   };
-
+  
   // Eliminar producto del pedido
   const handleRemoveProduct = (index: number) => {
-    // Guardar una referencia al producto antes de eliminarlo para mostrar en la notificación
-    const product = orderForm.productos[index];
-    const productName = product.nombre || 
-      getProductName(typeof product.productoId === 'object' ? product.productoId._id : product.productoId);
+    const productToRemove = orderForm.productos[index];
+    const productName = productToRemove.nombre || getProductName(typeof productToRemove.productoId === 'object' ? productToRemove.productoId._id : productToRemove.productoId as string);
     
     const updatedProducts = [...orderForm.productos];
     updatedProducts.splice(index, 1);
-
+    
     setOrderForm(prev => ({
       ...prev,
       productos: updatedProducts
     }));
     
-    // Notificación para producto eliminado
-    if (addNotification) {
-      addNotification(`Producto eliminado: ${productName}`, 'info');
-    }
+    addNotification(`Producto eliminado: ${productName}`, "info");
   };
-
+  
   // Resetear formulario de pedido
   const resetOrderForm = () => {
     setOrderForm({
@@ -1986,205 +1477,270 @@ const OrdersSection = () => {
       productos: [],
       detalle: ' '
     });
-    setCurrentOrder(null);
+    setCurrentOrderId(null);
+    setSelectedProduct("none");
+    setProductQuantity(1);
   };
-
-  // Calcular total del pedido
-  const calculateTotal = useCallback((productos: OrderProduct[]) => {
+  
+  // Calcular total de un pedido (memoizado)
+  const calculateOrderTotal = useCallback((productos: OrderProduct[]): number => {
     return productos.reduce((total, item) => {
       let precio = 0;
       
-      // Primero usar precio del item si existe
       if (typeof item.precio === 'number') {
         precio = item.precio;
       } else {
-        // Obtener id del producto
         const productId = typeof item.productoId === 'object' ? item.productoId._id : item.productoId;
-        
-        // Buscar en caché
-        if (cachedProducts[productId]) {
-          precio = cachedProducts[productId].precio;
-        } else {
-          // Buscar en lista de productos
-          const product = products.find(p => p._id === productId);
-          if (product) {
-            precio = product.precio;
-          }
+        if (productsMap[productId as string]) {
+          precio = productsMap[productId as string].precio;
         }
       }
       
       return total + (precio * item.cantidad);
     }, 0);
-  }, [cachedProducts, products]);
-
-  // Obtener nombre de producto por ID - memoizado
-  const getProductName = useCallback((id: string) => {
-    const product = cachedProducts[id] || products.find(p => p._id === id);
-    return product?.nombre || 'Producto no encontrado';
-  }, [cachedProducts, products]);
-
-  // Obtener precio de producto por ID - memoizado
-  const getProductPrice = useCallback((id: string) => {
-    const product = cachedProducts[id] || products.find(p => p._id === id);
-    return product?.precio || 0;
-  }, [cachedProducts, products]);
-
-  // Obtener email de usuario por ID - memoizado
-  const getUserEmail = useCallback((userId: any) => {
-    // Si userId es un objeto con email
-    if (typeof userId === 'object' && userId !== null && userId.email) {
-      return userId.email;
-    }
-
-    // Si userId es un string (ID)
-    if (typeof userId === 'string') {
-      const user = users.find(u => u._id === userId);
-      return user?.email || 'Usuario no encontrado';
-    }
-
-    return 'Usuario no encontrado';
-  }, [users]);
+  }, [productsMap]);
   
-  // Obtener nombre completo del usuario - memoizado
-  const getUserFullName = useCallback((userId: string) => {
-    if (!userId) return 'No asignado';
-    
-    const user = users.find(u => u._id === userId);
-    
-    if (!user) return 'Usuario no encontrado';
-    
-    // Si tiene nombre y apellido, mostrar ambos
-    if (user.nombre) {
-      if (user.nombre && typeof user.nombre === 'string') {
-        // Verificar si tiene apellido (asumiendo que puede estar en otra propiedad)
-        const apellido = user.apellido || '';
-        return `${user.nombre} ${apellido}`.trim();
-      }
-      return user.nombre;
+  // Filtrar pedidos por fecha
+  const handleDateFilter = async () => {
+    if (!dateFilter.from || !dateFilter.to) {
+      setError("Debe seleccionar fechas de inicio y fin");
+      addNotification("Seleccione ambas fechas para filtrar", "warning");
+      return;
     }
     
-    // Si no tiene nombre, mostrar el email
-    if (user.email) {
-      return user.email;
-    }
-    
-    // Si no tiene nombre ni email, mostrar el ID acortado
-    return `ID: ${userId.substring(0, 8)}...`;
-  }, [users]);
-
+    await fetchOrders(true);
+    setShowMobileFilters(false);
+  };
+  
   // Limpiar todos los filtros
   const clearAllFilters = () => {
     setSearchTerm('');
-    setDateFilter({ fechaInicio: '', fechaFin: '' });
+    setDateFilter({ from: '', to: '' });
     fetchOrders(true);
     setShowMobileFilters(false);
-    setCurrentPage(1); // Resetear a la primera página
+    setCurrentPage(1);
     
-    // Notificación para filtros limpiados
-    if (addNotification) {
-      addNotification('Filtros eliminados. Mostrando todos los pedidos.', 'info');
-    }
+    addNotification("Filtros eliminados", "info");
   };
-
+  
+  // Alternar vista de detalles del pedido
+  const toggleOrderDetails = useCallback((orderId: string) => {
+    setOrderDetailsOpen(prev => ({
+      ...prev,
+      [orderId]: !prev[orderId]
+    }));
+    
+    // Prefetch de productos en el pedido
+    const order = orders.find(o => o._id === orderId);
+    if (order && Array.isArray(order.productos)) {
+      order.productos.forEach(item => {
+        const productId = typeof item.productoId === 'object' ? item.productoId._id : item.productoId;
+        if (productId && !productsMap[productId as string]) {
+          productLoadQueue.current.add(productId as string);
+          processProductQueue();
+        }
+      });
+    }
+  }, [orders, productsMap]);
+  
+  // Prefetch de productos en los pedidos
+  const prefetchProductsFromOrders = useCallback((ordersData: Order[]) => {
+    if (!Array.isArray(ordersData) || ordersData.length === 0) return;
+    
+    // Limitar a los primeros 20 pedidos para no sobrecargar
+    const ordersToProcess = ordersData.slice(0, 20);
+    
+    ordersToProcess.forEach(order => {
+      if (Array.isArray(order.productos)) {
+        order.productos.forEach(item => {
+          const productId = typeof item.productoId === 'object' ? item.productoId._id : item.productoId;
+          if (productId && !productsMap[productId as string]) {
+            productLoadQueue.current.add(productId as string);
+          }
+        });
+      }
+    });
+    
+    if (productLoadQueue.current.size > 0) {
+      processProductQueue();
+    }
+  }, [productsMap]);
+  
+  // Procesar cola de productos a cargar
+  const processProductQueue = useCallback(async () => {
+    if (isProcessingQueue.current || productLoadQueue.current.size === 0) {
+      return;
+    }
+    
+    isProcessingQueue.current = true;
+    
+    try {
+      const batchSize = 5;
+      const productIds = Array.from(productLoadQueue.current);
+      productLoadQueue.current.clear();
+      
+      // Procesar en lotes
+      for (let i = 0; i < productIds.length; i += batchSize) {
+        if (!mountedRef.current) break;
+        
+        const batch = productIds.slice(i, i + batchSize);
+        const filteredBatch = batch.filter(id => !productsMap[id]);
+        
+        if (filteredBatch.length === 0) continue;
+        
+        // Cargar productos en paralelo
+        const productsPromises = filteredBatch.map(id => fetchProductById(id));
+        await Promise.all(productsPromises);
+      }
+    } catch (error) {
+      console.error("Error procesando cola de productos:", error);
+    } finally {
+      isProcessingQueue.current = false;
+      
+      // Si quedan productos en la cola, procesarlos
+      if (mountedRef.current && productLoadQueue.current.size > 0) {
+        setTimeout(processProductQueue, 100);
+      }
+    }
+  }, [productsMap, fetchProductById]);
+  
+  // Obtener nombre de producto
+  const getProductName = useCallback((productId: string): string => {
+    return productsMap[productId]?.nombre || "Producto no encontrado";
+  }, [productsMap]);
+  
+  // Obtener información de usuario
+  const getUserInfo = useCallback((userId: string | User): { email: string; name: string } => {
+    // Si es un objeto con email y nombre
+    if (typeof userId === 'object' && userId) {
+      return {
+        email: userId.email || "Email no disponible",
+        name: userId.nombre 
+          ? `${userId.nombre} ${userId.apellido || ''}`
+          : userId.email || "Usuario no disponible"
+      };
+    }
+    
+    // Si es un string (ID)
+    if (typeof userId === 'string') {
+      const user = usersMap[userId];
+      if (!user) return { email: "Usuario no encontrado", name: "Usuario no encontrado" };
+      
+      return {
+        email: user.email || "Email no disponible",
+        name: user.nombre 
+          ? `${user.nombre} ${user.apellido || ''}`
+          : user.email || "Usuario no disponible"
+      };
+    }
+    
+    return { email: "Usuario no disponible", name: "Usuario no disponible" };
+  }, [usersMap]);
+  
   // Función para cambiar de página
   const handlePageChange = (pageNumber: number) => {
     setCurrentPage(pageNumber);
     
-    // Al cambiar de página, hacemos scroll hacia arriba
+    // Scroll al inicio
     window.scrollTo({ top: 0, behavior: 'smooth' });
     
-    // Hacer scroll al inicio de la lista en móvil
-    if (windowWidth < 768 && mobileListRef.current) {
+    // En móvil, scroll al inicio de la lista
+    if (windowWidth < SCREEN_SIZES.MOBILE && mobileListRef.current) {
       mobileListRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   };
   
-  // Función para descargar recibo en PDF
-  const handleDownloadRemito = async (pedidoId: string) => {
+  // Actualizar manualmente los datos
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    
+    try {
+      // Recargar datos principales
+      await Promise.all([
+        fetchOrders(true),
+        fetchProducts(true)
+      ]);
+      
+      addNotification("Datos actualizados correctamente", "success");
+    } catch (error) {
+      console.error("Error actualizando datos:", error);
+      addNotification("Error al actualizar los datos", "error");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+  
+  // Gestionar el PDF de pedido
+  const handleDownloadRemito = (pedidoId: string) => {
     try {
       const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
+      if (!token) throw new Error("No hay token de autenticación");
       
-      // Notificación para indicar que se está generando
-      if (addNotification) {
-        addNotification('Generando recibo PDF, por favor espere...', 'info');
-      }
-      
-      // Generar URL para descargar remito
-      const url = `https://lyme-back.vercel.app/api/downloads/remito/${pedidoId}`;
+      addNotification("Generando PDF del remito...", "info");
       
       // Abrir en una nueva pestaña
-      window.open(url, '_blank');
+      window.open(`https://lyme-back.vercel.app/api/downloads/remito/${pedidoId}`, '_blank');
     } catch (error) {
-      console.error('Error al descargar remito:', error);
-      // Notificación para error
-      if (addNotification) {
-        addNotification(`Error al generar el recibo PDF: ${error instanceof Error ? error.message : 'Desconocido'}`, 'error');
-      }
+      console.error("Error al generar remito:", error);
+      addNotification("Error al generar el remito", "error");
     }
   };
   
-  // Función para actualizar manualmente los datos
-  const handleManualRefresh = async () => {
-    setRefreshing(true);
-    
-    // Recargar pedidos y productos
-    await Promise.all([
-      fetchOrders(true),
-      fetchProducts(true)
-    ]);
-    
-    setRefreshing(false);
-    
-    // Notificación de actualización
-    if (addNotification) {
-      addNotification('Datos actualizados correctamente', 'success');
-    }
-  };
-
-  // Filtrar pedidos por término de búsqueda - memoizado
+  // ======== FILTRADO Y PAGINACIÓN ========
+  
+  // Filtrar pedidos según términos de búsqueda
   const filteredOrders = useMemo(() => {
-    return orders.filter(order =>
-      order.servicio.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      String(order.nPedido).includes(searchTerm) ||
-      (order.seccionDelServicio || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      getUserEmail(order.userId).toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [orders, searchTerm, getUserEmail]);
-
-  // Calcular paginación
-  const indexOfLastOrder = currentPage * itemsPerPage;
-  const indexOfFirstOrder = indexOfLastOrder - itemsPerPage;
-  const currentOrders = useMemo(() => {
-    return filteredOrders.slice(indexOfFirstOrder, indexOfLastOrder);
-  }, [filteredOrders, indexOfFirstOrder, indexOfLastOrder]);
+    return orders.filter(order => {
+      const searchLower = searchTerm.toLowerCase();
+      
+      return (
+        order.servicio.toLowerCase().includes(searchLower) ||
+        String(order.nPedido).includes(searchTerm) ||
+        (order.seccionDelServicio || '').toLowerCase().includes(searchLower) ||
+        getUserInfo(order.userId).email.toLowerCase().includes(searchLower) ||
+        getUserInfo(order.userId).name.toLowerCase().includes(searchLower)
+      );
+    });
+  }, [orders, searchTerm, getUserInfo]);
   
-  // Calcular el total de páginas
-  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
-
+  // Calcular paginación
+  const paginatedOrders = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredOrders.slice(startIndex, endIndex);
+  }, [filteredOrders, currentPage, itemsPerPage]);
+  
+  // Calcular total de páginas
+  const totalPages = useMemo(() => {
+    return Math.ceil(filteredOrders.length / itemsPerPage);
+  }, [filteredOrders.length, itemsPerPage]);
+  
   // Información de paginación
-  const showingFromTo = filteredOrders.length > 0 
-    ? `${indexOfFirstOrder + 1}-${Math.min(indexOfLastOrder, filteredOrders.length)} de ${filteredOrders.length}`
-    : '0 de 0';
-
-  // Asegurarse de que la página actual es válida
-  useEffect(() => {
-    const maxPage = Math.max(1, totalPages);
-    if (currentPage > maxPage) {
-      setCurrentPage(maxPage);
-    }
-  }, [filteredOrders.length, itemsPerPage, currentPage, totalPages]);
-
-  if (loading && orders.length === 0) {
+  const paginationInfo = useMemo(() => {
+    const total = filteredOrders.length;
+    const start = (currentPage - 1) * itemsPerPage + 1;
+    const end = Math.min(start + itemsPerPage - 1, total);
+    
+    return {
+      total,
+      start: total > 0 ? start : 0,
+      end: total > 0 ? end : 0,
+      range: total > 0 ? `${start}-${end} de ${total}` : "0 de 0"
+    };
+  }, [filteredOrders.length, currentPage, itemsPerPage]);
+  
+  // ======== RENDERIZADO ========
+  
+  // Mostrar pantalla de carga
+  if (isLoading && orders.length === 0) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <Loader2 className="w-8 h-8 animate-spin text-[#29696B]" />
+      <div className="p-4 md:p-6 bg-[#DFEFE6]/30 min-h-[300px] flex flex-col items-center justify-center">
+        <Loader2 className="w-10 h-10 text-[#29696B] animate-spin mb-4" />
+        <p className="text-[#29696B]">Cargando pedidos...</p>
       </div>
     );
   }
-
+  
   return (
     <div className="p-4 md:p-6 bg-[#DFEFE6]/30">
       {/* Alertas */}
@@ -2194,14 +1750,14 @@ const OrdersSection = () => {
           <AlertDescription className="ml-2">{error}</AlertDescription>
         </Alert>
       )}
-
+      
       {successMessage && (
         <Alert className="mb-4 bg-[#DFEFE6] border-[#91BEAD] text-[#29696B] rounded-lg">
           <Check className="h-4 w-4 text-[#29696B]" />
           <AlertDescription className="ml-2">{successMessage}</AlertDescription>
         </Alert>
       )}
-
+      
       {/* Barra de filtros y acciones para escritorio */}
       <div className="mb-6 space-y-4 hidden md:block bg-white p-4 rounded-xl shadow-sm border border-[#91BEAD]/20">
         <div className="flex flex-wrap gap-4 items-center justify-between">
@@ -2215,61 +1771,65 @@ const OrdersSection = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-
+          
           <div className="flex gap-2">
             <Button
               variant="outline"
               onClick={handleManualRefresh}
-              disabled={refreshing}
+              disabled={isRefreshing}
               className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50"
             >
-              <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
               Actualizar
             </Button>
             
             <Button
               onClick={() => {
                 resetOrderForm();
-                setShowCreateModal(true);
+                setCreateOrderModalOpen(true);
               }}
               className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
+              disabled={clients.length === 0 || products.length === 0}
             >
               <ShoppingCart className="w-4 h-4 mr-2" />
               Nuevo Pedido
             </Button>
           </div>
         </div>
-
+        
         <div className="flex flex-wrap gap-4 items-end">
           <div>
             <Label htmlFor="fechaInicio" className="text-[#29696B]">Fecha Inicio</Label>
             <Input
               id="fechaInicio"
               type="date"
-              value={dateFilter.fechaInicio}
-              onChange={(e) => setDateFilter({ ...dateFilter, fechaInicio: e.target.value })}
+              value={dateFilter.from}
+              onChange={(e) => setDateFilter({ ...dateFilter, from: e.target.value })}
               className="w-full border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
             />
           </div>
+          
           <div>
             <Label htmlFor="fechaFin" className="text-[#29696B]">Fecha Fin</Label>
             <Input
               id="fechaFin"
               type="date"
-              value={dateFilter.fechaFin}
-              onChange={(e) => setDateFilter({ ...dateFilter, fechaFin: e.target.value })}
+              value={dateFilter.to}
+              onChange={(e) => setDateFilter({ ...dateFilter, to: e.target.value })}
               className="w-full border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
             />
           </div>
+          
           <Button
             variant="outline"
-            onClick={fetchOrdersByDate}
+            onClick={handleDateFilter}
             className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50"
           >
             <Filter className="w-4 h-4 mr-2" />
             Filtrar por Fecha
           </Button>
-          {(dateFilter.fechaInicio || dateFilter.fechaFin || searchTerm) && (
+          
+          {(dateFilter.from || dateFilter.to || searchTerm) && (
             <Button
               variant="ghost"
               onClick={clearAllFilters}
@@ -2280,7 +1840,7 @@ const OrdersSection = () => {
           )}
         </div>
       </div>
-
+      
       {/* Barra de filtros y acciones para móvil */}
       <div className="mb-6 space-y-4 md:hidden">
         <div className="flex items-center gap-2 bg-white p-3 rounded-xl shadow-sm border border-[#91BEAD]/20">
@@ -2294,6 +1854,7 @@ const OrdersSection = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
+          
           <Button
             variant="outline"
             size="icon"
@@ -2302,43 +1863,48 @@ const OrdersSection = () => {
           >
             <Filter className="w-4 h-4" />
           </Button>
+          
           <Button
             size="icon"
             onClick={() => {
               resetOrderForm();
-              setShowCreateModal(true);
+              setCreateOrderModalOpen(true);
             }}
             className="flex-shrink-0 bg-[#29696B] hover:bg-[#29696B]/90 text-white"
+            disabled={clients.length === 0 || products.length === 0}
           >
             <Plus className="w-4 h-4" />
           </Button>
         </div>
-
+        
         {showMobileFilters && (
           <div className="p-4 bg-[#DFEFE6]/30 rounded-lg border border-[#91BEAD]/20 space-y-4">
             <h3 className="font-medium text-sm text-[#29696B]">Filtrar por fecha</h3>
+            
             <div className="space-y-2">
               <div>
                 <Label htmlFor="mFechaInicio" className="text-xs text-[#29696B]">Fecha Inicio</Label>
                 <Input
                   id="mFechaInicio"
                   type="date"
-                  value={dateFilter.fechaInicio}
-                  onChange={(e) => setDateFilter({ ...dateFilter, fechaInicio: e.target.value })}
+                  value={dateFilter.from}
+                  onChange={(e) => setDateFilter({ ...dateFilter, from: e.target.value })}
                   className="w-full text-sm border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
                 />
               </div>
+              
               <div>
                 <Label htmlFor="mFechaFin" className="text-xs text-[#29696B]">Fecha Fin</Label>
                 <Input
                   id="mFechaFin"
                   type="date"
-                  value={dateFilter.fechaFin}
-                  onChange={(e) => setDateFilter({ ...dateFilter, fechaFin: e.target.value })}
+                  value={dateFilter.to}
+                  onChange={(e) => setDateFilter({ ...dateFilter, to: e.target.value })}
                   className="w-full text-sm border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
                 />
               </div>
             </div>
+            
             <div className="flex gap-2 pt-2">
               <Button
                 variant="outline"
@@ -2348,9 +1914,10 @@ const OrdersSection = () => {
               >
                 Limpiar
               </Button>
+              
               <Button
                 size="sm"
-                onClick={fetchOrdersByDate}
+                onClick={handleDateFilter}
                 className="text-xs bg-[#29696B] hover:bg-[#29696B]/90 text-white"
               >
                 Aplicar Filtros
@@ -2358,17 +1925,18 @@ const OrdersSection = () => {
             </div>
           </div>
         )}
-
-        {(dateFilter.fechaInicio || dateFilter.fechaFin) && (
+        
+        {(dateFilter.from || dateFilter.to) && (
           <div className="px-3 py-2 bg-[#DFEFE6]/50 rounded-md text-xs text-[#29696B] flex items-center justify-between border border-[#91BEAD]/20">
             <div>
               <CalendarRange className="w-3 h-3 inline mr-1" />
               <span>
-                {dateFilter.fechaInicio && new Date(dateFilter.fechaInicio).toLocaleDateString()}
-                {dateFilter.fechaInicio && dateFilter.fechaFin && ' al '}
-                {dateFilter.fechaFin && new Date(dateFilter.fechaFin).toLocaleDateString()}
+                {dateFilter.from && new Date(dateFilter.from).toLocaleDateString()}
+                {dateFilter.from && dateFilter.to && ' al '}
+                {dateFilter.to && new Date(dateFilter.to).toLocaleDateString()}
               </span>
             </div>
+            
             <Button
               variant="ghost"
               size="sm"
@@ -2380,18 +1948,36 @@ const OrdersSection = () => {
           </div>
         )}
       </div>
-
+      
+      {/* Indicador de carga o refresco */}
+      {isRefreshing && (
+        <div className="bg-[#DFEFE6]/30 rounded-lg p-2 mb-4 flex items-center justify-center">
+          <Loader2 className="w-4 h-4 text-[#29696B] animate-spin mr-2" />
+          <span className="text-sm text-[#29696B]">Actualizando datos...</span>
+        </div>
+      )}
+      
       {/* Sin resultados */}
-      {filteredOrders.length === 0 ? (
+      {!isLoading && filteredOrders.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm p-8 text-center text-[#7AA79C] border border-[#91BEAD]/20">
           <div className="inline-flex items-center justify-center w-12 h-12 bg-[#DFEFE6] rounded-full mb-4">
             <ShoppingCart className="w-6 h-6 text-[#29696B]" />
           </div>
+          
           <p>
             No se encontraron pedidos
             {searchTerm && ` que coincidan con "${searchTerm}"`}
-            {(dateFilter.fechaInicio || dateFilter.fechaFin) && " en el rango de fechas seleccionado"}
+            {(dateFilter.from || dateFilter.to) && " en el rango de fechas seleccionado"}
           </p>
+          
+          {(clients.length === 0 || products.length === 0) && (
+            <p className="mt-4 text-sm text-red-500 flex items-center justify-center">
+              <Info className="w-4 h-4 mr-2" />
+              {clients.length === 0 
+                ? "No tiene clientes asignados. Contacte a un administrador." 
+                : "No hay productos disponibles para crear pedidos."}
+            </p>
+          )}
         </div>
       ) : (
         <>
@@ -2401,7 +1987,6 @@ const OrdersSection = () => {
               <table className="w-full">
                 <thead className="bg-[#DFEFE6]/30">
                   <tr>
-                    {/* Nueva columna para número de pedido */}
                     <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
                       Nº Pedido
                     </th>
@@ -2425,11 +2010,11 @@ const OrdersSection = () => {
                     </th>
                   </tr>
                 </thead>
+                
                 <tbody className="divide-y divide-[#91BEAD]/20">
-                  {currentOrders.map((order) => (
+                  {paginatedOrders.map((order) => (
                     <React.Fragment key={order._id}>
                       <tr className="hover:bg-[#DFEFE6]/10 transition-colors">
-                        {/* Celda para el número de pedido */}
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
                             <Hash className="w-4 h-4 text-[#7AA79C] mr-2" />
@@ -2438,14 +2023,16 @@ const OrdersSection = () => {
                             </div>
                           </div>
                         </td>
+                        
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-[#29696B]">
                             {new Date(order.fecha).toLocaleDateString()}
                           </div>
                           <div className="text-xs text-[#7AA79C]">
-                            {new Date(order.fecha).toLocaleTimeString()}
+                            {new Date(order.fecha).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </div>
                         </td>
+                        
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
                             <Building className="w-4 h-4 text-[#7AA79C] mr-2" />
@@ -2454,6 +2041,7 @@ const OrdersSection = () => {
                             </div>
                           </div>
                         </td>
+                        
                         <td className="px-6 py-4 whitespace-nowrap">
                           {order.seccionDelServicio ? (
                             <div className="flex items-center">
@@ -2466,90 +2054,157 @@ const OrdersSection = () => {
                             <span className="text-xs text-[#7AA79C]">Sin sección</span>
                           )}
                         </td>
+                        
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-[#29696B]">
-                            {getUserEmail(order.userId)}
+                            {getUserInfo(order.userId).email}
                           </div>
                         </td>
+                        
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-2">
                             <Badge variant="outline" className="border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/30">
                               {order.productos.length} producto{order.productos.length !== 1 ? 's' : ''}
                             </Badge>
+                            
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => toggleOrderDetails(order._id)}
                               className="text-[#7AA79C] hover:text-[#29696B] hover:bg-[#DFEFE6]/30"
                             >
-                              <Eye className="w-4 h-4" />
+                              {orderDetailsOpen[order._id] ? (
+                                <ChevronUp className="w-4 h-4" />
+                              ) : (
+                                <Eye className="w-4 h-4" />
+                              )}
                             </Button>
                           </div>
                         </td>
+                        
                         <td className="px-6 py-4 whitespace-nowrap text-right">
                           <div className="flex justify-end space-x-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleEditOrder(order)}
-                              className="text-[#29696B] hover:bg-[#DFEFE6]/30"
-                            >
-                              <FileEdit className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteOrder(order._id)}
-                              className="text-red-600 hover:bg-red-50"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleDownloadRemito(order._id)}
+                                    className="text-[#29696B] hover:bg-[#DFEFE6]/30"
+                                  >
+                                    <Download className="w-4 h-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Descargar Remito</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleEditOrder(order)}
+                                    disabled={loadingActionId === `edit-${order._id}`}
+                                    className="text-[#29696B] hover:bg-[#DFEFE6]/30"
+                                  >
+                                    {loadingActionId === `edit-${order._id}` ? (
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      <FileEdit className="w-4 h-4" />
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Editar Pedido</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => confirmDeleteOrder(order._id)}
+                                    disabled={loadingActionId === `delete-${order._id}`}
+                                    className="text-red-600 hover:bg-red-50"
+                                  >
+                                    {loadingActionId === `delete-${order._id}` ? (
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="w-4 h-4" />
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Eliminar Pedido</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           </div>
                         </td>
                       </tr>
-
-                      {/* Detalles del pedido (expandible) */}
-                      {orderDetailsOpen === order._id && (
+                      
+                      {/* Detalles del pedido expandibles */}
+                      {orderDetailsOpen[order._id] && (
                         <tr>
                           <td colSpan={7} className="px-6 py-4 bg-[#DFEFE6]/20">
                             <div className="space-y-3">
                               <div className="font-medium text-[#29696B]">Detalles del Pedido</div>
-                              <div className="overflow-x-auto">
+                              
+                              <div className="overflow-x-auto rounded-md border border-[#91BEAD]/30">
                                 <table className="min-w-full divide-y divide-[#91BEAD]/20">
                                   <thead className="bg-[#DFEFE6]/50">
                                     <tr>
                                       <th className="px-4 py-2 text-left text-xs font-medium text-[#29696B]">Producto</th>
-                                      <th className="px-4 py-2 text-left text-xs font-medium text-[#29696B]">Cantidad</th>
-                                      <th className="px-4 py-2 text-left text-xs font-medium text-[#29696B]">Precio</th>
-                                      <th className="px-4 py-2 text-left text-xs font-medium text-[#29696B]">Total</th>
+                                      <th className="px-4 py-2 text-center text-xs font-medium text-[#29696B]">Cantidad</th>
+                                      <th className="px-4 py-2 text-right text-xs font-medium text-[#29696B]">Precio Unit.</th>
+                                      <th className="px-4 py-2 text-right text-xs font-medium text-[#29696B]">Subtotal</th>
                                     </tr>
                                   </thead>
-                                  <tbody className="divide-y divide-[#91BEAD]/20">
+                                  
+                                  <tbody className="divide-y divide-[#91BEAD]/20 bg-white">
                                     {order.productos.map((item, index) => (
                                       <tr key={index} className="hover:bg-[#DFEFE6]/20">
                                         <ProductDetail 
                                           item={item} 
-                                          cachedProducts={cachedProducts} 
-                                          products={products} 
-                                          getProductDetails={getProductDetails} 
+                                          productsMap={productsMap} 
+                                          onProductLoad={fetchProductById}
                                         />
                                       </tr>
                                     ))}
-
+                                    
                                     {/* Total */}
-                                    <tr className="bg-[#DFEFE6]/40">
-                                      <td colSpan={3} className="px-4 py-2 text-right font-medium text-[#29696B]">Total del Pedido:</td>
-                                      <td className="px-4 py-2 font-bold text-[#29696B]">
-                                        <OrderTotalCalculator 
-                                          order={order} 
-                                          cachedProducts={cachedProducts} 
-                                          products={products} 
-                                          getProductDetails={getProductDetails} 
+                                    <tr className="bg-[#DFEFE6]/40 font-medium">
+                                      <td colSpan={3} className="px-4 py-2 text-right text-[#29696B]">Total del Pedido:</td>
+                                      <td className="px-4 py-2 text-right font-bold text-[#29696B]">
+                                        <OrderTotal
+                                          order={order}
+                                          productsMap={productsMap}
+                                          onProductLoad={fetchProductById}
                                         />
                                       </td>
                                     </tr>
                                   </tbody>
                                 </table>
+                              </div>
+                              
+                              <div className="flex justify-end mt-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleDownloadRemito(order._id)}
+                                  className="text-xs h-8 border-[#29696B] text-[#29696B] hover:bg-[#DFEFE6]/30"
+                                >
+                                  <Download className="w-3 h-3 mr-1" />
+                                  Descargar Remito
+                                </Button>
                               </div>
                             </div>
                           </td>
@@ -2560,145 +2215,184 @@ const OrdersSection = () => {
                 </tbody>
               </table>
             </div>
-
+            
             {/* Paginación para la tabla */}
             {filteredOrders.length > itemsPerPage && (
-              <div className="py-4 border-t border-[#91BEAD]/20">
+              <div className="py-4 border-t border-[#91BEAD]/20 px-6 flex flex-col sm:flex-row justify-between items-center gap-2">
+                <div className="text-sm text-[#7AA79C]">
+                  Mostrando {paginationInfo.range}
+                </div>
+                
                 <Pagination
                   totalItems={filteredOrders.length}
                   itemsPerPage={itemsPerPage}
                   currentPage={currentPage}
                   onPageChange={handlePageChange}
-                  className="px-6"
                 />
               </div>
             )}
           </div>
-
+          
           {/* Vista de tarjetas para móviles */}
           <div ref={mobileListRef} id="mobile-orders-list" className="md:hidden grid grid-cols-1 gap-4">
-            {/* Paginación visible en la parte superior para móvil */}
-            {!loading && filteredOrders.length > itemsPerPage && (
+            {/* Paginación superior en móvil */}
+            {filteredOrders.length > itemsPerPage && (
               <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20">
                 <Pagination
                   totalItems={filteredOrders.length}
                   itemsPerPage={itemsPerPage}
                   currentPage={currentPage}
                   onPageChange={handlePageChange}
+                  showFirstLast={false}
+                  showNumbers={false}
                 />
               </div>
             )}
             
-            {!loading && currentOrders.map(order => (
-              <Card key={order._id} className="overflow-hidden shadow-sm border border-[#91BEAD]/20">
-                <CardHeader className="pb-2 bg-[#DFEFE6]/20">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <CardTitle className="text-sm font-medium flex items-center text-[#29696B]">
-                        <Building className="w-4 h-4 text-[#7AA79C] mr-1" />
-                        {order.servicio}
-                      </CardTitle>
-                      {order.seccionDelServicio && (
-                        <div className="text-xs text-[#7AA79C] flex items-center mt-1">
-                          <MapPin className="w-3 h-3 mr-1" />
-                          {order.seccionDelServicio}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                      {/* Badge para el número de pedido */}
-                      <Badge variant="outline" className="text-xs border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/20">
-                        <Hash className="w-3 h-3 mr-1" />
-                        {order.nPedido}
-                      </Badge>
-                      {/* Badge para la fecha */}
-                      <Badge variant="outline" className="text-xs border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/20">
-                        <Calendar className="w-3 h-3 mr-1" />
-                        {new Date(order.fecha).toLocaleDateString()}
-                      </Badge>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="py-2">
-                  <div className="text-xs space-y-1">
-                    <div className="flex items-center">
-                      <User className="w-3 h-3 text-[#7AA79C] mr-1" />
-                      <span className="text-[#29696B]">{getUserEmail(order.userId)}</span>
-                    </div>
-                    <div className="flex items-center">
-                      <ShoppingCart className="w-3 h-3 text-[#7AA79C] mr-1" />
-                      <span className="text-[#29696B]">{order.productos.length} productos</span>
-                    </div>
-                  </div>
-
-                  {/* Detalles expandibles en móvil */}
-                  <Accordion
-                    type="single"
-                    collapsible
-                    className="mt-2"
-                    value={mobileOrderDetailsOpen === order._id ? "details" : ""}
-                  >
-                    <AccordionItem value="details" className="border-0">
-                      <AccordionTrigger
-                        onClick={() => toggleMobileOrderDetails(order._id)}
-                        className="py-1 text-xs font-medium text-[#29696B]"
-                      >
-                        Ver detalles
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        <div className="text-xs pt-2 pb-1">
-                          <div className="font-medium mb-2 text-[#29696B]">Productos:</div>
-                          <div className="space-y-1">
-                            {order.productos.map((item, index) => (
-                              <ProductDetailCard
-                                key={index}
-                                item={item}
-                                cachedProducts={cachedProducts}
-                                products={products}
-                                getProductDetails={getProductDetails}
-                              />
-                            ))}
+            {isRefreshing && filteredOrders.length === 0 ? (
+              <OrdersSkeleton count={3} />
+            ) : (
+              paginatedOrders.map(order => (
+                <Card key={order._id} className="overflow-hidden shadow-sm border border-[#91BEAD]/20">
+                  <CardHeader className="pb-2 bg-[#DFEFE6]/20">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <CardTitle className="text-sm font-medium flex items-center text-[#29696B]">
+                          <Building className="w-4 h-4 text-[#7AA79C] mr-1" />
+                          {order.servicio}
+                        </CardTitle>
+                        
+                        {order.seccionDelServicio && (
+                          <div className="text-xs text-[#7AA79C] flex items-center mt-1">
+                            <MapPin className="w-3 h-3 mr-1" />
+                            {order.seccionDelServicio}
                           </div>
-                          <div className="flex justify-between items-center pt-2 font-medium text-sm">
-                            <span className="text-[#29696B]">Total:</span>
-                            <div className="flex items-center text-[#29696B]">
-                              <DollarSign className="w-3 h-3 mr-1" />
-                              <OrderTotalCalculator
-                                order={order}
-                                cachedProducts={cachedProducts}
-                                products={products}
-                                getProductDetails={getProductDetails}
-                              />
+                        )}
+                      </div>
+                      
+                      <div className="flex flex-col items-end gap-1">
+                        {/* Badge para el número de pedido */}
+                        <Badge variant="outline" className="text-xs border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/20">
+                          <Hash className="w-3 h-3 mr-1" />
+                          {order.nPedido}
+                        </Badge>
+                        
+                        {/* Badge para la fecha */}
+                        <Badge variant="outline" className="text-xs border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/20">
+                          <Calendar className="w-3 h-3 mr-1" />
+                          {new Date(order.fecha).toLocaleDateString()}
+                        </Badge>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  
+                  <CardContent className="py-2">
+                    <div className="text-xs space-y-1">
+                      <div className="flex items-center">
+                        <User className="w-3 h-3 text-[#7AA79C] mr-1" />
+                        <span className="text-[#29696B]">{getUserInfo(order.userId).email}</span>
+                      </div>
+                      
+                      <div className="flex items-center">
+                        <ShoppingCart className="w-3 h-3 text-[#7AA79C] mr-1" />
+                        <span className="text-[#29696B]">{order.productos.length} productos</span>
+                      </div>
+                    </div>
+                    
+                    {/* Detalles expandibles en móvil con Accordion */}
+                    <Accordion
+                      type="single"
+                      collapsible
+                      className="mt-2"
+                      value={orderDetailsOpen[order._id] ? "details" : ""}
+                    >
+                      <AccordionItem value="details" className="border-0">
+                        <AccordionTrigger
+                          onClick={() => toggleOrderDetails(order._id)}
+                          className="py-1 text-xs font-medium text-[#29696B]"
+                        >
+                          Ver detalles
+                        </AccordionTrigger>
+                        
+                        <AccordionContent>
+                          <div className="text-xs pt-2 pb-1">
+                            <div className="font-medium mb-2 text-[#29696B]">Productos:</div>
+                            
+                            <div className="space-y-1 max-h-60 overflow-y-auto pr-1">
+                              {order.productos.map((item, index) => (
+                                <ProductDetailMobile
+                                  key={index}
+                                  item={item}
+                                  productsMap={productsMap}
+                                  onProductLoad={fetchProductById}
+                                />
+                              ))}
+                            </div>
+                            
+                            <div className="flex justify-between items-center pt-2 font-medium text-sm border-t border-[#91BEAD]/20 mt-2">
+                              <span className="text-[#29696B]">Total:</span>
+                              <div className="flex items-center text-[#29696B]">
+                                <DollarSign className="w-3 h-3 mr-1" />
+                                <OrderTotal
+                                  order={order}
+                                  productsMap={productsMap}
+                                  onProductLoad={fetchProductById}
+                                />
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  </Accordion>
-                </CardContent>
-                <CardFooter className="py-2 px-4 bg-[#DFEFE6]/10 flex justify-end gap-2 border-t border-[#91BEAD]/20">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 px-2 text-[#29696B] hover:bg-[#DFEFE6]/30"
-                    onClick={() => handleEditOrder(order)}
-                  >
-                    <FileEdit className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 px-2 text-red-600 hover:bg-red-50"
-                    onClick={() => handleDeleteOrder(order._id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </CardFooter>
-              </Card>
-            ))}
-
+                          
+                          <div className="mt-2 pt-2 border-t border-[#91BEAD]/20">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDownloadRemito(order._id)}
+                              className="w-full text-xs h-8 border-[#29696B] text-[#29696B] hover:bg-[#DFEFE6]/30"
+                            >
+                              <Download className="w-3 h-3 mr-1" />
+                              Descargar Remito
+                            </Button>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
+                  </CardContent>
+                  
+                  <CardFooter className="py-2 px-4 bg-[#DFEFE6]/10 flex justify-end gap-2 border-t border-[#91BEAD]/20">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 text-[#29696B] hover:bg-[#DFEFE6]/30"
+                      onClick={() => handleEditOrder(order)}
+                      disabled={loadingActionId === `edit-${order._id}`}
+                    >
+                      {loadingActionId === `edit-${order._id}` ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <FileEdit className="w-4 h-4" />
+                      )}
+                    </Button>
+                    
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 text-red-600 hover:bg-red-50"
+                      onClick={() => confirmDeleteOrder(order._id)}
+                      disabled={loadingActionId === `delete-${order._id}`}
+                    >
+                      {loadingActionId === `delete-${order._id}` ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </CardFooter>
+                </Card>
+              ))
+            )}
+            
             {/* Mensaje que muestra la página actual y el total */}
-            {!loading && filteredOrders.length > itemsPerPage && (
+            {filteredOrders.length > itemsPerPage && (
               <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm">
                 <span className="text-[#29696B] font-medium">
                   Página {currentPage} de {totalPages}
@@ -2706,30 +2400,33 @@ const OrdersSection = () => {
               </div>
             )}
             
-            {/* Paginación duplicada al final de la lista para mayor visibilidad */}
-            {!loading && filteredOrders.length > itemsPerPage && (
+            {/* Paginación inferior para móvil */}
+            {filteredOrders.length > itemsPerPage && (
               <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20 mt-2">
                 <Pagination
                   totalItems={filteredOrders.length}
                   itemsPerPage={itemsPerPage}
                   currentPage={currentPage}
                   onPageChange={handlePageChange}
+                  showFirstLast={false}
                 />
               </div>
             )}
           </div>
         </>
       )}
-
-      {/* Modal de Producto */}
-      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+      
+      {/* ======== MODALES ======== */}
+      
+      {/* Modal para crear/editar pedido */}
+      <Dialog open={createOrderModalOpen} onOpenChange={setCreateOrderModalOpen}>
         <DialogContent className="sm:max-w-md max-h-[90vh] overflow-auto bg-white border border-[#91BEAD]/20">
           <DialogHeader>
             <DialogTitle className="text-[#29696B]">
-              {currentOrder ? `Editar Pedido #${currentOrder.nPedido}` : 'Nuevo Pedido'}
+              {currentOrderId ? `Editar Pedido` : 'Nuevo Pedido'}
             </DialogTitle>
           </DialogHeader>
-
+          
           <div className="py-4 space-y-6">
             {/* Sección de Cliente */}
             <div>
@@ -2737,7 +2434,7 @@ const OrdersSection = () => {
                 <Building className="w-5 h-5 mr-2 text-[#7AA79C]" />
                 Selección de Cliente
               </h2>
-
+              
               {clients.length === 0 ? (
                 <Alert className="bg-[#DFEFE6]/30 border border-[#91BEAD] text-[#29696B]">
                   <AlertDescription>
@@ -2754,6 +2451,7 @@ const OrdersSection = () => {
                         "none"
                       }
                       onValueChange={handleClientChange}
+                      disabled={!!currentOrderId}
                     >
                       <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
                         <SelectValue placeholder="Seleccionar cliente" />
@@ -2771,7 +2469,7 @@ const OrdersSection = () => {
                       </SelectContent>
                     </Select>
                   </div>
-
+                  
                   {orderForm.seccionDelServicio && (
                     <div className="flex items-center p-3 bg-[#DFEFE6]/30 rounded-md border border-[#91BEAD]/30">
                       <MapPin className="w-4 h-4 text-[#7AA79C] mr-2" />
@@ -2781,16 +2479,7 @@ const OrdersSection = () => {
                 </div>
               )}
             </div>
-
-            {/* Estado del formulario para debug - Actualizado para mostrar email en lugar de ID */}
-            {orderForm.servicio && (
-              <div className="p-3 bg-[#DFEFE6]/20 rounded-md text-xs text-[#7AA79C] border border-[#91BEAD]/30">
-                <div><strong className="text-[#29696B]">Cliente:</strong> {orderForm.servicio}</div>
-                <div><strong className="text-[#29696B]">Sección:</strong> {orderForm.seccionDelServicio || "No especificada"}</div>
-                <div><strong className="text-[#29696B]">Usuario:</strong> {getUserEmail(orderForm.userId) || "No asignado"}</div>
-              </div>
-            )}
-
+            
             {/* Productos del Pedido */}
             <div>
               <div className="flex justify-between items-center mb-4">
@@ -2798,13 +2487,10 @@ const OrdersSection = () => {
                   <ShoppingCart className="w-5 h-5 mr-2 text-[#7AA79C]" />
                   Productos
                 </h2>
-
+                
                 <Button
                   variant="outline"
-                  onClick={() => {
-                    setShowProductModal(true);
-                    console.log("Productos disponibles:", products.length);
-                  }}
+                  onClick={() => setSelectProductModalOpen(true)}
                   disabled={!orderForm.servicio || products.length === 0}
                   className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30 disabled:bg-gray-100 disabled:text-gray-400"
                 >
@@ -2812,31 +2498,34 @@ const OrdersSection = () => {
                   Agregar Producto
                 </Button>
               </div>
-
+              
               {orderForm.productos.length === 0 ? (
                 <div className="text-center py-8 text-[#7AA79C] border border-dashed border-[#91BEAD]/40 rounded-md bg-[#DFEFE6]/10">
                   No hay productos en el pedido
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                   {orderForm.productos.map((item, index) => {
                     const productId = typeof item.productoId === 'object' ? item.productoId._id : item.productoId;
-                    const product = products.find(p => p._id === productId) || cachedProducts[productId];
+                    const product = productsMap[productId as string];
+                    
                     return (
                       <div
                         key={index}
                         className="flex justify-between items-center p-3 bg-[#DFEFE6]/20 rounded-md border border-[#91BEAD]/30"
                       >
                         <div>
-                          <div className="font-medium text-[#29696B]">{item.nombre || product?.nombre || getProductName(productId)}</div>
+                          <div className="font-medium text-[#29696B]">{item.nombre || (product?.nombre || 'Cargando...')}</div>
                           <div className="text-sm text-[#7AA79C]">
-                            Cantidad: {item.cantidad} x ${item.precio || product?.precio || getProductPrice(productId)}
+                            Cantidad: {item.cantidad} x ${(item.precio || (product?.precio || 0)).toFixed(2)}
                           </div>
                         </div>
+                        
                         <div className="flex items-center gap-4">
                           <div className="font-medium text-[#29696B]">
-                            ${((item.precio || product?.precio || getProductPrice(productId) || 0) * item.cantidad).toFixed(2)}
+                            ${((item.precio || (product?.precio || 0)) * item.cantidad).toFixed(2)}
                           </div>
+                          
                           <Button
                             variant="ghost"
                             size="sm"
@@ -2849,57 +2538,65 @@ const OrdersSection = () => {
                       </div>
                     );
                   })}
-
-                  {/* Total */}
-                  <div className="flex justify-between items-center p-3 bg-[#DFEFE6]/40 rounded-md mt-4 border border-[#91BEAD]/30">
-                    <div className="font-medium text-[#29696B]">Total</div>
-                    <div className="font-bold text-lg text-[#29696B]">${calculateTotal(orderForm.productos).toFixed(2)}</div>
-                  </div>
+                </div>
+              )}
+              
+              {/* Total */}
+              {orderForm.productos.length > 0 && (
+                <div className="flex justify-between items-center p-3 bg-[#DFEFE6]/40 rounded-md mt-4 border border-[#91BEAD]/30">
+                  <div className="font-medium text-[#29696B]">Total</div>
+                  <div className="font-bold text-lg text-[#29696B]">${calculateOrderTotal(orderForm.productos).toFixed(2)}</div>
                 </div>
               )}
             </div>
           </div>
-
+          
           <DialogFooter className="gap-2">
             <Button
               variant="outline"
               onClick={() => {
-                setShowCreateModal(false);
+                setCreateOrderModalOpen(false);
                 resetOrderForm();
               }}
               className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
             >
               Cancelar
             </Button>
+            
             <Button
-              onClick={currentOrder ? handleUpdateOrder : handleCreateOrder}
-              disabled={loading || orderForm.productos.length === 0 || !orderForm.servicio}
+              onClick={currentOrderId ? handleUpdateOrder : handleCreateOrder}
+              disabled={
+                loadingActionId === "create-order" || 
+                loadingActionId === "update-order" || 
+                orderForm.productos.length === 0 || 
+                !orderForm.servicio
+              }
               className="bg-[#29696B] hover:bg-[#29696B]/90 text-white disabled:bg-[#8DB3BA] disabled:text-white/70"
             >
-              {loading ? (
+              {loadingActionId === "create-order" || loadingActionId === "update-order" ? (
                 <span className="flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Procesando...
                 </span>
-              ) : currentOrder ? 'Actualizar Pedido' : 'Crear Pedido'}
+              ) : currentOrderId ? 'Actualizar Pedido' : 'Crear Pedido'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
+      
       {/* Modal para seleccionar sección */}
-      <Dialog open={showSectionModal} onOpenChange={setShowSectionModal}>
+      <Dialog open={selectSectionModalOpen} onOpenChange={setSelectSectionModalOpen}>
         <DialogContent className="sm:max-w-md bg-white border border-[#91BEAD]/20">
           <DialogHeader>
             <DialogTitle className="text-[#29696B]">Seleccionar Sección</DialogTitle>
           </DialogHeader>
-
+          
           <div className="py-4">
             <p className="text-sm text-[#7AA79C] mb-4">
               Seleccione la sección para este pedido:
             </p>
-
-            <div className="space-y-2">
+            
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
               {orderForm.servicio &&
                 clientSections[orderForm.servicio]?.map((client) => (
                   <div
@@ -2915,11 +2612,11 @@ const OrdersSection = () => {
                 ))}
             </div>
           </div>
-
+          
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setShowSectionModal(false)}
+              onClick={() => setSelectSectionModalOpen(false)}
               className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
             >
               Cancelar
@@ -2927,35 +2624,53 @@ const OrdersSection = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
+      
       {/* Modal para agregar producto */}
-      <Dialog open={showProductModal} onOpenChange={setShowProductModal}>
+      <Dialog open={selectProductModalOpen} onOpenChange={setSelectProductModalOpen}>
         <DialogContent className="sm:max-w-md bg-white border border-[#91BEAD]/20">
           <DialogHeader>
             <DialogTitle className="text-[#29696B]">Agregar Producto</DialogTitle>
           </DialogHeader>
-
+          
           <div className="space-y-4 py-4">
+            {/* Búsqueda de productos */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
+              <Input
+                type="text"
+                placeholder="Buscar productos..."
+                className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
+                onChange={(e) => {
+                  const searchTerm = e.target.value.toLowerCase();
+                  // Implementaríamos aquí lógica para filtrar productos
+                }}
+              />
+            </div>
+            
             <div>
               <Label htmlFor="producto" className="text-[#29696B]">Producto</Label>
               <Select
-                value={selectedProduct}
+                value={selectedProduct || "none"}
                 onValueChange={setSelectedProduct}
               >
                 <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
                   <SelectValue placeholder="Seleccionar producto" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-80">
                   <SelectItem value="none" disabled>Seleccione un producto</SelectItem>
                   {products.map(product => (
-                    <SelectItem key={product._id} value={product._id}>
-                      {product.nombre} - ${product.precio.toFixed(2)} (Stock: {product.stock})
+                    <SelectItem 
+                      key={product._id} 
+                      value={product._id}
+                      disabled={product.stock <= 0}
+                    >
+                      {product.nombre} - ${product.precio.toFixed(2)} {product.stock <= 0 ? '(Sin stock)' : `(Stock: ${product.stock})`}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
+            
             <div>
               <Label htmlFor="cantidad" className="text-[#29696B]">Cantidad</Label>
               <Input
@@ -2967,30 +2682,63 @@ const OrdersSection = () => {
                 className="border-[#91BEAD] focus:ring-[#29696B]/20 focus:border-[#29696B]"
               />
             </div>
-
-            {/* Información de productos disponibles */}
-            <div className="text-xs text-[#7AA79C]">
-              Productos disponibles: {products.length}
-            </div>
+            
+            {/* Información del producto seleccionado */}
+            {selectedProduct && selectedProduct !== "none" && productsMap[selectedProduct] && (
+              <div className="p-3 bg-[#DFEFE6]/20 rounded-md border border-[#91BEAD]/30">
+                <div className="flex justify-between">
+                  <span className="text-sm font-medium text-[#29696B]">Producto seleccionado:</span>
+                  <span className="text-sm text-[#29696B]">{productsMap[selectedProduct].nombre}</span>
+                </div>
+                <div className="flex justify-between mt-1">
+                  <span className="text-sm font-medium text-[#29696B]">Precio:</span>
+                  <span className="text-sm text-[#29696B]">${productsMap[selectedProduct].precio.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between mt-1">
+                  <span className="text-sm font-medium text-[#29696B]">Stock disponible:</span>
+                  <span className="text-sm text-[#29696B]">{productsMap[selectedProduct].stock}</span>
+                </div>
+                <div className="flex justify-between mt-1">
+                  <span className="text-sm font-medium text-[#29696B]">Total:</span>
+                  <span className="text-sm font-medium text-[#29696B]">
+                    ${(productsMap[selectedProduct].precio * productQuantity).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
-
+          
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setShowProductModal(false)}
+              onClick={() => setSelectProductModalOpen(false)}
               className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
             >
               Cancelar
             </Button>
+            
             <Button 
               onClick={handleAddProduct}
               className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
+              disabled={!selectedProduct || selectedProduct === "none" || productQuantity <= 0}
             >
               Agregar
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      {/* Modal de confirmación para eliminar */}
+      <ConfirmationDialog
+        open={deleteConfirmModalOpen}
+        onOpenChange={setDeleteConfirmModalOpen}
+        title="¿Eliminar Pedido?"
+        description="¿Estás seguro de que deseas eliminar este pedido? Esta acción no se puede deshacer y devolverá el stock a inventario."
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+        onConfirm={() => orderToDelete && handleDeleteOrder(orderToDelete)}
+        variant="destructive"
+      />
     </div>
   );
 };
