@@ -176,32 +176,38 @@ const imageServiceExt = {
    * Precarga imágenes para productos visibles para mejorar experiencia
    */
    preloadImages(productIds: string[]): void {
-    if (!productIds.length) return;
+    if (!productIds || !Array.isArray(productIds) || productIds.length === 0) return;
     
-    // Limitar a primeros 8 productos para evitar sobrecarga
-    const idsToPreload = productIds.slice(0, 8);
-    
-    idsToPreload.forEach(id => {
-      // Verificar si ya está en caché
-      if (imageStatusCache.has(id) && imageStatusCache.get(id) !== 'loading') {
-        return;
-      }
+    try {
+      // Limitar a primeros 8 productos para evitar sobrecarga
+      const idsToPreload = productIds.slice(0, 8);
       
-      // Marcar como cargando para evitar solicitudes duplicadas
-      imageStatusCache.set(id, 'loading');
-      
-      // Precarga directa sin verificación previa para evitar errores CORS
-      const img = new Image();
-      img.onload = () => {
-        imageStatusCache.set(id, 'loaded');
-      };
-      img.onerror = () => {
-        imageStatusCache.set(id, 'notExists');
-      };
-      // Usar token actual si está disponible
-      const token = getAuthToken();
-      img.src = `https://lyme-back.vercel.app/api/producto/${id}/imagen?quality=60&width=64&height=64&v=${Date.now()}`;
-    });
+      idsToPreload.forEach(id => {
+        if (!id) return; // Saltar IDs inválidos
+        
+        // Verificar si ya está en caché
+        if (imageStatusCache.has(id) && imageStatusCache.get(id) !== 'loading') {
+          return;
+        }
+        
+        // Marcar como cargando para evitar solicitudes duplicadas
+        imageStatusCache.set(id, 'loading');
+        
+        // Precarga directa sin verificación previa para evitar errores CORS
+        const img = new Image();
+        img.onload = () => {
+          imageStatusCache.set(id, 'loaded');
+        };
+        img.onerror = () => {
+          imageStatusCache.set(id, 'notExists');
+        };
+        
+        // Añadir un timestamp aleatorio para evitar problemas de caché
+        img.src = `https://lyme-back.vercel.app/api/producto/${id}/imagen?quality=60&width=64&height=64&v=${Date.now()}`;
+      });
+    } catch (error) {
+      console.warn("Error en preloadImages:", error);
+    }
   }
 };
 
@@ -652,12 +658,19 @@ const VirtualizedProductTable = ({
     estimateSize: () => 70, // Estimated row height
     overscan: 5, // How many items to render before/after the visible area
     onChange: (instance) => {
-      // Notify parent when visible items change
-      const visibleItems = products.slice(
-        instance.range.startIndex,
-        instance.range.endIndex + 1
-      );
-      onVisibleItemsChanged?.(visibleItems);
+      // Verificar que instance.range no sea null antes de acceder a sus propiedades
+      if (instance.range && onVisibleItemsChanged) {
+        try {
+          // Notify parent when visible items change
+          const visibleItems = products.slice(
+            instance.range.startIndex,
+            instance.range.endIndex + 1
+          );
+          onVisibleItemsChanged(visibleItems);
+        } catch (error) {
+          console.warn("Error en virtualizador de tabla:", error);
+        }
+      }
     }
   });
 
@@ -851,12 +864,19 @@ const MobileProductList = React.memo(({ products, onEdit, onDelete, userSections
     estimateSize: () => 200, // Estimated card height
     overscan: 3,
     onChange: (instance) => {
-      // Notify parent component about visible items
-      const visibleItems = products.slice(
-        instance.range.startIndex,
-        instance.range.endIndex + 1
-      );
-      onVisibleItemsChanged?.(visibleItems);
+      // Verificar que instance.range no sea null antes de acceder a sus propiedades
+      if (instance.range && onVisibleItemsChanged) {
+        try {
+          // Notify parent component about visible items
+          const visibleItems = products.slice(
+            instance.range.startIndex,
+            instance.range.endIndex + 1
+          );
+          onVisibleItemsChanged(visibleItems);
+        } catch (error) {
+          console.warn("Error en virtualizador móvil:", error);
+        }
+      }
     }
   });
   
@@ -873,7 +893,7 @@ const MobileProductList = React.memo(({ products, onEdit, onDelete, userSections
           const product = products[virtualRow.index];
           return (
             <div
-              key={`${product._id}-${product.hasImage ? 'has-image' : 'no-image'}`}
+              key={`${product._id}-${product.hasImage ? 'has-image' : 'no-image'}-${Date.now() % 1000}`}
               style={{
                 position: 'absolute',
                 top: 0,
@@ -966,6 +986,15 @@ const InventorySection: React.FC = () => {
     imagen: null,
     imagenPreview: null
   });
+
+  // const safeGetVirtualItems = (virtualizer: { getVirtualItems: () => any; }) => {
+  //   try {
+  //     return virtualizer.getVirtualItems();
+  //   } catch (error) {
+  //     console.warn("Error al obtener elementos virtuales:", error);
+  //     return [];
+  //   }
+  // };
 
   // Function to preload images for visible products
   const preloadVisibleImages = useCallback((visibleProducts: ProductExtended[]) => {
@@ -2238,12 +2267,17 @@ const InventorySection: React.FC = () => {
 
   // Handler for visible items changed - This improves performance by preloading only what's visible
   const handleVisibleItemsChanged = useCallback((visibleItems: ProductExtended[]) => {
-    if (visibleItems.length > 0) {
-      // Usar método de precarga directo sin verificaciones CORS previas
-      const visibleIds = visibleItems.map(p => p._id);
-      imageServiceExt.preloadImages(visibleIds);
+    if (visibleItems && visibleItems.length > 0) {
+      try {
+        // Usar método de precarga directo sin verificaciones CORS previas
+        const visibleIds = visibleItems.map(p => p._id);
+        imageServiceExt.preloadImages(visibleIds);
+      } catch (error) {
+        console.warn("Error al precargar imágenes:", error);
+      }
     }
   }, []);
+  
 
   // When selected category changes, update UI
   useEffect(() => {
