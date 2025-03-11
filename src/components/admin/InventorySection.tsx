@@ -192,20 +192,15 @@ const InventorySection = () => {
   // Función mejorada para cargar productos
   const fetchProducts = async (forceRefresh = false) => {
     try {
-      // Solo evitamos la carga si ya está cargando y no es forzada
-      if (loading && !forceRefresh) {
-        console.log('Ya se está cargando productos, evitando otra carga');
-        return;
-      }
+      // Si ya estamos cargando, no iniciar otra carga
+      if ((loading || refreshing) && !forceRefresh) return;
       
-      console.log('Cargando productos desde el servidor...');
       setLoading(true);
       setRefreshing(forceRefresh);
       setError('');
       
       const token = getAuthToken();
       if (!token) {
-        console.error('No se encontró token de autenticación');
         throw new Error('No hay token de autenticación');
       }
 
@@ -355,11 +350,8 @@ const InventorySection = () => {
 
   // Cargar productos al montar el componente y suscribirse al observable para actualizaciones
   useEffect(() => {
-    console.log('InventorySection: Componente montado, iniciando carga de productos...');
-    
     // Cargar productos inmediatamente al montar el componente
-    // Usamos forceRefresh=true para asegurar que se ejecute independientemente del estado
-    fetchProducts(true);
+    fetchProducts();
     
     // Suscribirse a actualizaciones
     const unsubscribe = inventoryObservable.subscribe(() => {
@@ -371,7 +363,7 @@ const InventorySection = () => {
     return () => {
       unsubscribe();
     };
-  }, []); // Este efecto solo debe ejecutarse al montar el componente
+  }, []);
 
   // Efecto para detectar el tamaño de la ventana y ajustar la visualización en consecuencia
   useEffect(() => {
