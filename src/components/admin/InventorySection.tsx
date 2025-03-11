@@ -50,7 +50,8 @@ import {
   Loader2,
   RefreshCw,
   PackagePlus,
-  ShoppingBag
+  ShoppingBag,
+  Minus
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
