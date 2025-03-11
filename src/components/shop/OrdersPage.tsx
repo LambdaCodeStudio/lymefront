@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   ShoppingCart, 
   Search, 
@@ -18,10 +18,14 @@ import {
   X,
   DollarSign,
   Hash,
+  CheckSquare,
+  XSquare,
+  UserCheck,
   RefreshCw,
-  CheckCircle2,
-  XCircle,
-  HelpCircle
+  AlertTriangle,
+  Users,
+  FileCheck,
+  CheckCircle2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,6 +38,29 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogDescription, 
+  DialogFooter, 
+  DialogHeader, 
+  DialogTitle 
+} from "@/components/ui/dialog";
+import { Textarea } from '@/components/ui/textarea';
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
+import { 
+  Tabs, 
+  TabsContent, 
+  TabsList, 
+  TabsTrigger 
+} from "@/components/ui/tabs";
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { ShopNavbar } from './ShopNavbar';
 
 // Intentar usar el contexto de notificaciones de forma segura
@@ -49,9 +76,18 @@ try {
   });
 }
 
+// Estados de pedidos
+enum OrderStatus {
+  PENDING = "pendiente",
+  APPROVED = "aprobado",
+  REJECTED = "rechazado",
+  DELIVERED = "entregado",
+  CANCELED = "cancelado"
+}
+
 // Tipos de datos
 interface OrderProduct {
-  productoId: string | { _id: string; [key: string]: any };
+  productoId: string | { _id: string; nombre?: string; precio?: number; [key: string]: any };
   cantidad: number;
   nombre?: string;
   precio?: number;
@@ -61,7 +97,7 @@ interface Order {
   _id: string;
   servicio: string;
   seccionDelServicio: string;
-  userId: string | { _id: string; email?: string; [key: string]: any };
+  userId: string | { _id: string; email?: string; nombre?: string; [key: string]: any };
   fecha: string;
   productos: OrderProduct[];
   detalle?: string;
@@ -69,8 +105,17 @@ interface Order {
   nPedido?: number; // Campo específico para número de pedido (backend)
   displayNumber?: string; // Campo para mostrar consistentemente
   total?: number;
-  estado?: 'pendiente' | 'aprobado' | 'rechazado'; // Estado del pedido
-  metadata?: any; // Metadatos adicionales
+  estado?: OrderStatus; // Estado del pedido
+  metadata?: { // Datos adicionales para pedidos creados por operarios
+    creadoPorOperario?: boolean;
+    operarioId?: string;
+    operarioNombre?: string;
+    supervisorId?: string;
+    supervisorNombre?: string;
+    fechaCreacion?: string;
+    fechaAprobacion?: string;
+    motivoRechazo?: string;
+  };
 }
 
 interface Cliente {
@@ -86,7 +131,6 @@ interface Cliente {
   };
 }
 
-// Componente principal
 export const OrdersPage: React.FC = () => {
   // Usar el hook de notificaciones de forma segura
   const { addNotification } = useNotification();
@@ -96,27 +140,146 @@ export const OrdersPage: React.FC = () => {
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
   const [clients, setClients] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [orderDetailsOpen, setOrderDetailsOpen] = useState<string | null>(null);
   const [isDownloadingRemito, setIsDownloadingRemito] = useState<string | null>(null);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [cachedProducts, setCachedProducts] = useState<Record<string, any>>({});
-  const [userRole, setUserRole] = useState<string | null>(null);
   
-  // Filtro de fechas
+  // Filtros
   const [dateFilter, setDateFilter] = useState({
     fechaInicio: '',
     fechaFin: ''
   });
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  
+  // Estado para la pestaña actual
+  const [activeTab, setActiveTab] = useState<string>('todos');
+  
+  // Estados para la función de aprobar/rechazar pedidos
+  const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
+  const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [isProcessingApproval, setIsProcessingApproval] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  
+  // Información del usuario
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  
+  // Referencias para caché
+  const cacheTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastFetchTimeRef = useRef<number>(0);
+  const CACHE_DURATION = 2 * 60 * 1000; // 2 minutos
+  
+  // Obtener información del usuario actual
+  useEffect(() => {
+    const storedRole = localStorage.getItem('userRole');
+    const storedId = localStorage.getItem('userId');
+    
+    if (storedRole) setUserRole(storedRole);
+    if (storedId) setUserId(storedId);
+    
+    fetchUserData();
+  }, []);
 
-  // Filtro por estado
-  const [stateFilter, setStateFilter] = useState<string>('all');
+  // Cargar datos iniciales
+  useEffect(() => {
+    fetchOrders(true);
+    
+    // Limpiar timeout al desmontar
+    return () => {
+      if (cacheTimeoutRef.current) {
+        clearTimeout(cacheTimeoutRef.current);
+      }
+    };
+  }, [userRole, userId]);
 
-  // Para almacenar la hora de última carga
-  const [lastFetchTime, setLastFetchTime] = useState<number>(0);
-  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos en milisegundos
+  // Efecto para filtrar pedidos cuando cambian los filtros
+  useEffect(() => {
+    if (!orders.length) return;
+    
+    let result = [...orders];
+    
+    // Filtrar por término de búsqueda
+    if (searchTerm) {
+      result = result.filter(order => 
+        order.servicio.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (order.seccionDelServicio || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (order.displayNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (typeof order.userId === 'object' && order.userId.email 
+          ? order.userId.email.toLowerCase().includes(searchTerm.toLowerCase())
+          : false)
+      );
+    }
+    
+    // Filtrar por estado si se ha seleccionado un filtro
+    if (statusFilter !== 'all') {
+      result = result.filter(order => order.estado === statusFilter);
+    }
+    
+    // Filtrar por pestañas
+    switch (activeTab) {
+      case 'pendientes':
+        result = result.filter(order => order.estado === OrderStatus.PENDING);
+        break;
+      case 'aprobados':
+        result = result.filter(order => order.estado === OrderStatus.APPROVED);
+        break;
+      case 'rechazados':
+        result = result.filter(order => order.estado === OrderStatus.REJECTED);
+        break;
+      case 'porAprobar':
+        // Mostrar solo pedidos pendientes creados por operarios
+        result = result.filter(order => 
+          order.estado === OrderStatus.PENDING && 
+          order.metadata?.creadoPorOperario
+        );
+        break;
+      // El caso 'todos' no necesita filtro
+    }
+    
+    setFilteredOrders(result);
+  }, [searchTerm, orders, statusFilter, activeTab]);
+
+  // Obtener información del usuario actual
+  const fetchUserData = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No se encontró token de autenticación');
+      }
+
+      const response = await fetch('https://lyme-back.vercel.app/api/auth/me', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al obtener información del usuario');
+      }
+
+      const userData = await response.json();
+      
+      // Actualizar estados y localStorage
+      if (userData.role) {
+        localStorage.setItem('userRole', userData.role);
+        setUserRole(userData.role);
+      }
+      
+      if (userData._id) {
+        localStorage.setItem('userId', userData._id);
+        setUserId(userData._id);
+      }
+      
+      return userData._id || userData.id || null;
+    } catch (error) {
+      console.error('Error al obtener el usuario:', error);
+      setError('Error al cargar información del usuario. Por favor, inténtelo de nuevo.');
+      return null;
+    }
+  };
 
   // Calcular el total de un pedido
   const calculateOrderTotal = (order: Order): number => {
@@ -147,94 +310,25 @@ export const OrdersPage: React.FC = () => {
     }, 0);
   };
 
-  // Cargar datos iniciales cuando el componente se monta
-  useEffect(() => {
-    const role = localStorage.getItem('userRole');
-    setUserRole(role);
-    
-    fetchUser()
-      .then(userId => {
-        if (userId) {
-          Promise.all([
-            fetchOrders(true),
-            fetchClients(userId)
-          ]);
-        }
-      })
-      .catch(error => {
-        console.error('Error al cargar datos iniciales:', error);
-        setError('Error al cargar datos iniciales. Por favor, inténtelo de nuevo.');
-        setLoading(false);
-      });
-  }, []);
-
-  // Filtrar pedidos cuando cambia el término de búsqueda, estado o los pedidos
-  useEffect(() => {
-    if (!orders.length) return;
-    
-    let result = [...orders];
-    
-    // Filtrar por término de búsqueda
-    if (searchTerm) {
-      result = result.filter(order => 
-        order.servicio.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (order.seccionDelServicio || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (order.displayNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (typeof order.userId === 'object' && order.userId.email 
-          ? order.userId.email.toLowerCase().includes(searchTerm.toLowerCase())
-          : false)
-      );
-    }
-
-    // Filtrar por estado
-    if (stateFilter !== 'all') {
-      result = result.filter(order => 
-        order.estado === stateFilter
-      );
-    }
-    
-    setFilteredOrders(result);
-  }, [searchTerm, stateFilter, orders]);
-
-  // Obtener información del usuario actual
-  const fetchUser = async (): Promise<string | null> => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('No se encontró token de autenticación');
-      }
-
-      const response = await fetch('https://lyme-back.vercel.app/api/auth/me', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!response.ok) {
-        throw new Error('Error al obtener información del usuario');
-      }
-
-      const userData = await response.json();
-      return userData._id || userData.id || null;
-    } catch (error) {
-      console.error('Error al obtener el usuario:', error);
-      setError('Error al cargar información del usuario. Por favor, inténtelo de nuevo.');
-      return null;
-    }
-  };
-
-  // Cargar pedidos - con lógica mejorada de caché
+  // Función optimizada para cargar pedidos
   const fetchOrders = useCallback(async (forceRefresh = false) => {
-    // Verificar si estamos en tiempo de caché y no se forzó actualización
+    // Evitar múltiples solicitudes cercanas en el tiempo
     const now = Date.now();
-    if (!forceRefresh && orders.length > 0 && now - lastFetchTime < CACHE_DURATION) {
-      console.log('Usando datos en caché para pedidos');
+    if (!forceRefresh && now - lastFetchTimeRef.current < 5000) {
+      console.log('Solicitud descartada: demasiado frecuente');
+      return;
+    }
+    
+    // Verificar si tenemos datos en caché recientes
+    if (!forceRefresh && orders.length > 0 && now - lastFetchTimeRef.current < CACHE_DURATION) {
+      console.log('Usando datos en caché');
       return;
     }
     
     try {
+      setLoading(forceRefresh);
       if (forceRefresh) {
         setRefreshing(true);
-      } else {
-        setLoading(true);
       }
       
       const token = localStorage.getItem('token');
@@ -242,6 +336,7 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No se encontró token de autenticación');
       }
       
+      // Obtener todos los pedidos primero
       const response = await fetch('https://lyme-back.vercel.app/api/pedido', {
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -253,7 +348,7 @@ export const OrdersPage: React.FC = () => {
         if (response.status === 401) {
           localStorage.removeItem('token');
           localStorage.removeItem('userRole');
-          localStorage.removeItem('userSecciones');
+          localStorage.removeItem('userId');
           window.location.href = '/login';
           return;
         }
@@ -261,138 +356,86 @@ export const OrdersPage: React.FC = () => {
       }
   
       const allOrders = await response.json();
+      lastFetchTimeRef.current = Date.now();
       
       // Obtener información del usuario actual
-      const userResponse = await fetch('https://lyme-back.vercel.app/api/auth/me', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      let currentUserId = userId;
       
-      if (!userResponse.ok) {
-        throw new Error(`Error al obtener información del usuario (estado: ${userResponse.status})`);
+      if (!currentUserId) {
+        try {
+          // Intentar obtener el ID del usuario desde la API
+          const userResponse = await fetch('https://lyme-back.vercel.app/api/auth/me', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          
+          if (!userResponse.ok) {
+            throw new Error(`Error al obtener información del usuario (estado: ${userResponse.status})`);
+          }
+          
+          const userData = await userResponse.json();
+          currentUserId = userData._id || userData.id;
+          
+          if (!currentUserId) {
+            throw new Error('No se pudo obtener un ID de usuario válido');
+          }
+          
+          // Guardar en estado y localStorage para futuras consultas
+          setUserId(currentUserId);
+          localStorage.setItem('userId', currentUserId);
+        } catch (userError) {
+          console.error('Error al obtener información del usuario:', userError);
+        }
       }
       
-      const userData = await userResponse.json();
-      const userId = userData._id || userData.id;
-      const userRole = userData.role;
-      const userSecciones = userData.secciones;
+      // Determinar qué pedidos mostrar según el rol del usuario
+      let relevantOrders: Order[] = [];
       
-      // Almacenar el rol de usuario
-      setUserRole(userRole);
-      localStorage.setItem('userRole', userRole);
-      
-      // Obtener clientes para filtrar pedidos
-      const clientsResponse = await fetch(`https://lyme-back.vercel.app/api/cliente/user/${userId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      if (!clientsResponse.ok) {
-        throw new Error(`Error al cargar clientes (estado: ${clientsResponse.status})`);
-      }
-      
-      const clientsData = await clientsResponse.json();
-      setClients(clientsData);
-      
-      // Filtrar pedidos según el rol y la sección del usuario
-      let userOrders = allOrders;
-      
-      // Si es supervisor, mostrar los pedidos de sus operarios (pendientes)
-      // más sus propios pedidos
       if (userRole === 'supervisor') {
-        userOrders = allOrders.filter(order => {
-          // Mostrar pedidos pendientes creados por sus operarios
-          if (order.estado === 'pendiente' && order.metadata?.supervisorId === userId) {
-            return true;
-          }
+        // Para supervisores: mostrar pedidos propios + los creados por sus operarios
+        relevantOrders = allOrders.filter((order: Order) => {
+          // Pedidos propios del supervisor
+          const isOwnOrder = typeof order.userId === 'object' 
+            ? order.userId._id === currentUserId 
+            : order.userId === currentUserId;
           
-          // Mostrar pedidos propios
-          if (typeof order.userId === 'object') {
-            return order.userId._id === userId;
-          } else {
-            return order.userId === userId;
-          }
+          // Pedidos creados por operarios que el supervisor supervisa
+          const isOperarioOrder = order.metadata?.creadoPorOperario && 
+                                 order.metadata?.supervisorId === currentUserId;
+          
+          return isOwnOrder || isOperarioOrder;
         });
-      } 
-      // Si es operario, solo mostrar sus pedidos
-      else if (userRole === 'operario') {
-        // Buscar pedidos donde el operario aparece en los metadatos
-        userOrders = allOrders.filter(order => {
-          // Mostrar pedidos donde el operario es el creador en metadatos
-          if (order.metadata?.operarioId === userId) {
-            return true;
-          }
+      } else if (userRole === 'operario') {
+        // Para operarios: solo mostrar sus propios pedidos
+        relevantOrders = allOrders.filter((order: Order) => {
+          const isDirectOrder = typeof order.userId === 'object' 
+            ? order.userId._id === currentUserId 
+            : order.userId === currentUserId;
           
-          // También mostrar si está directamente asignado
-          if (typeof order.userId === 'object') {
-            return order.userId._id === userId;
-          } else {
-            return order.userId === userId;
-          }
+          const isIndirectOrder = order.metadata?.creadoPorOperario && 
+                                 order.metadata?.operarioId === currentUserId;
+          
+          return isDirectOrder || isIndirectOrder;
         });
-      }
-      // Si es otro rol, filtrar solo por asignación directa y sección
-      else {
-        // Crear un mapa de clientes para filtrado eficiente
-        const userClientMap = {};
-        clientsData.forEach(client => {
-          if (client.servicio) {
-            const key = `${client.servicio}-${client.seccionDelServicio || ''}`;
-            userClientMap[key] = true;
-          }
-        });
-        
-        userOrders = allOrders.filter(order => {
-          // Si es asignado directo
-          let isDirectlyAssigned = false;
-          if (typeof order.userId === 'object') {
-            isDirectlyAssigned = order.userId._id === userId;
-          } else {
-            isDirectlyAssigned = order.userId === userId;
-          }
-          
-          // Si coincide con algún cliente por servicio/sección
-          let matchesClientServices = false;
-          if (order.servicio) {
-            const orderKey = `${order.servicio}-${order.seccionDelServicio || ''}`;
-            matchesClientServices = userClientMap[orderKey] === true;
-          }
-          
-          // Filtrar por sección del usuario
-          let matchesUserSection = true;
-          if (userSecciones && userSecciones !== 'ambos') {
-            const esLimpieza = order.servicio?.toLowerCase() === 'limpieza';
-            const esMantenimiento = order.servicio?.toLowerCase() === 'mantenimiento';
-            
-            if (userSecciones === 'limpieza' && !esLimpieza) {
-              matchesUserSection = false;
-            }
-            if (userSecciones === 'mantenimiento' && !esMantenimiento) {
-              matchesUserSection = false;
-            }
-          }
-          
-          return (isDirectlyAssigned || matchesClientServices) && matchesUserSection;
-        });
+      } else {
+        // Para otros roles: mostrar todos los pedidos
+        relevantOrders = allOrders;
       }
       
       // Procesar pedidos (calcular totales y ordenar)
-      const processedOrders = userOrders.map((order) => ({
+      const processedOrders = relevantOrders.map((order: Order) => ({
         ...order,
         displayNumber: order.nPedido?.toString() || order.numero || 'S/N',
-        total: calculateOrderTotal(order),
-        // Asegurar que todos los pedidos tengan un estado
-        estado: order.estado || 'aprobado' // Por defecto, considerar aprobado
-      })).sort((a, b) => 
+        total: calculateOrderTotal(order)
+      })).sort((a: Order, b: Order) => 
         new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
       );
       
       setOrders(processedOrders);
       setFilteredOrders(processedOrders);
-      setLastFetchTime(Date.now());
-      setError(null);
       
       // Crear caché de productos para cálculos de precios
-      const productCache = {};
-      userOrders.forEach(order => {
+      const productCache: Record<string, any> = {};
+      allOrders.forEach((order: Order) => {
         if (Array.isArray(order.productos)) {
           order.productos.forEach(item => {
             if (typeof item.productoId === 'object' && item.productoId) {
@@ -415,6 +458,17 @@ export const OrdersPage: React.FC = () => {
       
       setCachedProducts(productCache);
       
+      // Programar la próxima actualización
+      if (cacheTimeoutRef.current) {
+        clearTimeout(cacheTimeoutRef.current);
+      }
+      
+      cacheTimeoutRef.current = setTimeout(() => {
+        console.log('Actualizando datos por expiración de caché');
+        fetchOrders(true);
+      }, CACHE_DURATION);
+      
+      setError(null);
     } catch (err) {
       const errorMsg = 'Error al cargar pedidos: ' +
         (err instanceof Error ? err.message : String(err));
@@ -428,38 +482,7 @@ export const OrdersPage: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [orders.length, lastFetchTime]);
-
-  // Función para refrescar manualmente
-  const handleManualRefresh = useCallback(() => {
-    fetchOrders(true);
-  }, [fetchOrders]);
-
-  // Cargar clientes para el usuario actual
-  const fetchClients = async (userId: string) => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('No se encontró token de autenticación');
-      }
-
-      const response = await fetch(`https://lyme-back.vercel.app/api/cliente/user/${userId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error al cargar clientes (estado: ${response.status})`);
-      }
-
-      const data = await response.json();
-      setClients(data);
-      
-      console.log(`Cargados ${data.length} clientes`);
-    } catch (err) {
-      console.error('Error al cargar clientes:', err);
-      // Esto no es crítico, así que no establecemos el estado de error principal
-    }
-  };
+  }, [orders.length, userRole, userId]);
 
   // Filtrar pedidos por rango de fechas
   const filterOrdersByDate = async () => {
@@ -492,43 +515,51 @@ export const OrdersPage: React.FC = () => {
 
       const data = await response.json();
       
-      // Procesar como en la carga inicial, pero con los resultados filtrados por fecha
-      const userId = localStorage.getItem('userId') || '';
+      // Filtrar según el rol del usuario
+      let relevantOrders: Order[] = [];
+      const currentUserId = userId;
       
-      // Filtrar por cliente/usuario actual
-      const userOrders = data.filter(order => {
-        // Si el usuario es el creador directo
-        let isDirectlyAssigned = false;
-        if (typeof order.userId === 'object') {
-          isDirectlyAssigned = order.userId._id === userId;
-        } else {
-          isDirectlyAssigned = order.userId === userId;
-        }
-        
-        // Si es un operario en los metadatos
-        let isOperatorInMeta = order.metadata?.operarioId === userId;
-        
-        // Si es un supervisor en los metadatos
-        let isSupervisorInMeta = order.metadata?.supervisorId === userId;
-        
-        return isDirectlyAssigned || isOperatorInMeta || isSupervisorInMeta;
-      });
+      if (userRole === 'supervisor') {
+        // Para supervisores: mostrar pedidos propios + los creados por sus operarios
+        relevantOrders = data.filter((order: Order) => {
+          const isOwnOrder = typeof order.userId === 'object' 
+            ? order.userId._id === currentUserId 
+            : order.userId === currentUserId;
+          
+          const isOperarioOrder = order.metadata?.creadoPorOperario && 
+                                 order.metadata?.supervisorId === currentUserId;
+          
+          return isOwnOrder || isOperarioOrder;
+        });
+      } else if (userRole === 'operario') {
+        // Para operarios: solo mostrar sus propios pedidos
+        relevantOrders = data.filter((order: Order) => {
+          const isDirectOrder = typeof order.userId === 'object' 
+            ? order.userId._id === currentUserId 
+            : order.userId === currentUserId;
+          
+          const isIndirectOrder = order.metadata?.creadoPorOperario && 
+                                 order.metadata?.operarioId === currentUserId;
+          
+          return isDirectOrder || isIndirectOrder;
+        });
+      } else {
+        // Para otros roles: mostrar todos los pedidos
+        relevantOrders = data;
+      }
       
-      // Procesar pedidos (añadir displayNumber y calcular total)
-      const processedOrders = userOrders.map((order) => ({
+      // Procesar pedidos (calcular totales y ordenar)
+      const processedOrders = relevantOrders.map((order: Order) => ({
         ...order,
         displayNumber: order.nPedido?.toString() || order.numero || 'S/N',
-        total: calculateOrderTotal(order),
-        estado: order.estado || 'aprobado' // Valor por defecto
-      }));
-      
-      // Ordenar por fecha (más recientes primero)
-      processedOrders.sort((a, b) => 
+        total: calculateOrderTotal(order)
+      })).sort((a: Order, b: Order) => 
         new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
       );
       
       setOrders(processedOrders);
       setFilteredOrders(processedOrders);
+      
       setError(null);
       
       const successMsg = `Se encontraron ${processedOrders.length} pedidos en el rango de fechas seleccionado`;
@@ -557,7 +588,7 @@ export const OrdersPage: React.FC = () => {
   const clearAllFilters = () => {
     setSearchTerm('');
     setDateFilter({ fechaInicio: '', fechaFin: '' });
-    setStateFilter('all');
+    setStatusFilter('all');
     fetchOrders(true);
     setShowMobileFilters(false);
     
@@ -644,89 +675,6 @@ export const OrdersPage: React.FC = () => {
     }
   };
 
-  // Funciones para aprobar/rechazar pedido (solo para supervisores)
-  const handleApproveOrder = async (orderId: string) => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('No se encontró token de autenticación');
-      }
-      
-      const response = await fetch(`https://lyme-back.vercel.app/api/pedido/${orderId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ estado: 'aprobado' })
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Error al aprobar pedido (estado: ${response.status})`);
-      }
-      
-      // Actualizar pedido en el estado local
-      setOrders(prevOrders => 
-        prevOrders.map(order => 
-          order._id === orderId 
-            ? { ...order, estado: 'aprobado' } 
-            : order
-        )
-      );
-      
-      if (addNotification) {
-        addNotification('Pedido aprobado correctamente', 'success');
-      }
-    } catch (error) {
-      console.error('Error al aprobar pedido:', error);
-      
-      if (addNotification) {
-        addNotification(`Error al aprobar pedido: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
-      }
-    }
-  };
-  
-  const handleRejectOrder = async (orderId: string) => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('No se encontró token de autenticación');
-      }
-      
-      const response = await fetch(`https://lyme-back.vercel.app/api/pedido/${orderId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ estado: 'rechazado' })
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Error al rechazar pedido (estado: ${response.status})`);
-      }
-      
-      // Actualizar pedido en el estado local
-      setOrders(prevOrders => 
-        prevOrders.map(order => 
-          order._id === orderId 
-            ? { ...order, estado: 'rechazado' } 
-            : order
-        )
-      );
-      
-      if (addNotification) {
-        addNotification('Pedido rechazado', 'warning');
-      }
-    } catch (error) {
-      console.error('Error al rechazar pedido:', error);
-      
-      if (addNotification) {
-        addNotification(`Error al rechazar pedido: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
-      }
-    }
-  };
-
   // Formatear fecha para mostrar
   const formatDate = (dateString: string) => {
     try {
@@ -738,6 +686,142 @@ export const OrdersPage: React.FC = () => {
       });
     } catch (error) {
       return 'Fecha inválida';
+    }
+  };
+
+  // Formatear hora para mostrar
+  const formatTime = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleTimeString('es-ES', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      return '';
+    }
+  };
+
+  // Abrir diálogo de aprobación de pedido
+  const openApprovalDialog = (orderId: string) => {
+    setSelectedOrderId(orderId);
+    setApprovalDialogOpen(true);
+  };
+
+  // Abrir diálogo de rechazo de pedido
+  const openRejectionDialog = (orderId: string) => {
+    setSelectedOrderId(orderId);
+    setRejectionReason('');
+    setRejectionDialogOpen(true);
+  };
+
+  // Aprobar pedido
+  const approveOrder = async () => {
+    if (!selectedOrderId) return;
+
+    try {
+      setIsProcessingApproval(true);
+      
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
+      
+      const response = await fetch(`https://lyme-back.vercel.app/api/pedido/${selectedOrderId}/approve`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          estado: OrderStatus.APPROVED,
+          fechaAprobacion: new Date().toISOString()
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.mensaje || `Error al aprobar pedido (${response.status})`);
+      }
+      
+      // Actualizar la lista de pedidos
+      await fetchOrders(true);
+      
+      // Notificar al usuario
+      if (addNotification) {
+        addNotification('Pedido aprobado correctamente', 'success');
+      }
+      
+      // Cerrar el diálogo
+      setApprovalDialogOpen(false);
+      setSelectedOrderId(null);
+    } catch (error) {
+      console.error('Error al aprobar pedido:', error);
+      
+      if (addNotification) {
+        addNotification(`Error al aprobar pedido: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
+      }
+    } finally {
+      setIsProcessingApproval(false);
+    }
+  };
+
+  // Rechazar pedido
+  const rejectOrder = async () => {
+    if (!selectedOrderId || !rejectionReason.trim()) {
+      // Validar que se proporcionó un motivo de rechazo
+      if (!rejectionReason.trim()) {
+        addNotification('Debe proporcionar un motivo para rechazar el pedido', 'warning');
+      }
+      return;
+    }
+
+    try {
+      setIsProcessingApproval(true);
+      
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
+      
+      const response = await fetch(`https://lyme-back.vercel.app/api/pedido/${selectedOrderId}/reject`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          estado: OrderStatus.REJECTED,
+          motivoRechazo: rejectionReason,
+          fechaRechazo: new Date().toISOString()
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.mensaje || `Error al rechazar pedido (${response.status})`);
+      }
+      
+      // Actualizar la lista de pedidos
+      await fetchOrders(true);
+      
+      // Notificar al usuario
+      if (addNotification) {
+        addNotification('Pedido rechazado correctamente', 'success');
+      }
+      
+      // Cerrar el diálogo
+      setRejectionDialogOpen(false);
+      setSelectedOrderId(null);
+      setRejectionReason('');
+    } catch (error) {
+      console.error('Error al rechazar pedido:', error);
+      
+      if (addNotification) {
+        addNotification(`Error al rechazar pedido: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
+      }
+    } finally {
+      setIsProcessingApproval(false);
     }
   };
 
@@ -767,32 +851,77 @@ export const OrdersPage: React.FC = () => {
     return 'N/A';
   };
 
-  // Obtener una clase CSS para el badge de estado
-  const getStatusBadgeClass = (estado: string) => {
-    switch (estado) {
-      case 'pendiente':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-300';
-      case 'aprobado':
-        return 'bg-green-100 text-green-800 border-green-300';
-      case 'rechazado':
-        return 'bg-red-100 text-red-800 border-red-300';
+  // Renderizar el badge de estado del pedido
+  const renderStatusBadge = (status?: OrderStatus) => {
+    switch (status) {
+      case OrderStatus.PENDING:
+        return (
+          <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
+            <Clock className="w-3 h-3 mr-1" />
+            Pendiente
+          </Badge>
+        );
+      case OrderStatus.APPROVED:
+        return (
+          <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
+            <CheckSquare className="w-3 h-3 mr-1" />
+            Aprobado
+          </Badge>
+        );
+      case OrderStatus.REJECTED:
+        return (
+          <Badge variant="outline" className="bg-red-100 text-red-800 border-red-300">
+            <XSquare className="w-3 h-3 mr-1" />
+            Rechazado
+          </Badge>
+        );
+      case OrderStatus.DELIVERED:
+        return (
+          <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300">
+            <Package className="w-3 h-3 mr-1" />
+            Entregado
+          </Badge>
+        );
+      case OrderStatus.CANCELED:
+        return (
+          <Badge variant="outline" className="bg-gray-100 text-gray-800 border-gray-300">
+            <X className="w-3 h-3 mr-1" />
+            Cancelado
+          </Badge>
+        );
       default:
-        return 'bg-gray-100 text-gray-800 border-gray-300';
+        return (
+          <Badge variant="outline" className="bg-gray-100 text-gray-800 border-gray-300">
+            Desconocido
+          </Badge>
+        );
     }
   };
 
-  // Obtener icono para estado
-  const getStatusIcon = (estado: string) => {
-    switch (estado) {
-      case 'pendiente':
-        return <HelpCircle className="w-3 h-3 mr-1" />;
-      case 'aprobado':
-        return <CheckCircle2 className="w-3 h-3 mr-1" />;
-      case 'rechazado':
-        return <XCircle className="w-3 h-3 mr-1" />;
-      default:
-        return null;
+  // Renderizar la badge de pedido creado por operario
+  const renderOperarioBadge = (order: Order) => {
+    if (order.metadata?.creadoPorOperario) {
+      return (
+        <Badge variant="outline" className="bg-purple-100 text-purple-800 border-purple-300 ml-2">
+          <Users className="w-3 h-3 mr-1" />
+          Operario: {order.metadata.operarioNombre || 'Desconocido'}
+        </Badge>
+      );
     }
+    return null;
+  };
+
+  // Obtener conteo de pedidos pendientes por aprobar (para supervisores)
+  const getPendingApprovalCount = () => {
+    return orders.filter(order => 
+      order.estado === OrderStatus.PENDING && 
+      order.metadata?.creadoPorOperario
+    ).length;
+  };
+
+  // Función para actualizar manualmente
+  const handleManualRefresh = () => {
+    fetchOrders(true);
   };
 
   return (
@@ -812,9 +941,77 @@ export const OrdersPage: React.FC = () => {
               <AlertDescription className="ml-2 text-white">{error}</AlertDescription>
             </Alert>
           )}
-          
-          {/* Filtros para escritorio */}
-          <div className="mb-6 space-y-4 hidden md:block bg-white/10 backdrop-blur-sm p-4 rounded-xl shadow-sm border border-[#2A82C7]/20">
+
+          {/* Filtros y búsqueda */}
+          <div className="mb-6 space-y-4 bg-white/10 backdrop-blur-sm p-4 rounded-xl shadow-sm border border-[#2A82C7]/20">
+            {/* Pestañas para filtrar por categorías principales */}
+            <div className="flex justify-between items-center">
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                <TabsList className="bg-[#15497E]/50 border border-[#2A82C7]/40 w-full">
+                  <TabsTrigger 
+                    value="todos" 
+                    className="flex-1 data-[state=active]:bg-[#15497E] data-[state=active]:text-white text-[#F8F9FA]"
+                  >
+                    Todos
+                  </TabsTrigger>
+                  
+                  {/* Pestaña extra para supervisores: pedidos por aprobar */}
+                  {userRole === 'supervisor' && (
+                    <TabsTrigger 
+                      value="porAprobar" 
+                      className="flex-1 data-[state=active]:bg-[#15497E] data-[state=active]:text-white text-[#F8F9FA] relative"
+                    >
+                      <FileCheck className="w-4 h-4 mr-1" />
+                      Por aprobar
+                      {getPendingApprovalCount() > 0 && (
+                        <span className="absolute -top-1 -right-1 bg-[#FF6B35] text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                          {getPendingApprovalCount()}
+                        </span>
+                      )}
+                    </TabsTrigger>
+                  )}
+                  
+                  <TabsTrigger 
+                    value="pendientes" 
+                    className="flex-1 data-[state=active]:bg-[#15497E] data-[state=active]:text-white text-[#F8F9FA]"
+                  >
+                    <Clock className="w-4 h-4 mr-1" />
+                    Pendientes
+                  </TabsTrigger>
+                  
+                  <TabsTrigger 
+                    value="aprobados" 
+                    className="flex-1 data-[state=active]:bg-[#15497E] data-[state=active]:text-white text-[#F8F9FA]"
+                  >
+                    <CheckCircle2 className="w-4 h-4 mr-1" />
+                    Aprobados
+                  </TabsTrigger>
+                  
+                  <TabsTrigger 
+                    value="rechazados" 
+                    className="flex-1 data-[state=active]:bg-[#15497E] data-[state=active]:text-white text-[#F8F9FA]"
+                  >
+                    <XSquare className="w-4 h-4 mr-1" />
+                    Rechazados
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleManualRefresh}
+                disabled={refreshing}
+                className="ml-2 hidden sm:flex border-[#2A82C7] text-[#F8F9FA] hover:bg-[#2A82C7]/20"
+              >
+                {refreshing ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+              </Button>
+            </div>
+
             <div className="flex flex-wrap gap-4 items-center justify-between">
               <div className="relative flex-1 min-w-[280px]">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#6C757D] w-4 h-4" />
@@ -826,20 +1023,6 @@ export const OrdersPage: React.FC = () => {
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
-              
-              <Button
-                variant="outline"
-                onClick={handleManualRefresh}
-                disabled={refreshing}
-                className="border-[#2A82C7] text-[#F8F9FA] hover:bg-[#2A82C7]/20"
-              >
-                {refreshing ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                )}
-                Actualizar
-              </Button>
             </div>
 
             <div className="flex flex-wrap gap-4 items-end">
@@ -867,39 +1050,19 @@ export const OrdersPage: React.FC = () => {
                   className="w-full bg-white/10 border-[#2A82C7] focus:border-[#15497E] text-white mt-1"
                 />
               </div>
-              
-              {/* Filtro por estado */}
-              <div>
-                <label htmlFor="estadoFilter" className="text-[#F8F9FA] text-sm font-medium">
-                  Estado
-                </label>
-                <select
-                  id="estadoFilter"
-                  value={stateFilter}
-                  onChange={(e) => setStateFilter(e.target.value)}
-                  className="w-full bg-white/10 border-[#2A82C7] focus:border-[#15497E] rounded-md text-white py-2 px-3 mt-1"
-                >
-                  <option value="all" className="bg-[#15497E] text-white">Todos</option>
-                  <option value="pendiente" className="bg-[#15497E] text-white">Pendientes</option>
-                  <option value="aprobado" className="bg-[#15497E] text-white">Aprobados</option>
-                  <option value="rechazado" className="bg-[#15497E] text-white">Rechazados</option>
-                </select>
-              </div>
-              
               <Button
                 variant="outline"
                 onClick={filterOrdersByDate}
-                className="border-[#2A82C7] text-[#F8F9FA] hover:bg-[#2A82C7]/20"
+                className="border-[#2A82C7] text-[#F8F9FA] hover:bg-[#15497E]/50"
               >
                 <Filter className="w-4 h-4 mr-2" />
                 Filtrar por Fecha
               </Button>
-              
-              {(dateFilter.fechaInicio || dateFilter.fechaFin || searchTerm || stateFilter !== 'all') && (
+              {(dateFilter.fechaInicio || dateFilter.fechaFin || searchTerm || statusFilter !== 'all') && (
                 <Button
                   variant="ghost"
                   onClick={clearAllFilters}
-                  className="text-[#6C757D] hover:text-[#F8F9FA] hover:bg-[#2A82C7]/30"
+                  className="text-[#6C757D] hover:text-[#F8F9FA] hover:bg-[#15497E]/30"
                 >
                   Limpiar filtros
                 </Button>
@@ -907,153 +1070,12 @@ export const OrdersPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Filtros para móvil */}
-          <div className="mb-6 space-y-4 md:hidden">
-            <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm p-3 rounded-xl shadow-sm border border-[#2A82C7]/20">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#6C757D] w-4 h-4" />
-                <Input
-                  type="text"
-                  placeholder="Buscar pedidos..."
-                  className="pl-10 bg-white/10 border-[#2A82C7] focus:border-[#15497E] text-white placeholder:text-[#F8F9FA]/70"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setShowMobileFilters(!showMobileFilters)}
-                className="flex-shrink-0 border-[#2A82C7] text-[#F8F9FA] hover:bg-[#2A82C7]/20"
-              >
-                <Filter className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={handleManualRefresh}
-                disabled={refreshing}
-                className="flex-shrink-0 border-[#2A82C7] text-[#F8F9FA] hover:bg-[#2A82C7]/20"
-              >
-                {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-              </Button>
-            </div>
-
-            {showMobileFilters && (
-              <div className="p-4 bg-[#2A82C7]/10 rounded-lg border border-[#2A82C7]/20 space-y-4">
-                {/* Fechas */}
-                <h3 className="font-medium text-sm text-[#F8F9FA]">Filtrar por fecha</h3>
-                <div className="space-y-2">
-                  <div>
-                    <label htmlFor="mFechaInicio" className="text-xs text-[#F8F9FA]">
-                      Fecha Inicio
-                    </label>
-                    <Input
-                      id="mFechaInicio"
-                      type="date"
-                      value={dateFilter.fechaInicio}
-                      onChange={(e) => setDateFilter({ ...dateFilter, fechaInicio: e.target.value })}
-                      className="w-full text-sm bg-white/10 border-[#2A82C7] focus:border-[#15497E] text-white mt-1"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="mFechaFin" className="text-xs text-[#F8F9FA]">
-                      Fecha Fin
-                    </label>
-                    <Input
-                      id="mFechaFin"
-                      type="date"
-                      value={dateFilter.fechaFin}
-                      onChange={(e) => setDateFilter({ ...dateFilter, fechaFin: e.target.value })}
-                      className="w-full text-sm bg-white/10 border-[#2A82C7] focus:border-[#15497E] text-white mt-1"
-                    />
-                  </div>
-                </div>
-                
-                {/* Estado */}
-                <div>
-                  <label htmlFor="mEstadoFilter" className="text-xs text-[#F8F9FA]">
-                    Estado
-                  </label>
-                  <select
-                    id="mEstadoFilter"
-                    value={stateFilter}
-                    onChange={(e) => setStateFilter(e.target.value)}
-                    className="w-full bg-white/10 border-[#2A82C7] focus:border-[#15497E] rounded-md text-white py-2 px-3 mt-1 text-sm"
-                  >
-                    <option value="all" className="bg-[#15497E] text-white">Todos</option>
-                    <option value="pendiente" className="bg-[#15497E] text-white">Pendientes</option>
-                    <option value="aprobado" className="bg-[#15497E] text-white">Aprobados</option>
-                    <option value="rechazado" className="bg-[#15497E] text-white">Rechazados</option>
-                  </select>
-                </div>
-                
-                <div className="flex gap-2 pt-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={clearAllFilters}
-                    className="text-xs border-[#2A82C7] text-[#F8F9FA] hover:bg-[#2A82C7]/20"
-                  >
-                    Limpiar
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={filterOrdersByDate}
-                    className="text-xs bg-[#15497E] hover:bg-[#2A82C7] text-white"
-                  >
-                    Aplicar Filtros
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {(dateFilter.fechaInicio || dateFilter.fechaFin) && (
-              <div className="px-3 py-2 bg-[#2A82C7]/20 rounded-md text-xs text-[#F8F9FA] flex items-center justify-between border border-[#2A82C7]/20">
-                <div>
-                  <CalendarRange className="w-3 h-3 inline mr-1" />
-                  <span>
-                    {dateFilter.fechaInicio && new Date(dateFilter.fechaInicio).toLocaleDateString()}
-                    {dateFilter.fechaInicio && dateFilter.fechaFin && ' al '}
-                    {dateFilter.fechaFin && new Date(dateFilter.fechaFin).toLocaleDateString()}
-                  </span>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearAllFilters}
-                  className="h-6 text-xs px-2 text-[#6C757D] hover:text-[#F8F9FA] hover:bg-[#2A82C7]/30"
-                >
-                  <X className="w-3 h-3" />
-                </Button>
-              </div>
-            )}
-            
-            {stateFilter !== 'all' && (
-              <div className="px-3 py-2 bg-[#2A82C7]/20 rounded-md text-xs text-[#F8F9FA] flex items-center justify-between border border-[#2A82C7]/20">
-                <div>
-                  <span>
-                    Estado: {stateFilter === 'pendiente' ? 'Pendientes' : stateFilter === 'aprobado' ? 'Aprobados' : 'Rechazados'}
-                  </span>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setStateFilter('all')}
-                  className="h-6 text-xs px-2 text-[#6C757D] hover:text-[#F8F9FA] hover:bg-[#2A82C7]/30"
-                >
-                  <X className="w-3 h-3" />
-                </Button>
-              </div>
-            )}
-          </div>
-
           {/* Estado de carga */}
           {loading && (
             <div className="flex justify-center items-center py-20">
               <div className="flex flex-col items-center">
                 <Loader2 className="h-10 w-10 animate-spin text-[#F8F9FA]" />
-                <p className="mt-4 text-[#F8F9FA]">Cargando tus pedidos...</p>
+                <p className="mt-4 text-[#F8F9FA]">Cargando pedidos...</p>
               </div>
             </div>
           )}
@@ -1066,18 +1088,24 @@ export const OrdersPage: React.FC = () => {
               </div>
               <h2 className="text-xl font-bold mb-2 text-[#F8F9FA]">No se encontraron pedidos</h2>
               <p className="text-[#6C757D] max-w-lg mx-auto">
-                {searchTerm || stateFilter !== 'all'
-                  ? `No hay pedidos que coincidan con tu búsqueda` 
-                  : dateFilter.fechaInicio || dateFilter.fechaFin
-                    ? "No se encontraron pedidos en el rango de fechas seleccionado" 
-                    : "Aún no has realizado ningún pedido. Comienza a comprar para ver tus pedidos aquí."}
+                {searchTerm || dateFilter.fechaInicio || dateFilter.fechaFin || statusFilter !== 'all'
+                  ? 'No hay pedidos que coincidan con los filtros seleccionados.' 
+                  : activeTab === 'porAprobar'
+                    ? 'No hay pedidos pendientes de aprobación.'
+                    : activeTab === 'pendientes'
+                      ? 'No hay pedidos en estado pendiente.'
+                      : activeTab === 'aprobados'
+                        ? 'No hay pedidos aprobados.'
+                        : activeTab === 'rechazados'
+                          ? 'No hay pedidos rechazados.'
+                          : 'Aún no has realizado ningún pedido. Comienza a comprar para ver tus pedidos aquí.'}
               </p>
-              {(searchTerm || dateFilter.fechaInicio || dateFilter.fechaFin || stateFilter !== 'all') && (
+              {(searchTerm || dateFilter.fechaInicio || dateFilter.fechaFin || statusFilter !== 'all' || activeTab !== 'todos') && (
                 <Button 
                   onClick={clearAllFilters}
                   className="mt-4 bg-[#15497E] hover:bg-[#2A82C7] text-white"
                 >
-                  Limpiar filtros
+                  Mostrar todos los pedidos
                 </Button>
               )}
             </div>
@@ -1087,7 +1115,11 @@ export const OrdersPage: React.FC = () => {
           {!loading && filteredOrders.length > 0 && (
             <div className="space-y-6">
               <h2 className="text-xl font-medium mb-4 flex items-center text-[#F8F9FA]">
-                Tus Pedidos
+                {activeTab === 'todos' ? 'Todos los pedidos' : 
+                 activeTab === 'porAprobar' ? 'Pedidos por aprobar' :
+                 activeTab === 'pendientes' ? 'Pedidos pendientes' :
+                 activeTab === 'aprobados' ? 'Pedidos aprobados' :
+                 activeTab === 'rechazados' ? 'Pedidos rechazados' : 'Pedidos'}
                 <Badge variant="outline" className="ml-3 bg-white/10 text-[#F8F9FA] border-[#2A82C7]">
                   {filteredOrders.length} pedidos
                 </Badge>
@@ -1109,10 +1141,10 @@ export const OrdersPage: React.FC = () => {
                           Cliente
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                          Estado
+                          Productos
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                          Productos
+                          Estado
                         </th>
                         <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider">
                           Total
@@ -1122,7 +1154,7 @@ export const OrdersPage: React.FC = () => {
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#2A82C7]/20">
+                    <tbody className="bg-white/5 divide-y divide-[#2A82C7]/20">
                       {filteredOrders.map((order) => (
                         <React.Fragment key={order._id}>
                           <tr className="hover:bg-[#15497E]/20 transition-colors">
@@ -1135,14 +1167,14 @@ export const OrdersPage: React.FC = () => {
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div>{formatDate(order.fecha)}</div>
                               <div className="text-xs text-[#6C757D]">
-                                {new Date(order.fecha).toLocaleTimeString()}
+                                {formatTime(order.fecha)}
                               </div>
                             </td>
                             <td className="px-6 py-4">
                               <div className="flex items-center">
                                 <Building className="w-4 h-4 text-[#6C757D] mr-2" />
                                 <div>
-                                  <div className="font-medium">{order.servicio}</div>
+                                  <div className="font-medium text-[#F8F9FA]">{order.servicio}</div>
                                   {order.seccionDelServicio && (
                                     <div className="text-xs text-[#6C757D] flex items-center mt-1">
                                       <MapPin className="w-3 h-3 mr-1" />
@@ -1151,22 +1183,6 @@ export const OrdersPage: React.FC = () => {
                                   )}
                                 </div>
                               </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <Badge className={getStatusBadgeClass(order.estado || 'aprobado')}>
-                                {getStatusIcon(order.estado || 'aprobado')}
-                                {order.estado === 'pendiente' ? 'Pendiente' : 
-                                  order.estado === 'aprobado' ? 'Aprobado' : 
-                                  order.estado === 'rechazado' ? 'Rechazado' : 
-                                  'Desconocido'}
-                              </Badge>
-                              
-                              {/* Información del operario si existe */}
-                              {order.metadata?.operarioNombre && (
-                                <div className="text-xs text-[#6C757D] mt-1">
-                                  Creado por: {order.metadata.operarioNombre}
-                                </div>
-                              )}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <Badge className="bg-[#2A82C7]/30 text-[#F8F9FA] border-[#2A82C7]/50">
@@ -1181,53 +1197,54 @@ export const OrdersPage: React.FC = () => {
                                 <Eye className="w-4 h-4" />
                               </Button>
                             </td>
-                            <td className="px-6 py-4 text-right whitespace-nowrap font-bold">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex flex-col space-y-1">
+                                {renderStatusBadge(order.estado)}
+                                {renderOperarioBadge(order)}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-right whitespace-nowrap font-bold text-[#F8F9FA]">
                               ${order.total?.toFixed(2) || '0.00'}
                             </td>
                             <td className="px-6 py-4 text-right whitespace-nowrap">
-                              <div className="flex justify-end">
-                                {/* Acciones de aprobación para supervisores y estado pendiente */}
-                                {userRole === 'supervisor' && order.estado === 'pendiente' && (
+                              <div className="flex justify-end space-x-2">
+                                {/* Botón para descargar remito */}
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleRemitoDownload(order._id)}
+                                  disabled={isDownloadingRemito === order._id}
+                                  className="border-[#2A82C7] text-[#F8F9FA] hover:bg-[#15497E]/30"
+                                >
+                                  {isDownloadingRemito === order._id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Download className="h-4 w-4" />
+                                  )}
+                                </Button>
+                                
+                                {/* Botones de aprobación para supervisores */}
+                                {userRole === 'supervisor' && 
+                                  order.estado === OrderStatus.PENDING && 
+                                  order.metadata?.creadoPorOperario && (
                                   <>
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      onClick={() => handleApproveOrder(order._id)}
-                                      className="mr-2 border-green-500 text-green-500 hover:bg-green-500/20"
+                                      onClick={() => openApprovalDialog(order._id)}
+                                      className="border-green-500 text-green-500 hover:bg-green-900/20 hover:text-green-400"
                                     >
-                                      <CheckCircle2 className="h-4 w-4 mr-1" />
-                                      Aprobar
+                                      <CheckSquare className="h-4 w-4" />
                                     </Button>
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      onClick={() => handleRejectOrder(order._id)}
-                                      className="mr-2 border-red-500 text-red-500 hover:bg-red-500/20"
+                                      onClick={() => openRejectionDialog(order._id)}
+                                      className="border-red-500 text-red-500 hover:bg-red-900/20 hover:text-red-400"
                                     >
-                                      <XCircle className="h-4 w-4 mr-1" />
-                                      Rechazar
+                                      <XSquare className="h-4 w-4" />
                                     </Button>
                                   </>
-                                )}
-                                
-                                {/* Descargar remito - solo para aprobados */}
-                                {order.estado !== 'rechazado' && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleRemitoDownload(order._id)}
-                                    disabled={isDownloadingRemito === order._id}
-                                    className="border-[#2A82C7] text-[#F8F9FA] hover:bg-[#15497E]/30"
-                                  >
-                                    {isDownloadingRemito === order._id ? (
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                      <>
-                                        <Download className="h-4 w-4 mr-1.5" />
-                                        Remito
-                                      </>
-                                    )}
-                                  </Button>
                                 )}
                               </div>
                             </td>
@@ -1238,7 +1255,33 @@ export const OrdersPage: React.FC = () => {
                             <tr>
                               <td colSpan={7} className="px-6 py-4 bg-[#15497E]/20">
                                 <div className="space-y-3">
-                                  <h3 className="font-medium text-[#F8F9FA]">Detalles del Pedido #{order.displayNumber}</h3>
+                                  <div className="flex justify-between items-start">
+                                    <h3 className="font-medium text-[#F8F9FA]">Detalles del Pedido #{order.displayNumber}</h3>
+                                    
+                                    {/* Mostrar información de operario (si aplica) */}
+                                    {order.metadata?.creadoPorOperario && (
+                                      <div className="bg-white/10 rounded-md p-2 text-xs text-[#F8F9FA] border border-[#2A82C7]/50">
+                                        <div className="flex items-center mb-1 text-[#2A82C7]">
+                                          <UserCheck className="h-3 w-3 mr-1" />
+                                          <span className="font-medium">Pedido creado por operario</span>
+                                        </div>
+                                        <p>Operario: <span className="font-medium">{order.metadata.operarioNombre || "Desconocido"}</span></p>
+                                        {order.metadata.fechaCreacion && (
+                                          <p>Fecha: {formatDate(order.metadata.fechaCreacion)} {formatTime(order.metadata.fechaCreacion)}</p>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                  
+                                  {/* Mostrar motivo de rechazo si aplica */}
+                                  {order.estado === OrderStatus.REJECTED && order.metadata?.motivoRechazo && (
+                                    <Alert className="bg-red-900/20 border border-red-400 mt-2">
+                                      <AlertTriangle className="h-4 w-4 text-red-400" />
+                                      <AlertDescription className="ml-2 text-red-100">
+                                        <span className="font-bold">Motivo de rechazo:</span> {order.metadata.motivoRechazo}
+                                      </AlertDescription>
+                                    </Alert>
+                                  )}
                                   
                                   {/* Productos del pedido */}
                                   <div className="bg-white/5 rounded-md border border-[#2A82C7]/20 overflow-hidden">
@@ -1314,17 +1357,6 @@ export const OrdersPage: React.FC = () => {
                                       </p>
                                     </div>
                                   )}
-                                  
-                                  {/* Información adicional de operario si existe */}
-                                  {order.metadata?.operarioNombre && (
-                                    <div className="mt-3">
-                                      <h4 className="text-sm font-medium text-[#F8F9FA]">Creado por:</h4>
-                                      <p className="text-sm text-[#6C757D] bg-white/5 p-3 rounded-md border border-[#2A82C7]/20 mt-1">
-                                        Operario: {order.metadata.operarioNombre}<br />
-                                        Fecha: {new Date(order.metadata.fechaCreacion).toLocaleString()}
-                                      </p>
-                                    </div>
-                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -1348,22 +1380,20 @@ export const OrdersPage: React.FC = () => {
                             Pedido #{order.displayNumber}
                           </CardTitle>
                           <p className="text-xs text-[#6C757D] mt-1">
-                            {formatDate(order.fecha)}
+                            {formatDate(order.fecha)} - {formatTime(order.fecha)}
                           </p>
                         </div>
-                        <div className="flex gap-1 items-center">
-                          <Badge className={getStatusBadgeClass(order.estado || 'aprobado')}>
-                            {getStatusIcon(order.estado || 'aprobado')}
-                            {order.estado === 'pendiente' ? 'Pendiente' : 
-                              order.estado === 'aprobado' ? 'Aprobado' : 
-                              order.estado === 'rechazado' ? 'Rechazado' : 
-                              'Desconocido'}
-                          </Badge>
+                        <div className="flex flex-col items-end">
+                          {renderStatusBadge(order.estado)}
+                          <div className="text-xs text-right mt-1">
+                            <span className="text-[#F8F9FA] font-medium">${order.total?.toFixed(2) || '0.00'}</span>
+                          </div>
                         </div>
                       </div>
                     </CardHeader>
                     <CardContent className="pt-3 pb-2">
                       <div className="space-y-2">
+                        {/* Datos de cliente */}
                         <div className="flex items-start gap-2">
                           <Building className="w-4 h-4 text-[#6C757D] mt-0.5" />
                           <div>
@@ -1377,22 +1407,24 @@ export const OrdersPage: React.FC = () => {
                           </div>
                         </div>
                         
-                        {/* Información del operario si existe */}
-                        {order.metadata?.operarioNombre && (
-                          <div className="text-xs text-[#6C757D] bg-[#15497E]/10 px-2 py-1 rounded">
-                            Creado por: {order.metadata.operarioNombre}
+                        {/* Badge de operario si aplica */}
+                        {renderOperarioBadge(order)}
+                        
+                        {/* Motivo de rechazo si aplica */}
+                        {order.estado === OrderStatus.REJECTED && order.metadata?.motivoRechazo && (
+                          <div className="mt-2 bg-red-900/20 border border-red-400 rounded-md p-2 text-xs text-red-100">
+                            <span className="font-bold">Motivo de rechazo:</span> {order.metadata.motivoRechazo}
                           </div>
                         )}
                         
                         <div className="flex justify-between items-center mt-2">
                           <div className="text-sm text-[#6C757D] flex items-center">
-                            <Package className="h-4 w-4 mr-1" />
-                            {order.productos?.length || 0} productos
+                            <DollarSign className="h-4 w-4 mr-1" />
+                            Productos:
                           </div>
-                          <div className="text-sm font-bold text-[#F8F9FA] flex items-center">
-                            <DollarSign className="h-4 w-4 mr-1 text-[#6C757D]" />
-                            ${order.total?.toFixed(2) || '0.00'}
-                          </div>
+                          <Badge className="bg-[#2A82C7]/30 text-[#F8F9FA] border-[#2A82C7]/50">
+                            {order.productos?.length || 0} items
+                          </Badge>
                         </div>
                       </div>
                       
@@ -1443,51 +1475,47 @@ export const OrdersPage: React.FC = () => {
                         </AccordionItem>
                       </Accordion>
                     </CardContent>
-                    <CardFooter className="pt-0 pb-3">
-                      {/* Acciones según rol y estado */}
-                      <div className="w-full flex gap-2">
-                        {/* Acciones de aprobación para supervisores y estado pendiente */}
-                        {userRole === 'supervisor' && order.estado === 'pendiente' ? (
-                          <>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleApproveOrder(order._id)}
-                              className="flex-1 border-green-500 text-green-500 hover:bg-green-500/20"
-                            >
-                              <CheckCircle2 className="h-4 w-4 mr-1" />
-                              Aprobar
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleRejectOrder(order._id)}
-                              className="flex-1 border-red-500 text-red-500 hover:bg-red-500/20"
-                            >
-                              <XCircle className="h-4 w-4 mr-1" />
-                              Rechazar
-                            </Button>
-                          </>
+                    <CardFooter className="pt-0 pb-3 flex justify-between">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleRemitoDownload(order._id)}
+                        disabled={isDownloadingRemito === order._id}
+                        className="border-[#2A82C7] text-[#F8F9FA] hover:bg-[#15497E]/30"
+                      >
+                        {isDownloadingRemito === order._id ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
                         ) : (
-                          // Botón de descarga de remito - solo para aprobados
-                          order.estado !== 'rechazado' && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleRemitoDownload(order._id)}
-                              disabled={isDownloadingRemito === order._id}
-                              className="w-full border-[#2A82C7] text-[#F8F9FA] hover:bg-[#15497E]/30"
-                            >
-                              {isDownloadingRemito === order._id ? (
-                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                              ) : (
-                                <Download className="h-4 w-4 mr-2" />
-                              )}
-                              Descargar Remito
-                            </Button>
-                          )
+                          <Download className="h-4 w-4 mr-2" />
                         )}
-                      </div>
+                        Remito
+                      </Button>
+                      
+                      {/* Botones de aprobación para supervisores en móvil */}
+                      {userRole === 'supervisor' && 
+                        order.estado === OrderStatus.PENDING && 
+                        order.metadata?.creadoPorOperario && (
+                        <div className="flex space-x-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openApprovalDialog(order._id)}
+                            className="border-green-500 text-green-500 hover:bg-green-900/20 hover:text-green-400"
+                          >
+                            <CheckSquare className="h-4 w-4 mr-1" />
+                            Aprobar
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openRejectionDialog(order._id)}
+                            className="border-red-500 text-red-500 hover:bg-red-900/20 hover:text-red-400"
+                          >
+                            <XSquare className="h-4 w-4 mr-1" />
+                            Rechazar
+                          </Button>
+                        </div>
+                      )}
                     </CardFooter>
                   </Card>
                 ))}
@@ -1496,6 +1524,124 @@ export const OrdersPage: React.FC = () => {
           )}
         </div>
       </div>
+      
+      {/* Diálogo de confirmación de aprobación */}
+      <Dialog open={approvalDialogOpen} onOpenChange={setApprovalDialogOpen}>
+        <DialogContent className="sm:max-w-md bg-[#15497E] border-[#2A82C7] text-white">
+          <DialogHeader>
+            <DialogTitle className="text-[#F8F9FA]">Aprobar Pedido</DialogTitle>
+            <DialogDescription className="text-[#6C757D]">
+              Al aprobar este pedido, se generará la orden y se procesará para su entrega.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4">
+            <p className="text-[#F8F9FA]">
+              ¿Estás seguro de que deseas aprobar este pedido?
+            </p>
+            
+            <div className="mt-4 bg-white/10 p-3 rounded-md border border-[#2A82C7]/40">
+              <p className="text-sm text-[#6C757D]">
+                Una vez aprobado, el pedido se enviará a logística para su procesamiento y entrega. 
+                El operario será notificado de que su pedido ha sido aprobado.
+              </p>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button 
+              type="button" 
+              variant="outline"
+              onClick={() => setApprovalDialogOpen(false)}
+              className="border-[#2A82C7] text-[#F8F9FA]"
+              disabled={isProcessingApproval}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              type="button"
+              onClick={approveOrder}
+              disabled={isProcessingApproval}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              {isProcessingApproval ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Procesando...
+                </>
+              ) : (
+                <>
+                  <CheckSquare className="mr-2 h-4 w-4" />
+                  Confirmar Aprobación
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Diálogo de rechazo de pedido */}
+      <Dialog open={rejectionDialogOpen} onOpenChange={setRejectionDialogOpen}>
+        <DialogContent className="sm:max-w-md bg-[#15497E] border-[#2A82C7] text-white">
+          <DialogHeader>
+            <DialogTitle className="text-[#F8F9FA]">Rechazar Pedido</DialogTitle>
+            <DialogDescription className="text-[#6C757D]">
+              Por favor, proporciona un motivo para el rechazo del pedido.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4">
+            <Label htmlFor="rejectionReason" className="text-[#F8F9FA] mb-2 block">
+              Motivo del rechazo *
+            </Label>
+            <Textarea
+              id="rejectionReason"
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+              placeholder="Explica por qué estás rechazando este pedido..."
+              className="min-h-[120px] bg-white/10 border-[#2A82C7] text-[#F8F9FA] placeholder:text-[#6C757D]"
+              required
+            />
+            
+            <div className="mt-4 bg-red-900/20 p-3 rounded-md border border-red-500/40">
+              <p className="text-sm text-red-200">
+                Al rechazar un pedido, se notificará al operario con el motivo proporcionado. 
+                El pedido no se procesará y los productos volverán a estar disponibles.
+              </p>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button 
+              type="button" 
+              variant="outline"
+              onClick={() => setRejectionDialogOpen(false)}
+              className="border-[#2A82C7] text-[#F8F9FA]"
+              disabled={isProcessingApproval}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              type="button"
+              onClick={rejectOrder}
+              disabled={isProcessingApproval || !rejectionReason.trim()}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {isProcessingApproval ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Procesando...
+                </>
+              ) : (
+                <>
+                  <XSquare className="mr-2 h-4 w-4" />
+                  Confirmar Rechazo
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };
