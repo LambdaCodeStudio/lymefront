@@ -44,13 +44,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import Pagination from "@/components/ui/pagination";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
-import type { Product, ProductFilters } from '@/types/inventory';
 import { useNotification } from '@/context/NotificationContext';
 import { inventoryObservable, getAuthToken } from '@/utils/inventoryUtils';
-import { imageService } from '@/services/imageService';
-// Importar el componente ProductImage
 import ProductImage from '@/components/admin/components/ProductImage';
-// Importar el nuevo componente de carga de imágenes
 import ImageUpload from '@/components/admin/components/ImageUpload';
 
 // Definir umbral de stock bajo
@@ -136,9 +132,6 @@ const InventorySection = () => {
   // Estado para controlar el ancho de la ventana
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
   
-  // Caché simple en memoria usando useRef (sin estructuras complejas)
-  const lastFetchTimeRef = useRef(0);
-  
   // Calculamos dinámicamente itemsPerPage basado en el ancho de la ventana
   const itemsPerPage = windowWidth < 768 ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP;
   
@@ -184,6 +177,7 @@ const InventorySection = () => {
       
       setLoading(true);
       setRefreshing(forceRefresh);
+      setError('');
       
       const token = getAuthToken();
       if (!token) {
@@ -209,26 +203,41 @@ const InventorySection = () => {
         throw new Error('Error al cargar productos');
       }
       
-      const data = await response.json();
-      console.log(`Productos actualizados: ${data.length}`);
+      // Obtenemos el JSON de la respuesta
+      let data;
+      try {
+        data = await response.json();
+        console.log(`Productos actualizados: ${data.length}`);
+      } catch (jsonError) {
+        console.error("Error al parsear JSON:", jsonError);
+        throw new Error('Error al procesar datos de productos');
+      }
       
-      // Asegurarnos que la respuesta sea un array
-      const productsArray = Array.isArray(data) ? data : [];
-      
-      // Actualizar el tiempo de la última carga
-      lastFetchTimeRef.current = Date.now();
+      // Validamos que la respuesta sea un array
+      if (!Array.isArray(data)) {
+        console.error("La respuesta no es un array:", data);
+        data = Array.isArray(data.items) ? data.items : [];
+        
+        if (data.length === 0) {
+          console.warn("No se encontraron productos o formato inesperado");
+        }
+      }
       
       // Establecer productos
-      setProducts(productsArray);
+      setProducts(data);
+      
+      // Si hay pocos productos, mostrar una alerta
+      if (data.length === 0) {
+        addNotification('No se encontraron productos', 'info');
+      }
       
     } catch (err) {
       const errorMsg = 'Error al cargar productos: ' + err.message;
+      console.error(errorMsg);
       setError(errorMsg);
       
       if (typeof addNotification === 'function') {
         addNotification(errorMsg, 'error');
-      } else {
-        console.error('addNotification no está disponible:', errorMsg);
       }
     } finally {
       setLoading(false);
@@ -236,19 +245,23 @@ const InventorySection = () => {
     }
   };
 
-  // Verificar productos con stock bajo y enviar notificación
+  // Verificar productos con stock bajo y enviar notificación (con manejo de errores robusto)
   useEffect(() => {
-    if (loading || !products || !products.length) return;
+    if (loading || !Array.isArray(products)) return;
     
     try {
       const lowStockProducts = products.filter(product => 
-        product && typeof product.stock === 'number' && 
-        product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD
+        product && 
+        typeof product === 'object' && 
+        typeof product.stock === 'number' && 
+        product.stock > 0 && 
+        product.stock <= LOW_STOCK_THRESHOLD
       );
       
       if (lowStockProducts.length > 0) {
-        const productNames = lowStockProducts.map(p => p.nombre).join(', ');
-        const message = `Alerta: ${lowStockProducts.length} producto${lowStockProducts.length > 1 ? 's' : ''} con stock bajo: ${productNames}`;
+        const productNames = lowStockProducts.slice(0, 3).map(p => p.nombre || 'Producto sin nombre').join(', ');
+        const extraCount = lowStockProducts.length > 3 ? ` y ${lowStockProducts.length - 3} más` : '';
+        const message = `Alerta: ${lowStockProducts.length} producto${lowStockProducts.length > 1 ? 's' : ''} con stock bajo: ${productNames}${extraCount}`;
         
         if (addNotification) {
           addNotification(message, 'warning');
@@ -259,21 +272,24 @@ const InventorySection = () => {
     }
   }, [products, loading, addNotification]);
 
-  // Cargar productos y suscribirse al observable
+  // Cargar productos al montar el componente y suscribirse al observable para actualizaciones
   useEffect(() => {
+    // Cargar productos inicialmente
     fetchProducts();
     
+    // Suscribirse a actualizaciones
     const unsubscribe = inventoryObservable.subscribe(() => {
       console.log('InventorySection: Actualización de inventario notificada por observable');
       fetchProducts(true);
     });
     
+    // Limpiar suscripción al desmontar
     return () => {
       unsubscribe();
     };
   }, []);
 
-  // Efecto para detectar el tamaño de la ventana
+  // Efecto para detectar el tamaño de la ventana y ajustar la visualización en consecuencia
   useEffect(() => {
     const handleResize = () => {
       const newWidth = window.innerWidth;
@@ -305,13 +321,15 @@ const InventorySection = () => {
     
     return products.filter(product => {
       // Verificación de seguridad para producto
-      if (!product) return false;
+      if (!product || typeof product !== 'object') return false;
       
-      // Buscar coincidencias en nombre, descripción y proveedor (con verificación)
+      // Buscar coincidencias en nombre, descripción y proveedor (con verificación segura)
       const matchesSearch = 
-        (product.nombre && product.nombre.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (product.descripcion && product.descripcion.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (product.proovedorInfo && product.proovedorInfo.toLowerCase().includes(searchTerm.toLowerCase()));
+        searchTerm === '' || (
+          (product.nombre && product.nombre.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (product.descripcion && product.descripcion.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (product.proovedorInfo && product.proovedorInfo.toLowerCase().includes(searchTerm.toLowerCase()))
+        );
         
       // Verificar categoría
       const matchesCategory = 
@@ -321,17 +339,6 @@ const InventorySection = () => {
         
       return matchesSearch && matchesCategory;
     });
-  };
-
-  // Cargar la imagen en Base64 para productos específicos
-  const fetchProductImageBase64 = async (productId) => {
-    try {
-      const base64Image = await imageService.getImageBase64(productId);
-      return base64Image;
-    } catch (error) {
-      console.error(`Error al obtener imagen base64 para producto ${productId}:`, error);
-      return null;
-    }
   };
 
   // Manejar cambio de imagen
@@ -389,7 +396,22 @@ const InventorySection = () => {
   const handleDeleteProductImage = async (productId) => {
     try {
       setImageLoading(true);
-      await imageService.deleteImage(productId);
+      
+      const token = getAuthToken();
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
+      
+      const response = await fetch(`https://lyme-back.vercel.app/api/producto/${productId}/imagen`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Error al eliminar imagen (${response.status})`);
+      }
       
       // Actualizar la vista del formulario para permitir subir una nueva imagen
       setFormData(prev => ({
@@ -398,17 +420,14 @@ const InventorySection = () => {
         imagenPreview: null
       }));
       
-      // Invalidar cualquier caché de imagen que pueda existir
-      imageService.invalidateCache(productId);
-      
       // Actualizar productos
-      fetchProducts(true);
+      await fetchProducts(true);
       
       addNotification('Imagen eliminada correctamente', 'success');
       setDeleteImageDialogOpen(false);
     } catch (error) {
       console.error('Error al eliminar la imagen:', error);
-      addNotification('Error al eliminar la imagen', 'error');
+      addNotification(`Error al eliminar la imagen: ${error.message}`, 'error');
     } finally {
       setImageLoading(false);
     }
@@ -420,13 +439,32 @@ const InventorySection = () => {
     
     try {
       setImageLoading(true);
-      // Convertir a base64 y subir
-      const base64Data = await imageService.fileToBase64(formData.imagen);
-      await imageService.uploadImageBase64(productId, base64Data);
+      
+      const token = getAuthToken();
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
+      
+      // Crear FormData para enviar la imagen
+      const formDataObj = new FormData();
+      formDataObj.append('imagen', formData.imagen);
+      
+      const response = await fetch(`https://lyme-back.vercel.app/api/producto/${productId}/imagen`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formDataObj
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Error al subir imagen (${response.status})`);
+      }
       
       return true;
     } catch (error) {
       console.error('Error al subir imagen:', error);
+      addNotification(`Error al subir imagen: ${error.message}`, 'error');
       return false;
     } finally {
       setImageLoading(false);
@@ -475,7 +513,14 @@ const InventorySection = () => {
         throw new Error(error.error || 'Error al procesar la solicitud');
       }
       
-      const savedProduct = await response.json();
+      // Parsear la respuesta JSON
+      let savedProduct;
+      try {
+        savedProduct = await response.json();
+      } catch (jsonError) {
+        console.error("Error al parsear JSON:", jsonError);
+        throw new Error('Error al procesar datos del producto guardado');
+      }
       
       // Manejar la subida de imagen si hay una imagen nueva
       if (formData.imagen) {
@@ -565,40 +610,39 @@ const InventorySection = () => {
 
   // Preparar edición de producto
   const handleEdit = async (product) => {
-    setEditingProduct(product);
-    
-    // Intentamos cargar la imagen en formato base64
-    let imagePreview = null;
-    if (product.hasImage) {
-      try {
-        // Cargar imagen base64 para vista previa
-        const base64Image = await fetchProductImageBase64(product._id);
-        if (base64Image) {
-          imagePreview = `data:image/jpeg;base64,${base64Image}`;
-        } else {
-          // Fallback a la URL normal
-          imagePreview = imageService.getImageUrl(product._id);
+    try {
+      setEditingProduct(product);
+      
+      // Intentar cargar vista previa de la imagen si el producto tiene una
+      let imagePreview = null;
+      if (product.hasImage) {
+        try {
+          // Usar la URL de la imagen (sin cargar base64)
+          imagePreview = `https://lyme-back.vercel.app/api/producto/${product._id}/imagen?cache=${Date.now()}`;
+        } catch (error) {
+          console.error('Error al preparar imagen:', error);
+          // No establecer imagen si hay error
+          imagePreview = null;
         }
-      } catch (error) {
-        console.error('Error al cargar imagen:', error);
-        // No establecer imagen si hay error
-        imagePreview = null;
       }
+      
+      setFormData({
+        nombre: product.nombre || '',
+        descripcion: product.descripcion || '',
+        categoria: product.categoria || 'limpieza',
+        subCategoria: product.subCategoria || 'aerosoles',
+        precio: product.precio ? product.precio.toString() : '',
+        stock: product.stock ? product.stock.toString() : '',
+        proovedorInfo: product.proovedorInfo || '',
+        imagen: null,
+        imagenPreview: imagePreview
+      });
+      
+      setShowModal(true);
+    } catch (error) {
+      console.error("Error al preparar edición:", error);
+      addNotification("Error al preparar edición del producto", "error");
     }
-    
-    setFormData({
-      nombre: product.nombre || '',
-      descripcion: product.descripcion || '',
-      categoria: product.categoria || 'limpieza',
-      subCategoria: product.subCategoria || 'aerosoles',
-      precio: product.precio ? product.precio.toString() : '',
-      stock: product.stock ? product.stock.toString() : '',
-      proovedorInfo: product.proovedorInfo || '',
-      imagen: null,
-      imagenPreview: imagePreview
-    });
-    
-    setShowModal(true);
   };
 
   // Resetear formulario
@@ -802,8 +846,18 @@ const InventorySection = () => {
         </div>
       </div>
 
+      {/* Indicador de carga */}
+      {loading && (
+        <div className="bg-white rounded-xl shadow-sm p-8 text-center border border-[#91BEAD]/20">
+          <div className="inline-flex items-center justify-center">
+            <Loader2 className="w-6 h-6 text-[#29696B] animate-spin mr-2" />
+            <p className="text-[#29696B]">Cargando productos...</p>
+          </div>
+        </div>
+      )}
+
       {/* Alerta para productos con stock bajo */}
-      {!loading && products && products.some(p => p && p.stock > 0 && p.stock <= LOW_STOCK_THRESHOLD) && (
+      {!loading && Array.isArray(products) && products.some(p => p && typeof p === 'object' && p.stock > 0 && p.stock <= LOW_STOCK_THRESHOLD) && (
         <Alert className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg">
           <AlertTriangle className="h-4 w-4 text-yellow-500" />
           <AlertDescription className="ml-2">
@@ -818,17 +872,11 @@ const InventorySection = () => {
           <div className="inline-flex items-center justify-center w-12 h-12 bg-[#DFEFE6] rounded-full mb-4">
             <Search className="w-6 h-6 text-[#29696B]" />
           </div>
-          <p className="text-[#7AA79C]">No se encontraron productos que coincidan con la búsqueda</p>
-        </div>
-      )}
-
-      {/* Indicador de carga */}
-      {loading && (
-        <div className="bg-white rounded-xl shadow-sm p-8 text-center border border-[#91BEAD]/20">
-          <div className="inline-flex items-center justify-center">
-            <Loader2 className="w-6 h-6 text-[#29696B] animate-spin mr-2" />
-            <p className="text-[#29696B]">Cargando productos...</p>
-          </div>
+          <p className="text-[#7AA79C]">
+            {searchTerm || selectedCategory !== 'all' 
+              ? 'No se encontraron productos que coincidan con la búsqueda' 
+              : 'No hay productos disponibles'}
+          </p>
         </div>
       )}
 
@@ -886,17 +934,24 @@ const InventorySection = () => {
                     <td className="px-6 py-4">
                       <div className="flex items-center">
                         <div className="flex-shrink-0 h-10 w-10 mr-3">
-                          <ProductImage
-                            productId={product._id}
-                            alt={product.nombre}
-                            width={40}
-                            height={40}
-                            quality={80}
-                            className="h-10 w-10 rounded-full object-cover border border-[#91BEAD]/30"
-                            fallbackClassName="h-10 w-10 rounded-full bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30"
-                            containerClassName="h-10 w-10"
-                            useBase64={false}
-                          />
+                          {/* Usamos la imagen directamente en lugar de ProductImage */}
+                          <div className="h-10 w-10 rounded-full bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30 overflow-hidden">
+                            {product.hasImage ? (
+                              <img 
+                                src={`https://lyme-back.vercel.app/api/producto/${product._id}/imagen?width=40&height=40&quality=75`} 
+                                alt={product.nombre}
+                                className="h-10 w-10 object-cover"
+                                loading="lazy"
+                                onError={(e) => {
+                                  e.target.style.display = 'none';
+                                  e.target.nextSibling.style.display = 'flex';
+                                }}
+                              />
+                            ) : null}
+                            <div className={`h-10 w-10 rounded-full bg-[#DFEFE6]/50 flex items-center justify-center text-xs text-[#29696B] ${product.hasImage ? 'hidden' : ''}`}>
+                              Sin img
+                            </div>
+                          </div>
                         </div>
                         <div>
                           <div className="text-sm font-medium text-[#29696B]">
@@ -1002,17 +1057,24 @@ const InventorySection = () => {
             <CardContent className="p-4 pt-2 pb-3">
               <div className="flex gap-4 mb-3">
                 <div className="flex-shrink-0 h-16 w-16">
-                  <ProductImage
-                    productId={product._id}
-                    alt={product.nombre}
-                    width={64}
-                    height={64}
-                    quality={80}
-                    className="h-16 w-16 rounded-md object-cover border border-[#91BEAD]/30"
-                    fallbackClassName="h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30"
-                    containerClassName="h-16 w-16"
-                    useBase64={false}
-                  />
+                  {/* Usar enfoque más simplificado para imágenes en móvil */}
+                  <div className="h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30 overflow-hidden">
+                    {product.hasImage ? (
+                      <img 
+                        src={`https://lyme-back.vercel.app/api/producto/${product._id}/imagen?width=64&height=64&quality=60`} 
+                        alt={product.nombre}
+                        className="h-16 w-16 object-cover"
+                        loading="lazy"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.nextSibling.style.display = 'flex';
+                        }}
+                      />
+                    ) : null}
+                    <div className={`h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center text-xs text-[#29696B] ${product.hasImage ? 'hidden' : ''}`}>
+                      Sin imagen
+                    </div>
+                  </div>
                 </div>
                 <div className="flex-1 min-w-0">
                   {product.descripcion && (
@@ -1202,7 +1264,7 @@ const InventorySection = () => {
               <div>
                 <Label className="text-sm text-[#29696B] block mb-2">Imagen del Producto</Label>
                 
-                {/* Mostrar el componente de carga de imágenes cuando estamos editando */}
+                {/* Simplificamos la gestión de imágenes */}
                 {editingProduct ? (
                   <div className="mt-2">
                     {formData.imagenPreview ? (
@@ -1211,7 +1273,14 @@ const InventorySection = () => {
                           src={formData.imagenPreview} 
                           alt="Vista previa" 
                           className="w-full h-full object-contain" 
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                            e.target.nextSibling.style.display = 'flex';
+                          }}
                         />
+                        <div className="absolute inset-0 flex items-center justify-center text-sm text-[#7AA79C] hidden">
+                          No se pudo cargar la imagen
+                        </div>
                         <Button
                           type="button"
                           variant="destructive"
@@ -1223,11 +1292,27 @@ const InventorySection = () => {
                         </Button>
                       </div>
                     ) : (
-                      <ImageUpload 
-                        productId={editingProduct._id}
-                        useBase64={false}
-                        onImageUploaded={handleImageUploaded}
-                      />
+                      // Usar input file simple en lugar del componente complejo
+                      <div className="flex items-center justify-center w-full">
+                        <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#91BEAD]/30 border-dashed rounded-md cursor-pointer bg-[#DFEFE6]/20 hover:bg-[#DFEFE6]/40 transition-colors">
+                          <div className="flex flex-col items-center justify-center pt-3 pb-4">
+                            <ImageIcon className="w-8 h-8 text-[#7AA79C] mb-1" />
+                            <p className="text-xs text-[#7AA79C]">
+                              Haz clic para subir una imagen
+                            </p>
+                            <p className="text-xs text-[#7AA79C]">
+                              Máximo 5MB
+                            </p>
+                          </div>
+                          <input 
+                            ref={fileInputRef}
+                            type="file" 
+                            accept="image/*" 
+                            className="hidden" 
+                            onChange={handleImageChange}
+                          />
+                        </label>
+                      </div>
                     )}
                   </div>
                 ) : (
