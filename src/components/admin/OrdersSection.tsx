@@ -633,51 +633,36 @@ const OrdersSection = () => {
         }));
       }
       
-      // Intentar cargar productos
+      // Intentar cargar productos con verificación de tipo
       const cachedProducts = loadFromLocalStorage(STORAGE_KEYS.PRODUCTS);
-      if (cachedProducts) {
+      if (Array.isArray(cachedProducts) && cachedProducts.length > 0) {
         setProducts(cachedProducts);
         
-        // Crear mapa para acceso rápido
-        const productMap = cachedProducts.reduce((map: Record<string, Product>, product: Product) => {
-          map[product._id] = product;
-          return map;
-        }, {});
-        setProductsMap(productMap);
+        // Crear mapa para acceso rápido usando la función segura
+        setProductsMap(createProductsMap(cachedProducts));
       }
       
-      // Intentar cargar usuarios
+      // Intentar cargar usuarios con verificación de tipo
       const cachedUsers = loadFromLocalStorage(STORAGE_KEYS.USERS);
-      if (cachedUsers) {
+      if (Array.isArray(cachedUsers) && cachedUsers.length > 0) {
         setUsers(cachedUsers);
         
-        // Crear mapa para acceso rápido
-        const userMap = cachedUsers.reduce((map: Record<string, User>, user: User) => {
-          map[user._id] = user;
-          return map;
-        }, {});
-        setUsersMap(userMap);
+        // Crear mapa para acceso rápido usando la función segura
+        setUsersMap(createUsersMap(cachedUsers));
       }
       
-      // Intentar cargar clientes
+      // Intentar cargar clientes con verificación de tipo
       const cachedClients = loadFromLocalStorage(STORAGE_KEYS.CLIENTS);
-      if (cachedClients) {
+      if (Array.isArray(cachedClients) && cachedClients.length > 0) {
         setClients(cachedClients);
         
-        // Agrupar por servicio
-        const sectionMap = cachedClients.reduce((map: Record<string, Client[]>, client: Client) => {
-          if (!map[client.servicio]) {
-            map[client.servicio] = [];
-          }
-          map[client.servicio].push(client);
-          return map;
-        }, {});
-        setClientSections(sectionMap);
+        // Agrupar por servicio usando la función segura
+        setClientSections(groupClientsByService(cachedClients));
       }
       
-      // Intentar cargar pedidos
+      // Intentar cargar pedidos con verificación de tipo
       const cachedOrders = loadFromLocalStorage(STORAGE_KEYS.ORDERS);
-      if (cachedOrders) {
+      if (Array.isArray(cachedOrders)) {
         setOrders(cachedOrders);
       }
     };
@@ -913,6 +898,10 @@ const OrdersSection = () => {
         productsData = responseData;
       } else if (responseData && Array.isArray(responseData.items)) {
         productsData = responseData.items;
+      } else {
+        // Si no es un array ni tiene items, establecer como array vacío
+        productsData = [];
+        console.warn("Formato de respuesta de productos no reconocido:", responseData);
       }
       
       if (!mountedRef.current) return products;
@@ -920,12 +909,8 @@ const OrdersSection = () => {
       // Actualizar estado
       setProducts(productsData);
       
-      // Crear mapa para acceso rápido
-      const productMap = productsData.reduce((map: Record<string, Product>, product: Product) => {
-        map[product._id] = product;
-        return map;
-      }, {});
-      setProductsMap(productMap);
+      // Crear mapa para acceso rápido usando la función segura
+      setProductsMap(createProductsMap(productsData));
       
       // Actualizar caché
       saveToLocalStorage(STORAGE_KEYS.PRODUCTS, productsData);
@@ -966,17 +951,19 @@ const OrdersSection = () => {
       
       const usersData = await response.json();
       
+      // Verificar que la respuesta sea un array
+      if (!Array.isArray(usersData)) {
+        console.warn("La respuesta de usuarios no es un array:", usersData);
+        return users; // Mantener el estado actual en caso de error
+      }
+      
       if (!mountedRef.current) return users;
       
       // Actualizar estado
       setUsers(usersData);
       
-      // Crear mapa para acceso rápido
-      const userMap = usersData.reduce((map: Record<string, User>, user: User) => {
-        map[user._id] = user;
-        return map;
-      }, {});
-      setUsersMap(userMap);
+      // Crear mapa para acceso rápido usando la función segura
+      setUsersMap(createUsersMap(usersData));
       
       // Actualizar caché
       saveToLocalStorage(STORAGE_KEYS.USERS, usersData);
@@ -1018,20 +1005,19 @@ const OrdersSection = () => {
       
       const clientsData = await response.json();
       
+      // Verificar que la respuesta sea un array
+      if (!Array.isArray(clientsData)) {
+        console.warn("La respuesta de clientes no es un array:", clientsData);
+        return clients; // Mantener el estado actual en caso de error
+      }
+      
       if (!mountedRef.current) return clients;
       
       // Actualizar estado
       setClients(clientsData);
       
-      // Agrupar por servicio
-      const sectionMap = clientsData.reduce((map: Record<string, Client[]>, client: Client) => {
-        if (!map[client.servicio]) {
-          map[client.servicio] = [];
-        }
-        map[client.servicio].push(client);
-        return map;
-      }, {});
-      setClientSections(sectionMap);
+      // Agrupar por servicio usando la función segura
+      setClientSections(groupClientsByService(clientsData));
       
       // Actualizar caché
       saveToLocalStorage(clientCacheKey, clientsData);
@@ -1481,9 +1467,53 @@ const OrdersSection = () => {
     setSelectedProduct("none");
     setProductQuantity(1);
   };
+
+  const createProductsMap = (productsData: any): Record<string, Product> => {
+    // Verificar que productsData sea un array
+    if (!Array.isArray(productsData)) return {};
+    
+    return productsData.reduce((map: Record<string, Product>, product: Product) => {
+      if (product && product._id) {
+        map[product._id] = product;
+      }
+      return map;
+    }, {});
+  };
+  
+  // Creación segura de mapa de usuarios
+  const createUsersMap = (usersData: any): Record<string, User> => {
+    // Verificar que usersData sea un array
+    if (!Array.isArray(usersData)) return {};
+    
+    return usersData.reduce((map: Record<string, User>, user: User) => {
+      if (user && user._id) {
+        map[user._id] = user;
+      }
+      return map;
+    }, {});
+  };
+  
+  // Agrupación segura de clientes por servicio
+  const groupClientsByService = (clientsData: any): Record<string, Client[]> => {
+    // Verificar que clientsData sea un array
+    if (!Array.isArray(clientsData)) return {};
+    
+    return clientsData.reduce((map: Record<string, Client[]>, client: Client) => {
+      if (client && client.servicio) {
+        if (!map[client.servicio]) {
+          map[client.servicio] = [];
+        }
+        map[client.servicio].push(client);
+      }
+      return map;
+    }, {});
+  };
   
   // Calcular total de un pedido (memoizado)
   const calculateOrderTotal = useCallback((productos: OrderProduct[]): number => {
+    // Verificar explícitamente que productos sea un array
+    if (!Array.isArray(productos)) return 0;
+    
     return productos.reduce((total, item) => {
       let precio = 0;
       
@@ -1690,6 +1720,9 @@ const OrdersSection = () => {
   
   // Filtrar pedidos según términos de búsqueda
   const filteredOrders = useMemo(() => {
+    // Verificar que orders sea un array
+    if (!Array.isArray(orders)) return [];
+    
     return orders.filter(order => {
       const searchLower = searchTerm.toLowerCase();
       
@@ -1705,6 +1738,9 @@ const OrdersSection = () => {
   
   // Calcular paginación
   const paginatedOrders = useMemo(() => {
+    // Verificar que filteredOrders sea un array
+    if (!Array.isArray(filteredOrders)) return [];
+    
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
     return filteredOrders.slice(startIndex, endIndex);
