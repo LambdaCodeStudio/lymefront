@@ -44,7 +44,6 @@ import {
   Package,
   ShoppingBag,
   Filter,
-  RefreshCw
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -235,6 +234,7 @@ const ProductRow: React.FC<{
               fallbackClassName="h-10 w-10 rounded-full bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30"
               containerClassName="h-10 w-10"
               useBase64={false}
+              key={`img-${product._id}-${product.hasImage ? 'has-image' : 'no-image'}`} // Forzar actualización cuando cambia hasImage
             />
           </div>
           <div>
@@ -354,7 +354,7 @@ const InventorySection: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [totalItems, setTotalItems] = useState<number>(0);
   const [totalPages, setTotalPages] = useState<number>(1);
-  const [isRefetching, setIsRefetching] = useState<boolean>(false);
+  const [isFetching, setIsFetching] = useState<boolean>(false);
 
   // Estado para combo seleccionado
   const [selectedComboItem, setSelectedComboItem] = useState<string>('');
@@ -533,7 +533,6 @@ const InventorySection: React.FC = () => {
   const { 
     data, 
     isLoading, 
-    isFetching,
     error: queryError,
     refetch
   } = useQuery(
@@ -541,9 +540,9 @@ const InventorySection: React.FC = () => {
     () => fetchProductsData(currentPage, itemsPerPage, selectedCategory, debouncedSearchTerm),
     {
       keepPreviousData: true,
-      staleTime: 60000, // 1 minuto
+      staleTime: 30000, // 30 segundos (reducido para actualizar más frecuentemente)
       cacheTime: 300000, // 5 minutos
-      refetchOnWindowFocus: false,
+      refetchOnWindowFocus: true, // Habilitar actualización al enfocar la ventana
       onSuccess: (data) => {
         setProducts(data.items);
         setTotalItems(data.totalItems);
@@ -574,6 +573,9 @@ const InventorySection: React.FC = () => {
         if (typeof addNotification === 'function') {
           addNotification(errorMsg, 'error');
         }
+      },
+      onSettled: () => {
+        setIsFetching(false);
       }
     }
   );
@@ -672,6 +674,8 @@ const InventorySection: React.FC = () => {
     {
       // Actualización optimista del caché para la imagen
       onMutate: async (productId) => {
+        setIsFetching(true);
+        
         // Cancelar consultas en curso
         await queryClient.cancelQueries(getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm));
         
@@ -684,11 +688,16 @@ const InventorySection: React.FC = () => {
         queryClient.setQueryData(
           getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm),
           (old: any) => {
+            if (!old || !old.items) return old;
+            
             const newData = { ...old };
             newData.items = old.items.map((p: ProductExtended) => {
               if (p._id === productId) {
                 // Marcar que ya no tiene imagen
-                return { ...p, hasImage: false };
+                return {
+                  ...p,
+                  hasImage: false
+                };
               }
               return p;
             });
@@ -732,11 +741,23 @@ const InventorySection: React.FC = () => {
             imagen: null,
             imagenPreview: null
           }));
+          
+          // Actualizar el estado de editingProduct para reflejar el cambio de imagen
+          setEditingProduct(prev => prev ? {...prev, hasImage: false} : null);
         }
         
         // Invalidar cachés de imágenes
         imageService.invalidateCache(productId);
         imageCache.current.delete(productId);
+        
+        // Actualizar el estado local de products para mostrar el cambio inmediatamente
+        setProducts(prevProducts => 
+          prevProducts.map(p => 
+            p._id === productId 
+              ? {...p, hasImage: false} 
+              : p
+          )
+        );
         
         // Invalidar todas las consultas de productos para asegurar sincronización
         queryClient.invalidateQueries({
@@ -748,6 +769,7 @@ const InventorySection: React.FC = () => {
       onSettled: () => {
         setDeleteImageDialogOpen(false);
         setImageLoading(false);
+        setIsFetching(false);
       }
     }
   );
@@ -791,9 +813,16 @@ const InventorySection: React.FC = () => {
       return savedProduct;
     },
     {
+      onMutate: async (data) => {
+        setIsFetching(true);
+        return { data };
+      },
       onSuccess: (savedProduct) => {
         setShowModal(false);
         resetForm();
+        
+        // Forzar refresco inmediato de los datos
+        refetch();
         
         // Invalidar todas las consultas de productos para asegurar sincronización
         queryClient.invalidateQueries({
@@ -811,6 +840,9 @@ const InventorySection: React.FC = () => {
         const errorMsg = 'Error al guardar producto: ' + error.message;
         setError(errorMsg);
         addNotification(errorMsg, 'error');
+      },
+      onSettled: () => {
+        setIsFetching(false);
       }
     }
   );
@@ -820,6 +852,7 @@ const InventorySection: React.FC = () => {
     debounce((value: string) => {
       setDebouncedSearchTerm(value);
       setCurrentPage(1); // Reset a primera página
+      setIsFetching(true);
     }, 300),
     []
   );
@@ -1033,13 +1066,6 @@ const InventorySection: React.FC = () => {
     };
   }, []);
 
-  // Refrescar datos manualmente
-  const handleRefreshData = async () => {
-    setIsRefetching(true);
-    await refetch();
-    setIsRefetching(false);
-  };
-
   // Manejar cambio de imagen con compresión automática
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -1112,6 +1138,7 @@ const InventorySection: React.FC = () => {
     
     try {
       setImageLoading(true);
+      setIsFetching(true);
       
       // Comprimir imagen antes de convertir a base64
       let imageToUpload = imageToProcess;
@@ -1154,7 +1181,7 @@ const InventorySection: React.FC = () => {
           queryClient.setQueryData(
             getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm),
             (old: any) => {
-              if (!old) return old;
+              if (!old || !old.items) return old;
               
               return {
                 ...old,
@@ -1172,11 +1199,25 @@ const InventorySection: React.FC = () => {
             }
           );
           
+          // Actualizar el estado local de products para mostrar el cambio inmediatamente
+          setProducts(prevProducts => 
+            prevProducts.map(p => 
+              p._id === productId 
+                ? {...p, hasImage: true} 
+                : p
+            )
+          );
+          
+          // Si estamos editando este producto, actualizar su estado
+          if (editingProduct && editingProduct._id === productId) {
+            setEditingProduct(prev => prev ? {...prev, hasImage: true} : null);
+          }
+          
           // Invalidar caché de imágenes para forzar una recarga
           imageService.invalidateCache(productId);
           imageCache.current.delete(productId);
           
-          // Invalidar la caché de React Query
+          // Forzar refresco de datos
           queryClient.invalidateQueries({
             predicate: (query) => query.queryKey[0] === PRODUCTS_CACHE_KEY,
           });
@@ -1199,6 +1240,7 @@ const InventorySection: React.FC = () => {
       return false;
     } finally {
       setImageLoading(false);
+      setIsFetching(false);
     }
   };
 
@@ -1329,13 +1371,6 @@ const InventorySection: React.FC = () => {
           cantidad: item.cantidad
         };
       });
-      
-      // Depurar para verificar
-      console.log('Combo a editar:', {
-        nombre: product.nombre,
-        itemsOriginal: product.itemsCombo,
-        itemsFixed: itemsComboFixed
-      });
     }
     
     // Configurar formData para edición
@@ -1356,8 +1391,10 @@ const InventorySection: React.FC = () => {
     // Intentamos cargar la imagen si existe
     if (product.hasImage) {
       try {
-        // Cargar imagen para vista previa
-        const imageUrl = imageService.getImageUrl(product._id);
+        // Cargar imagen para vista previa 
+        // Añadir parámetro de versión para forzar recarga
+        const timestamp = new Date().getTime();
+        const imageUrl = `${imageService.getImageUrl(product._id)}?v=${timestamp}`;
         setFormData(prev => ({
           ...prev,
           imagenPreview: imageUrl
@@ -1490,6 +1527,7 @@ const InventorySection: React.FC = () => {
   // Función para cambiar de página
   const handlePageChange = useCallback((pageNumber: number) => {
     setCurrentPage(pageNumber);
+    setIsFetching(true);
     
     // Al cambiar de página, hacemos scroll hacia arriba
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1503,11 +1541,13 @@ const InventorySection: React.FC = () => {
   // Manejar la subida de imagen con el nuevo componente
   const handleImageUploaded = (success: boolean, productId?: string) => {
     if (success && productId) {
+      setIsFetching(true);
+      
       // Actualizar el caché directamente
       queryClient.setQueryData(
         getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm),
         (old: any) => {
-          if (!old) return old;
+          if (!old || !old.items) return old;
           
           return {
             ...old,
@@ -1525,13 +1565,22 @@ const InventorySection: React.FC = () => {
         }
       );
       
+      // Actualizar el estado local de products para mostrar el cambio inmediatamente
+      setProducts(prevProducts => 
+        prevProducts.map(p => 
+          p._id === productId 
+            ? {...p, hasImage: true} 
+            : p
+        )
+      );
+      
       // Invalidar caché de imágenes para forzar una recarga
       imageService.invalidateCache(productId);
       imageCache.current.delete(productId);
       
-      // Invalidar la caché de React Query
-      queryClient.invalidateQueries({
-        predicate: (query) => query.queryKey[0] === PRODUCTS_CACHE_KEY,
+      // Forzar refresco para asegurar datos actualizados
+      refetch().then(() => {
+        setIsFetching(false);
       });
     }
   };
@@ -1555,7 +1604,6 @@ const InventorySection: React.FC = () => {
     );
     
     if (productByStringComp) {
-      console.log(`Encontrado producto "${productByStringComp.nombre}" usando comparación de strings`);
       return productByStringComp.nombre;
     }
     
@@ -1594,6 +1642,11 @@ const InventorySection: React.FC = () => {
     if (!Array.isArray(productOptions)) return [];
     return productOptions.filter(p => !p.esCombo);
   }, [productOptions]);
+
+  // Cuando cambia la categoría seleccionada, actualizamos la UI
+  useEffect(() => {
+    setIsFetching(true);
+  }, [selectedCategory]);
 
   return (
     <div className="p-4 md:p-6 space-y-6 bg-[#DFEFE6]/30">
@@ -1657,16 +1710,7 @@ const InventorySection: React.FC = () => {
           </Tabs>
         </div>
 
-        <div className="w-full md:w-auto flex gap-2">
-          <Button
-            onClick={handleRefreshData}
-            className="bg-[#DFEFE6] hover:bg-[#DFEFE6]/90 text-[#29696B]"
-            disabled={isFetching || isRefetching}
-          >
-            <RefreshCw className={`w-4 h-4 mr-2 ${(isFetching || isRefetching) ? 'animate-spin' : ''}`} />
-            Actualizar
-          </Button>
-            
+        <div className="w-full md:w-auto">            
           <Button 
             onClick={() => {
               resetForm();
@@ -1762,7 +1806,7 @@ const InventorySection: React.FC = () => {
               <tbody className="bg-white divide-y divide-[#91BEAD]/20">
                 {products.map((product) => (
                   <ProductRow 
-                    key={product._id}
+                    key={`${product._id}-${product.hasImage ? 'has-image' : 'no-image'}`}
                     product={product}
                     onEdit={handleEdit}
                     onDelete={confirmDelete}
@@ -1804,7 +1848,7 @@ const InventorySection: React.FC = () => {
         
         {!isLoading && products.map(product => (
           <Card 
-            key={product._id} 
+            key={`${product._id}-${product.hasImage ? 'has-image' : 'no-image'}`} 
             className={`overflow-hidden shadow-sm border ${
               product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD 
                 ? 'border-yellow-300 bg-yellow-50' 
@@ -1843,6 +1887,7 @@ const InventorySection: React.FC = () => {
                     fallbackClassName="h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30"
                     containerClassName="h-16 w-16"
                     useBase64={false}
+                    key={`img-${product._id}-${product.hasImage ? 'has-image' : 'no-image'}`} // Forzar actualización cuando cambia hasImage
                   />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -1912,7 +1957,7 @@ const InventorySection: React.FC = () => {
         ))}
         
         {/* Indicador de carga en móvil */}
-        {(isFetching || isRefetching) && (
+        {isFetching && (
           <div className="flex justify-center items-center py-4">
             <Loader2 className="w-5 h-5 text-[#29696B] animate-spin mr-2" />
             <span className="text-[#29696B] text-sm">Actualizando...</span>
