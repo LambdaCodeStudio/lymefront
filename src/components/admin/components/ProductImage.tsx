@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
 import { ImageIcon } from 'lucide-react';
 
 interface ProductImageProps {
@@ -11,139 +11,155 @@ interface ProductImageProps {
   fallbackClassName?: string;
   containerClassName?: string;
   useBase64?: boolean;
+  priority?: boolean;
 }
+
+// Memory cache to avoid unnecessary requests
+const imageStatusCache = new Map<string, 'loading' | 'loaded' | 'error' | 'notExists'>();
 
 const ProductImage: React.FC<ProductImageProps> = ({
   productId,
   alt = 'Product image',
   width = 80,
   height = 80,
-  quality = 80,
+  quality = 75, // Reduced default quality
   className = '',
   fallbackClassName = '',
   containerClassName = '',
-  useBase64 = false
+  useBase64 = false,
+  priority = false
 }) => {
-  const [loaded, setLoaded] = useState<boolean>(false);
-  const [error, setError] = useState<boolean>(false);
-  const [imageSrc, setImageSrc] = useState<string>('');
+  const [loadState, setLoadState] = useState<'loading' | 'loaded' | 'error' | 'notExists'>(
+    imageStatusCache.get(productId) || 'loading'
+  );
   const imgRef = useRef<HTMLImageElement>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
+  const cacheKey = `${productId}-${width}-${height}-${quality}`;
+  const [timestamp, setTimestamp] = useState<number>(Date.now());
+  
+  // Build image URL with cache busting
+  const imageUrl = useBase64 
+    ? `https://lyme-back.vercel.app/api/producto/${productId}/imagen-base64`
+    : `https://lyme-back.vercel.app/api/producto/${productId}/imagen?quality=${quality}&width=${width}&height=${height}&v=${timestamp}`;
 
   useEffect(() => {
-    // Si no hay ID de producto, no hacer nada
     if (!productId) return;
 
+    // Reset if product ID changes
+    if (imageStatusCache.has(productId) && imageStatusCache.get(productId) !== 'loading') {
+      setLoadState(imageStatusCache.get(productId)!);
+      return;
+    }
+
     const loadImage = () => {
-      // Construir URL de la imagen
-      const imageUrl = useBase64 
-        ? `https://lyme-back.vercel.app/api/producto/${productId}/imagen-base64`
-        : `https://lyme-back.vercel.app/api/producto/${productId}/imagen?quality=${quality}&width=${width}&height=${height}`;
-      
+      // For Base64 images
       if (useBase64) {
-        // Para imágenes base64, necesitamos hacer un fetch
-        setLoaded(false);
         fetch(imageUrl)
           .then(response => {
             if (!response.ok) {
               if (response.status === 204) {
-                // El producto no tiene imagen
-                throw new Error('No image');
+                imageStatusCache.set(productId, 'notExists');
+                setLoadState('notExists');
+                return;
               }
               throw new Error('Failed to load image');
             }
             return response.json();
           })
           .then(data => {
-            setImageSrc(data.image);
-            setLoaded(true);
+            imageStatusCache.set(productId, 'loaded');
+            setLoadState('loaded');
           })
-          .catch(err => {
-            console.log(`Error loading image for product ${productId}:`, err.message);
-            setError(true);
+          .catch(() => {
+            imageStatusCache.set(productId, 'error');
+            setLoadState('error');
           });
       } else {
-        // Para imágenes directas, establecer la URL
-        setImageSrc(imageUrl);
+        // For direct image URLs we'll handle the loading in the img element
+        setLoadState('loading');
       }
     };
 
-    // Usar IntersectionObserver para carga diferida
+    // Priority images load immediately, others use IntersectionObserver
+    if (priority) {
+      loadImage();
+      return;
+    }
+
+    // Lazy loading with IntersectionObserver
     if ('IntersectionObserver' in window && imgRef.current) {
-      // Destruir observer anterior si existe
       if (observerRef.current) {
         observerRef.current.disconnect();
       }
 
-      // Crear nuevo observer
       observerRef.current = new IntersectionObserver(
         (entries) => {
           const [entry] = entries;
           if (entry.isIntersecting) {
-            // Cargar imagen cuando sea visible
             loadImage();
-            // Dejar de observar este elemento
-            if (observerRef.current) {
-              observerRef.current.disconnect();
-              observerRef.current = null;
-            }
+            observerRef.current?.disconnect();
+            observerRef.current = null;
           }
         },
         {
-          rootMargin: '100px', // Precargar cuando esté a 100px de ser visible
-          threshold: 0.1 // Cuando al menos el 10% del elemento sea visible
+          rootMargin: '200px', // Increased margin to load images earlier
+          threshold: 0.01 // Load when even a small part is visible
         }
       );
 
-      // Empezar a observar
       observerRef.current.observe(imgRef.current);
     } else {
-      // Fallback para navegadores sin IntersectionObserver
+      // Fallback
       loadImage();
     }
 
-    // Cleanup
     return () => {
-      if (observerRef.current) {
-        observerRef.current.disconnect();
-        observerRef.current = null;
-      }
+      observerRef.current?.disconnect();
     };
-  }, [productId, quality, width, height, useBase64]);
+  }, [productId, imageUrl, priority, useBase64]);
 
-  // Manejar carga correcta de la imagen
+  // Handle image events
   const handleImageLoad = () => {
-    setLoaded(true);
-    setError(false);
+    imageStatusCache.set(productId, 'loaded');
+    setLoadState('loaded');
   };
 
-  // Manejar error de carga
   const handleImageError = () => {
-    setError(true);
-    setLoaded(false);
+    // Try refreshing once on error
+    if (imageStatusCache.get(productId) !== 'error') {
+      imageStatusCache.set(productId, 'error');
+      setLoadState('error');
+      setTimestamp(Date.now()); // Update timestamp to try loading again
+    }
   };
 
-  // Renderizar componente
+  const isLoading = loadState === 'loading';
+  const hasError = loadState === 'error' || loadState === 'notExists';
+
   return (
-    <div className={`relative ${containerClassName}`}>
-      {/* Fallback/Placeholder mientras carga o si hay error */}
-      {(!loaded || error) && (
-        <div className={`flex items-center justify-center ${fallbackClassName || 'bg-gray-100 rounded-md'}`}>
+    <div 
+      className={`relative ${containerClassName}`} 
+      style={{ width: width, height: height }}
+    >
+      {/* Placeholder while loading or on error */}
+      {(isLoading || hasError) && (
+        <div className={`flex items-center justify-center ${fallbackClassName || 'bg-gray-100 rounded-md'}`} 
+          style={{ width: width, height: height }}>
           <ImageIcon className="w-6 h-6 text-gray-400" />
         </div>
       )}
       
-      {/* Imagen real (visible solo cuando está cargada) */}
-      {imageSrc && (
+      {/* Only render if not using base64 or already loaded for base64 */}
+      {!useBase64 && (
         <img
           ref={imgRef}
-          src={imageSrc}
+          src={!isLoading ? imageUrl : undefined}
           alt={alt}
           width={width}
           height={height}
           onLoad={handleImageLoad}
           onError={handleImageError}
-          className={`${className} ${loaded ? 'opacity-100' : 'opacity-0'} transition-opacity duration-300`}
+          className={`${className} ${loadState === 'loaded' ? 'opacity-100' : 'opacity-0'} absolute top-0 left-0 transition-opacity duration-300`}
           loading="lazy"
         />
       )}
@@ -151,4 +167,4 @@ const ProductImage: React.FC<ProductImageProps> = ({
   );
 };
 
-export default ProductImage;
+export default memo(ProductImage);

@@ -1,6 +1,4 @@
-// src/components/admin/components/ImageUpload.tsx
-import React, { useState, useRef } from 'react';
-import { imageService } from '@/services/imageService';
+import React, { useState, useRef, useCallback } from 'react';
 import { ImageIcon, Upload, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNotification } from '@/context/NotificationContext';
@@ -9,12 +7,18 @@ import { getAuthToken } from '@/utils/inventoryUtils';
 interface ImageUploadProps {
   productId: string;
   useBase64?: boolean;
-  onImageUploaded?: (success: boolean) => void;
+  onImageUploaded?: (success: boolean, productId?: string) => void;
+  maxSizeMB?: number;
+  maxWidth?: number;
+  maxHeight?: number;
 }
 
 const ImageUpload: React.FC<ImageUploadProps> = ({
   productId,
-  onImageUploaded
+  onImageUploaded,
+  maxSizeMB = 5,
+  maxWidth = 1200,
+  maxHeight = 1200
 }) => {
   const { addNotification } = useNotification();
   const [loading, setLoading] = useState(false);
@@ -22,69 +26,237 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
   const [fileToUpload, setFileToUpload] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  // Validar y procesar el archivo seleccionado
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Improved file validation and processing
+  const validateAndProcessFile = useCallback(async (file: File) => {
+    // Size validation (in bytes)
+    const maxSize = maxSizeMB * 1024 * 1024;
+    if (file.size > maxSize) {
+      addNotification?.(`La imagen no debe superar los ${maxSizeMB}MB`, 'error');
+      return null;
+    }
+
+    // Type validation
+    if (!file.type.startsWith('image/')) {
+      addNotification?.('El archivo debe ser una imagen', 'error');
+      return null;
+    }
+    
+    // Process and compress image if needed
+    let processedFile = file;
+    if (file.size > 1024 * 1024) { // Compress if larger than 1MB
+      try {
+        // More efficient compression
+        processedFile = await compressImage(file, maxWidth, maxHeight);
+        
+        // Add notification about compression
+        const reduction = Math.round((1 - processedFile.size / file.size) * 100);
+        if (reduction > 10) { // Only notify if significant reduction
+          addNotification?.(
+            `Imagen optimizada (reducida un ${reduction}%)`,
+            'info'
+          );
+        }
+      } catch (err) {
+        console.warn('Error compressing image:', err);
+        // Continue with original file if compression fails
+      }
+    }
+    
+    return processedFile;
+  }, [addNotification, maxSizeMB, maxWidth, maxHeight]);
+
+  // Improved file change handler
+  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       
-      // Validar tamaño del archivo (5MB máximo)
-      if (file.size > 5 * 1024 * 1024) {
-        console.log('La imagen no debe superar los 5MB');
-        addNotification?.('La imagen no debe superar los 5MB', 'error');
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
-        return;
-      }
-
-      // Validar tipo de archivo
-      if (!file.type.startsWith('image/')) {
-        console.log('El archivo debe ser una imagen');
-        addNotification?.('El archivo debe ser una imagen', 'error');
+      // Process and validate file
+      const processedFile = await validateAndProcessFile(file);
+      if (!processedFile) {
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
         }
         return;
       }
       
-      // Mostrar vista previa
+      // Create preview
       const reader = new FileReader();
       reader.onloadend = () => {
         setImagePreview(reader.result as string);
-        setFileToUpload(file); // Guardar el archivo para subirlo posteriormente
+        setFileToUpload(processedFile);
       };
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(processedFile);
     }
+  }, [validateAndProcessFile]);
+  
+  // Optimized image compression using canvas
+  const compressImage = (file: File, maxWidth = 1200, maxHeight = 1200): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      try {
+        const reader = new FileReader();
+        const img = new Image();
+        
+        reader.onload = (event) => {
+          if (!event.target?.result) {
+            return resolve(file);
+          }
+          
+          img.onload = () => {
+            try {
+              // Use OffscreenCanvas if available for better performance
+              let canvas: HTMLCanvasElement | OffscreenCanvas;
+              let ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
+              
+              if (typeof OffscreenCanvas !== 'undefined') {
+                canvas = new OffscreenCanvas(img.width, img.height);
+                ctx = canvas.getContext('2d');
+              } else {
+                canvas = document.createElement('canvas');
+                ctx = canvas.getContext('2d');
+              }
+              
+              if (!ctx) {
+                return resolve(file);
+              }
+
+              // Calculate dimensions
+              let width = img.width;
+              let height = img.height;
+              
+              if (width > height) {
+                if (width > maxWidth) {
+                  height *= maxWidth / width;
+                  width = maxWidth;
+                }
+              } else {
+                if (height > maxHeight) {
+                  width *= maxHeight / height;
+                  height = maxHeight;
+                }
+              }
+              
+              width = Math.floor(width);
+              height = Math.floor(height);
+              
+              // Set dimensions
+              if (canvas instanceof HTMLCanvasElement) {
+                canvas.width = width;
+                canvas.height = height;
+              } else {
+                // For OffscreenCanvas
+                canvas.width = width;
+                canvas.height = height;
+              }
+              
+              // Draw image
+              ctx.drawImage(img, 0, 0, width, height);
+              
+              // Determine output format based on browser support and original format
+              const outputType = file.type === 'image/png' ? 'image/png' : 'image/webp';
+              const quality = file.size > 2 * 1024 * 1024 ? 0.6 : 0.8;
+              
+              // Create blob
+              const canvasToBlob = (canvas: HTMLCanvasElement | OffscreenCanvas, callback: (blob: Blob | null) => void) => {
+                if (canvas instanceof HTMLCanvasElement) {
+                  canvas.toBlob(callback, outputType, quality);
+                } else {
+                  // For OffscreenCanvas
+                  canvas.convertToBlob({ type: outputType, quality }).then(callback);
+                }
+              };
+              
+              canvasToBlob(canvas, (blob) => {
+                if (!blob) {
+                  return resolve(file);
+                }
+                
+                // Create filename with appropriate extension
+                let fileName = file.name;
+                if (outputType === 'image/webp' && !fileName.toLowerCase().endsWith('.webp')) {
+                  const nameParts = fileName.split('.');
+                  fileName = nameParts.length > 1 
+                    ? nameParts.slice(0, -1).join('.') + '.webp'
+                    : fileName + '.webp';
+                }
+                
+                const compressedFile = new File([blob], fileName, {
+                  type: outputType,
+                  lastModified: Date.now()
+                });
+                
+                resolve(compressedFile);
+              });
+              
+            } catch (err) {
+              console.error('Compression error:', err);
+              resolve(file);
+            }
+          };
+          
+          img.onerror = () => resolve(file);
+          img.src = event.target.result as string;
+        };
+        
+        reader.onerror = () => resolve(file);
+        reader.readAsDataURL(file);
+        
+      } catch (err) {
+        console.error('General compression error:', err);
+        resolve(file);
+      }
+    });
   };
   
-  // Subir imagen al servidor
+  // Optimized image upload with retry logic
   const uploadImage = async () => {
     if (!fileToUpload) {
-      console.log('No hay imagen para subir');
+      addNotification?.('No hay imagen para subir', 'warning');
       return;
     }
 
     setLoading(true);
     
     try {
-      // Convertir a base64 y subir
-      try {
-        console.log('Subiendo imagen en Base64 para producto:', productId);
-        const base64Data = await convertFileToBase64(fileToUpload);
-        await uploadBase64Direct(productId, base64Data);
-        
-        console.log('Imagen Base64 subida correctamente');
-        addNotification?.('Imagen subida correctamente', 'success');
-        
-        if (onImageUploaded) {
-          onImageUploaded(true);
+      // Improved upload with retry logic
+      const MAX_RETRIES = 3;
+      let retryCount = 0;
+      let success = false;
+      
+      while (retryCount < MAX_RETRIES && !success) {
+        try {
+          if (retryCount > 0) {
+            // Exponential backoff
+            const delay = Math.min(Math.pow(2, retryCount) * 500, 4000);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            addNotification?.(`Reintentando subida (${retryCount + 1}/${MAX_RETRIES})...`, 'info');
+          }
+          
+          // Convert to base64
+          const base64Data = await convertFileToBase64(fileToUpload);
+          
+          // Upload with more efficient process
+          await uploadBase64Direct(productId, base64Data);
+          success = true;
+          
+          addNotification?.('Imagen subida correctamente', 'success');
+          
+          // Notify parent component
+          if (onImageUploaded) {
+            onImageUploaded(true, productId);
+          }
+          
+        } catch (err: any) {
+          retryCount++;
+          console.error(`Error en intento ${retryCount}:`, err);
+          
+          if (retryCount >= MAX_RETRIES) {
+            throw err;
+          }
         }
-      } catch (err: any) {
-        console.error('Error en subida Base64:', err);
-        throw err;
       }
     } catch (err: any) {
       console.error('Error al subir imagen:', err);
+      addNotification?.(`Error al subir la imagen: ${err.message || 'Error desconocido'}`, 'error');
       
       if (onImageUploaded) {
         onImageUploaded(false);
@@ -94,39 +266,53 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
     }
   };
 
-  // Función auxiliar para convertir File a Base64
+  // More efficient base64 conversion
   const convertFileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.readAsDataURL(file);
       reader.onload = () => resolve(reader.result as string);
       reader.onerror = error => reject(error);
+      reader.readAsDataURL(file);
     });
   };
 
-  // Función auxiliar para subir Base64 directamente (evita problemas potenciales con imageService)
+  // Improved direct upload with better error handling
   const uploadBase64Direct = async (productId: string, base64Image: string): Promise<void> => {
     const token = getAuthToken();
     if (!token) {
       throw new Error('No hay token de autenticación');
     }
 
-    const response = await fetch(`https://lyme-back.vercel.app/api/producto/${productId}/imagen-base64`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ base64Image })
-    });
+    try {
+      const controller = new AbortController();
+      // Set timeout to avoid hanging requests
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || 'Error al subir imagen');
+      const response = await fetch(`https://lyme-back.vercel.app/api/producto/${productId}/imagen-base64`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ base64Image }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Error ${response.status}: ${response.statusText}`);
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw new Error('La solicitud tardó demasiado tiempo');
+      }
+      throw error;
     }
   };
   
-  // Limpiar selección y estados
+  // Clear form
   const handleClear = () => {
     setImagePreview(null);
     setFileToUpload(null);
@@ -137,7 +323,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
   
   return (
     <div className="relative">
-      {/* Vista previa */}
+      {/* Preview */}
       {imagePreview && (
         <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30 mb-2">
           <img 
@@ -146,7 +332,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
             className="w-full h-full object-contain" 
           />
           
-          {/* Estado de carga */}
+          {/* Loading state */}
           {loading && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/30 backdrop-blur-sm">
               <div className="flex flex-col items-center">
@@ -158,7 +344,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
             </div>
           )}
           
-          {/* Botón para eliminar */}
+          {/* Clear button */}
           {!loading && (
             <Button
               type="button"
@@ -173,7 +359,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
         </div>
       )}
       
-      {/* Área de subida */}
+      {/* Upload area */}
       {!imagePreview ? (
         <div className="flex items-center justify-center w-full">
           <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#91BEAD]/30 border-dashed rounded-md cursor-pointer bg-[#DFEFE6]/20 hover:bg-[#DFEFE6]/40 transition-colors">
@@ -183,7 +369,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
                 Haz clic para seleccionar una imagen
               </p>
               <p className="text-xs text-[#7AA79C]">
-                Máximo 5MB
+                Máximo {maxSizeMB}MB
               </p>
             </div>
             <input 
