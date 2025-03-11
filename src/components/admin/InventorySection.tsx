@@ -455,7 +455,7 @@ const FilaProducto: React.FC<FilaProductoProps> = ({
             : ''
       }`}
     >
-      <td className="px-6 py-4">
+      <td className="px-6 py-4 w-1/3">
         <div className="flex items-center">
           <div className="flex-shrink-0 h-10 w-10 mr-3">
             <ImagenProductoOptimizada
@@ -468,7 +468,7 @@ const FilaProducto: React.FC<FilaProductoProps> = ({
               fallbackClassName="h-10 w-10 rounded-full bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30"
               containerClassName="h-10 w-10"
               priority={isInViewport}
-              key={`img-${producto._id}`}
+              key={`img-${producto._id}-${producto.hasImage ? 'loaded' : 'empty'}`}
               onLoadComplete={() => setImagenCargada(true)}
             />
           </div>
@@ -494,22 +494,22 @@ const FilaProducto: React.FC<FilaProductoProps> = ({
           </div>
         </div>
       </td>
-      <td className="px-6 py-4 text-sm text-[#7AA79C]">
+      <td className="px-6 py-4 text-sm text-[#7AA79C] w-1/6">
         <Badge variant="outline" className="capitalize border-[#91BEAD] text-[#29696B]">
           {producto.categoria}
         </Badge>
         <div className="text-xs mt-1 capitalize text-[#7AA79C]">{producto.subCategoria}</div>
       </td>
-      <td className="px-6 py-4 text-sm font-medium text-[#29696B]">
+      <td className="px-6 py-4 text-sm font-medium text-[#29696B] w-1/8">
         ${producto.precio.toFixed(2)}
       </td>
-      <td className="px-6 py-4">
+      <td className="px-6 py-4 w-1/6">
         {renderizarIndicadorStock(producto.stock)}
       </td>
-      <td className="px-6 py-4 text-sm text-[#7AA79C]">
+      <td className="px-6 py-4 text-sm text-[#7AA79C] w-1/8">
         {producto.vendidos || 0}
       </td>
-      <td className="px-6 py-4 text-right text-sm font-medium">
+      <td className="px-6 py-4 text-right text-sm font-medium w-1/8">
         <div className="flex justify-end space-x-2">
           <Button
             variant="ghost"
@@ -566,25 +566,25 @@ const TablaProductosVirtualizada: React.FC<TablaProductosVirtualizadaProps> = ({
   });
 
   return (
-    <table className="w-full">
+    <table className="w-full table-fixed">
       <thead className="bg-[#DFEFE6]/50 border-b border-[#91BEAD]/20 sticky top-0 z-10">
         <tr>
-          <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
+          <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider w-1/3">
             Nombre
           </th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
+          <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider w-1/6">
             Categoría
           </th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
+          <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider w-1/8">
             Precio
           </th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
+          <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider w-1/6">
             Stock
           </th>
-          <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
+          <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider w-1/8">
             Vendidos
           </th>
-          <th className="px-6 py-3 text-right text-xs font-medium text-[#29696B] uppercase tracking-wider">
+          <th className="px-6 py-3 text-right text-xs font-medium text-[#29696B] uppercase tracking-wider w-1/8">
             Acciones
           </th>
         </tr>
@@ -685,6 +685,7 @@ const TarjetaProducto: React.FC<TarjetaProductoProps> = ({
               fallbackClassName="h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30"
               containerClassName="h-16 w-16"
               priority={isInViewport}
+              key={`img-mobile-${producto._id}-${producto.hasImage ? 'loaded' : 'empty'}`}
               onLoadComplete={() => setImagenCargada(true)}
             />
           </div>
@@ -780,6 +781,15 @@ const ListaProductosMobile: React.FC<ListaProductosMobileProps> = ({
     }
   });
   
+  // Verificar si hay productos
+  if (productos.length === 0) {
+    return (
+      <div className="p-4 text-center text-[#7AA79C]">
+        No se encontraron productos
+      </div>
+    );
+  }
+  
   return (
     <div ref={parentRef} className="h-[70vh] overflow-auto">
       <div
@@ -846,6 +856,7 @@ const InventorySection: React.FC = () => {
   const [totalItems, setTotalItems] = useState<number>(0);
   const [totalPaginas, setTotalPaginas] = useState<number>(1);
   const [estaCargando, setEstaCargando] = useState<boolean>(false);
+  const [cacheData, setCacheData] = useState<Record<string, any>>({});
 
   // Estado para item combo seleccionado
   const [itemComboSeleccionado, setItemComboSeleccionado] = useState<string>('');
@@ -909,6 +920,24 @@ const InventorySection: React.FC = () => {
     [itemsPorPagina]
   );
 
+  // Función para verificar si los datos ya están en caché local
+  const getDatosDeCache = useCallback((pagina: number, categoria: string, busqueda: string) => {
+    const clave = JSON.stringify(getClaveProductosCache(pagina, categoria, busqueda));
+    return cacheData[clave];
+  }, [cacheData, getClaveProductosCache]);
+
+  // Función para guardar datos en caché local
+  const guardarEnCache = useCallback((pagina: number, categoria: string, busqueda: string, datos: any) => {
+    const clave = JSON.stringify(getClaveProductosCache(pagina, categoria, busqueda));
+    setCacheData(prev => ({
+      ...prev,
+      [clave]: {
+        datos,
+        timestamp: Date.now()
+      }
+    }));
+  }, [getClaveProductosCache]);
+
   // Función para buscar productos con React Query - Optimizada
   const buscarDatosProductos = useCallback(async (
     pagina: number, 
@@ -917,6 +946,12 @@ const InventorySection: React.FC = () => {
     busqueda: string
   ): Promise<RespuestaPaginada<ProductoExtendido>> => {
     try {
+      // Verificar si tenemos datos en caché local y no han expirado (5 minutos)
+      const datosCache = getDatosDeCache(pagina, categoria, busqueda);
+      if (datosCache && (Date.now() - datosCache.timestamp) < 300000) {
+        return datosCache.datos;
+      }
+
       const token = getAuthToken();
       if (!token) {
         throw new Error('No hay token de autenticación');
@@ -955,7 +990,12 @@ const InventorySection: React.FC = () => {
         throw new Error(`Error HTTP: ${response.status}`);
       }
       
-      return await response.json();
+      const datos = await response.json();
+      
+      // Guardar en caché local
+      guardarEnCache(pagina, categoria, busqueda, datos);
+      
+      return datos;
     } catch (error: any) {
       // No reportar error si fue cancelado
       if (error.name === 'AbortError') {
@@ -980,7 +1020,7 @@ const InventorySection: React.FC = () => {
         refControladorAborto.current = null;
       }
     }
-  }, [getAuthToken]);
+  }, [getAuthToken, getDatosDeCache, guardarEnCache]);
 
   // Mejorar función fetch con reintentos para manejar "failed to fetch"
   const fetchConReintentos = async (url: string, opciones: RequestInit, maxReintentos = 2) => {
@@ -1063,6 +1103,9 @@ const InventorySection: React.FC = () => {
         
         // Precargar imágenes para productos de primera página
         precargarImagenesVisibles(data.items);
+        
+        // Finalizar estado de carga
+        setEstaCargando(false);
       },
       onError: (err: any) => {
         // No mostrar errores si la solicitud fue cancelada
@@ -1074,8 +1117,8 @@ const InventorySection: React.FC = () => {
         if (typeof addNotification === 'function') {
           addNotification(errorMsg, 'error');
         }
-      },
-      onSettled: () => {
+        
+        // Finalizar estado de carga incluso en caso de error
         setEstaCargando(false);
       }
     }
@@ -1566,6 +1609,16 @@ const InventorySection: React.FC = () => {
     };
   }, []);
 
+  // Efecto para detectar cambios en la categoría seleccionada
+  useEffect(() => {
+    // Verificar si hay datos en caché para esta categoría
+    const datosCache = getDatosDeCache(paginaActual, categoriaSeleccionada, terminoBusquedaRetrasado);
+    if (!datosCache) {
+      // Solo mostrar indicador de carga si no hay datos en caché
+      setEstaCargando(true);
+    }
+  }, [categoriaSeleccionada, getDatosDeCache, paginaActual, terminoBusquedaRetrasado]);
+
   // Manejar cambio de imagen con compresión automática
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -1676,6 +1729,9 @@ const InventorySection: React.FC = () => {
           
           await imageService.uploadImageBase64(productId, base64Data);
           exito = true;
+          
+          // Limpiar la caché de este producto específico
+          cacheEstadoImagen.delete(productId);
           
           // Actualizar caché directamente después de subir imagen
           queryClient.setQueryData(
@@ -2026,7 +2082,13 @@ const InventorySection: React.FC = () => {
   // Función para cambiar página
   const handlePageChange = useCallback((pageNumber: number) => {
     setPaginaActual(pageNumber);
-    setEstaCargando(true);
+    
+    // Verificar si tenemos datos en caché para la nueva página
+    const datosCache = getDatosDeCache(pageNumber, categoriaSeleccionada, terminoBusquedaRetrasado);
+    if (!datosCache) {
+      // Solo mostrar estado de carga si no hay datos en caché
+      setEstaCargando(true);
+    }
     
     // Al cambiar de página, hacer scroll hacia arriba
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -2035,7 +2097,7 @@ const InventorySection: React.FC = () => {
     if (anchoVentana < 768 && refListaMobile.current) {
       refListaMobile.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [anchoVentana]);
+  }, [anchoVentana, categoriaSeleccionada, getDatosDeCache, terminoBusquedaRetrasado]);
 
   // Manejar subida de imagen con nuevo componente
   const handleImageUploaded = (success: boolean, productId?: string) => {
@@ -2073,7 +2135,7 @@ const InventorySection: React.FC = () => {
         )
       );
       
-      // Invalidar caché de imagen para forzar recarga
+      // Forzar limpieza de caché de imagen para este producto
       cacheEstadoImagen.delete(productId);
       
       // Forzar actualización para asegurar datos actualizados
@@ -2149,11 +2211,16 @@ const InventorySection: React.FC = () => {
     }
   }, []);
   
-
-  // Cuando cambia la categoría seleccionada, actualizar UI
-  useEffect(() => {
-    setEstaCargando(true);
-  }, [categoriaSeleccionada]);
+  // Función para manejar cambio de categoría en la UI
+  const handleCategoriaSeleccionadaChange = (value: string) => {
+    // Si la categoría seleccionada es la misma, no hacer nada
+    if (value === categoriaSeleccionada) return;
+    
+    // Cambiar categoría seleccionada
+    setCategoriaSeleccionada(value);
+    // Reset a primera página
+    setPaginaActual(1);
+  };
 
   return (
     <div className="p-4 md:p-6 space-y-6 bg-[#DFEFE6]/30">
