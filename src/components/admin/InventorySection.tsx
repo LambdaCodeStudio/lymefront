@@ -53,6 +53,7 @@ import { useNotification } from '@/context/NotificationContext';
 import { imageService } from '@/services/imageService';
 import ImageUpload from '@/components/admin/components/ImageUpload';
 import { Switch } from "@/components/ui/switch";
+import { getAuthToken } from '@/utils/inventoryUtils';
 
 // Define interfaces according to the backend
 interface ProductExtended {
@@ -132,27 +133,31 @@ const PRODUCTS_CACHE_KEY = 'products';
 // Evita volver a verificar imágenes que ya sabemos que existen o no
 const imageStatusCache = new Map<string, 'loading' | 'loaded' | 'error' | 'notExists'>();
 
-// Extended imageService with additional helper methods
+// Extended imageService con funciones mejoradas para evitar errores CORS
 const imageServiceExt = {
   ...imageService,
+  
   /**
-   * Checks if a product has an image
+   * Verifica si un producto tiene imagen de manera compatible con CORS
    */
   async checkImageExists(productId: string): Promise<boolean> {
     try {
-      // If already in cache, don't check again
+      // Si ya está en caché, no verificar de nuevo
       if (imageStatusCache.has(productId)) {
         return imageStatusCache.get(productId) === 'loaded';
       }
       
-      const token = localStorage.getItem('token');
+      // En lugar de usar una solicitud HEAD que puede causar problemas CORS,
+      // usamos una solicitud GET normal con tratamiento de errores
+      const token = getAuthToken();
       if (!token) return false;
       
       const response = await fetch(
         `https://lyme-back.vercel.app/api/producto/${productId}/imagen?width=1&height=1&quality=1&v=${Date.now()}`,
         {
           headers: { 'Authorization': `Bearer ${token}` },
-          method: 'HEAD'
+          credentials: 'include', // Incluir credenciales para CORS
+          mode: 'cors' // Forzar modo CORS
         }
       );
       
@@ -160,33 +165,42 @@ const imageServiceExt = {
       imageStatusCache.set(productId, hasImage ? 'loaded' : 'notExists');
       return hasImage;
     } catch (error) {
-      console.warn(`Error checking image for ${productId}:`, error);
-      return false;
+      console.warn(`Error verificando imagen para ${productId}:`, error);
+      // En caso de error CORS, asumimos que la imagen podría existir
+      // para evitar errores falsos negativos en móviles
+      return true; // Retornar true para intentar cargar la imagen de todos modos
     }
   },
   
-  /**
-   * Preloads images for visible products to improve user experience
+   /**
+   * Precarga imágenes para productos visibles para mejorar experiencia
    */
-  preloadImages(productIds: string[]): void {
+   preloadImages(productIds: string[]): void {
     if (!productIds.length) return;
     
-    // Limit to first 10 products to avoid overloading
-    const idsToPreload = productIds.slice(0, 10);
+    // Limitar a primeros 8 productos para evitar sobrecarga
+    const idsToPreload = productIds.slice(0, 8);
     
     idsToPreload.forEach(id => {
-      // Check if already cached
+      // Verificar si ya está en caché
       if (imageStatusCache.has(id) && imageStatusCache.get(id) !== 'loading') {
         return;
       }
       
-      // Start preloading image
-      this.checkImageExists(id).then(hasImage => {
-        if (hasImage) {
-          const img = new Image();
-          img.src = `https://lyme-back.vercel.app/api/producto/${id}/imagen?quality=60&width=64&height=64&v=${Date.now()}`;
-        }
-      });
+      // Marcar como cargando para evitar solicitudes duplicadas
+      imageStatusCache.set(id, 'loading');
+      
+      // Precarga directa sin verificación previa para evitar errores CORS
+      const img = new Image();
+      img.onload = () => {
+        imageStatusCache.set(id, 'loaded');
+      };
+      img.onerror = () => {
+        imageStatusCache.set(id, 'notExists');
+      };
+      // Usar token actual si está disponible
+      const token = getAuthToken();
+      img.src = `https://lyme-back.vercel.app/api/producto/${id}/imagen?quality=60&width=64&height=64&v=${Date.now()}`;
     });
   }
 };
@@ -212,7 +226,7 @@ const OptimizedProductImage: React.FC<ProductImageProps> = ({
   alt = 'Product image',
   width = 80,
   height = 80,
-  quality = 75, // Increased default quality
+  quality = 75,
   className = '',
   fallbackClassName = '',
   containerClassName = '',
@@ -221,7 +235,7 @@ const OptimizedProductImage: React.FC<ProductImageProps> = ({
   placeholderText,
   onLoadComplete
 }) => {
-  // Use the state of the cache global if exists, or 'loading' by default
+  // Usar el estado de la caché global si existe, o 'loading' por defecto
   const [loadState, setLoadState] = useState<'loading' | 'loaded' | 'error' | 'notExists'>(
     imageStatusCache.get(productId) || 'loading'
   );
@@ -232,21 +246,21 @@ const OptimizedProductImage: React.FC<ProductImageProps> = ({
   const [retryCount, setRetryCount] = useState(0);
   const [timestamp, setTimestamp] = useState<number>(Date.now());
   
-  // Create the URL of the image with version parameter to avoid obsolete caches
+  // Crear URL de la imagen con parámetro de versión para evitar cachés obsoletas
   const imageUrl = useBase64 
     ? `https://lyme-back.vercel.app/api/producto/${productId}/imagen-base64`
     : `https://lyme-back.vercel.app/api/producto/${productId}/imagen?quality=${quality}&width=${width}&height=${height}&v=${timestamp}`;
 
   useEffect(() => {
-    // If no product ID, do nothing
+    // Si no hay ID de producto, no hacer nada
     if (!productId) return;
 
-    // If we already have the state in cache and it's not loading, simply use it
+    // Si ya tenemos el estado en caché y no está cargando, simplemente usarlo
     if (imageStatusCache.has(productId) && imageStatusCache.get(productId) !== 'loading') {
       const cachedState = imageStatusCache.get(productId)!;
       setLoadState(cachedState);
       
-      // If image is already known to be loaded from cache, notify parent
+      // Si la imagen ya se conoce como cargada desde caché, notificar al padre
       if (cachedState === 'loaded' && onLoadComplete) {
         onLoadComplete();
       }
@@ -254,19 +268,25 @@ const OptimizedProductImage: React.FC<ProductImageProps> = ({
     }
 
     const loadImage = () => {
-      // For base64 images, we need to do a fetch
+      // Para imágenes base64, necesitamos hacer un fetch
       if (useBase64) {
         setLoadState('loading');
-        fetch(imageUrl)
+        fetch(imageUrl, {
+          credentials: 'include', // Incluir credenciales para CORS
+          mode: 'cors', // Forzar modo CORS
+          headers: {
+            'Authorization': `Bearer ${getAuthToken() || ''}`
+          }
+        })
           .then(response => {
             if (!response.ok) {
               if (response.status === 204) {
-                // The product doesn't have an image
+                // El producto no tiene imagen
                 imageStatusCache.set(productId, 'notExists');
                 setLoadState('notExists');
                 return;
               }
-              throw new Error('Failed to load image');
+              throw new Error('Error cargando imagen');
             }
             return response.json();
           })
@@ -277,42 +297,42 @@ const OptimizedProductImage: React.FC<ProductImageProps> = ({
               setLoadState('loaded');
               if (onLoadComplete) onLoadComplete();
             } else {
-              throw new Error('Invalid image data');
+              throw new Error('Datos de imagen inválidos');
             }
           })
           .catch(err => {
-            console.error(`Error loading base64 image for ${productId}:`, err);
+            console.error(`Error cargando imagen base64 para ${productId}:`, err);
             imageStatusCache.set(productId, 'error');
             setLoadState('error');
           });
       } else {
-        // For direct images, set the URL
+        // Para imágenes directas, establecer la URL
         setImageSrc(imageUrl);
         setLoadState('loading');
       }
     };
 
-    // If prioritized, load immediately
+    // Si es prioritaria, cargar inmediatamente
     if (priority) {
       loadImage();
       return;
     }
 
-    // Use IntersectionObserver for lazy loading
+    // Usar IntersectionObserver para carga diferida
     if ('IntersectionObserver' in window && imgRef.current) {
-      // Destroy previous observer if it exists
+      // Destruir observer anterior si existe
       if (observerRef.current) {
         observerRef.current.disconnect();
       }
 
-      // Create new observer
+      // Crear nuevo observer
       observerRef.current = new IntersectionObserver(
         (entries) => {
           const [entry] = entries;
           if (entry.isIntersecting) {
-            // Load image when visible
+            // Cargar imagen cuando sea visible
             loadImage();
-            // Stop observing this element
+            // Dejar de observar este elemento
             if (observerRef.current) {
               observerRef.current.disconnect();
               observerRef.current = null;
@@ -320,15 +340,15 @@ const OptimizedProductImage: React.FC<ProductImageProps> = ({
           }
         },
         {
-          rootMargin: '200px', // Preload when within 200px of being visible
-          threshold: 0.01 // Load when barely visible
+          rootMargin: '200px', // Precargar cuando esté a 200px de ser visible
+          threshold: 0.01 // Cargar cuando apenas sea visible
         }
       );
 
-      // Start observing
+      // Empezar a observar
       observerRef.current.observe(imgRef.current);
     } else {
-      // Fallback for browsers without IntersectionObserver
+      // Fallback para navegadores sin IntersectionObserver
       loadImage();
     }
 
@@ -341,19 +361,19 @@ const OptimizedProductImage: React.FC<ProductImageProps> = ({
     };
   }, [productId, imageUrl, priority, useBase64, onLoadComplete]);
 
-  // Handle successful image load
+  // Manejar carga correcta de la imagen
   const handleImageLoad = () => {
     imageStatusCache.set(productId, 'loaded');
     setLoadState('loaded');
-    setRetryCount(0); // Reset retry counter
-    // Notify parent component that image is loaded
+    setRetryCount(0); // Resetear contador de reintentos
+    // Notificar al componente padre que la imagen está cargada
     if (onLoadComplete) onLoadComplete();
   };
 
-  // Handle load error with retry
+  // Manejar error de carga con reintento
   const handleImageError = () => {
-    if (retryCount < 2) { // Increase max retries for better chance of success
-      // Retry once with a new timestamp to avoid cache
+    if (retryCount < 2) { // Aumentar max reintentos para mejor probabilidad de éxito
+      // Reintentar una vez con un nuevo timestamp para evitar caché
       setRetryCount(prev => prev + 1);
       setTimestamp(Date.now());
     } else {
@@ -371,7 +391,7 @@ const OptimizedProductImage: React.FC<ProductImageProps> = ({
       style={{ width: width, height: height }}
       ref={imgRef}
     >
-      {/* Placeholder/Fallback while loading or if there's an error */}
+      {/* Placeholder/Fallback mientras carga o si hay error */}
       {(isLoading || hasError) && (
         <div className={`flex items-center justify-center ${fallbackClassName || 'bg-gray-100 rounded-md'}`} 
           style={{ width: width, height: height }}>
@@ -382,7 +402,7 @@ const OptimizedProductImage: React.FC<ProductImageProps> = ({
         </div>
       )}
       
-      {/* Real image - for base64 */}
+      {/* Imagen real - para base64 */}
       {useBase64 && imageSrc && loadState === 'loaded' && (
         <img
           src={imageSrc}
@@ -393,7 +413,7 @@ const OptimizedProductImage: React.FC<ProductImageProps> = ({
         />
       )}
       
-      {/* Real image - for direct image */}
+      {/* Imagen real - para imagen directa */}
       {!useBase64 && (
         <img
           src={loadState === 'loading' ? undefined : imageUrl}
@@ -402,6 +422,7 @@ const OptimizedProductImage: React.FC<ProductImageProps> = ({
           height={height}
           onLoad={handleImageLoad}
           onError={handleImageError}
+          crossOrigin="anonymous" // Agregar crossOrigin para evitar problemas CORS
           className={`${className} ${loadState === 'loaded' ? 'opacity-100' : 'opacity-0'} absolute top-0 left-0 transition-opacity duration-300`}
           loading="lazy"
         />
@@ -709,9 +730,9 @@ const VirtualizedProductTable = ({
 
 // IMPROVED PRODUCT CARD COMPONENT FOR MOBILE
 const ProductCard = React.memo(({ product, onEdit, onDelete, userSections, isInViewport }) => {
-  // Check permissions
+  // Verificar permisos
   const canEdit = userSections === 'ambos' || product.categoria === userSections;
-  // Track image load state
+  // Seguimiento del estado de carga de imagen
   const [imageLoaded, setImageLoaded] = useState(false);
 
   return (
@@ -755,7 +776,7 @@ const ProductCard = React.memo(({ product, onEdit, onDelete, userSections, isInV
               containerClassName="h-16 w-16"
               useBase64={false}
               priority={isInViewport}
-              key={`img-${product._id}-${product.hasImage ? 'has-image' : 'no-image'}`}
+              key={`img-${product._id}-${product.hasImage ? 'has-image' : 'no-image'}-${Date.now()}`} // Agregar timestamp para forzar recarga
               onLoadComplete={() => setImageLoaded(true)}
             />
           </div>
@@ -2218,9 +2239,11 @@ const InventorySection: React.FC = () => {
   // Handler for visible items changed - This improves performance by preloading only what's visible
   const handleVisibleItemsChanged = useCallback((visibleItems: ProductExtended[]) => {
     if (visibleItems.length > 0) {
-      preloadVisibleImages(visibleItems);
+      // Usar método de precarga directo sin verificaciones CORS previas
+      const visibleIds = visibleItems.map(p => p._id);
+      imageServiceExt.preloadImages(visibleIds);
     }
-  }, [preloadVisibleImages]);
+  }, []);
 
   // When selected category changes, update UI
   useEffect(() => {
