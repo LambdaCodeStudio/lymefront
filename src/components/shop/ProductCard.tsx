@@ -13,8 +13,7 @@ import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-// Importar el componente OptimizedProductImage en lugar del original
-import OptimizedProductImage from '@/components/OptimizedProductImage';
+import OptimizedProductImage from '@/components/admin/components/ProductImage';
 
 interface Product {
   _id: string;

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useQuery, useQueryClient, useMutation } from 'react-query';
-import { useVirtualizer } from '@tanstack/react-virtual'; // Necesitarás instalar este paquete
+import { useVirtualizer } from '@tanstack/react-virtual';
 import debounce from 'lodash/debounce';
 import {
   Dialog,

@@ -39,6 +39,7 @@
     "react-dom": "^18.2.0",
     "react-query": "^3.39.3",
     "react-router-dom": "^7.2.0",
+    "react-virtual": "^2.10.4",
     "react-window": "^1.8.11",
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7"
