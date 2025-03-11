@@ -55,7 +55,7 @@ import ImageUpload from '@/components/admin/components/ImageUpload';
 import { Switch } from "@/components/ui/switch";
 
 // Importar el ProductImage optimizado (asegúrate de haberlo implementado)
-import OptimizedProductImage from './OptimizedProductImage';
+import OptimizedProductImage from './components/ProductImage';
 
 // COMPONENTE OPTIMIZADO DE IMAGEN DE PRODUCTO
 // Implementa este componente en un archivo separado
