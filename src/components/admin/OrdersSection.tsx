@@ -2395,6 +2395,16 @@ const OrdersSection = () => {
         </div>
       ) : (
         <>
+          {/* Estadísticas de resultados y paginación */}
+          <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm text-[#29696B] flex flex-col sm:flex-row sm:justify-between items-center mb-4">
+            <span className="mb-2 sm:mb-0">
+              Total: {filteredOrders.length} {filteredOrders.length === 1 ? 'pedido' : 'pedidos'}
+            </span>
+            <span className="text-[#29696B] font-medium">
+              Mostrando: {showingFromTo}
+            </span>
+          </div>
+
           {/* Tabla de pedidos para pantallas medianas y grandes */}
           <div className="bg-white rounded-xl shadow-sm overflow-hidden hidden md:block border border-[#91BEAD]/20">
             <div className="overflow-x-auto">
@@ -2488,22 +2498,57 @@ const OrdersSection = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right">
                           <div className="flex justify-end space-x-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleEditOrder(order)}
-                              className="text-[#29696B] hover:bg-[#DFEFE6]/30"
-                            >
-                              <FileEdit className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteOrder(order._id)}
-                              className="text-red-600 hover:bg-red-50"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleDownloadRemito(order._id)}
+                                    className="text-[#7AA79C] hover:text-[#29696B] hover:bg-[#DFEFE6]/30"
+                                  >
+                                    <Download className="w-4 h-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Descargar remito</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleEditOrder(order)}
+                                    className="text-[#29696B] hover:bg-[#DFEFE6]/30"
+                                  >
+                                    <FileEdit className="w-4 h-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Editar pedido</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => confirmDeleteOrder(order._id)}
+                                    className="text-red-600 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Eliminar pedido</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           </div>
                         </td>
                       </tr>
@@ -2513,7 +2558,7 @@ const OrdersSection = () => {
                         <tr>
                           <td colSpan={7} className="px-6 py-4 bg-[#DFEFE6]/20">
                             <div className="space-y-3">
-                              <div className="font-medium text-[#29696B]">Detalles del Pedido</div>
+                              <div className="font-medium text-[#29696B]">Detalles del Pedido #{order.nPedido}</div>
                               <div className="overflow-x-auto">
                                 <table className="min-w-full divide-y divide-[#91BEAD]/20">
                                   <thead className="bg-[#DFEFE6]/50">
@@ -2680,6 +2725,14 @@ const OrdersSection = () => {
                   <Button
                     variant="ghost"
                     size="sm"
+                    className="h-8 px-2 text-[#7AA79C] hover:bg-[#DFEFE6]/30"
+                    onClick={() => handleDownloadRemito(order._id)}
+                  >
+                    <Download className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     className="h-8 px-2 text-[#29696B] hover:bg-[#DFEFE6]/30"
                     onClick={() => handleEditOrder(order)}
                   >
@@ -2689,7 +2742,7 @@ const OrdersSection = () => {
                     variant="ghost"
                     size="sm"
                     className="h-8 px-2 text-red-600 hover:bg-red-50"
-                    onClick={() => handleDeleteOrder(order._id)}
+                    onClick={() => confirmDeleteOrder(order._id)}
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
@@ -2991,6 +3044,18 @@ const OrdersSection = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Diálogo de confirmación de eliminación */}
+      <ConfirmationDialog
+        open={deleteConfirmOpen}
+        onOpenChange={setDeleteConfirmOpen}
+        title="Eliminar pedido"
+        description="¿Está seguro de que desea eliminar este pedido? Esta acción ajustará el inventario y no puede deshacerse."
+        confirmText="Eliminar"
+        cancelText="Cancelar" 
+        onConfirm={() => orderToDelete && handleDeleteOrder(orderToDelete)}
+        variant="destructive"
+      />
     </div>
   );
 };
