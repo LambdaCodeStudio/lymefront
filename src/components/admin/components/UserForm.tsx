@@ -1,7 +1,7 @@
 /**
  * Componente de formulario para crear y editar usuarios
  * Actualizado para la nueva estructura de roles y agregar soporte para operarios temporales
- * Corregido el manejo del desplegable de roles
+ * Optimización para mejorar visualización en dispositivos móviles
  */
 import React, { useState, useEffect } from 'react';
 import { AlertCircle, Info } from 'lucide-react';
@@ -37,6 +37,14 @@ const ROLES = {
   TEMPORARIO: 'temporario'
 };
 
+// Nombres cortos de roles para el formulario
+const shortRoleLabels = {
+  admin: 'Admin',
+  supervisor_de_supervisores: 'Sup. de Supervisores',
+  supervisor: 'Supervisor',
+  operario: 'Operario'
+};
+
 interface UserFormProps {
   isOpen: boolean;
   onClose: () => void;
@@ -67,6 +75,22 @@ const UserForm: React.FC<UserFormProps> = ({
 }) => {
   // Estado para controlar la opción de usuario temporal
   const [isTemporary, setIsTemporary] = useState(false);
+  // Estado para controlar ancho de pantalla
+  const [windowWidth, setWindowWidth] = useState(
+    typeof window !== 'undefined' ? window.innerWidth : 1024
+  );
+  
+  // Efecto para detectar el tamaño de la ventana
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth);
+    };
+    
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }
+  }, []);
   
   // Efecto para actualizar isTemporary cuando cambie el usuario editado
   useEffect(() => {
@@ -100,15 +124,11 @@ const UserForm: React.FC<UserFormProps> = ({
       isTemporary: formData.role === ROLES.OPERARIO ? isTemporary : undefined
     };
     
-    console.log("Submitting user data:", submissionData);
-    
     await onSubmit(submissionData);
   };
 
-  // Debugging logs
-  console.log("Available roles:", availableRoles);
-  console.log("Current form data:", formData);
-  console.log("Current user role:", currentUserRole);
+  // Función para determinar si mostrar nombres cortos según ancho de pantalla
+  const useShortNames = windowWidth < 450;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -173,7 +193,6 @@ const UserForm: React.FC<UserFormProps> = ({
                   <Select
                     value={formData.role}
                     onValueChange={(value: string) => {
-                      console.log("Selected role:", value);
                       setFormData({
                         ...formData,
                         role: value,
@@ -193,7 +212,8 @@ const UserForm: React.FC<UserFormProps> = ({
                     <SelectContent>
                       {availableRoles.map((role) => (
                         <SelectItem key={role.value} value={role.value}>
-                          {role.label}
+                          {/* Usar nombres cortos en pantallas pequeñas */}
+                          {useShortNames ? shortRoleLabels[role.value] || role.label : role.label}
                         </SelectItem>
                       ))}
                     </SelectContent>

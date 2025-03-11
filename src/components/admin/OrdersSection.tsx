@@ -82,14 +82,15 @@ import { refreshInventory, getAuthToken } from '@/utils/inventoryUtils';
 
 // ======== TIPOS Y INTERFACES ========
 
-interface User {
+export interface User {
   _id: string;
-  id?: string;
-  email: string;
+  usuario?: string;           
   nombre?: string;
   apellido?: string;
   role: string;
+  secciones?: 'limpieza' | 'mantenimiento' | 'ambos';
   isActive?: boolean;
+  expiresAt?: string | Date;
 }
 
 interface Client {
@@ -100,6 +101,7 @@ interface Client {
 }
 
 interface Product {
+  id: string;
   _id: string;
   nombre: string;
   precio: number;
@@ -1640,31 +1642,31 @@ const OrdersSection = () => {
   }, [productsMap]);
   
   // Obtener información de usuario
-  const getUserInfo = useCallback((userId: string | User): { email: string; name: string } => {
-    // Si es un objeto con email y nombre
+  const getUserInfo = useCallback((userId: string | User): { usuario: string; name: string } => {
+    // Si es un objeto con usuario y nombre
     if (typeof userId === 'object' && userId) {
       return {
-        email: userId.email || "Email no disponible",
+        usuario: userId.usuario || "Usuario no disponible",
         name: userId.nombre 
           ? `${userId.nombre} ${userId.apellido || ''}`
-          : userId.email || "Usuario no disponible"
+          : userId.usuario || "Usuario no disponible"
       };
     }
     
     // Si es un string (ID)
     if (typeof userId === 'string') {
       const user = usersMap[userId];
-      if (!user) return { email: "Usuario no encontrado", name: "Usuario no encontrado" };
+      if (!user) return { usuario: "Usuario no encontrado", name: "Usuario no encontrado" };
       
       return {
-        email: user.email || "Email no disponible",
+        usuario: user.usuario || "Usuario no disponible",
         name: user.nombre 
           ? `${user.nombre} ${user.apellido || ''}`
-          : user.email || "Usuario no disponible"
+          : user.usuario || "Usuario no disponible"
       };
     }
     
-    return { email: "Usuario no disponible", name: "Usuario no disponible" };
+    return { usuario: "Usuario no disponible", name: "Usuario no disponible" };
   }, [usersMap]);
   
   // Función para cambiar de página
@@ -1730,7 +1732,7 @@ const OrdersSection = () => {
         order.servicio.toLowerCase().includes(searchLower) ||
         String(order.nPedido).includes(searchTerm) ||
         (order.seccionDelServicio || '').toLowerCase().includes(searchLower) ||
-        getUserInfo(order.userId).email.toLowerCase().includes(searchLower) ||
+        getUserInfo(order.userId).usuario.toLowerCase().includes(searchLower) ||
         getUserInfo(order.userId).name.toLowerCase().includes(searchLower)
       );
     });
@@ -2093,7 +2095,7 @@ const OrdersSection = () => {
                         
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-[#29696B]">
-                            {getUserInfo(order.userId).email}
+                            {getUserInfo(order.userId).usuario}
                           </div>
                         </td>
                         
@@ -2326,7 +2328,7 @@ const OrdersSection = () => {
                     <div className="text-xs space-y-1">
                       <div className="flex items-center">
                         <User className="w-3 h-3 text-[#7AA79C] mr-1" />
-                        <span className="text-[#29696B]">{getUserInfo(order.userId).email}</span>
+                        <span className="text-[#29696B]">{getUserInfo(order.userId).usuario}</span>
                       </div>
                       
                       <div className="flex items-center">

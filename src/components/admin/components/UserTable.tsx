@@ -2,6 +2,7 @@
  * Componente de tabla para mostrar usuarios en pantallas medianas y grandes
  * Incluye todas las acciones disponibles para administración de usuarios
  * Actualizado para la nueva estructura de roles y mejorar visualización de "Creado por"
+ * Optimización para roles largos con textos más compactos
  */
 import React from 'react';
 import { UserCog, Trash2, CheckCircle, XCircle, Clock, ShieldAlert, Shield } from 'lucide-react';
@@ -16,14 +17,12 @@ const ROLES = {
   ADMIN: 'admin',
   SUPERVISOR_DE_SUPERVISORES: 'supervisor_de_supervisores',
   SUPERVISOR: 'supervisor',
-  OPERARIO: 'operario',
-  TEMPORARIO: 'temporario'
+  OPERARIO: 'operario'
 };
 
 // Función para verificar si el usuario tiene fecha de expiración
 const hasExpiration = (user: AdminUser) => {
-  return user.role === ROLES.TEMPORARIO || 
-    (user.role === ROLES.OPERARIO && user.expiresAt);
+  return user.role === ROLES.OPERARIO && user.expiresAt;
 };
 
 // Función para verificar si un usuario puede modificar a otro según jerarquía
@@ -97,36 +96,56 @@ const UserTable: React.FC<UserTableProps> = ({
           {users.map((user) => (
             <tr key={user._id} className="hover:bg-gray-50">
               <td className="px-6 py-4">
-                <div className="text-sm font-medium text-gray-900">
+                <div className="text-sm font-medium text-gray-900 truncate max-w-[150px]">
                   {getUserIdentifier(user)}
                 </div>
                 {getFullName(user) && (
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-gray-500 truncate max-w-[150px]">
                     {getFullName(user)}
                   </div>
                 )}
                 {hasExpiration(user) && user.expiresAt && (
                   <div className="text-xs text-gray-500 flex items-center">
-                    <Clock className="inline-block w-3 h-3 mr-1" />
-                    Expira: {new Date(user.expiresAt).toLocaleString()}
+                    <Clock className="inline-block w-3 h-3 mr-1 flex-shrink-0" />
+                    <span className="truncate max-w-[140px]">
+                      Expira: {new Date(user.expiresAt).toLocaleString()}
+                    </span>
                   </div>
                 )}
               </td>
               <td className="px-6 py-4">
-                <Badge 
-                  variant="outline" 
-                  className={`
-                    ${user.role === ROLES.ADMIN ? 'border-purple-500 text-purple-700 bg-purple-50' : ''}
-                    ${user.role === ROLES.SUPERVISOR_DE_SUPERVISORES ? 'border-blue-500 text-blue-700 bg-blue-50' : ''}
-                    ${user.role === ROLES.SUPERVISOR ? 'border-cyan-500 text-cyan-700 bg-cyan-50' : ''}
-                    ${user.role === ROLES.OPERARIO ? 'border-green-500 text-green-700 bg-green-50' : ''}
-                    ${user.role === ROLES.TEMPORARIO ? 'border-yellow-500 text-yellow-700 bg-yellow-50' : ''}
-                  `}
-                >
-                  {user.role === ROLES.ADMIN && <ShieldAlert className="w-3 h-3 mr-1" />}
-                  {user.role === ROLES.SUPERVISOR_DE_SUPERVISORES && <Shield className="w-3 h-3 mr-1" />}
-                  {rolesDisplayNames[user.role] || user.role}
-                </Badge>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge 
+                        variant="outline" 
+                        className={`
+                          ${user.role === ROLES.ADMIN ? 'border-purple-500 text-purple-700 bg-purple-50' : ''}
+                          ${user.role === ROLES.SUPERVISOR_DE_SUPERVISORES ? 'border-blue-500 text-blue-700 bg-blue-50' : ''}
+                          ${user.role === ROLES.SUPERVISOR ? 'border-cyan-500 text-cyan-700 bg-cyan-50' : ''}
+                          ${user.role === ROLES.OPERARIO ? 'border-green-500 text-green-700 bg-green-50' : ''}
+                        `}
+                      >
+                        {user.role === ROLES.ADMIN && <ShieldAlert className="w-3 h-3 mr-1 flex-shrink-0" />}
+                        {user.role === ROLES.SUPERVISOR_DE_SUPERVISORES && <Shield className="w-3 h-3 mr-1 flex-shrink-0" />}
+                        {/* Usar un nombre más corto para Supervisor de Supervisores en tablet */}
+                        {user.role === ROLES.SUPERVISOR_DE_SUPERVISORES ? (
+                          <>
+                            <span className="hidden md:inline xl:hidden">Sup. de Sups.</span>
+                            <span className="inline md:hidden xl:inline">{rolesDisplayNames[user.role]}</span>
+                          </>
+                        ) : (
+                          <span>{rolesDisplayNames[user.role] || user.role}</span>
+                        )}
+                      </Badge>
+                    </TooltipTrigger>
+                    {user.role === ROLES.SUPERVISOR_DE_SUPERVISORES && (
+                      <TooltipContent>
+                        <p>Supervisor de Supervisores</p>
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
+                </TooltipProvider>
               </td>
               <td className="px-6 py-4">
                 <div className="flex items-center gap-2">
@@ -158,7 +177,7 @@ const UserTable: React.FC<UserTableProps> = ({
                   <span className="text-gray-400">No especificado</span>
                 )}
               </td>
-              <td className="px-6 py-4 text-sm text-gray-500">
+              <td className="px-6 py-4 text-sm text-gray-500 truncate max-w-[150px]">
                 {getCreatorName(user)}
               </td>
               <td className="px-6 py-4 text-right">

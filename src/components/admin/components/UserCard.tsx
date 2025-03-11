@@ -2,6 +2,7 @@
  * Componente para mostrar tarjetas de usuario en dispositivos móviles
  * Muestra información compacta de usuarios con acciones
  * Actualizado para la nueva estructura de roles y mejorar visualización de "Creado por"
+ * Optimizado para móviles con texto responsive para roles largos
  */
 import React from 'react';
 import { UserCog, Trash2, CheckCircle, XCircle, Clock, ShieldAlert, Shield } from 'lucide-react';
@@ -26,6 +27,15 @@ const ROLES = {
   SUPERVISOR: 'supervisor',
   OPERARIO: 'operario',
   TEMPORARIO: 'temporario'
+};
+
+// Nombres cortos para roles en pantallas muy pequeñas
+const shortRoleNames = {
+  [ROLES.ADMIN]: 'Admin',
+  [ROLES.SUPERVISOR_DE_SUPERVISORES]: 'Sup. de Sups.',
+  [ROLES.SUPERVISOR]: 'Supervisor',
+  [ROLES.OPERARIO]: 'Operario',
+  [ROLES.TEMPORARIO]: 'Temporal'
 };
 
 // Función para verificar si el usuario tiene fecha de expiración
@@ -91,14 +101,14 @@ const UserCard: React.FC<UserCardProps> = ({
   return (
     <Card className="overflow-hidden">
       <CardHeader className="p-4 pb-0">
-        <div className="flex justify-between items-start">
-          <div>
-            <CardTitle className="text-base">{getUserIdentifier(user)}</CardTitle>
+        <div className="flex justify-between items-start gap-2">
+          <div className="min-w-0 flex-1"> {/* Añadido min-w-0 para permitir truncado del texto */}
+            <CardTitle className="text-base truncate">{getUserIdentifier(user)}</CardTitle>
             {getFullName(user) && (
-              <CardDescription>{getFullName(user)}</CardDescription>
+              <CardDescription className="truncate">{getFullName(user)}</CardDescription>
             )}
           </div>
-          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full
+          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full whitespace-nowrap
             ${!user.isActive
               ? 'bg-red-100 text-red-800'
               : hasExpiration(user)
@@ -125,7 +135,7 @@ const UserCard: React.FC<UserCardProps> = ({
             <span className="text-gray-500">Rol:</span>{' '}
             <Badge 
               variant="outline" 
-              className={`ml-1 py-0 h-5 
+              className={`ml-1 py-0 h-5 text-xs
                 ${user.role === ROLES.ADMIN ? 'border-purple-500 text-purple-700 bg-purple-50' : ''}
                 ${user.role === ROLES.SUPERVISOR_DE_SUPERVISORES ? 'border-blue-500 text-blue-700 bg-blue-50' : ''}
                 ${user.role === ROLES.SUPERVISOR ? 'border-cyan-500 text-cyan-700 bg-cyan-50' : ''}
@@ -133,32 +143,40 @@ const UserCard: React.FC<UserCardProps> = ({
                 ${user.role === ROLES.TEMPORARIO ? 'border-yellow-500 text-yellow-700 bg-yellow-50' : ''}
               `}
             >
-              {user.role === ROLES.ADMIN && <ShieldAlert className="w-3 h-3 mr-1" />}
-              {user.role === ROLES.SUPERVISOR_DE_SUPERVISORES && <Shield className="w-3 h-3 mr-1" />}
-              {rolesDisplayNames[user.role] || user.role}
+              {/* Mostrar sólo el icono en pantallas muy pequeñas */}
+              {user.role === ROLES.ADMIN && <ShieldAlert className="w-3 h-3 mr-1 flex-shrink-0" />}
+              {user.role === ROLES.SUPERVISOR_DE_SUPERVISORES && <Shield className="w-3 h-3 mr-1 flex-shrink-0" />}
+              
+              {/* Nombre corto del rol para móviles */}
+              <span className="hidden xs:inline">
+                {rolesDisplayNames[user.role] || user.role}
+              </span>
+              <span className="inline xs:hidden">
+                {shortRoleNames[user.role] || user.role}
+              </span>
             </Badge>
           </div>
-          <div>
+          <div className="truncate">
             <span className="text-gray-500">Secciones:</span>
-            <span className="ml-1 capitalize">{user.secciones || 'No especificado'}</span>
+            <span className="ml-1 capitalize truncate">{user.secciones || 'No especificado'}</span>
           </div>
           {hasExpiration(user) && user.expiresAt && (
             <div className="col-span-2 flex items-center">
-              <Clock className="w-3.5 h-3.5 mr-1 text-yellow-600" />
+              <Clock className="w-3.5 h-3.5 mr-1 text-yellow-600 flex-shrink-0" />
               <span className="text-gray-500">Expira:</span>
-              <span className="ml-1">{new Date(user.expiresAt).toLocaleString()}</span>
+              <span className="ml-1 truncate">{new Date(user.expiresAt).toLocaleString()}</span>
             </div>
           )}
           {user.celular && (
-            <div className="col-span-2">
+            <div className="col-span-2 truncate">
               <span className="text-gray-500">Teléfono:</span>
-              <span className="ml-1">{user.celular}</span>
+              <span className="ml-1 truncate">{user.celular}</span>
             </div>
           )}
           {user.createdBy && (
-            <div className="col-span-2">
+            <div className="col-span-2 truncate">
               <span className="text-gray-500">Creado por:</span>
-              <span className="ml-1">{getCreatorName(user)}</span>
+              <span className="ml-1 truncate">{getCreatorName(user)}</span>
             </div>
           )}
         </div>
@@ -171,7 +189,7 @@ const UserCard: React.FC<UserCardProps> = ({
               variant="ghost"
               size="sm"
               onClick={() => onToggleStatus(user._id, !user.isActive)}
-              className={user.isActive ? 'text-red-600' : 'text-green-600'}
+              className={`p-0 w-8 h-8 ${user.isActive ? 'text-red-600' : 'text-green-600'}`}
             >
               {user.isActive ? (
                 <XCircle className="w-4 h-4" />
@@ -184,7 +202,7 @@ const UserCard: React.FC<UserCardProps> = ({
               variant="ghost"
               size="sm"
               onClick={() => onEdit(user)}
-              className="text-blue-600"
+              className="p-0 w-8 h-8 text-blue-600"
             >
               <UserCog className="w-4 h-4" />
             </Button>
@@ -193,7 +211,7 @@ const UserCard: React.FC<UserCardProps> = ({
               variant="ghost"
               size="sm"
               onClick={() => onDelete(user._id)}
-              className="text-red-600"
+              className="p-0 w-8 h-8 text-red-600"
             >
               <Trash2 className="w-4 h-4" />
             </Button>
