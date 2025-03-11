@@ -1,4 +1,3 @@
-// src/providers/CartProvider.tsx
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { imageService } from '@/services/imageService';
 

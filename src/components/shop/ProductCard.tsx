@@ -80,31 +80,31 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   // Determinar la clase de gradiente según la categoría
   const getGradientClass = () => {
     if (product.esCombo) {
-      return 'from-[#966eaa]/70 to-[#c48adc]/70'; // Gradiente especial para combos
+      return 'from-[#8A4FFF]/70 to-[#AF7FFF]/70'; // Gradiente especial para combos
     } else if (product.categoria === 'limpieza') {
-      return 'from-[#00888A]/70 to-[#50C3AD]/70';
+      return 'from-[#15497E]/70 to-[#2A82C7]/70';
     }
-    return 'from-[#50C3AD]/70 to-[#75D0E0]/70';
+    return 'from-[#2A82C7]/70 to-[#6C757D]/70';
   };
 
   // Determinar el color de borde según la categoría
   const getBorderClass = () => {
     if (product.esCombo) {
-      return 'border-[#966eaa]'; // Borde especial para combos
+      return 'border-[#8A4FFF]'; // Borde especial para combos
     } else if (product.categoria === 'limpieza') {
-      return 'border-[#00888A]';
+      return 'border-[#15497E]';
     }
-    return 'border-[#50C3AD]';
+    return 'border-[#2A82C7]';
   };
 
   // Determinar el color del botón según la categoría
   const getButtonClass = () => {
     if (product.esCombo) {
-      return 'bg-[#966eaa] hover:bg-[#7a569b]'; // Botón especial para combos
+      return 'bg-[#8A4FFF] hover:bg-[#7A4EE5]'; // Botón especial para combos
     } else if (product.categoria === 'limpieza') {
-      return 'bg-[#00888A] hover:bg-[#50C3AD]';
+      return 'bg-[#15497E] hover:bg-[#2A82C7]';
     }
-    return 'bg-[#50C3AD] hover:bg-[#00888A]';
+    return 'bg-[#2A82C7] hover:bg-[#15497E]';
   };
 
   // Obtener colores y estilos para el indicador de stock
@@ -205,7 +205,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     };
 
     return (
-      <div className="mt-2 text-[#D4F5E6]/90 bg-black/10 rounded-md p-2 text-xs">
+      <div className="mt-2 text-[#F8F9FA]/90 bg-black/10 rounded-md p-2 text-xs">
         <div className="font-medium mb-1 flex items-center justify-between">
           <div className="flex items-center">
             <PackagePlus size={14} className="mr-1" />
@@ -214,7 +214,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {hasMoreItems && (
             <Button
               variant="ghost"
-              className="h-5 px-1 py-0 text-[10px] text-[#D4F5E6]/80 hover:bg-white/10"
+              className="h-5 px-1 py-0 text-[10px] text-[#F8F9FA]/80 hover:bg-white/10"
               onClick={toggleExpand}
             >
               {expandedCombo ? 'Ver menos' : `Ver todos (${comboItems.length})`}
@@ -230,7 +230,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           ))}
         </ul>
         {!expandedCombo && hasMoreItems && (
-          <div className="mt-1 text-center text-[#D4F5E6]/60 text-[10px]">
+          <div className="mt-1 text-center text-[#F8F9FA]/60 text-[10px]">
             +{comboItems.length - initialItemsToShow} productos más
           </div>
         )}
@@ -318,7 +318,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               size="icon"
               className={`absolute top-2 right-2 z-10 bg-white/50 backdrop-blur-md hover:bg-red/70 rounded-full 
                 ${compact ? 'h-7 w-7 sm:h-8 sm:w-8' : 'h-8 w-8'} 
-                ${isFavorite ? 'text-red-500' : 'text-[#00888A]/70'} 
+                ${isFavorite ? 'text-red-500' : 'text-[#15497E]/70'} 
                 transition-all touch-manipulation`}
               onClick={(e) => {
                 e.stopPropagation();
@@ -335,7 +335,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {/* Badge de categoría - Responsivo */}
           <Badge 
             variant="outline" 
-            className={`mb-1 sm:mb-2 text-xs border-[#75D0E0] text-[#D4F5E6] bg-[#75D0E0]/20
+            className={`mb-1 sm:mb-2 text-xs border-[#6C757D] text-[#F8F9FA] bg-[#6C757D]/20
               ${compact ? 'hidden xs:inline-flex' : ''}`}
           >
             {product.subCategoria}
@@ -350,14 +350,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {/* Descripción - Con expansión controlada */}
           {product.descripcion && (
             <div className="relative">
-              <p className={`text-sm text-[#D4F5E6]/80 ${showDescription ? '' : 'line-clamp-2'} 
+              <p className={`text-sm text-[#F8F9FA]/80 ${showDescription ? '' : 'line-clamp-2'} 
                 ${compact ? 'text-xs sm:text-sm mb-1' : 'mb-1 sm:mb-2'}`}>
                 {product.descripcion}
               </p>
               {product.descripcion.length > 100 && (
                 <Button
                   variant="ghost"
-                  className="absolute bottom-0 right-0 h-6 px-1 py-0.5 text-xs text-[#D4F5E6]/80 hover:bg-white/10"
+                  className="absolute bottom-0 right-0 h-6 px-1 py-0.5 text-xs text-[#F8F9FA]/80 hover:bg-white/10"
                   onClick={toggleDescription}
                   aria-label={showDescription ? "Mostrar menos" : "Mostrar más"}
                 >
@@ -383,7 +383,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`${compact ? 'h-8 w-8 sm:h-8 sm:w-8' : 'h-8 w-8'} p-0 text-[#D4F5E6] touch-manipulation`}
+                  className={`${compact ? 'h-8 w-8 sm:h-8 sm:w-8' : 'h-8 w-8'} p-0 text-[#F8F9FA] touch-manipulation`}
                   onClick={(e) => {
                     e.stopPropagation();
                     handleQuantityChange(quantity - 1);
@@ -399,13 +399,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                   value={quantity}
                   onChange={(e) => handleQuantityChange(parseInt(e.target.value) || 1)}
                   onClick={(e) => e.stopPropagation()}
-                  className={`${compact ? 'w-10 sm:w-14 h-8' : 'w-14 h-8'} text-center p-0 border-0 bg-transparent focus:ring-0 text-[#D4F5E6]`}
+                  className={`${compact ? 'w-10 sm:w-14 h-8' : 'w-14 h-8'} text-center p-0 border-0 bg-transparent focus:ring-0 text-[#F8F9FA]`}
                   aria-label="Cantidad"
                 />
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`${compact ? 'h-8 w-8 sm:h-8 sm:w-8' : 'h-8 w-8'} p-0 text-[#D4F5E6] touch-manipulation`}
+                  className={`${compact ? 'h-8 w-8 sm:h-8 sm:w-8' : 'h-8 w-8'} p-0 text-[#F8F9FA] touch-manipulation`}
                   onClick={(e) => {
                     e.stopPropagation();
                     handleQuantityChange(quantity + 1);

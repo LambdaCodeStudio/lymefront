@@ -1,40 +1,81 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, User, Menu, X, LogOut, Search, Settings, ClipboardList, Users, Clock } from 'lucide-react';
-import { useAuthContext } from '@/components/auth/AuthProvider';
+import { ShoppingCart, User, Menu, X, LogOut, Search, Settings, ClipboardList, BookCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCartContext } from '@/providers/CartProvider';
-import { CreateTemporalUserModal } from './CreateTemporalUserModal'; // Importamos el nuevo componente modal
+
+// Interfaz para el usuario
+interface UserData {
+  _id?: string;
+  id?: string;
+  role?: string;
+  secciones?: string;
+  nombre?: string;
+  apellido?: string;
+  usuario?: string;
+  email?: string;
+}
 
 export const ShopNavbar: React.FC = () => {
-  // Removed useAuthContext to fix error
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('userRole');
+    localStorage.removeItem('userSecciones');
     window.location.href = '/login';
   };
+  
   const { items } = useCartContext();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [cartItemCount, setCartItemCount] = useState(0);
   const [searchOpen, setSearchOpen] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
-  
-  // Estado para controlar la visibilidad del modal de creación de usuarios temporales
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [userSecciones, setUserSecciones] = useState<string | null>(null);
+  const [userData, setUserData] = useState<UserData | null>(null);
 
-  // Get user role from localStorage
+  // Obtener información del usuario del localStorage y API
   useEffect(() => {
+    // Recuperar datos del localStorage
     const role = localStorage.getItem('userRole');
+    const secciones = localStorage.getItem('userSecciones');
+    
     setUserRole(role);
+    setUserSecciones(secciones);
+
+    // Intentar obtener datos completos del usuario
+    const fetchUserData = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        const response = await fetch('https://lyme-back.vercel.app/api/auth/me', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setUserData(data);
+          
+          // Actualizar localStorage con datos más recientes
+          if (data.role) localStorage.setItem('userRole', data.role);
+          if (data.secciones) localStorage.setItem('userSecciones', data.secciones);
+          
+          // Actualizar estados con datos frescos
+          setUserRole(data.role);
+          setUserSecciones(data.secciones);
+        }
+      } catch (error) {
+        console.error('Error al obtener datos del usuario:', error);
+      }
+    };
+
+    fetchUserData();
   }, []);
 
-  const isAdmin = userRole === 'admin' || userRole === 'supervisor';
-  const isBasic = userRole === 'basic'; // Usuario básico
-  const isTemporal = userRole === 'temporal'; // Usuario temporal
-  const canViewOrders = isBasic ; // Usuarios que pueden ver "Mis pedidos"
-
+  // Efecto para manejar scroll
   useEffect(() => {
     const handleScroll = () => {
       setScrolled(window.scrollY > 10);
@@ -44,17 +85,26 @@ export const ShopNavbar: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Efecto para actualizar contador de carrito
   useEffect(() => {
     setCartItemCount(items.reduce((acc, item) => acc + item.quantity, 0));
   }, [items]);
+
+  // Determinar permisos según rol
+  const isAdmin = userRole === 'admin';
+  const isSupervisorDeSupervisores = userRole === 'supervisor_de_supervisores';
+  const isSupervisor = userRole === 'supervisor';
+  const isOperario = userRole === 'operario';
+  const canAccessAdmin = isAdmin || isSupervisorDeSupervisores;
+  const canViewOrders = true; // Todos los roles pueden ver sus pedidos
 
   return (
     <>
       <header 
         className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
           scrolled 
-            ? 'bg-[#00888A] bg-opacity-95 backdrop-blur-lg shadow-lg py-2' 
-            : 'bg-gradient-to-r from-[#00888A]/90 to-[#50C3AD]/90 backdrop-blur-md py-4'
+            ? 'bg-[#15497E] bg-opacity-95 backdrop-blur-lg shadow-lg py-2' 
+            : 'bg-gradient-to-r from-[#15497E]/90 to-[#2A82C7]/90 backdrop-blur-md py-4'
         }`}
       >
         <div className="container mx-auto px-4">
@@ -63,7 +113,7 @@ export const ShopNavbar: React.FC = () => {
             <div className="flex items-center">
               <a href="/shop" className="flex items-center">
                 <span className="text-2xl font-bold text-white">
-                  LYME<span className="text-[#D4F5E6]"> S.A</span>
+                  LYME<span className="text-[#F8F9FA]"> S.A</span>
                 </span>
               </a>
             </div>
@@ -72,46 +122,55 @@ export const ShopNavbar: React.FC = () => {
             <nav className="hidden md:flex items-center space-x-6">
               <a 
                 href="/shop" 
-                className="text-white hover:text-[#D4F5E6] transition-colors text-sm font-medium uppercase tracking-wide"
+                className="text-white hover:text-[#F8F9FA] transition-colors text-sm font-medium uppercase tracking-wide"
               >
                 Inicio
               </a>
-              <a 
-                href="/shop?category=limpieza" 
-                className="text-white hover:text-[#D4F5E6] transition-colors text-sm font-medium uppercase tracking-wide"
-              >
-                Limpieza
-              </a>
-              <a 
-                href="/shop?category=mantenimiento" 
-                className="text-white hover:text-[#D4F5E6] transition-colors text-sm font-medium uppercase tracking-wide"
-              >
-                Mantenimiento
-              </a>
+              
+              {/* Solo mostrar Limpieza si tiene permisos para esta sección */}
+              {(userSecciones === 'limpieza' || userSecciones === 'ambos') && (
+                <a 
+                  href="/shop?category=limpieza" 
+                  className="text-white hover:text-[#F8F9FA] transition-colors text-sm font-medium uppercase tracking-wide"
+                >
+                  Limpieza
+                </a>
+              )}
+              
+              {/* Solo mostrar Mantenimiento si tiene permisos para esta sección */}
+              {(userSecciones === 'mantenimiento' || userSecciones === 'ambos') && (
+                <a 
+                  href="/shop?category=mantenimiento" 
+                  className="text-white hover:text-[#F8F9FA] transition-colors text-sm font-medium uppercase tracking-wide"
+                >
+                  Mantenimiento
+                </a>
+              )}
+              
               <a 
                 href="/shop?view=favorites" 
-                className="text-white hover:text-[#D4F5E6] transition-colors text-sm font-medium uppercase tracking-wide"
+                className="text-white hover:text-[#F8F9FA] transition-colors text-sm font-medium uppercase tracking-wide"
               >
                 Favoritos
               </a>
               
-              {/* Sólo mostrar "Mis Pedidos" para usuarios básicos y temporales */}
+              {/* Todos pueden ver sus pedidos */}
               {canViewOrders && (
                 <a 
                   href="/orders" 
-                  className="text-white hover:text-[#D4F5E6] transition-colors text-sm font-medium uppercase tracking-wide"
+                  className="text-white hover:text-[#F8F9FA] transition-colors text-sm font-medium uppercase tracking-wide"
                 >
                   Mis Pedidos
                 </a>
               )}
               
-              {/* Enlace para administrar usuarios temporales - visible sólo para usuarios básicos */}
-              {isBasic && (
+              {/* Supervisores tienen acceso a aprobar pedidos */}
+              {isSupervisor && (
                 <a 
-                  href="/temporal-users" 
-                  className="text-white hover:text-[#D4F5E6] transition-colors text-sm font-medium uppercase tracking-wide"
+                  href="/approve-orders" 
+                  className="text-white hover:text-[#F8F9FA] transition-colors text-sm font-medium uppercase tracking-wide"
                 >
-                  Usuarios Temp
+                  Aprobar Pedidos
                 </a>
               )}
             </nav>
@@ -120,53 +179,52 @@ export const ShopNavbar: React.FC = () => {
             <div className="flex items-center space-x-4">
               <button 
                 onClick={() => setSearchOpen(!searchOpen)}
-                className="text-white hover:text-[#D4F5E6] transition-colors"
+                className="text-white hover:text-[#F8F9FA] transition-colors"
                 aria-label="Buscar"
               >
                 <Search className="w-5 h-5" />
               </button>
 
-              {/* Sólo mostrar icono de "Mis Pedidos" para usuarios básicos y temporales */}
+              {/* Mis Pedidos para móvil */}
               {canViewOrders && (
                 <a 
                   href="/orders" 
-                  className="hidden sm:flex text-white hover:text-[#D4F5E6] transition-colors"
+                  className="hidden sm:flex text-white hover:text-[#F8F9FA] transition-colors"
                   aria-label="Mis Pedidos"
                 >
                   <ClipboardList className="w-5 h-5" />
                 </a>
               )}
 
+              {/* Aprobar Pedidos para supervisores */}
+              {isSupervisor && (
+                <a 
+                  href="/approve-orders" 
+                  className="hidden sm:flex text-white hover:text-[#F8F9FA] transition-colors"
+                  aria-label="Aprobar Pedidos"
+                >
+                  <BookCheck className="w-5 h-5" />
+                </a>
+              )}
+
               <a 
                 href="/cart" 
-                className="relative text-white hover:text-[#D4F5E6] transition-colors"
+                className="relative text-white hover:text-[#F8F9FA] transition-colors"
                 aria-label="Carrito"
               >
                 <ShoppingCart className="w-5 h-5" />
                 {cartItemCount > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-[#80CFB0] text-[#00888A] text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                  <span className="absolute -top-2 -right-2 bg-[#FF6B35] text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
                     {cartItemCount}
                   </span>
                 )}
               </a>
 
-              {/* Botón para usuarios básicos */}
-              {isBasic && (
-                <button 
-                  onClick={() => setIsCreateModalOpen(true)}
-                  className="hidden md:flex items-center text-sm font-medium text-white rounded transition-colors"
-                  aria-label="Crear Usuario Temporal"
-                >
-                  <Users className="w-5 h-5" />
-                  <Clock className="w-3 h-3" />
-                </button>
-              )}
-
               <div className="hidden md:flex space-x-2">
-                {isAdmin && (
+                {canAccessAdmin && (
                   <a 
                     href="/admin"
-                    className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-[#80CFB0]/30 hover:bg-[#80CFB0]/40 rounded transition-colors"
+                    className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-[#2A82C7]/30 hover:bg-[#2A82C7]/40 rounded transition-colors"
                   >
                     <Settings className="w-4 h-4 mr-1" />
                     Admin
@@ -204,19 +262,19 @@ export const ShopNavbar: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.2 }}
-            className="fixed top-[60px] left-0 right-0 bg-[#00888A] bg-opacity-95 backdrop-blur-lg z-40 p-4 border-b border-[#50C3AD]/50 shadow-lg"
+            className="fixed top-[60px] left-0 right-0 bg-[#15497E] bg-opacity-95 backdrop-blur-lg z-40 p-4 border-b border-[#2A82C7]/50 shadow-lg"
           >
             <div className="container mx-auto">
               <div className="flex items-center">
                 <Input 
                   type="text" 
                   placeholder="Buscar productos..." 
-                  className="w-full focus:ring-2 focus:ring-[#80CFB0] bg-white/10 border-[#50C3AD] text-white placeholder-white/60"
+                  className="w-full focus:ring-2 focus:ring-[#2A82C7] bg-white/10 border-[#2A82C7] text-white placeholder-white/60"
                   autoFocus
                 />
                 <Button 
                   size="sm" 
-                  className="ml-2 bg-[#D4F5E6] hover:bg-white text-[#00888A]"
+                  className="ml-2 bg-[#FF6B35] hover:bg-[#FF6B35]/90 text-white"
                 >
                   Buscar
                 </Button>
@@ -234,81 +292,74 @@ export const ShopNavbar: React.FC = () => {
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.3 }}
-            className="fixed inset-x-0 top-[60px] bg-[#00888A] bg-opacity-95 backdrop-blur-xl z-40 md:hidden border-b border-[#50C3AD]/50"
+            className="fixed inset-x-0 top-[60px] bg-[#15497E] bg-opacity-95 backdrop-blur-xl z-40 md:hidden border-b border-[#2A82C7]/50"
           >
             <div className="container mx-auto px-4 py-6 flex flex-col space-y-4">
               <a 
                 href="/shop" 
-                className="text-white hover:text-[#D4F5E6] transition-colors py-2 border-b border-[#50C3AD]/30 text-lg"
+                className="text-white hover:text-[#F8F9FA] transition-colors py-2 border-b border-[#2A82C7]/30 text-lg"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Inicio
               </a>
-              <a 
-                href="/shop?category=limpieza" 
-                className="text-white hover:text-[#D4F5E6] transition-colors py-2 border-b border-[#50C3AD]/30 text-lg"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Limpieza
-              </a>
-              <a 
-                href="/shop?category=mantenimiento" 
-                className="text-white hover:text-[#D4F5E6] transition-colors py-2 border-b border-[#50C3AD]/30 text-lg"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Mantenimiento
-              </a>
+              
+              {/* Solo mostrar Limpieza si tiene permisos para esta sección */}
+              {(userSecciones === 'limpieza' || userSecciones === 'ambos') && (
+                <a 
+                  href="/shop?category=limpieza" 
+                  className="text-white hover:text-[#F8F9FA] transition-colors py-2 border-b border-[#2A82C7]/30 text-lg"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Limpieza
+                </a>
+              )}
+              
+              {/* Solo mostrar Mantenimiento si tiene permisos para esta sección */}
+              {(userSecciones === 'mantenimiento' || userSecciones === 'ambos') && (
+                <a 
+                  href="/shop?category=mantenimiento" 
+                  className="text-white hover:text-[#F8F9FA] transition-colors py-2 border-b border-[#2A82C7]/30 text-lg"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Mantenimiento
+                </a>
+              )}
+              
               <a 
                 href="/shop?view=favorites" 
-                className="text-white hover:text-[#D4F5E6] transition-colors py-2 border-b border-[#50C3AD]/30 text-lg"
+                className="text-white hover:text-[#F8F9FA] transition-colors py-2 border-b border-[#2A82C7]/30 text-lg"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Favoritos
               </a>
               
-              {/* Sólo mostrar "Mis Pedidos" en móvil para usuarios básicos y temporales */}
-              {canViewOrders && (
+              {/* Todos pueden ver sus pedidos */}
+              <a 
+                href="/orders" 
+                className="text-white hover:text-[#F8F9FA] transition-colors py-2 border-b border-[#2A82C7]/30 text-lg flex items-center"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <ClipboardList className="w-5 h-5 mr-2" />
+                Mis Pedidos
+              </a>
+              
+              {/* Supervisores tienen acceso a aprobar pedidos */}
+              {isSupervisor && (
                 <a 
-                  href="/orders" 
-                  className="text-white hover:text-[#D4F5E6] transition-colors py-2 border-b border-[#50C3AD]/30 text-lg flex items-center"
+                  href="/approve-orders" 
+                  className="text-white hover:text-[#F8F9FA] transition-colors py-2 border-b border-[#2A82C7]/30 text-lg flex items-center"
                   onClick={() => setIsMenuOpen(false)}
                 >
-                  <ClipboardList className="w-5 h-5 mr-2" />
-                  Mis Pedidos
+                  <BookCheck className="w-5 h-5 mr-2" />
+                  Aprobar Pedidos
                 </a>
-              )}
-              
-              {/* Enlace móvil para usuarios temporales */}
-              {isBasic && (
-                <a 
-                  href="/temporal-users" 
-                  className="text-white hover:text-[#D4F5E6] transition-colors py-2 border-b border-[#50C3AD]/30 text-lg flex items-center"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  <Users className="w-5 h-5 mr-2" />
-                  Usuarios Temporales
-                </a>
-              )}
-              
-              {/* Botón móvil para crear usuario temporal */}
-              {isBasic && (
-                <button 
-                  onClick={() => {
-                    setIsMenuOpen(false);
-                    setIsCreateModalOpen(true);
-                  }}
-                  className="text-white hover:text-[#D4F5E6] transition-colors py-2 border-b border-[#50C3AD]/30 text-lg flex items-center"
-                >
-                  <Clock className="w-5 h-5 mr-2" />
-                  Crear Usuario Temporal
-                </button>
               )}
               
               <div className="pt-4 flex flex-col space-y-3">
-                {isAdmin && (
+                {canAccessAdmin && (
                   <a 
                     href="/admin"
-                    className="flex justify-center items-center py-2 text-white bg-[#80CFB0]/30 hover:bg-[#80CFB0]/40 rounded transition-colors"
+                    className="flex justify-center items-center py-2 text-white bg-[#2A82C7]/30 hover:bg-[#2A82C7]/40 rounded transition-colors"
                     onClick={() => setIsMenuOpen(false)}
                   >
                     <Settings className="w-5 h-5 mr-2" />
@@ -331,12 +382,6 @@ export const ShopNavbar: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Modal para crear usuario temporal */}
-      <CreateTemporalUserModal 
-        isOpen={isCreateModalOpen} 
-        onClose={() => setIsCreateModalOpen(false)} 
-      />
 
       {/* Espacio para que el contenido no quede debajo del navbar */}
       <div className="h-16 md:h-20"></div>

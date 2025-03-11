@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useCartContext } from '@/providers/CartProvider';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -112,6 +112,7 @@ interface User {
   apellido?: string;
   tipo?: string;
   role?: string;
+  secciones?: string;
   createdBy?: string | {
     _id?: string;
     id?: string;
@@ -120,7 +121,6 @@ interface User {
     nombre?: string;
     apellido?: string;
   };
-  isTemporary?: boolean;
 }
 
 export const Cart: React.FC = () => {
@@ -144,18 +144,18 @@ export const Cart: React.FC = () => {
   // Estado para formulario de checkout
   const [orderForm, setOrderForm] = useState({
     notes: '',
-    deliveryDate: '',
     servicio: '',
     seccionDelServicio: ''
   });
   
-  // Estados para manejo de usuario temporal
+  // Estados para manejo de usuario
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [isTemporaryUser, setIsTemporaryUser] = useState<boolean>(false);
-  const [parentUserId, setParentUserId] = useState<string | null>(null);
-  const [parentUserName, setParentUserName] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [userSecciones, setUserSecciones] = useState<string | null>(null);
+  const [supervisorId, setSupervisorId] = useState<string | null>(null);
+  const [supervisorName, setSupervisorName] = useState<string | null>(null);
   
-  // Obtener clientes del usuario al cargar el componente - MEJORADO
+  // Obtener clientes del usuario al cargar el componente
   useEffect(() => {
     async function initializeCart() {
       try {
@@ -194,7 +194,7 @@ export const Cart: React.FC = () => {
     }
   }, [orderComplete]);
 
-  // Función para obtener información del usuario actual - MEJORADA
+  // Función para obtener información del usuario actual
   const fetchCurrentUser = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -202,125 +202,87 @@ export const Cart: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
       
+      // Recuperar información desde localStorage primero (para agilidad)
+      const storedRole = localStorage.getItem('userRole');
+      const storedSecciones = localStorage.getItem('userSecciones');
+      
+      if (storedRole) setUserRole(storedRole);
+      if (storedSecciones) setUserSecciones(storedSecciones);
+      
       const response = await fetch('https://lyme-back.vercel.app/api/auth/me', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
       if (!response.ok) {
-        throw new Error('Error al obtener información del usuario');
+        throw new Error(`Error al obtener información del usuario (${response.status})`);
       }
       
       const userData: User = await response.json();
       setCurrentUser(userData);
       
-      // Determinar si es un usuario temporal
-      const isTemp = userData.role === 'temporal' || userData.tipo === 'temporal';
-      setIsTemporaryUser(isTemp);
+      // Guardar datos frescos en localStorage
+      if (userData.role) {
+        localStorage.setItem('userRole', userData.role);
+        setUserRole(userData.role);
+      }
       
-      // Si es temporal y tiene createdBy, obtener información del usuario básico
-      if (isTemp && userData.createdBy) {
+      if (userData.secciones) {
+        localStorage.setItem('userSecciones', userData.secciones);
+        setUserSecciones(userData.secciones);
+      }
+      
+      // Determinar si es operario y establecer datos del supervisor
+      const isOperario = userData.role === 'operario';
+      
+      if (isOperario && userData.createdBy) {
         // Extraer el ID correctamente, ya sea que createdBy sea un string o un objeto
         const createdById = typeof userData.createdBy === 'object' 
           ? userData.createdBy._id || userData.createdBy.id 
           : userData.createdBy;
         
-        setParentUserId(createdById);
+        setSupervisorId(createdById);
         
-        // Verificar si ya tenemos información del usuario básico en los datos actuales
+        // Verificar si ya tenemos información del supervisor en los datos actuales
         if (typeof userData.createdBy === 'object' && userData.createdBy) {
-          const basicUser = userData.createdBy;
+          const supervisor = userData.createdBy;
           
           // Intentar extraer el nombre del objeto createdBy si contiene la información
-          if (basicUser.nombre || basicUser.apellido || basicUser.email || basicUser.usuario) {
+          if (supervisor.nombre || supervisor.apellido || supervisor.email || supervisor.usuario) {
             const displayName = 
-              basicUser.nombre && basicUser.apellido 
-                ? `${basicUser.nombre} ${basicUser.apellido}`
-                : basicUser.usuario || basicUser.email || 'Usuario Básico';
+              supervisor.nombre && supervisor.apellido 
+                ? `${supervisor.nombre} ${supervisor.apellido}`
+                : supervisor.usuario || supervisor.email || 'Supervisor';
             
-            setParentUserName(displayName);
-            console.log('Información de usuario básico obtenida de datos existentes:', displayName);
+            setSupervisorName(displayName);
+            console.log('Información de supervisor obtenida de datos existentes:', displayName);
             return userData;
           }
         }
         
-        // Si no tenemos la información en los datos actuales, intentar obtenerla a través de los clientes
+        // Si no tenemos la información en los datos actuales, intentar obtenerla
         try {
-          console.log('Obteniendo información del usuario básico a través de sus clientes...');
+          console.log('Obteniendo información del supervisor...');
           
-          // Obtener los clientes del usuario básico para ver si podemos extraer su información
-          const clientesResponse = await fetch(`https://lyme-back.vercel.app/api/cliente/user/${createdById}`, {
+          const supervisorResponse = await fetch(`https://lyme-back.vercel.app/api/auth/users/${createdById}`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           
-          if (clientesResponse.ok) {
-            const clientesData = await clientesResponse.json();
+          if (supervisorResponse.ok) {
+            const supervisorData = await supervisorResponse.json();
+            const displayName = 
+              supervisorData.nombre && supervisorData.apellido 
+                ? `${supervisorData.nombre} ${supervisorData.apellido}`
+                : supervisorData.usuario || supervisorData.email || 'Supervisor';
             
-            // Buscar en los clientes si alguno tiene información poblada del userId
-            if (clientesData && clientesData.length > 0) {
-              // Buscar un cliente que tenga información de usuario poblada
-              const clienteConInfo = clientesData.find(cliente => 
-                cliente.userId && typeof cliente.userId === 'object' && 
-                (cliente.userId.nombre || cliente.userId.email || cliente.userId.usuario)
-              );
-              
-              if (clienteConInfo && clienteConInfo.userId) {
-                const basicUser = clienteConInfo.userId;
-                const displayName = 
-                  basicUser.nombre && basicUser.apellido 
-                    ? `${basicUser.nombre} ${basicUser.apellido}`
-                    : basicUser.usuario || basicUser.email || 'Usuario Básico';
-                
-                setParentUserName(displayName);
-                console.log('Información de usuario básico obtenida de clientes:', displayName);
-                return userData;
-              }
-            }
+            setSupervisorName(displayName);
+            console.log('Información de supervisor obtenida:', displayName);
+          } else {
+            console.log('No se pudo obtener información detallada del supervisor');
+            setSupervisorName(`Supervisor ID: ${createdById.substring(0, 8)}...`);
           }
-          
-          // Si llegamos aquí, intentamos obtener la info del usuario directamente
-          // Intentar con endpoints directos
-          try {
-            const basicUserResponse = await fetch(`https://lyme-back.vercel.app/api/auth/users/${createdById}`, {
-              headers: { 'Authorization': `Bearer ${token}` }
-            });
-            
-            if (basicUserResponse.ok) {
-              const basicUserData = await basicUserResponse.json();
-              const displayName = 
-                basicUserData.nombre && basicUserData.apellido 
-                  ? `${basicUserData.nombre} ${basicUserData.apellido}`
-                  : basicUserData.usuario || basicUserData.email || 'Usuario Básico';
-              
-              setParentUserName(displayName);
-              return userData;
-            }
-            
-            // Intentar endpoint alternativo
-            const altResponse = await fetch(`https://lyme-back.vercel.app/api/user/${createdById}`, {
-              headers: { 'Authorization': `Bearer ${token}` }
-            });
-            
-            if (altResponse.ok) {
-              const altUserData = await altResponse.json();
-              const displayName = 
-                altUserData.nombre && altUserData.apellido 
-                  ? `${altUserData.nombre} ${altUserData.apellido}`
-                  : altUserData.usuario || altUserData.email || 'Usuario Básico';
-              
-              setParentUserName(displayName);
-              return userData;
-            }
-          } catch (error) {
-            console.log('Error al intentar obtener información directa del usuario básico');
-          }
-          
-          // Si llegamos aquí, no pudimos obtener información detallada
-          console.log('No se pudo obtener información detallada del usuario básico');
-          setParentUserName(`Usuario ID: ${createdById.substring(0, 8)}...`);
         } catch (error) {
-          console.error('Error al obtener detalles del usuario básico:', error);
-          // Usar ID parcial para identificación
-          setParentUserName(`Usuario ID: ${createdById.substring(0, 8)}...`);
+          console.error('Error al obtener detalles del supervisor:', error);
+          setSupervisorName(`Supervisor ID: ${createdById.substring(0, 8)}...`);
         }
       }
       
@@ -331,8 +293,8 @@ export const Cart: React.FC = () => {
     }
   };
 
-  // Función para obtener los clientes del usuario adecuado - MEJORADA
-  const fetchClientes = async () => {
+  // Función optimizada para obtener los clientes del usuario
+  const fetchClientes = useCallback(async () => {
     try {
       setCargandoClientes(true);
       setErrorClientes(null);
@@ -345,17 +307,10 @@ export const Cart: React.FC = () => {
       // Determinar qué ID de usuario usar para obtener clientes
       let clientsUserId;
       
-      // Verificación explícita de los valores actuales
-      console.log('Estado al obtener clientes:', {
-        isTemporaryUser,
-        parentUserId,
-        currentUser: currentUser?._id || currentUser?.id
-      });
-      
-      if (isTemporaryUser && parentUserId) {
-        // Si es usuario temporal, usar el ID del usuario básico
-        clientsUserId = parentUserId;
-        console.log('Usando ID de usuario básico para obtener clientes:', clientsUserId);
+      // Si es operario, usar el ID del supervisor
+      if (userRole === 'operario' && supervisorId) {
+        clientsUserId = supervisorId;
+        console.log('Usando ID de supervisor para obtener clientes:', clientsUserId);
       } else if (currentUser) {
         // De lo contrario, usar el ID del usuario actual
         clientsUserId = currentUser._id || currentUser.id;
@@ -364,43 +319,18 @@ export const Cart: React.FC = () => {
         // Si no hay usuario actual (no debería ocurrir), intentar obtenerlo de nuevo
         const userData = await fetchCurrentUser();
         
-        // Si no hay usuario disponible aún, esperamos 500ms e intentamos de nuevo
-        // Esta es una medida de contingencia en caso de que haya problemas de temporización
         if (!userData || (!userData._id && !userData.id)) {
-          console.log('Usuario no disponible aún, esperando...');
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-          // Intentar determinar clientsUserId una vez más
-          if (isTemporaryUser && parentUserId) {
-            clientsUserId = parentUserId;
-          } else if (currentUser) {
-            clientsUserId = currentUser._id || currentUser.id;
-          } else {
-            throw new Error('No se pudo determinar el ID del usuario para obtener clientes');
-          }
-        } else {
-          // Usar datos del usuario que acabamos de obtener
-          const isTemp = userData.role === 'temporal' || userData.tipo === 'temporal';
-          
-          if (isTemp && userData.createdBy) {
-            const createdById = typeof userData.createdBy === 'object' 
-              ? userData.createdBy._id || userData.createdBy.id 
-              : userData.createdBy;
-            
-            clientsUserId = createdById;
-          } else {
-            clientsUserId = userData._id || userData.id;
-          }
+          throw new Error('No se pudo determinar el ID del usuario para obtener clientes');
         }
+        
+        clientsUserId = userData._id || userData.id;
       }
       
       if (!clientsUserId) {
         throw new Error('No se pudo determinar el ID del usuario para obtener clientes');
       }
       
-      console.log('ID final usado para buscar clientes:', clientsUserId);
-      
-      // Ahora, hacemos el fetch de los clientes con el ID determinado
+      // Realizar la solicitud de clientes
       const response = await fetch(`https://lyme-back.vercel.app/api/cliente/user/${clientsUserId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -416,68 +346,34 @@ export const Cart: React.FC = () => {
       
       // Procesar los datos
       const data = await response.json();
-      console.log(`Se obtuvieron ${data.length} clientes para el usuario ${clientsUserId}`);
+      console.log(`Se obtuvieron ${data.length} clientes`);
       
-      // Si no hay clientes pero es un usuario temporal, intentar con un endpoint alternativo
-      if (data.length === 0 && isTemporaryUser && parentUserId) {
-        console.log('No se encontraron clientes, intentando endpoint alternativo');
-        
-        // Intentar obtener directamente todos los clientes y filtrar
-        try {
-          const allClientsResponse = await fetch(`https://lyme-back.vercel.app/api/cliente`, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
-          
-          if (allClientsResponse.ok) {
-            const allClients = await allClientsResponse.json();
-            
-            // Filtrar clientes que pertenecen al usuario básico
-            const filteredClients = allClients.filter(cliente => {
-              // Verificar si userId es un objeto o un string
-              if (typeof cliente.userId === 'object' && cliente.userId !== null) {
-                return cliente.userId._id === parentUserId || cliente.userId.id === parentUserId;
-              } else {
-                return cliente.userId === parentUserId;
-              }
-            });
-            
-            console.log(`Después de filtrar todos los clientes, se encontraron ${filteredClients.length} para el usuario básico`);
-            
-            if (filteredClients.length > 0) {
-              setClientes(filteredClients);
-              
-              // Agrupar clientes por servicio
-              const agrupados = filteredClients.reduce((acc, cliente) => {
-                if (!acc[cliente.servicio]) {
-                  acc[cliente.servicio] = [];
-                }
-                acc[cliente.servicio].push(cliente);
-                return acc;
-              }, {});
-              
-              setClientesAgrupados(agrupados);
-              setClienteSeleccionado(filteredClients[0]._id);
-              setOrderForm(prev => ({
-                ...prev,
-                servicio: filteredClients[0].servicio,
-                seccionDelServicio: filteredClients[0].seccionDelServicio
-              }));
-              
-              setCargandoClientes(false);
-              return; // Salir de la función aquí
-            }
-          }
-        } catch (alternativeError) {
-          console.error('Error al intentar endpoint alternativo:', alternativeError);
-        }
+      // Verificar si hay clientes
+      if (data.length === 0) {
+        setErrorClientes('No hay clientes asignados. Por favor, contacta con administración para que asignen clientes antes de realizar pedidos.');
+        return;
       }
       
-      setClientes(data);
+      // Filtrar clientes según la sección del usuario si es necesario
+      let clientesFiltrados = data;
+      if (userSecciones && userSecciones !== 'ambos') {
+        // Mostrar solo clientes que coincidan con la sección del usuario
+        clientesFiltrados = data.filter(cliente => {
+          const servicioClienteEsLimpieza = cliente.servicio?.toLowerCase() === 'limpieza';
+          const servicioClienteEsMantenimiento = cliente.servicio?.toLowerCase() === 'mantenimiento';
+          
+          if (userSecciones === 'limpieza' && servicioClienteEsLimpieza) return true;
+          if (userSecciones === 'mantenimiento' && servicioClienteEsMantenimiento) return true;
+          return false;
+        });
+        
+        console.log(`Filtrados ${clientesFiltrados.length} clientes por sección ${userSecciones}`);
+      }
+      
+      setClientes(clientesFiltrados);
       
       // Agrupar clientes por servicio
-      const agrupados = data.reduce((acc, cliente) => {
+      const agrupados = clientesFiltrados.reduce((acc, cliente) => {
         if (!acc[cliente.servicio]) {
           acc[cliente.servicio] = [];
         }
@@ -488,15 +384,13 @@ export const Cart: React.FC = () => {
       setClientesAgrupados(agrupados);
       
       // Si hay al menos un cliente, seleccionarlo por defecto
-      if (data.length > 0) {
-        setClienteSeleccionado(data[0]._id);
+      if (clientesFiltrados.length > 0) {
+        setClienteSeleccionado(clientesFiltrados[0]._id);
         setOrderForm(prev => ({
           ...prev,
-          servicio: data[0].servicio,
-          seccionDelServicio: data[0].seccionDelServicio
+          servicio: clientesFiltrados[0].servicio,
+          seccionDelServicio: clientesFiltrados[0].seccionDelServicio
         }));
-      } else {
-        setErrorClientes('No hay clientes asignados. Por favor, contacta con administración para que te asignen clientes antes de realizar pedidos.');
       }
       
     } catch (error) {
@@ -505,7 +399,7 @@ export const Cart: React.FC = () => {
     } finally {
       setCargandoClientes(false);
     }
-  };
+  }, [currentUser, userRole, supervisorId, userSecciones]);
 
   // Función para descargar el remito del pedido creado
   const handleRemitoDownload = async () => {
@@ -589,7 +483,7 @@ export const Cart: React.FC = () => {
     }
   };
   
-  // Procesamiento de pedido - MEJORADO
+  // Procesamiento de pedido
   const processOrder = async () => {
     if (items.length === 0) return;
     if (clientes.length === 0) {
@@ -615,44 +509,16 @@ export const Cart: React.FC = () => {
       let orderUserId;
       let actualUserId = currentUser?._id || currentUser?.id;
       
-      console.log('Estado al procesar pedido:', {
-        isTemporaryUser,
-        parentUserId,
-        currentUserId: actualUserId
-      });
-      
-      // IMPORTANTE: Si es usuario temporal, usar el ID del usuario básico
-      if (isTemporaryUser && parentUserId) {
-        orderUserId = parentUserId;
-        console.log('Usuario temporal: Usando ID de usuario básico para el pedido:', orderUserId);
+      // Si es operario, usar el ID del supervisor
+      if (userRole === 'operario' && supervisorId) {
+        orderUserId = supervisorId;
+        console.log('Usando ID de supervisor para el pedido:', orderUserId);
       } else if (currentUser) {
         orderUserId = actualUserId;
-        console.log('Usuario regular: Usando ID de usuario actual para el pedido:', orderUserId);
+        console.log('Usando ID de usuario actual para el pedido:', orderUserId);
       } else {
-        // Si no hay usuario actual, obtenerlo
-        const userData = await fetchCurrentUser();
-        actualUserId = userData?._id || userData?.id;
-        
-        // Intentar determinar si es usuario temporal después de obtener datos
-        const isTemp = userData?.role === 'temporal' || userData?.tipo === 'temporal';
-        
-        if (isTemp && userData?.createdBy) {
-          // Extraer ID del usuario básico
-          const createdById = typeof userData.createdBy === 'object' 
-            ? userData.createdBy._id || userData.createdBy.id 
-            : userData.createdBy;
-            
-          orderUserId = createdById;
-        } else {
-          orderUserId = actualUserId;
-        }
-        
-        if (!orderUserId) {
-          throw new Error('No se pudo determinar el ID del usuario para el pedido');
-        }
+        throw new Error('No se pudo determinar el ID del usuario para el pedido');
       }
-      
-      console.log('ID final usado para asociar pedido:', orderUserId);
       
       // Formato de los productos para la API
       const productsData = items.map(item => ({
@@ -669,21 +535,25 @@ export const Cart: React.FC = () => {
         throw new Error('Cliente seleccionado no encontrado en la lista de clientes');
       }
       
+      // Estado del pedido (pendiente para operarios, aprobado para supervisores)
+      const estadoPedido = userRole === 'operario' ? 'pendiente' : 'aprobado';
+      
       // Crear objeto de pedido
       const orderData = {
-        userId: orderUserId, // Este es el ID del usuario básico si es temporal
+        userId: orderUserId,
         servicio: clienteObj.servicio || orderForm.servicio || "Sin especificar",
         seccionDelServicio: clienteObj.seccionDelServicio || orderForm.seccionDelServicio || "Sin especificar",
         detalle: orderForm.notes || "Pedido creado desde la tienda web",
         productos: productsData,
-        // Información más detallada si el pedido lo hizo un usuario temporal
-        metadata: isTemporaryUser ? {
-          creadoPorUsuarioTemporal: true,
-          usuarioTemporalId: actualUserId,
-          usuarioTemporalNombre: currentUser?.nombre || currentUser?.usuario || currentUser?.email,
+        estado: estadoPedido,
+        // Si es pedido realizado por operario
+        metadata: userRole === 'operario' ? {
+          creadoPorOperario: true,
+          operarioId: actualUserId,
+          operarioNombre: currentUser?.nombre || currentUser?.usuario || currentUser?.email,
           fechaCreacion: new Date().toISOString(),
-          usuarioBasicoId: parentUserId,
-          usuarioBasicoNombre: parentUserName
+          supervisorId: supervisorId,
+          supervisorNombre: supervisorName
         } : undefined
       };
       
@@ -712,7 +582,8 @@ export const Cart: React.FC = () => {
       console.log('Pedido creado exitosamente:', {
         id: pedidoCreado._id,
         asignadoA: orderUserId,
-        esUsuarioTemporal: isTemporaryUser
+        estado: estadoPedido,
+        esOperario: userRole === 'operario'
       });
       
       // Pedido creado correctamente
@@ -721,8 +592,8 @@ export const Cart: React.FC = () => {
       
       // Notificar al usuario
       if (addNotification) {
-        if (isTemporaryUser && parentUserName) {
-          addNotification(`Pedido realizado exitosamente a nombre de ${parentUserName}`, 'success');
+        if (userRole === 'operario' && supervisorName) {
+          addNotification(`Pedido enviado para aprobación de ${supervisorName}`, 'success');
         } else {
           addNotification('Pedido realizado exitosamente', 'success');
         }
@@ -746,16 +617,16 @@ export const Cart: React.FC = () => {
         <ShopNavbar />
         <div className="container mx-auto px-4 py-8">
           <div className="flex flex-col items-center justify-center py-16">
-            <div className="bg-[#50C3AD]/30 backdrop-blur-md rounded-full p-6 mb-6 shadow-lg shadow-[#00888A]/20">
-              <ShoppingCart className="h-16 w-16 text-[#D4F5E6]" />
+            <div className="bg-[#15497E]/30 backdrop-blur-md rounded-full p-6 mb-6 shadow-lg shadow-[#15497E]/20">
+              <ShoppingCart className="h-16 w-16 text-[#F8F9FA]" />
             </div>
-            <h2 className="text-2xl font-semibold mb-4 text-[#D4F5E6]">Tu carrito está vacío</h2>
-            <p className="text-[#75D0E0] mb-8 text-center max-w-md">
+            <h2 className="text-2xl font-semibold mb-4 text-[#F8F9FA]">Tu carrito está vacío</h2>
+            <p className="text-[#6C757D] mb-8 text-center max-w-md">
               Parece que aún no has agregado productos a tu carrito. 
               Explora nuestro catálogo y encuentra lo que necesitas.
             </p>
             <Button 
-              className="bg-[#00888A] hover:bg-[#50C3AD] text-white shadow-md shadow-[#00888A]/20"
+              className="bg-[#15497E] hover:bg-[#2A82C7] text-white shadow-md shadow-[#15497E]/20"
               onClick={() => window.location.href = '/shop'}
             >
               <ArrowLeft className="mr-2 h-4 w-4" />
@@ -778,22 +649,30 @@ export const Cart: React.FC = () => {
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5 }}
-              className="bg-gradient-to-r from-[#00888A]/40 to-[#50C3AD]/40 backdrop-blur-md border border-[#80CFB0] p-8 rounded-2xl text-center shadow-lg shadow-[#00888A]/10"
+              className="bg-gradient-to-r from-[#15497E]/40 to-[#2A82C7]/40 backdrop-blur-md border border-[#2A82C7] p-8 rounded-2xl text-center shadow-lg shadow-[#15497E]/10"
             >
               <div className="bg-green-500 rounded-full h-20 w-20 flex items-center justify-center mx-auto mb-6 shadow-lg shadow-green-500/30">
                 <Check className="h-10 w-10 text-white" />
               </div>
-              <h2 className="text-2xl font-bold mb-4 text-[#D4F5E6]">¡Pedido realizado con éxito!</h2>
-              <p className="text-[#75D0E0] mb-6">
-                Hemos recibido tu solicitud. El equipo de administración revisará tu pedido y te contactará pronto.
-              </p>
+              <h2 className="text-2xl font-bold mb-4 text-[#F8F9FA]">¡Pedido realizado con éxito!</h2>
               
-              {/* Mostrar información del usuario básico si es un usuario temporal */}
-              {isTemporaryUser && parentUserName && (
-                <div className="mb-6 p-3 bg-white/10 border border-[#80CFB0] rounded-lg">
-                  <p className="flex items-center justify-center text-[#D4F5E6]">
+              {userRole === 'operario' ? (
+                <p className="text-[#6C757D] mb-6">
+                  Tu pedido ha sido enviado a tu supervisor para su aprobación. 
+                  Te notificaremos cuando sea procesado.
+                </p>
+              ) : (
+                <p className="text-[#6C757D] mb-6">
+                  Hemos recibido tu solicitud. El equipo de administración revisará tu pedido y te contactará pronto.
+                </p>
+              )}
+              
+              {/* Mostrar información del supervisor si es operario */}
+              {userRole === 'operario' && supervisorName && (
+                <div className="mb-6 p-3 bg-white/10 border border-[#2A82C7] rounded-lg">
+                  <p className="flex items-center justify-center text-[#F8F9FA]">
                     <UserCircle2 className="h-4 w-4 mr-2" />
-                    Pedido realizado a nombre de: <span className="font-bold ml-1">{parentUserName}</span>
+                    Pedido enviado a: <span className="font-bold ml-1">{supervisorName}</span>
                   </p>
                 </div>
               )}
@@ -801,7 +680,7 @@ export const Cart: React.FC = () => {
               {/* Botones de acción */}
               <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 justify-center mb-6">
                 <Button 
-                  className="bg-[#00888A] hover:bg-[#50C3AD] text-white shadow-md shadow-[#00888A]/20"
+                  className="bg-[#15497E] hover:bg-[#2A82C7] text-white shadow-md shadow-[#15497E]/20"
                   onClick={handleRemitoDownload}
                   disabled={isDownloadingRemito}
                 >
@@ -815,7 +694,7 @@ export const Cart: React.FC = () => {
                 
                 <Button 
                   variant="outline"
-                  className="border-[#80CFB0] text-[#D4F5E6] hover:bg-[#00888A]/20"
+                  className="border-[#2A82C7] text-[#F8F9FA] hover:bg-[#15497E]/20"
                   onClick={() => window.location.href = '/shop'}
                 >
                   Volver a la tienda
@@ -823,9 +702,9 @@ export const Cart: React.FC = () => {
               </div>
               
               {/* Contador */}
-              <div className="bg-white/10 border border-[#80CFB0]/50 rounded-lg p-3 inline-flex items-center">
-                <Clock className="h-4 w-4 mr-2 text-[#D4F5E6]" />
-                <span className="text-[#D4F5E6]">
+              <div className="bg-white/10 border border-[#2A82C7]/50 rounded-lg p-3 inline-flex items-center">
+                <Clock className="h-4 w-4 mr-2 text-[#F8F9FA]" />
+                <span className="text-[#F8F9FA]">
                   Volviendo a la tienda en <span className="font-bold">{countdown}</span> segundos
                 </span>
               </div>
@@ -841,18 +720,18 @@ export const Cart: React.FC = () => {
       <ShopNavbar />
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-3xl font-bold mb-8 flex items-center text-[#D4F5E6]">
+          <h1 className="text-3xl font-bold mb-8 flex items-center text-[#F8F9FA]">
             <ShoppingCart className="mr-3 h-8 w-8" />
             Tu Carrito
           </h1>
           
-          {/* Mostrar banner informativo para usuarios temporales */}
-          {isTemporaryUser && parentUserName && (
-            <Alert className="mb-6 bg-[#00888A]/30 border-[#50C3AD] shadow-md">
-              <UserCircle2 className="h-5 w-5 text-[#D4F5E6]" />
-              <AlertDescription className="ml-2 text-[#D4F5E6]">
-                Estás realizando un pedido a nombre de <span className="font-bold">{parentUserName}</span>. 
-                Los clientes mostrados y el pedido se asignarán a esta cuenta.
+          {/* Mostrar banner informativo para operarios */}
+          {userRole === 'operario' && supervisorName && (
+            <Alert className="mb-6 bg-[#15497E]/30 border-[#2A82C7] shadow-md">
+              <UserCircle2 className="h-5 w-5 text-[#F8F9FA]" />
+              <AlertDescription className="ml-2 text-[#F8F9FA]">
+                Estás realizando un pedido como operario. 
+                El pedido será enviado a <span className="font-bold">{supervisorName}</span> para su aprobación.
               </AlertDescription>
             </Alert>
           )}
@@ -869,22 +748,22 @@ export const Cart: React.FC = () => {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, x: -100 }}
-                        className="bg-gradient-to-r from-[#00888A]/40 to-[#50C3AD]/40 backdrop-blur-sm border border-[#80CFB0] rounded-lg overflow-hidden shadow-md"
+                        className="bg-gradient-to-r from-[#15497E]/40 to-[#2A82C7]/40 backdrop-blur-sm border border-[#2A82C7] rounded-lg overflow-hidden shadow-md"
                       >
                         <div className="p-4 flex gap-4">
-                          {/* Imagen del producto - MEJORADO CON CARTITEMIMAGE */}
-                          <div className="w-20 h-20 bg-white/10 rounded-md overflow-hidden flex-shrink-0 border border-[#80CFB0]/30">
+                          {/* Imagen del producto */}
+                          <div className="w-20 h-20 bg-white/10 rounded-md overflow-hidden flex-shrink-0 border border-[#2A82C7]/30">
                             <CartItemImage item={item} />
                           </div>
                           
                           {/* Información del producto */}
                           <div className="flex-grow">
                             <div className="flex justify-between">
-                              <h3 className="font-medium text-lg text-[#D4F5E6]">{item.name}</h3>
+                              <h3 className="font-medium text-lg text-[#F8F9FA]">{item.name}</h3>
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-8 w-8 p-0 text-[#D4F5E6]/60 hover:text-red-400 hover:bg-transparent"
+                                className="h-8 w-8 p-0 text-[#F8F9FA]/60 hover:text-red-400 hover:bg-transparent"
                                 onClick={() => removeItem(item.id)}
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -893,17 +772,17 @@ export const Cart: React.FC = () => {
                             
                             {/* Categoría */}
                             {item.category && (
-                              <p className="text-sm text-[#75D0E0] capitalize">
+                              <p className="text-sm text-[#6C757D] capitalize">
                                 {item.category} {item.subcategory && `- ${item.subcategory}`}
                               </p>
                             )}
                             
                             <div className="flex justify-between items-center mt-2">
-                              <div className="flex items-center space-x-1 bg-white/10 rounded-md border border-[#80CFB0]/30">
+                              <div className="flex items-center space-x-1 bg-white/10 rounded-md border border-[#2A82C7]/30">
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  className="h-8 w-8 p-0 text-[#D4F5E6]"
+                                  className="h-8 w-8 p-0 text-[#F8F9FA]"
                                   onClick={() => handleQuantityChange(item.id, item.quantity - 1)}
                                 >
                                   <Minus className="h-3 w-3" />
@@ -913,12 +792,12 @@ export const Cart: React.FC = () => {
                                   min="1"
                                   value={item.quantity}
                                   onChange={(e) => handleQuantityChange(item.id, parseInt(e.target.value) || 1)}
-                                  className="w-16 h-8 text-center p-0 border-0 bg-transparent focus:ring-0 text-[#D4F5E6]"
+                                  className="w-16 h-8 text-center p-0 border-0 bg-transparent focus:ring-0 text-[#F8F9FA]"
                                 />
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  className="h-8 w-8 p-0 text-[#D4F5E6]"
+                                  className="h-8 w-8 p-0 text-[#F8F9FA]"
                                   onClick={() => handleQuantityChange(item.id, item.quantity + 1)}
                                 >
                                   <Plus className="h-3 w-3" />
@@ -926,8 +805,8 @@ export const Cart: React.FC = () => {
                               </div>
                               
                               <div className="text-right">
-                                <div className="text-lg font-semibold text-[#D4F5E6]">${(item.price * item.quantity).toFixed(2)}</div>
-                                <div className="text-xs text-[#75D0E0]">${item.price.toFixed(2)} por unidad</div>
+                                <div className="text-lg font-semibold text-[#F8F9FA]">${(item.price * item.quantity).toFixed(2)}</div>
+                                <div className="text-xs text-[#6C757D]">${item.price.toFixed(2)} por unidad</div>
                               </div>
                             </div>
                           </div>
@@ -942,14 +821,14 @@ export const Cart: React.FC = () => {
                     className="space-y-6"
                   >
                     {/* Selector de clientes */}
-                    <Card className="bg-gradient-to-r from-[#00888A]/40 to-[#50C3AD]/40 backdrop-blur-sm border-[#80CFB0] shadow-md">
-                      <CardHeader className="border-b border-[#80CFB0]/50">
-                        <CardTitle className="text-[#D4F5E6]">Seleccionar Cliente</CardTitle>
+                    <Card className="bg-gradient-to-r from-[#15497E]/40 to-[#2A82C7]/40 backdrop-blur-sm border-[#2A82C7] shadow-md">
+                      <CardHeader className="border-b border-[#2A82C7]/50">
+                        <CardTitle className="text-[#F8F9FA]">Seleccionar Cliente</CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-4 pt-6">
                         {cargandoClientes ? (
                           <div className="py-3 flex justify-center">
-                            <Loader2 className="h-6 w-6 animate-spin text-[#D4F5E6]" />
+                            <Loader2 className="h-6 w-6 animate-spin text-[#F8F9FA]" />
                           </div>
                         ) : errorClientes ? (
                           <Alert className="bg-red-900/30 border-red-400">
@@ -970,7 +849,7 @@ export const Cart: React.FC = () => {
                             <div className="flex justify-center mt-6">
                               <Button 
                                 onClick={() => window.location.href = '/shop'}
-                                className="bg-[#00888A] hover:bg-[#50C3AD] text-white"
+                                className="bg-[#15497E] hover:bg-[#2A82C7] text-white"
                               >
                                 <ArrowLeft className="mr-2 h-4 w-4" />
                                 Volver a la tienda
@@ -984,11 +863,11 @@ export const Cart: React.FC = () => {
                               {cargandoClientes && <Loader2 className="ml-2 h-3 w-3 animate-spin text-white/70" />}
                             </Label>
                             
-                            {/* Indicador de usuario básico para temporales */}
-                            {isTemporaryUser && parentUserName && (
-                              <div className="text-xs text-[#D4F5E6] mb-2 flex items-center">
-                                <UserCircle2 className="h-3 w-3 mr-1 text-[#50C3AD]" />
-                                Mostrando clientes de: {parentUserName}
+                            {/* Indicador de operario/supervisor */}
+                            {userRole === 'operario' && supervisorName && (
+                              <div className="text-xs text-[#F8F9FA] mb-2 flex items-center">
+                                <UserCircle2 className="h-3 w-3 mr-1 text-[#2A82C7]" />
+                                Mostrando clientes de: {supervisorName}
                               </div>
                             )}
                             
@@ -999,15 +878,15 @@ export const Cart: React.FC = () => {
                                 disabled={cargandoClientes}
                               >
                                 <SelectTrigger 
-                                  className="w-full bg-white/10 border-2 border-[#50C3AD] rounded-md text-white"
+                                  className="w-full bg-white/10 border-2 border-[#2A82C7] rounded-md text-white"
                                 >
                                   <SelectValue placeholder="Selecciona un cliente" />
                                 </SelectTrigger>
-                                <SelectContent className="max-h-80 overflow-y-auto bg-[#00888A] border-[#50C3AD]">
+                                <SelectContent className="max-h-80 overflow-y-auto bg-[#15497E] border-[#2A82C7]">
                                   {Object.entries(clientesAgrupados).map(([servicio, clientesServicio]) => (
                                     <div key={servicio} className="px-1 py-1">
                                       {/* Encabezado de grupo de servicio */}
-                                      <div className="flex items-center px-2 py-1.5 text-xs uppercase tracking-wider font-semibold bg-[#50C3AD]/30 text-[#D4F5E6] rounded mb-1">
+                                      <div className="flex items-center px-2 py-1.5 text-xs uppercase tracking-wider font-semibold bg-[#2A82C7]/30 text-[#F8F9FA] rounded mb-1">
                                         <Building className="h-3 w-3 mr-2" />
                                         {servicio}
                                       </div>
@@ -1018,17 +897,17 @@ export const Cart: React.FC = () => {
                                           <SelectItem 
                                             key={cliente._id} 
                                             value={cliente._id}
-                                            className="focus:bg-[#50C3AD]/50 data-[state=checked]:bg-[#50C3AD] data-[state=checked]:text-white"
+                                            className="focus:bg-[#2A82C7]/50 data-[state=checked]:bg-[#2A82C7] data-[state=checked]:text-white"
                                           >
                                             <div className="flex items-center">
                                               {cliente.seccionDelServicio ? (
                                                 <>
-                                                  <MapPin className="h-3 w-3 mr-2 text-[#D4F5E6]/70" />
+                                                  <MapPin className="h-3 w-3 mr-2 text-[#F8F9FA]/70" />
                                                   <span>{cliente.seccionDelServicio}</span>
                                                 </>
                                               ) : (
                                                 <>
-                                                  <Check className="h-3 w-3 mr-2 text-[#D4F5E6]/70" />
+                                                  <Check className="h-3 w-3 mr-2 text-[#F8F9FA]/70" />
                                                   <span>Principal</span>
                                                 </>
                                               )}
@@ -1047,17 +926,17 @@ export const Cart: React.FC = () => {
                               <motion.div 
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className="mt-4 p-3 rounded-md bg-white/10 border border-[#50C3AD]/50 backdrop-blur-sm"
+                                className="mt-4 p-3 rounded-md bg-white/10 border border-[#2A82C7]/50 backdrop-blur-sm"
                               >
-                                <div className="text-sm text-[#D4F5E6]">
+                                <div className="text-sm text-[#F8F9FA]">
                                   <p className="flex items-center">
-                                    <Building className="w-4 h-4 mr-2 text-[#50C3AD]" />
+                                    <Building className="w-4 h-4 mr-2 text-[#2A82C7]" />
                                     <span className="font-medium">Servicio:</span>
                                     <span className="ml-1">{orderForm.servicio}</span>
                                   </p>
                                   {orderForm.seccionDelServicio && (
                                     <p className="flex items-center mt-1">
-                                      <MapPin className="w-4 h-4 mr-2 text-[#50C3AD]" />
+                                      <MapPin className="w-4 h-4 mr-2 text-[#2A82C7]" />
                                       <span className="font-medium">Sección:</span>
                                       <span className="ml-1">{orderForm.seccionDelServicio}</span>
                                     </p>
@@ -1070,29 +949,17 @@ export const Cart: React.FC = () => {
                       </CardContent>
                     </Card>
                     
-                    <Card className="bg-gradient-to-r from-[#00888A]/40 to-[#50C3AD]/40 backdrop-blur-sm border-[#80CFB0] shadow-md">
-                      <CardHeader className="border-b border-[#80CFB0]/50">
-                        <CardTitle className="text-[#D4F5E6]">Información del pedido</CardTitle>
+                    <Card className="bg-gradient-to-r from-[#15497E]/40 to-[#2A82C7]/40 backdrop-blur-sm border-[#2A82C7] shadow-md">
+                      <CardHeader className="border-b border-[#2A82C7]/50">
+                        <CardTitle className="text-[#F8F9FA]">Información del pedido</CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-4 pt-6">
                         <div>
-                          <Label htmlFor="deliveryDate" className="text-[#D4F5E6]">Fecha de entrega deseada</Label>
-                          <Input
-                            id="deliveryDate"
-                            type="date"
-                            className="bg-white/10 border-[#50C3AD] mt-1 text-[#D4F5E6]"
-                            min={new Date().toISOString().split('T')[0]}
-                            value={orderForm.deliveryDate}
-                            onChange={(e) => setOrderForm({...orderForm, deliveryDate: e.target.value})}
-                          />
-                        </div>
-                        
-                        <div>
-                          <Label htmlFor="notes" className="text-[#D4F5E6]">Notas adicionales</Label>
+                          <Label htmlFor="notes" className="text-[#F8F9FA]">Notas adicionales</Label>
                           <Textarea
                             id="notes"
                             placeholder="Instrucciones especiales, ubicación de entrega, etc."
-                            className="bg-white/10 border-[#50C3AD] mt-1 text-[#D4F5E6] placeholder:text-[#D4F5E6]/50"
+                            className="bg-white/10 border-[#2A82C7] mt-1 text-[#F8F9FA] placeholder:text-[#F8F9FA]/50"
                             value={orderForm.notes}
                             onChange={(e) => setOrderForm({...orderForm, notes: e.target.value})}
                           />
@@ -1100,21 +967,21 @@ export const Cart: React.FC = () => {
                       </CardContent>
                     </Card>
                     
-                    <Card className="bg-gradient-to-r from-[#00888A]/40 to-[#50C3AD]/40 backdrop-blur-sm border-[#80CFB0] shadow-md">
-                      <CardHeader className="border-b border-[#80CFB0]/50">
-                        <CardTitle className="text-[#D4F5E6]">Resumen del pedido</CardTitle>
+                    <Card className="bg-gradient-to-r from-[#15497E]/40 to-[#2A82C7]/40 backdrop-blur-sm border-[#2A82C7] shadow-md">
+                      <CardHeader className="border-b border-[#2A82C7]/50">
+                        <CardTitle className="text-[#F8F9FA]">Resumen del pedido</CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-3 pt-6 overflow-y-auto max-h-60">
                         {items.map((item) => (
-                          <div key={item.id} className="flex justify-between py-1 text-[#D4F5E6]">
+                          <div key={item.id} className="flex justify-between py-1 text-[#F8F9FA]">
                             <span>
-                              {item.name} <span className="text-[#75D0E0]">x{item.quantity}</span>
+                              {item.name} <span className="text-[#6C757D]">x{item.quantity}</span>
                             </span>
                             <span>${(item.price * item.quantity).toFixed(2)}</span>
                           </div>
                         ))}
-                        <Separator className="bg-[#80CFB0]/30 my-2" />
-                        <div className="flex justify-between font-bold text-[#D4F5E6]">
+                        <Separator className="bg-[#2A82C7]/30 my-2" />
+                        <div className="flex justify-between font-bold text-[#F8F9FA]">
                           <span>Total:</span>
                           <span>${totalPrice.toFixed(2)}</span>
                         </div>
@@ -1148,7 +1015,7 @@ export const Cart: React.FC = () => {
                 <div className="mt-6 flex justify-between">
                   <Button 
                     variant="outline"
-                    className="border-[#50C3AD] text-[#D4F5E6] hover:bg-[#50C3AD]/20"
+                    className="border-[#2A82C7] text-[#F8F9FA] hover:bg-[#2A82C7]/20"
                     onClick={() => setCheckoutStep(1)}
                   >
                     <ArrowLeft className="mr-2 h-4 w-4" />
@@ -1157,13 +1024,18 @@ export const Cart: React.FC = () => {
                   
                   <Button 
                     onClick={processOrder}
-                    className="bg-[#00888A] hover:bg-[#50C3AD] text-white shadow-md shadow-[#00888A]/20"
+                    className="bg-[#15497E] hover:bg-[#2A82C7] text-white shadow-md shadow-[#15497E]/20"
                     disabled={processingOrder}
                   >
                     {processingOrder ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Procesando...
+                      </>
+                    ) : userRole === 'operario' ? (
+                      <>
+                        <CreditCard className="mr-2 h-4 w-4" />
+                        Enviar para aprobación
                       </>
                     ) : (
                       <>
@@ -1179,35 +1051,38 @@ export const Cart: React.FC = () => {
             {/* Resumen de compra */}
             <div className="w-full lg:w-80 flex-shrink-0">
               <div className="sticky top-20">
-                <Card className="bg-gradient-to-br from-[#00888A]/60 to-[#50C3AD]/60 backdrop-blur-md border border-[#80CFB0] shadow-lg shadow-[#00888A]/10">
-                  <CardHeader className="border-b border-[#80CFB0]/50">
-                    <CardTitle className="text-[#D4F5E6]">Resumen</CardTitle>
+                <Card className="bg-gradient-to-br from-[#15497E]/60 to-[#2A82C7]/60 backdrop-blur-md border border-[#2A82C7] shadow-lg shadow-[#15497E]/10">
+                  <CardHeader className="border-b border-[#2A82C7]/50">
+                    <CardTitle className="text-[#F8F9FA]">Resumen</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4 pt-6">
-                    <div className="flex justify-between text-sm text-[#D4F5E6]">
+                    <div className="flex justify-between text-sm text-[#F8F9FA]">
                       <span>Subtotal:</span>
                       <span>${totalPrice.toFixed(2)}</span>
                     </div>
                     
-                    <div className="flex justify-between text-sm text-[#D4F5E6]">
+                    <div className="flex justify-between text-sm text-[#F8F9FA]">
                       <span>Productos:</span>
                       <span>{totalItems} {totalItems === 1 ? 'item' : 'items'}</span>
                     </div>
                     
-                    {/* Mostrar información del usuario básico para temporales en el resumen */}
-                    {isTemporaryUser && parentUserName && (
-                      <div className="bg-white/10 rounded-md p-2 text-xs text-[#D4F5E6] border border-[#80CFB0]/50">
-                        <div className="flex items-center mb-1 text-[#50C3AD]">
+                    {/* Mostrar información del supervisor para operarios */}
+                    {userRole === 'operario' && supervisorName && (
+                      <div className="bg-white/10 rounded-md p-2 text-xs text-[#F8F9FA] border border-[#2A82C7]/50">
+                        <div className="flex items-center mb-1 text-[#2A82C7]">
                           <UserCircle2 className="h-3 w-3 mr-1" />
-                          <span className="font-medium">Información de usuario</span>
+                          <span className="font-medium">Información de pedido</span>
                         </div>
-                        <p>Pedido a nombre de: <span className="font-medium">{parentUserName}</span></p>
+                        <p>Supervisor: <span className="font-medium">{supervisorName}</span></p>
+                        <p className="text-[#6C757D] text-[10px] mt-1">
+                          El pedido requiere aprobación
+                        </p>
                       </div>
                     )}
                     
-                    <Separator className="bg-[#80CFB0]/30" />
+                    <Separator className="bg-[#2A82C7]/30" />
                     
-                    <div className="flex justify-between font-semibold text-lg text-[#D4F5E6]">
+                    <div className="flex justify-between font-semibold text-lg text-[#F8F9FA]">
                       <span>Total:</span>
                       <span>${totalPrice.toFixed(2)}</span>
                     </div>
@@ -1217,27 +1092,34 @@ export const Cart: React.FC = () => {
                     {checkoutStep === 1 ? (
                       <Button 
                         onClick={() => setCheckoutStep(2)}
-                        className="w-full bg-[#00888A] hover:bg-[#50C3AD] text-white shadow-md shadow-[#00888A]/20"
+                        className="w-full bg-[#15497E] hover:bg-[#2A82C7] text-white shadow-md shadow-[#15497E]/20"
                       >
                         Proceder a confirmar la orden
                       </Button>
                     ) : (
-                      <div className="w-full text-center text-sm text-[#D4F5E6]/90">
+                      <div className="w-full text-center text-sm text-[#F8F9FA]/90">
                         <p>Revisa tu pedido y completa la información requerida.</p>
                       </div>
                     )}
                   </CardFooter>
                 </Card>
                 
-                <div className="mt-4 p-4 bg-gradient-to-br from-[#50C3AD]/20 to-[#75D0E0]/20 backdrop-blur-sm rounded-lg border border-[#80CFB0] shadow-md">
-                  <h3 className="flex items-center text-sm font-medium mb-2 text-[#D4F5E6]">
-                    <Check className="text-[#D4F5E6] mr-2 h-4 w-4" />
+                <div className="mt-4 p-4 bg-gradient-to-br from-[#2A82C7]/20 to-[#6C757D]/20 backdrop-blur-sm rounded-lg border border-[#2A82C7] shadow-md">
+                  <h3 className="flex items-center text-sm font-medium mb-2 text-[#F8F9FA]">
+                    <Check className="text-[#F8F9FA] mr-2 h-4 w-4" />
                     Política de pedidos
                   </h3>
-                  <p className="text-xs text-[#75D0E0]">
-                    Los pedidos realizados están sujetos a revisión y aprobación por el equipo administrativo.
-                    Una vez confirmado, se coordinará la entrega de los productos.
-                  </p>
+                  {userRole === 'operario' ? (
+                    <p className="text-xs text-[#6C757D]">
+                      Los pedidos realizados por operarios requieren aprobación del supervisor 
+                      antes de ser procesados.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-[#6C757D]">
+                      Los pedidos realizados están sujetos a revisión y aprobación por el equipo administrativo.
+                      Una vez confirmado, se coordinará la entrega de los productos.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
