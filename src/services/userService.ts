@@ -47,6 +47,13 @@ export interface CreateUserData {
   ciudad?: string;
 }
 
+// Interfaz para respuesta de login
+export interface LoginResponse {
+  token: string;
+  role: string;
+  user?: AdminUser;
+}
+
 /**
  * Obtener token de autenticación
  */
@@ -63,9 +70,11 @@ export const getAuthToken = (): string | null => {
  * Función base para realizar peticiones al API
  */
 export const fetchApi = async (endpoint: string, options: RequestInit = {}): Promise<any> => {
-  const token = getAuthToken();
+  // Para el login no requerimos token
+  const isLoginEndpoint = endpoint === '/login';
+  const token = !isLoginEndpoint ? getAuthToken() : null;
   
-  if (!token) {
+  if (!isLoginEndpoint && !token) {
     throw new Error('No hay token de autenticación');
   }
   
@@ -73,7 +82,7 @@ export const fetchApi = async (endpoint: string, options: RequestInit = {}): Pro
   
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`,
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
     ...options.headers
   };
   
@@ -85,8 +94,8 @@ export const fetchApi = async (endpoint: string, options: RequestInit = {}): Pro
     
     // Si la respuesta no es exitosa
     if (!response.ok) {
-      // Si la respuesta es 401, redirigir al login
-      if (response.status === 401) {
+      // Si la respuesta es 401, redirigir al login (excepto si estamos en el endpoint de login)
+      if (response.status === 401 && !isLoginEndpoint) {
         localStorage.removeItem('token');
         localStorage.removeItem('userRole');
         window.location.href = '/login';
@@ -101,6 +110,15 @@ export const fetchApi = async (endpoint: string, options: RequestInit = {}): Pro
         throw new Error(`Error ${response.status}: ${response.statusText}`);
       }
       
+      // Personalizar mensajes de error para login
+      if (isLoginEndpoint && response.status === 400) {
+        throw new Error('Usuario o contraseña incorrectos');
+      }
+      
+      if (isLoginEndpoint && response.status === 403) {
+        throw new Error('Su cuenta ha sido desactivada');
+      }
+      
       // Lanzar error con el mensaje del API o un mensaje genérico
       throw Object.assign(
         new Error(errorData.msg || errorData.error || 'Error en la solicitud'),
@@ -112,6 +130,28 @@ export const fetchApi = async (endpoint: string, options: RequestInit = {}): Pro
     return await response.json();
   } catch (error) {
     console.error('Error en fetchApi:', error);
+    throw error;
+  }
+};
+
+/**
+ * Función de login - NUEVA
+ */
+export const login = async (usuario: string, password: string): Promise<LoginResponse> => {
+  try {
+    const response = await fetchApi('/login', {
+      method: 'POST',
+      body: JSON.stringify({ usuario, password })
+    });
+    
+    // Verificar que la respuesta contiene el token y role
+    if (!response.token || !response.role) {
+      throw new Error('Formato de respuesta inválido del servidor');
+    }
+    
+    return response;
+  } catch (error) {
+    console.error('Error de login:', error);
     throw error;
   }
 };
@@ -200,8 +240,19 @@ export const reactivateTemporaryUser = async (): Promise<{expiresAt: string}> =>
   });
 };
 
+/**
+ * Registro de usuario
+ */
+export const register = async (userData: CreateUserData): Promise<AdminUser> => {
+  return await fetchApi('/register', {
+    method: 'POST',
+    body: JSON.stringify(userData)
+  });
+};
+
 // Servicio de usuarios para exportar como objeto completo
 const userService = {
+  login,     
   getAllUsers,
   getUserById,
   createUser,
@@ -211,7 +262,8 @@ const userService = {
   createTemporaryUser,
   getCurrentUser,
   reactivateTemporaryUser,
-  getAuthToken
+  getAuthToken,
+  register    
 };
 
 export default userService;
