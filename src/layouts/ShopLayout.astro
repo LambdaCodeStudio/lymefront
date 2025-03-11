@@ -9,54 +9,87 @@ const { title = 'Tienda Lyme - Productos de Calidad' } = Astro.props;
 ---
 
 <MainLayout title={title}>
-  <!-- Updated background with vibrant color palette -->
-  <div class="min-h-screen bg-gradient-to-br from-[#00888A] via-[#50C3AD] to-[#00888A] text-white !important">
+  <!-- Updated background with nueva paleta de colores moderna -->
+  <div class="min-h-screen bg-gradient-to-br from-[#15497E] via-[#2A82C7] to-[#15497E] text-white !important">
     <slot />
   </div>
 </MainLayout>
 
 <style is:global>
-  /* Force theme for all shop pages with vibrant color palette */
+  /* Force theme for all shop pages with modern color palette */
   body {
-    background-color: #00888A !important; /* Vibrant teal as fallback */
-    color: #ffffff !important;
+    background-color: #15497E !important; /* Azul marino como fallback */
+    color: #F8F9FA !important;
   }
   
   /* Ensure all cards and UI elements have proper contrast */
   .card, .bg-white, .bg-gray-100, .bg-gray-200 {
-    background-color: rgba(80, 195, 173, 0.2) !important; /* #50C3AD with opacity */
-    border-color: rgba(212, 245, 230, 0.2) !important; /* #D4F5E6 with opacity */
+    background-color: rgba(42, 130, 199, 0.2) !important; /* #2A82C7 with opacity */
+    border-color: rgba(248, 249, 250, 0.2) !important; /* #F8F9FA with opacity */
   }
   
   /* Update text colors for better readability with new palette */
   .text-gray-700, .text-gray-800, .text-gray-900, .text-black {
-    color: #D4F5E6 !important; /* Vibrant mint green */
+    color: #F8F9FA !important; /* Blanco/gris muy claro */
+  }
+  
+  .text-gray-500, .text-gray-600 {
+    color: #6C757D !important; /* Gris medio */
   }
   
   /* Additional styles for consistent theming */
   .btn-primary, .bg-primary {
-    background-color: #50C3AD !important; /* Vibrant teal green */
-    border-color: #80CFB0 !important; /* Vibrant sage green */
+    background-color: #2A82C7 !important; /* Azul medio */
+    border-color: #15497E !important; /* Azul marino */
+  }
+  
+  .btn-secondary, .bg-secondary {
+    background-color: #FF6B35 !important; /* Naranja para CTA */
+    border-color: #FF6B35 !important;
   }
   
   .text-primary {
-    color: #D4F5E6 !important; /* Vibrant mint green */
+    color: #F8F9FA !important; /* Blanco/gris muy claro */
+  }
+  
+  .text-secondary {
+    color: #FF6B35 !important; /* Naranja */
   }
   
   /* Ensure inputs and form elements match the theme */
   input, select, textarea {
-    background-color: rgba(212, 245, 230, 0.1) !important;
-    border-color: rgba(80, 195, 173, 0.4) !important;
-    color: #D4F5E6 !important;
+    background-color: rgba(248, 249, 250, 0.1) !important;
+    border-color: rgba(42, 130, 199, 0.4) !important;
+    color: #F8F9FA !important;
   }
   
   input::placeholder, textarea::placeholder {
-    color: rgba(212, 245, 230, 0.6) !important;
+    color: rgba(248, 249, 250, 0.6) !important;
   }
   
   /* Button styling */
   button, .button {
     color: white !important;
   }
-
+  
+  /* Dialog/Modal styling */
+  .dialog, .modal {
+    background-color: #15497E !important;
+    border-color: #2A82C7 !important;
+  }
+  
+  /* Table styling */
+  table {
+    background-color: rgba(21, 73, 126, 0.7) !important;
+    color: #F8F9FA !important;
+  }
+  
+  th, td {
+    border-color: #2A82C7 !important;
+  }
+  
+  /* Shadow effects for modern look */
+  .shadow, .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl {
+    --tw-shadow-color: rgba(21, 73, 126, 0.15) !important;
+  }
 </style>
