@@ -64,6 +64,7 @@ import {
 } from "@/components/ui/select";
 import type { OrderDetailsDialog } from './OrderDetailsDialog';
 import ApprovalConfirmDialog  from './ApprovalConfirmDialog';
+import { Label } from "@/components/ui/label";
 
 // Intentar usar el contexto de notificaciones de forma segura
 let useNotification;

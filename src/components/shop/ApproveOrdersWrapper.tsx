@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 
 // Importación segura de useNotification
 let useNotification;

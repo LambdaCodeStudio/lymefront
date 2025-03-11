@@ -62,6 +62,7 @@ import {
 } from "@/components/ui/tabs";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { ShopNavbar } from './ShopNavbar';
+import { Label } from "@/components/ui/label";
 
 // Intentar usar el contexto de notificaciones de forma segura
 let useNotification;
