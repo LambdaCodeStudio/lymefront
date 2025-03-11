@@ -1,6 +1,6 @@
 // src/hooks/useAuth.ts
 import { useState, useEffect, useCallback } from 'react';
-import  userService from '@/services/userService';
+import userService from '@/services/userService';
 import type { User, LoginResponse, UserRole, CreateUserDTO } from '@/types/users';
 
 interface AuthState {
@@ -9,6 +9,52 @@ interface AuthState {
   loading: boolean;
   error: string | null;
 }
+
+// Utilidad para manejar reintentos con backoff exponencial
+const withRetry = async <T>(
+  fn: () => Promise<T>,
+  retries = 3,
+  backoffMs = 1000
+): Promise<T> => {
+  try {
+    return await fn();
+  } catch (error: any) {
+    // Si no hay más reintentos o no es un error 429, lanzar el error original
+    if (retries <= 0 || !error.response || error.response.status !== 429) {
+      throw error;
+    }
+    
+    console.log(`Error 429 detectado, reintentando en ${backoffMs}ms. Reintentos restantes: ${retries}`);
+    
+    // Esperar según el tiempo de backoff
+    await new Promise(resolve => setTimeout(resolve, backoffMs));
+    
+    // Reintentar con backoff exponencial (duplicar el tiempo de espera)
+    return withRetry(fn, retries - 1, backoffMs * 2);
+  }
+};
+
+// Función para formatear el mensaje de error según el código de respuesta
+const formatErrorMessage = (error: any): string => {
+  if (!error.response) {
+    return error.message || 'Error de conexión';
+  }
+  
+  switch (error.response.status) {
+    case 400:
+      return 'Usuario o contraseña incorrectos';
+    case 401:
+      return 'No autorizado. Verifique sus credenciales.';
+    case 403:
+      return 'Acceso prohibido';
+    case 429:
+      return 'Demasiados intentos. Por favor, espere un momento antes de volver a intentarlo.';
+    case 500:
+      return 'Error en el servidor. Por favor, intente de nuevo más tarde.';
+    default:
+      return error.response.data?.msg || error.message || 'Error desconocido';
+  }
+};
 
 export const useAuth = () => {
   const [auth, setAuth] = useState<AuthState>({
@@ -32,7 +78,7 @@ export const useAuth = () => {
     localStorage.removeItem('userRole'); // También eliminar el rol al cerrar sesión
   };
 
-  // Verificar autenticación al iniciar
+  // Verificar autenticación al iniciar con manejo de reintentos
   const checkAuth = useCallback(async () => {
     try {
       const token = getStoredToken();
@@ -42,7 +88,12 @@ export const useAuth = () => {
         return false;
       }
 
-      const user = await userService.getCurrentUser();
+      // Usar withRetry para manejar posibles errores 429
+      const user = await withRetry(
+        () => userService.getCurrentUser(),
+        2, // Menos reintentos para esta operación
+        1000
+      );
       
       setAuth({
         user,
@@ -52,14 +103,14 @@ export const useAuth = () => {
       });
       
       return true;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error checking auth:', error);
       removeStoredToken();
       setAuth({
         user: null,
         isAuthenticated: false,
         loading: false,
-        error: 'Sesión expirada o inválida'
+        error: formatErrorMessage(error)
       });
       
       return false;
@@ -70,12 +121,17 @@ export const useAuth = () => {
     checkAuth();
   }, [checkAuth]);
 
-  // Función de login actualizada para manejar la respuesta de la API
+  // Función de login actualizada para manejar la respuesta de la API con reintentos
   const login = async (email: string, password: string): Promise<LoginResponse> => {
     try {
       setAuth(prev => ({ ...prev, loading: true, error: null }));
       
-      const response = await userService.login(email, password);
+      // Usar withRetry para manejar errores 429 en el login
+      const response = await withRetry(
+        () => userService.login(email, password),
+        3, // Máximo 3 reintentos
+        1000 // Empezar con 1 segundo de espera
+      );
       
       // Verificar si tenemos token
       if (!response.token) {
@@ -103,9 +159,13 @@ export const useAuth = () => {
           role: response.role
         };
         
-        // Intentar obtener los datos completos del usuario
+        // Intentar obtener los datos completos del usuario (con reintentos)
         try {
-          const fullUserData = await userService.getCurrentUser();
+          const fullUserData = await withRetry(
+            () => userService.getCurrentUser(),
+            2,
+            1000
+          );
           userData = fullUserData;
         } catch (userError) {
           console.warn('No se pudieron cargar los datos completos del usuario:', userError);
@@ -128,12 +188,12 @@ export const useAuth = () => {
         user: userData
       };
     } catch (error: any) {
-      // Actualizar estado con el error
+      // Actualizar estado con el error formateado
       console.error('Error detallado del login:', error);
       setAuth(prev => ({ 
         ...prev, 
         loading: false,
-        error: error.message || 'Error al iniciar sesión'
+        error: formatErrorMessage(error)
       }));
       
       throw error;
@@ -152,13 +212,19 @@ export const useAuth = () => {
     window.location.href = '/login';
   };
 
-  // Función para registrar nuevo usuario
+  // Función para registrar nuevo usuario (con reintentos)
   const register = async (email: string, password: string, role: UserRole = 'basic'): Promise<User> => {
     try {
       setAuth(prev => ({ ...prev, loading: true, error: null }));
       
       const userData: CreateUserDTO = { email, password, role };
-      const user = await userService.register(userData);
+      
+      // Usar withRetry para manejar posibles errores 429
+      const user = await withRetry(
+        () => userService.register(userData),
+        3,
+        1000
+      );
 
       // No autenticamos automáticamente tras el registro
       setAuth(prev => ({ ...prev, loading: false }));
@@ -168,7 +234,7 @@ export const useAuth = () => {
       setAuth(prev => ({ 
         ...prev, 
         loading: false, 
-        error: error.message || 'Error al registrar usuario'
+        error: formatErrorMessage(error)
       }));
       
       throw error;
