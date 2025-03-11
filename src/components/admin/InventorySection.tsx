@@ -54,150 +54,10 @@ import { imageService } from '@/services/imageService';
 import ImageUpload from '@/components/admin/components/ImageUpload';
 import { Switch } from "@/components/ui/switch";
 
-// Importar el ProductImage optimizado (asegúrate de haberlo implementado)
+// Import the optimized ProductImage component
 import OptimizedProductImage from './components/ProductImage';
 
-// COMPONENTE OPTIMIZADO DE IMAGEN DE PRODUCTO
-// Implementa este componente en un archivo separado
-const ProductImage = ({ 
-  productId, 
-  alt = "Product image", 
-  width = 80, 
-  height = 80, 
-  quality = 70, 
-  className = "", 
-  fallbackClassName = "", 
-  containerClassName = "", 
-  useBase64 = false, 
-  priority = false 
-}) => {
-  const [loadState, setLoadState] = useState('loading');
-  const imageRef = useRef(null);
-  const observerRef = useRef(null);
-  const [retryCount, setRetryCount] = useState(0);
-  const [timestamp, setTimestamp] = useState(Date.now());
-  
-  // Construir URL de la imagen con cache busting
-  const imageUrl = useBase64 
-    ? `https://lyme-back.vercel.app/api/producto/${productId}/imagen-base64`
-    : `https://lyme-back.vercel.app/api/producto/${productId}/imagen?quality=${quality}&width=${width}&height=${height}&v=${timestamp}`;
-
-  useEffect(() => {
-    if (!productId) return;
-
-    const loadImage = () => {
-      // Para imágenes base64, se manejaría diferente
-      if (useBase64) {
-        fetch(imageUrl)
-          .then(response => {
-            if (!response.ok) {
-              if (response.status === 204) {
-                setLoadState('notExists');
-                return;
-              }
-              throw new Error('Failed to load image');
-            }
-            return response.json();
-          })
-          .then(() => {
-            setLoadState('loaded');
-          })
-          .catch(() => {
-            setLoadState('error');
-          });
-      } else {
-        // Para imágenes directas, se maneja en el evento onload/onerror
-        setLoadState('loading');
-      }
-    };
-
-    // Cargar inmediatamente si es prioritaria
-    if (priority) {
-      loadImage();
-      return;
-    }
-
-    // Lazy loading con IntersectionObserver
-    if ('IntersectionObserver' in window && imageRef.current) {
-      if (observerRef.current) {
-        observerRef.current.disconnect();
-      }
-
-      observerRef.current = new IntersectionObserver(
-        (entries) => {
-          const [entry] = entries;
-          if (entry.isIntersecting) {
-            loadImage();
-            observerRef.current?.disconnect();
-            observerRef.current = null;
-          }
-        },
-        {
-          rootMargin: '200px', // Precargar cuando esté a 200px de ser visible
-          threshold: 0.01 // Cargar cuando apenas sea visible
-        }
-      );
-
-      observerRef.current.observe(imageRef.current);
-    } else {
-      // Fallback
-      loadImage();
-    }
-
-    return () => {
-      observerRef.current?.disconnect();
-    };
-  }, [productId, imageUrl, priority, useBase64]);
-
-  // Manejar carga correcta
-  const handleImageLoad = () => {
-    setLoadState('loaded');
-    setRetryCount(0);
-  };
-
-  // Manejar error con reintento
-  const handleImageError = () => {
-    if (retryCount < 1) {
-      // Reintentar una vez con un nuevo timestamp
-      setRetryCount(prev => prev + 1);
-      setTimestamp(Date.now());
-    } else {
-      setLoadState('error');
-    }
-  };
-
-  const isLoading = loadState === 'loading';
-  const hasError = loadState === 'error' || loadState === 'notExists';
-
-  return (
-    <div className={`relative ${containerClassName}`} style={{ width, height }}>
-      {/* Placeholder mientras carga o si hay error */}
-      {(isLoading || hasError) && (
-        <div className={`flex items-center justify-center ${fallbackClassName || 'bg-gray-100 rounded-md'}`} 
-          style={{ width, height }}>
-          <ImageIcon className="w-6 h-6 text-gray-400" />
-        </div>
-      )}
-      
-      {/* Solo renderizar si no se usa base64 */}
-      {!useBase64 && (
-        <img
-          ref={imageRef}
-          src={!isLoading ? imageUrl : undefined}
-          alt={alt}
-          width={width}
-          height={height}
-          onLoad={handleImageLoad}
-          onError={handleImageError}
-          className={`${className} ${loadState === 'loaded' ? 'opacity-100' : 'opacity-0'} absolute top-0 left-0 transition-opacity duration-300`}
-          loading="lazy"
-        />
-      )}
-    </div>
-  );
-};
-
-// Definir interfaces según el backend
+// Define interfaces according to the backend
 interface ProductExtended {
   _id: string;
   nombre: string;
@@ -226,7 +86,7 @@ interface PagedResponse<T> {
 }
 
 interface ComboItem {
-  productoId: string | any; // Permitir objetos para facilitar la manipulación
+  productoId: string | any; // Allow objects for easier manipulation
   cantidad: number;
 }
 
@@ -244,7 +104,7 @@ interface FormData {
   imagenPreview?: string | null;
 }
 
-// Subcategorías organizadas por categoría
+// Subcategories organized by category
 const subCategorias: Record<string, Array<{value: string, label: string}>> = {
   limpieza: [
     { value: 'accesorios', label: 'Accesorios' },
@@ -266,12 +126,12 @@ const subCategorias: Record<string, Array<{value: string, label: string}>> = {
   ]
 };
 
-// Definir umbral de stock bajo
+// Define low stock threshold
 const LOW_STOCK_THRESHOLD = 10;
-// Clave para cache de productos
+// Key for products cache
 const PRODUCTS_CACHE_KEY = 'products';
 
-// Componente para input de stock con límite máximo
+// Component for stock input with maximum limit
 const ProductStockInput: React.FC<{
   value: string;
   onChange: (value: string) => void;
@@ -301,7 +161,7 @@ const ProductStockInput: React.FC<{
       return;
     }
     
-    // Para productos de limpieza, el stock mínimo es 1
+    // For cleaning products, minimum stock is 1
     if (categoria === 'limpieza' && numValue < 1) {
       onChange('1');
       return;
@@ -316,7 +176,7 @@ const ProductStockInput: React.FC<{
     }
   };
 
-  // Mostrar advertencia para productos de limpieza
+  // Show warning for cleaning products
   const minStockWarning = categoria === 'limpieza' ? (
     <p className="mt-1 text-xs text-amber-600">
       Para productos de limpieza, el stock mínimo debe ser 1
@@ -343,15 +203,15 @@ const ProductStockInput: React.FC<{
   );
 };
 
-// COMPONENTE DE FILA DE PRODUCTO OPTIMIZADO
+// OPTIMIZED PRODUCT ROW COMPONENT
 const ProductRow = React.memo(({ 
   product, 
   onEdit, 
   onDelete, 
   userSections,
-  isInViewport = false // Nueva prop para optimizar la carga de imágenes
+  isInViewport = false // New prop to optimize image loading
 }) => {
-  // Verificar permisos
+  // Check permissions
   const canEdit = userSections === 'ambos' || product.categoria === userSections;
 
   return (
@@ -367,17 +227,17 @@ const ProductRow = React.memo(({
       <td className="px-6 py-4">
         <div className="flex items-center">
           <div className="flex-shrink-0 h-10 w-10 mr-3">
-            <ProductImage
+            <OptimizedProductImage
               productId={product._id}
               alt={product.nombre}
               width={40}
               height={40}
-              quality={60} // Calidad reducida para mejor rendimiento
+              quality={60} // Reduced quality for better performance
               className="h-10 w-10 rounded-full object-cover border border-[#91BEAD]/30"
               fallbackClassName="h-10 w-10 rounded-full bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30"
               containerClassName="h-10 w-10"
               useBase64={false}
-              priority={isInViewport} // Cargar con prioridad solo si está visible
+              priority={isInViewport} // Load with priority only if visible
               key={`img-${product._id}-${product.hasImage ? 'has-image' : 'no-image'}`}
             />
           </div>
@@ -444,7 +304,7 @@ const ProductRow = React.memo(({
   );
 });
 
-// Función para renderizar indicador de stock
+// Function to render stock indicator
 const renderStockIndicator = (stock: number) => {
   if (stock <= 0) {
     return (
@@ -473,7 +333,7 @@ const renderStockIndicator = (stock: number) => {
   }
 };
 
-// COMPONENTE DE TABLA VIRTUALIZADA
+// VIRTUALIZED TABLE COMPONENT
 const VirtualizedProductTable = ({ 
   products, 
   onEdit, 
@@ -484,8 +344,8 @@ const VirtualizedProductTable = ({
   const rowVirtualizer = useVirtualizer({
     count: products.length,
     getScrollElement: () => tableContainerRef.current,
-    estimateSize: () => 70, // Altura estimada de fila
-    overscan: 5 // Cuántos elementos renderizar antes/después del área visible
+    estimateSize: () => 70, // Estimated row height
+    overscan: 5 // How many items to render before/after the visible area
   });
 
   return (
@@ -555,14 +415,14 @@ const VirtualizedProductTable = ({
   );
 };
 
-// COMPONENTE PARA VISTA MÓVIL OPTIMIZADA
+// OPTIMIZED MOBILE VIEW COMPONENT
 const MobileProductList = React.memo(({ products, onEdit, onDelete, userSections }) => {
   const parentRef = useRef(null);
   
   const virtualizer = useVirtualizer({
     count: products.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 200, // Altura estimada de tarjeta
+    estimateSize: () => 200, // Estimated card height
     overscan: 3
   });
   
@@ -605,9 +465,9 @@ const MobileProductList = React.memo(({ products, onEdit, onDelete, userSections
   );
 });
 
-// COMPONENTE DE TARJETA DE PRODUCTO PARA MÓVIL
+// PRODUCT CARD COMPONENT FOR MOBILE
 const ProductCard = React.memo(({ product, onEdit, onDelete, userSections, isInViewport }) => {
-  // Verificar permisos
+  // Check permissions
   const canEdit = userSections === 'ambos' || product.categoria === userSections;
 
   return (
@@ -640,7 +500,7 @@ const ProductCard = React.memo(({ product, onEdit, onDelete, userSections, isInV
       <CardContent className="p-4 pt-2 pb-3">
         <div className="flex gap-4 mb-3">
           <div className="flex-shrink-0 h-16 w-16">
-            <ProductImage
+            <OptimizedProductImage
               productId={product._id}
               alt={product.nombre}
               width={64}
@@ -716,7 +576,7 @@ const ProductCard = React.memo(({ product, onEdit, onDelete, userSections, isInV
 });
 
 const InventorySection: React.FC = () => {
-  // Inicializar React Query
+  // Initialize React Query
   const queryClient = useQueryClient();
   
   const { addNotification } = useNotification();
@@ -742,31 +602,31 @@ const InventorySection: React.FC = () => {
   const [totalPages, setTotalPages] = useState<number>(1);
   const [isFetching, setIsFetching] = useState<boolean>(false);
 
-  // Estado para combo seleccionado
+  // State for selected combo item
   const [selectedComboItem, setSelectedComboItem] = useState<string>('');
   const [comboItemQuantity, setComboItemQuantity] = useState<number>(1);
 
-  // Estado para la paginación
+  // State for pagination
   const [currentPage, setCurrentPage] = useState<number>(1);
 
-  // Referencias para el scroll en móvil
+  // References for scrolling in mobile
   const mobileListRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLDivElement>(null);
 
-  // Tamaños fijos para cada tipo de dispositivo
+  // Fixed sizes for each device type
   const ITEMS_PER_PAGE_MOBILE = 5;
   const ITEMS_PER_PAGE_DESKTOP = 10;
 
-  // Estado para controlar el ancho de la ventana
+  // State to control window width
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
 
-  // Calculamos dinámicamente itemsPerPage basado en el ancho de la ventana
+  // Dynamically calculate itemsPerPage based on window width
   const itemsPerPage = windowWidth < 768 ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP;
 
-  // Creamos caché para evitar peticiones repetidas al API de imágenes
+  // Create cache to avoid repeated requests to image API
   const imageCache = useRef<Map<string, boolean>>(new Map());
 
-  // Referencia al controlador de aborto para cancelar solicitudes pendientes
+  // Reference to abort controller to cancel pending requests
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const [formData, setFormData] = useState<FormData>({
@@ -783,7 +643,7 @@ const InventorySection: React.FC = () => {
     imagenPreview: null
   });
 
-  // Obtener auth token
+  // Get auth token
   const getAuthToken = useCallback(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('token');
@@ -791,7 +651,7 @@ const InventorySection: React.FC = () => {
     return null;
   }, []);
 
-  // Función para generar clave de caché de productos
+  // Function to generate products cache key
   const getProductsCacheKey = useCallback(
     (page: number, category: string, search: string) => {
       return [PRODUCTS_CACHE_KEY, page, itemsPerPage, category, search];
@@ -799,7 +659,7 @@ const InventorySection: React.FC = () => {
     [itemsPerPage]
   );
 
-  // Función para obtener productos con React Query - Optimizada
+  // Function to fetch products with React Query - Optimized
   const fetchProductsData = useCallback(async (
     page: number, 
     limit: number, 
@@ -812,15 +672,15 @@ const InventorySection: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      // Abortar solicitud anterior si existe
+      // Abort previous request if exists
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
       
-      // Crear nuevo controlador de aborto
+      // Create new abort controller
       abortControllerRef.current = new AbortController();
 
-      // Parámetros de paginación y filtros
+      // Pagination and filter parameters
       const params = new URLSearchParams({
         page: page.toString(),
         limit: limit.toString(),
@@ -847,10 +707,10 @@ const InventorySection: React.FC = () => {
       
       return await response.json();
     } catch (error: any) {
-      // No reportar error si fue cancelado
+      // Don't report error if it was cancelled
       if (error.name === 'AbortError') {
-        console.log('Solicitud cancelada');
-        // Devolvemos un estado vacío en lugar de lanzar un error
+        console.log('Request cancelled');
+        // Return empty state instead of throwing an error
         return {
           items: [],
           page,
@@ -863,16 +723,16 @@ const InventorySection: React.FC = () => {
       }
       
       console.error('Error fetching products:', error);
-      throw new Error(`Error al cargar productos: ${error.message}`);
+      throw new Error(`Error loading products: ${error.message}`);
     } finally {
-      // Limpiar controlador de aborto si la solicitud se completó o falló
+      // Clear abort controller if request completed or failed
       if (abortControllerRef.current?.signal.aborted) {
         abortControllerRef.current = null;
       }
     }
   }, [getAuthToken]);
 
-  // Mejorar la función fetch con reintentos para manejar "failed to fetch"
+  // Improve fetch function with retries to handle "failed to fetch"
   const fetchWithRetry = async (url: string, options: RequestInit, maxRetries = 2) => {
     let retries = 0;
     
@@ -881,41 +741,41 @@ const InventorySection: React.FC = () => {
         const response = await fetch(url, options);
         
         if (!response.ok) {
-          // Si es un error de autenticación, no reintentar
+          // If authentication error, don't retry
           if (response.status === 401) {
-            throw new Error('Error de autenticación');
+            throw new Error('Authentication error');
           }
           
-          throw new Error(`Error HTTP: ${response.status}`);
+          throw new Error(`HTTP Error: ${response.status}`);
         }
         
         return response;
       } catch (error: any) {
-        // Si la solicitud fue cancelada, no reintentar
+        // If request was cancelled, don't retry
         if (error.name === 'AbortError') {
           throw error;
         }
         
         retries++;
-        console.warn(`Intento ${retries}/${maxRetries} fallido: ${error.message}`);
+        console.warn(`Attempt ${retries}/${maxRetries} failed: ${error.message}`);
         
-        // Si es el último intento, lanzar el error
+        // If it's the last attempt, throw the error
         if (retries >= maxRetries) {
           throw error;
         }
         
-        // Esperar antes de reintentar (espera menor y más corta)
+        // Wait before retrying (shorter and faster wait)
         const delay = Math.min(500 * retries, 3000);
-        console.log(`Esperando ${delay}ms antes de reintentar...`);
+        console.log(`Waiting ${delay}ms before retrying...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
     
-    // Por seguridad, aunque nunca debería llegar aquí
+    // For safety, although it should never get here
     throw new Error(`Failed after ${maxRetries} retries`);
   };
 
-  // Usar React Query para cargar productos - Configuración optimizada
+  // Use React Query to load products - Optimized configuration
   const { 
     data, 
     isLoading, 
@@ -926,24 +786,24 @@ const InventorySection: React.FC = () => {
     () => fetchProductsData(currentPage, itemsPerPage, selectedCategory, debouncedSearchTerm),
     {
       keepPreviousData: true,
-      staleTime: 300000, // Aumentado a 5 minutos
-      cacheTime: 3600000, // 1 hora - para mantener datos en caché más tiempo
+      staleTime: 300000, // Increased to 5 minutes
+      cacheTime: 3600000, // 1 hour - to keep data in cache longer
       refetchOnWindowFocus: false,
       refetchOnMount: false,
-      refetchOnReconnect: false, // Deshabilitar auto refresh al reconectar
+      refetchOnReconnect: false, // Disable auto refresh on reconnect
       onSuccess: (data) => {
         setProducts(data.items);
         setTotalItems(data.totalItems);
         setTotalPages(data.totalPages);
         
-        // Extraer productos no combo para selector
+        // Extract non-combo products for selector
         const productOptionsFiltered = data.items.filter(p => !p.esCombo);
         setProductOptions(productOptionsFiltered);
         
-        // Ya no estamos en carga inicial después de la primera carga
+        // No longer in initial load after first load
         setIsInitialLoad(false);
         
-        // Pre-fetch siguiente página si existe
+        // Pre-fetch next page if it exists
         if (data.hasNextPage) {
           queryClient.prefetchQuery(
             getProductsCacheKey(currentPage + 1, selectedCategory, debouncedSearchTerm),
@@ -952,10 +812,10 @@ const InventorySection: React.FC = () => {
         }
       },
       onError: (err: any) => {
-        // No mostrar errores si la solicitud fue cancelada
+        // Don't show errors if request was cancelled
         if (err.name === 'AbortError') return;
         
-        const errorMsg = `Error al cargar productos: ${err.message}`;
+        const errorMsg = `Error loading products: ${err.message}`;
         setError(errorMsg);
         
         if (typeof addNotification === 'function') {
@@ -968,7 +828,7 @@ const InventorySection: React.FC = () => {
     }
   );
 
-  // Mutation para eliminar producto
+  // Mutation to delete product
   const deleteProductMutation = useMutation(
     async (id: string) => {
       const token = getAuthToken();
@@ -985,23 +845,23 @@ const InventorySection: React.FC = () => {
       
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Error al eliminar producto');
+        throw new Error(error.error || 'Error deleting product');
       }
       
       return id;
     },
     {
-      // Actualización optimista del caché
+      // Optimistic update of cache
       onMutate: async (deletedId) => {
-        // Cancelar consultas en curso
+        // Cancel ongoing queries
         await queryClient.cancelQueries(getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm));
         
-        // Guardar el estado anterior
+        // Save previous state
         const previousProducts = queryClient.getQueryData(
           getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm)
         );
         
-        // Actualizar la caché con optimistic update
+        // Update cache with optimistic update
         queryClient.setQueryData(
           getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm),
           (old: any) => {
@@ -1013,11 +873,11 @@ const InventorySection: React.FC = () => {
           }
         );
         
-        // Retornar el estado anterior para rollback si es necesario
+        // Return previous state for rollback if needed
         return { previousProducts };
       },
       onError: (err, id, context: any) => {
-        // Restaurar el estado anterior en caso de error
+        // Restore previous state in case of error
         if (context?.previousProducts) {
           queryClient.setQueryData(
             getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm),
@@ -1025,54 +885,54 @@ const InventorySection: React.FC = () => {
           );
         }
         
-        const errorMsg = `Error al eliminar producto: ${err instanceof Error ? err.message : 'Error desconocido'}`;
+        const errorMsg = `Error deleting product: ${err instanceof Error ? err.message : 'Unknown error'}`;
         setError(errorMsg);
         addNotification(errorMsg, 'error');
       },
       onSuccess: (deletedId) => {
-        // Invalidar todas las consultas de productos para asegurar sincronización
+        // Invalidate all product queries to ensure synchronization
         queryClient.invalidateQueries({
           predicate: (query) => query.queryKey[0] === PRODUCTS_CACHE_KEY,
         });
         
-        // Eliminar imagen de las cachés de imágenes
+        // Remove image from image caches
         imageService.invalidateCache(deletedId);
         imageCache.current.delete(deletedId);
         
-        const successMsg = 'Producto eliminado correctamente';
+        const successMsg = 'Product deleted successfully';
         setSuccessMessage(successMsg);
         addNotification(successMsg, 'success');
         
-        // Limpiar mensaje después de unos segundos
+        // Clear message after a few seconds
         setTimeout(() => setSuccessMessage(''), 5000);
       },
       onSettled: () => {
-        // Cerrar diálogo
+        // Close dialog
         setDeleteDialogOpen(false);
         setProductToDelete(null);
       }
     }
   );
 
-  // Mutation para eliminar imagen
+  // Mutation to delete image
   const deleteImageMutation = useMutation(
     async (productId: string) => {
       return await imageService.deleteImage(productId);
     },
     {
-      // Actualización optimista del caché para la imagen
+      // Optimistic update of cache for image
       onMutate: async (productId) => {
         setIsFetching(true);
         
-        // Cancelar consultas en curso
+        // Cancel ongoing queries
         await queryClient.cancelQueries(getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm));
         
-        // Guardar el estado anterior
+        // Save previous state
         const previousProducts = queryClient.getQueryData(
           getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm)
         );
         
-        // Actualizar optimistamente el caché para mostrar que la imagen se eliminó
+        // Optimistically update cache to show that image was deleted
         queryClient.setQueryData(
           getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm),
           (old: any) => {
@@ -1081,7 +941,7 @@ const InventorySection: React.FC = () => {
             const newData = { ...old };
             newData.items = old.items.map((p: ProductExtended) => {
               if (p._id === productId) {
-                // Marcar que ya no tiene imagen
+                // Mark that it no longer has an image
                 return {
                   ...p,
                   hasImage: false
@@ -1093,11 +953,11 @@ const InventorySection: React.FC = () => {
           }
         );
         
-        // Limpiar cualquier caché de imagen existente
+        // Clear any existing image cache
         imageService.invalidateCache(productId);
         imageCache.current.delete(productId);
         
-        // Actualizar formulario si está abierto
+        // Update form if it's open
         if (editingProduct && editingProduct._id === productId) {
           setFormData(prev => ({
             ...prev,
@@ -1109,7 +969,7 @@ const InventorySection: React.FC = () => {
         return { previousProducts };
       },
       onError: (err, productId, context: any) => {
-        // Restaurar el estado anterior en caso de error
+        // Restore previous state in case of error
         if (context?.previousProducts) {
           queryClient.setQueryData(
             getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm),
@@ -1117,12 +977,12 @@ const InventorySection: React.FC = () => {
           );
         }
         
-        // Mostrar error
-        console.error('Error al eliminar la imagen:', err);
-        addNotification('Error al eliminar la imagen', 'error');
+        // Show error
+        console.error('Error deleting image:', err);
+        addNotification('Error deleting image', 'error');
       },
       onSuccess: (_, productId) => {
-        // Limpiar referencias a la imagen
+        // Clear image references
         if (editingProduct && editingProduct._id === productId) {
           setFormData(prev => ({
             ...prev,
@@ -1130,15 +990,15 @@ const InventorySection: React.FC = () => {
             imagenPreview: null
           }));
           
-          // Actualizar el estado de editingProduct para reflejar el cambio de imagen
+          // Update editingProduct state to reflect image change
           setEditingProduct(prev => prev ? {...prev, hasImage: false} : null);
         }
         
-        // Invalidar cachés de imágenes
+        // Invalidate image caches
         imageService.invalidateCache(productId);
         imageCache.current.delete(productId);
         
-        // Actualizar el estado local de products para mostrar el cambio inmediatamente
+        // Update local products state to show change immediately
         setProducts(prevProducts => 
           prevProducts.map(p => 
             p._id === productId 
@@ -1147,12 +1007,12 @@ const InventorySection: React.FC = () => {
           )
         );
         
-        // Invalidar todas las consultas de productos para asegurar sincronización
+        // Invalidate all product queries to ensure synchronization
         queryClient.invalidateQueries({
           predicate: (query) => query.queryKey[0] === PRODUCTS_CACHE_KEY,
         });
         
-        addNotification('Imagen eliminada correctamente', 'success');
+        addNotification('Image deleted successfully', 'success');
       },
       onSettled: () => {
         setDeleteImageDialogOpen(false);
@@ -1162,7 +1022,7 @@ const InventorySection: React.FC = () => {
     }
   );
 
-  // Mutation para crear/actualizar producto
+  // Mutation to create/update product
   const productMutation = useMutation(
     async (data: { id?: string; payload: any; image?: File }) => {
       const token = getAuthToken();
@@ -1176,7 +1036,7 @@ const InventorySection: React.FC = () => {
       
       const method = data.id ? 'PUT' : 'POST';
       
-      // Realizar solicitud para crear/actualizar producto
+      // Make request to create/update product
       const response = await fetch(url, {
         method,
         headers: {
@@ -1188,12 +1048,12 @@ const InventorySection: React.FC = () => {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Error al procesar la solicitud');
+        throw new Error(error.error || 'Error processing request');
       }
       
       const savedProduct = await response.json();
       
-      // Si hay imagen, subirla
+      // If there's an image, upload it
       if (data.image) {
         await handleImageUpload(savedProduct._id, data.image);
       }
@@ -1209,23 +1069,23 @@ const InventorySection: React.FC = () => {
         setShowModal(false);
         resetForm();
         
-        // Forzar refresco inmediato de los datos
+        // Force immediate refresh of data
         refetch();
         
-        // Invalidar todas las consultas de productos para asegurar sincronización
+        // Invalidate all product queries to ensure synchronization
         queryClient.invalidateQueries({
           predicate: (query) => query.queryKey[0] === PRODUCTS_CACHE_KEY,
         });
         
-        const successMsg = `Producto ${editingProduct ? 'actualizado' : 'creado'} correctamente`;
+        const successMsg = `Product ${editingProduct ? 'updated' : 'created'} successfully`;
         setSuccessMessage(successMsg);
         addNotification(successMsg, 'success');
         
-        // Limpiar mensaje después de unos segundos
+        // Clear message after a few seconds
         setTimeout(() => setSuccessMessage(''), 5000);
       },
       onError: (error: any) => {
-        const errorMsg = 'Error al guardar producto: ' + error.message;
+        const errorMsg = 'Error saving product: ' + error.message;
         setError(errorMsg);
         addNotification(errorMsg, 'error');
       },
@@ -1235,17 +1095,17 @@ const InventorySection: React.FC = () => {
     }
   );
 
-  // Debounced search - optimizado con useCallback
+  // Debounced search - optimized with useCallback
   const debouncedSearch = useCallback(
     debounce((value: string) => {
       setDebouncedSearchTerm(value);
-      setCurrentPage(1); // Reset a primera página
+      setCurrentPage(1); // Reset to first page
       setIsFetching(true);
     }, 300),
     []
   );
 
-  // Verificar productos con stock bajo y enviar notificación - optimizado con useMemo
+  // Check for low stock products and send notification - optimized with useMemo
   const lowStockProducts = useMemo(() => {
     if (!Array.isArray(products)) return [];
     return products.filter(product => 
@@ -1253,11 +1113,11 @@ const InventorySection: React.FC = () => {
     );
   }, [products]);
 
-  // Función para comprimir imágenes usando Canvas - optimizada
+  // Function to compress images using Canvas - optimized
   const compressImage = (file: File, maxWidth = 800, maxHeight = 800, quality = 0.7): Promise<File> => {
     return new Promise((resolve, reject) => {
       try {
-        // Crear elementos para la manipulación de la imagen
+        // Create elements for image manipulation
         const reader = new FileReader();
         const img = new Image();
         
@@ -1268,7 +1128,7 @@ const InventorySection: React.FC = () => {
           
           img.onload = () => {
             try {
-              // Usar OffscreenCanvas si está disponible para mejor rendimiento
+              // Use OffscreenCanvas if available for better performance
               let canvas: HTMLCanvasElement | OffscreenCanvas;
               let ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
               
@@ -1281,11 +1141,11 @@ const InventorySection: React.FC = () => {
               }
               
               if (!ctx) {
-                console.warn('No se pudo obtener contexto 2D del canvas');
+                console.warn('Could not get 2D context from canvas');
                 return resolve(file);
               }
 
-              // Calcular dimensiones
+              // Calculate dimensions
               let width = img.width;
               let height = img.height;
               
@@ -1304,28 +1164,28 @@ const InventorySection: React.FC = () => {
               width = Math.floor(width);
               height = Math.floor(height);
               
-              // Configurar canvas con las nuevas dimensiones
+              // Configure canvas with new dimensions
               if (canvas instanceof HTMLCanvasElement) {
                 canvas.width = width;
                 canvas.height = height;
               } else {
-                // Para OffscreenCanvas
+                // For OffscreenCanvas
                 canvas.width = width;
                 canvas.height = height;
               }
               
-              // Dibujar imagen
+              // Draw image
               ctx.drawImage(img, 0, 0, width, height);
               
-              // Determinar tipo de salida
+              // Determine output type
               const outputType = file.type === 'image/png' ? 'image/png' : 'image/webp';
               
-              // Crear blob
+              // Create blob
               const canvasToBlob = (canvas: HTMLCanvasElement | OffscreenCanvas, callback: (blob: Blob | null) => void) => {
                 if (canvas instanceof HTMLCanvasElement) {
                   canvas.toBlob(callback, outputType, quality);
                 } else {
-                  // Para OffscreenCanvas
+                  // For OffscreenCanvas
                   canvas.convertToBlob({ type: outputType, quality }).then(callback);
                 }
               };
@@ -1335,7 +1195,7 @@ const InventorySection: React.FC = () => {
                   return resolve(file);
                 }
                 
-                // Crear filename con extensión apropiada
+                // Create filename with appropriate extension
                 let fileName = file.name;
                 if (outputType === 'image/webp' && !fileName.toLowerCase().endsWith('.webp')) {
                   const nameParts = fileName.split('.');
@@ -1353,7 +1213,7 @@ const InventorySection: React.FC = () => {
               });
               
             } catch (err) {
-              console.error('Error durante la compresión:', err);
+              console.error('Error during compression:', err);
               resolve(file);
             }
           };
@@ -1366,25 +1226,25 @@ const InventorySection: React.FC = () => {
         reader.readAsDataURL(file);
         
       } catch (err) {
-        console.error('Error general en compresión:', err);
+        console.error('General error in compression:', err);
         resolve(file);
       }
     });
   };
 
-  // Función auxiliar para formatear tamaños de archivo
+  // Helper function to format file sizes
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return bytes + ' bytes';
     else if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     else return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
 
-  // Mostrar notificación por productos con stock bajo
+  // Show notification for products with low stock
   useEffect(() => {
     if (lowStockProducts.length > 0 && !loading && !isInitialLoad) {
       const productNames = lowStockProducts.slice(0, 3).map(p => p.nombre).join(', ');
-      const moreText = lowStockProducts.length > 3 ? ` y ${lowStockProducts.length - 3} más` : '';
-      const message = `Alerta: ${lowStockProducts.length} producto${lowStockProducts.length > 1 ? 's' : ''} con stock bajo: ${productNames}${moreText}`;
+      const moreText = lowStockProducts.length > 3 ? ` and ${lowStockProducts.length - 3} more` : '';
+      const message = `Alert: ${lowStockProducts.length} product${lowStockProducts.length > 1 ? 's' : ''} with low stock: ${productNames}${moreText}`;
       
       if (addNotification) {
         addNotification(message, 'warning');
@@ -1392,7 +1252,7 @@ const InventorySection: React.FC = () => {
     }
   }, [lowStockProducts, loading, addNotification, isInitialLoad]);
 
-  // Obtener permisos de sección del usuario actual
+  // Get user section permissions
   useEffect(() => {
     const fetchCurrentUser = async () => {
       try {
@@ -1406,35 +1266,35 @@ const InventorySection: React.FC = () => {
         });
 
         if (!response.ok) {
-          throw new Error('Error al obtener información del usuario');
+          throw new Error('Error getting user information');
         }
 
         const data = await response.json();
-        // Guardar las secciones a las que tiene acceso el usuario
+        // Save the sections the user has access to
         if (data.secciones) {
           setUserSections(data.secciones);
-          console.log(`Usuario con acceso a secciones: ${data.secciones}`);
+          console.log(`User with access to sections: ${data.secciones}`);
         }
       } catch (err) {
-        console.error('Error al obtener secciones del usuario:', err);
+        console.error('Error getting user sections:', err);
       }
     };
     
     fetchCurrentUser();
   }, [getAuthToken]);
 
-  // Efecto para manejar búsqueda
+  // Effect for handling search
   useEffect(() => {
     debouncedSearch(searchTerm);
   }, [searchTerm, debouncedSearch]);
 
-  // Efecto para detectar el tamaño de la ventana
+  // Effect to detect window size
   useEffect(() => {
     const handleResize = () => {
       const newWidth = window.innerWidth;
       setWindowWidth(newWidth);
       
-      // Si cambiamos entre móvil y escritorio, volvemos a la primera página
+      // If we change between mobile and desktop, go back to first page
       if ((newWidth < 768 && windowWidth >= 768) || (newWidth >= 768 && windowWidth < 768)) {
         setCurrentPage(1);
       }
@@ -1446,50 +1306,50 @@ const InventorySection: React.FC = () => {
     }
   }, [windowWidth]);
 
-  // Limpiar controladores de aborto al desmontar
+  // Clean up abort controllers when unmounting
   useEffect(() => {
     return () => {
-      // Abortar cualquier solicitud pendiente
+      // Abort any pending requests
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
     };
   }, []);
 
-  // Manejar cambio de imagen con compresión automática
+  // Handle image change with automatic compression
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       
-      // Validar tamaño del archivo (5MB máximo)
+      // Validate file size (5MB maximum)
       if (file.size > 5 * 1024 * 1024) {
-        console.log('La imagen no debe superar los 5MB');
-        addNotification('La imagen no debe superar los 5MB', 'error');
+        console.log('Image must not exceed 5MB');
+        addNotification('Image must not exceed 5MB', 'error');
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
         }
         return;
       }
 
-      // Validar tipo de archivo
+      // Validate file type
       if (!file.type.startsWith('image/')) {
-        console.log('El archivo debe ser una imagen');
-        addNotification('El archivo debe ser una imagen', 'error');
+        console.log('File must be an image');
+        addNotification('File must be an image', 'error');
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
         }
         return;
       }
       
-      // Mostrar mensaje si comprimiremos
+      // Show message if we will compress
       if (file.size > 1024 * 1024) {
         addNotification(
-          `La imagen será optimizada para mejor rendimiento (${formatFileSize(file.size)})`,
+          `Image will be optimized for better performance (${formatFileSize(file.size)})`,
           'info'
         );
       }
       
-      // Crear URL para vista previa
+      // Create URL for preview
       const reader = new FileReader();
       reader.onloadend = () => {
         setFormData({
@@ -1503,7 +1363,7 @@ const InventorySection: React.FC = () => {
     }
   };
 
-  // Eliminar imagen del formulario
+  // Remove image from form
   const handleRemoveImage = () => {
     setFormData({
       ...formData,
@@ -1515,13 +1375,13 @@ const InventorySection: React.FC = () => {
     }
   };
 
-  // Eliminar imagen del producto ya guardado
+  // Delete image from already saved product
   const handleDeleteProductImage = (productId: string) => {
-    // Usar la mutación en lugar de la implementación directa
+    // Use mutation instead of direct implementation
     deleteImageMutation.mutate(productId);
   };
 
-  // Manejar subida de imagen después de crear/editar producto con compresión y reintentos
+  // Handle image upload after creating/editing product with compression and retries
   const handleImageUpload = async (productId: string, imageFile?: File) => {
     const imageToProcess = imageFile || formData.imagen;
     if (!imageToProcess) return true;
@@ -1530,44 +1390,44 @@ const InventorySection: React.FC = () => {
       setImageLoading(true);
       setIsFetching(true);
       
-      // Comprimir imagen antes de convertir a base64
+      // Compress image before converting to base64
       let imageToUpload = imageToProcess;
       
       if (imageToUpload.size > 1024 * 1024) {
-        console.log(`Comprimiendo imagen grande (${formatFileSize(imageToUpload.size)})...`);
+        console.log(`Compressing large image (${formatFileSize(imageToUpload.size)})...`);
         
-        // Nivel de calidad basado en el tamaño del archivo
-        let quality = 0.7; // Valor predeterminado
+        // Quality level based on file size
+        let quality = 0.7; // Default value
         
-        // Ajustar calidad según tamaño
-        if (imageToUpload.size > 3 * 1024 * 1024) quality = 0.5; // Imágenes muy grandes
-        else if (imageToUpload.size > 2 * 1024 * 1024) quality = 0.6; // Imágenes grandes
+        // Adjust quality based on size
+        if (imageToUpload.size > 3 * 1024 * 1024) quality = 0.5; // Very large images
+        else if (imageToUpload.size > 2 * 1024 * 1024) quality = 0.6; // Large images
         
-        // Comprimir imagen
+        // Compress image
         imageToUpload = await compressImage(imageToUpload, 1200, 1200, quality);
       }
       
-      // Convertir a base64 y subir
+      // Convert to base64 and upload
       const base64Data = await imageService.fileToBase64(imageToUpload);
       
-      // Implementar sistema de reintentos para manejar "failed to fetch"
+      // Implement retry system to handle "failed to fetch"
       const MAX_RETRIES = 3;
       let retryCount = 0;
       let success = false;
       
       while (retryCount < MAX_RETRIES && !success) {
         try {
-          // Si no es el primer intento, esperar antes de reintentar
+          // If not the first attempt, wait before retrying
           if (retryCount > 0) {
-            const waitTime = Math.pow(2, retryCount) * 1000; // Espera exponencial
-            console.log(`Reintentando subida de imagen (intento ${retryCount + 1}/${MAX_RETRIES}) después de ${waitTime}ms...`);
+            const waitTime = Math.pow(2, retryCount) * 1000; // Exponential wait
+            console.log(`Retrying image upload (attempt ${retryCount + 1}/${MAX_RETRIES}) after ${waitTime}ms...`);
             await new Promise(resolve => setTimeout(resolve, waitTime));
           }
           
           await imageService.uploadImageBase64(productId, base64Data);
           success = true;
           
-          // Actualizar el caché directamente después de subir imagen
+          // Update cache directly after uploading image
           queryClient.setQueryData(
             getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm),
             (old: any) => {
@@ -1577,7 +1437,7 @@ const InventorySection: React.FC = () => {
                 ...old,
                 items: old.items.map((p: ProductExtended) => {
                   if (p._id === productId) {
-                    // Actualizar el producto para indicar que ahora tiene imagen
+                    // Update product to indicate it now has an image
                     return {
                       ...p,
                       hasImage: true
@@ -1589,7 +1449,7 @@ const InventorySection: React.FC = () => {
             }
           );
           
-          // Actualizar el estado local de products para mostrar el cambio inmediatamente
+          // Update local products state to show change immediately
           setProducts(prevProducts => 
             prevProducts.map(p => 
               p._id === productId 
@@ -1598,16 +1458,16 @@ const InventorySection: React.FC = () => {
             )
           );
           
-          // Si estamos editando este producto, actualizar su estado
+          // If we're editing this product, update its state
           if (editingProduct && editingProduct._id === productId) {
             setEditingProduct(prev => prev ? {...prev, hasImage: true} : null);
           }
           
-          // Invalidar caché de imágenes para forzar una recarga
+          // Invalidate image cache to force a reload
           imageService.invalidateCache(productId);
           imageCache.current.delete(productId);
           
-          // Forzar refresco de datos
+          // Force data refresh
           queryClient.invalidateQueries({
             predicate: (query) => query.queryKey[0] === PRODUCTS_CACHE_KEY,
           });
@@ -1615,18 +1475,18 @@ const InventorySection: React.FC = () => {
           retryCount++;
           
           if (retryCount >= MAX_RETRIES) {
-            console.error(`Error después de ${MAX_RETRIES} intentos:`, error);
+            console.error(`Error after ${MAX_RETRIES} attempts:`, error);
             throw error;
           } else {
-            console.warn(`Error al subir imagen (intento ${retryCount}/${MAX_RETRIES}):`, error.message);
+            console.warn(`Error uploading image (attempt ${retryCount}/${MAX_RETRIES}):`, error.message);
           }
         }
       }
       
       return success;
     } catch (error: any) {
-      console.error('Error al subir imagen:', error);
-      addNotification(`Error al subir imagen: ${error.message || 'Error desconocido'}`, 'error');
+      console.error('Error uploading image:', error);
+      addNotification(`Error uploading image: ${error.message || 'Unknown error'}`, 'error');
       return false;
     } finally {
       setImageLoading(false);
@@ -1634,42 +1494,42 @@ const InventorySection: React.FC = () => {
     }
   };
 
-  // Manejar envío del formulario (crear/editar)
+  // Handle form submission (create/edit)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     
     try {
-      // Validaciones específicas para combos
+      // Specific validations for combos
       if (formData.esCombo) {
-        // Verificar que haya al menos un producto en el combo
+        // Verify that there is at least one product in the combo
         if (!formData.itemsCombo || formData.itemsCombo.length === 0) {
-          throw new Error('Un combo debe contener al menos un producto');
+          throw new Error('A combo must contain at least one product');
         }
         
-        // Verificar que todos los productos existan en la lista de productos
+        // Verify that all products exist in the product list
         const invalidProducts = formData.itemsCombo.filter(item => 
           !productOptions.some(p => p._id === item.productoId)
         );
         
         if (invalidProducts.length > 0) {
-          throw new Error('El combo contiene productos inválidos');
+          throw new Error('The combo contains invalid products');
         }
       }
       
-      // IMPORTANTE: Asegurarnos de que los productoId sean cadenas válidas
+      // IMPORTANT: Make sure productoId are valid strings
       let itemsComboFixed = [];
       if (formData.esCombo && formData.itemsCombo && formData.itemsCombo.length > 0) {
         itemsComboFixed = formData.itemsCombo.map(item => {
-          // Asegurar que el ID sea una cadena válida
+          // Explicitly ensure ID is a valid string
           return {
-            productoId: item.productoId.toString(), // Convertir explícitamente a string
+            productoId: item.productoId.toString(), // Explicitly convert to string
             cantidad: item.cantidad
           };
         });
       }
       
-      // Datos básicos del producto (sin la imagen que se manejará por separado)
+      // Basic product data (without the image which will be handled separately)
       const payload = {
         nombre: formData.nombre,
         descripcion: formData.descripcion,
@@ -1682,37 +1542,37 @@ const InventorySection: React.FC = () => {
         itemsCombo: formData.esCombo ? itemsComboFixed : []
       };
       
-      // Usar mutation para crear/editar producto
+      // Use mutation to create/edit product
       productMutation.mutate({
         id: editingProduct?._id,
         payload,
         image: formData.imagen || undefined
       });
     } catch (err: any) {
-      const errorMsg = 'Error al guardar producto: ' + err.message;
+      const errorMsg = 'Error saving product: ' + err.message;
       setError(errorMsg);
       addNotification(errorMsg, 'error');
     }
   };
 
-  // Iniciar el proceso de eliminación mostrando el diálogo de confirmación
+  // Start deletion process by showing confirmation dialog
   const confirmDelete = (id: string) => {
     setProductToDelete(id);
     setDeleteDialogOpen(true);
   };
 
-  // Confirmar eliminación de imagen
+  // Confirm image deletion
   const confirmDeleteImage = (id: string) => {
     setProductToDelete(id);
     setDeleteImageDialogOpen(true);
   };
 
-  // Eliminar producto (después de confirmación)
+  // Delete product (after confirmation)
   const handleDelete = (id: string) => {
-    // Verificar si este producto está en algún combo antes de intentar eliminar
+    // Check if this product is in any combo before trying to delete
     const combosWithProduct = products.filter(
       p => p.esCombo && p.itemsCombo?.some(item => {
-        // Manejar tanto si productoId es un string como si es un objeto
+        // Handle both if productoId is a string or an object
         const itemId = typeof item.productoId === 'object' 
           ? item.productoId._id 
           : item.productoId;
@@ -1722,7 +1582,7 @@ const InventorySection: React.FC = () => {
     
     if (combosWithProduct.length > 0) {
       const comboNames = combosWithProduct.map(c => c.nombre).join(', ');
-      const errorMsg = `No se puede eliminar este producto porque está incluido en los siguientes combos: ${comboNames}`;
+      const errorMsg = `Cannot delete this product because it is included in the following combos: ${comboNames}`;
       setError(errorMsg);
       addNotification(errorMsg, 'error');
       setDeleteDialogOpen(false);
@@ -1730,30 +1590,30 @@ const InventorySection: React.FC = () => {
       return;
     }
     
-    // Usar la mutación para eliminar
+    // Use mutation to delete
     deleteProductMutation.mutate(id);
   };
 
-  // Preparar edición de producto
+  // Prepare product editing
   const handleEdit = async (product: ProductExtended) => {
     setEditingProduct(product);
     
-    // Cuando editamos un combo existente, asegurémonos de que todas las referencias a productos
-    // en itemsCombo estén correctamente configuradas
+    // When editing an existing combo, make sure all references to products
+    // in itemsCombo are correctly configured
     let itemsComboFixed = [];
     
     if (product.esCombo && product.itemsCombo && product.itemsCombo.length > 0) {
-      // Verificar los IDs de productos dentro del combo y arreglarlos si es necesario
+      // Verify product IDs inside the combo and fix them if necessary
       itemsComboFixed = product.itemsCombo.map(item => {
         const productId = typeof item.productoId === 'object' 
           ? item.productoId._id 
           : item.productoId;
           
-        // Validar que el ID exista en la lista de productos
+        // Validate that ID exists in product list
         const productExists = productOptions.some(p => p._id === productId);
         
         if (!productExists) {
-          console.warn(`Producto con ID ${productId} no encontrado en la lista de productos disponibles`);
+          console.warn(`Product with ID ${productId} not found in list of available products`);
         }
         
         return {
@@ -1763,7 +1623,7 @@ const InventorySection: React.FC = () => {
       });
     }
     
-    // Configurar formData para edición
+    // Configure formData for editing
     setFormData({
       nombre: product.nombre,
       descripcion: product.descripcion || '',
@@ -1778,11 +1638,11 @@ const InventorySection: React.FC = () => {
       imagenPreview: null
     });
     
-    // Intentamos cargar la imagen si existe
+    // Try to load image if it exists
     if (product.hasImage) {
       try {
-        // Cargar imagen para vista previa 
-        // Añadir parámetro de versión para forzar recarga
+        // Load image for preview
+        // Add version parameter to force reload
         const timestamp = new Date().getTime();
         const imageUrl = `${imageService.getImageUrl(product._id)}?v=${timestamp}`;
         setFormData(prev => ({
@@ -1790,14 +1650,14 @@ const InventorySection: React.FC = () => {
           imagenPreview: imageUrl
         }));
       } catch (error) {
-        console.error('Error al cargar imagen para vista previa:', error);
+        console.error('Error loading image for preview:', error);
       }
     }
     
     setShowModal(true);
   };
 
-  // Resetear formulario
+  // Reset form
   const resetForm = () => {
     setFormData({
       nombre: '',
@@ -1818,12 +1678,12 @@ const InventorySection: React.FC = () => {
     }
   };
 
-  // Manejar cambio de categoría
+  // Handle category change
   const handleCategoryChange = (value: 'limpieza' | 'mantenimiento') => {
     try {
       if (!subCategorias[value]) {
-        console.error(`Categoría no válida: ${value}`);
-        addNotification(`Error: Categoría '${value}' no válida`, 'error');
+        console.error(`Invalid category: ${value}`);
+        addNotification(`Error: Category '${value}' not valid`, 'error');
         return;
       }
       
@@ -1835,57 +1695,57 @@ const InventorySection: React.FC = () => {
         subCategoria: defaultSubcategoria
       }));
     } catch (error) {
-      console.error("Error al cambiar categoría:", error);
-      addNotification("Error al cambiar categoría", 'error');
+      console.error("Error changing category:", error);
+      addNotification("Error changing category", 'error');
     }
   };
 
-  // Manejar cambio de estado esCombo
+  // Handle esCombo state change
   const handleComboChange = (checked: boolean) => {
     setFormData(prev => ({
       ...prev,
       esCombo: checked,
-      // Si no es combo, vaciar la lista de productos
+      // If not combo, empty the product list
       itemsCombo: checked ? prev.itemsCombo : []
     }));
   };
 
-  // Agregar item al combo - Optimizado con validaciones y comprobaciones
+  // Add item to combo - Optimized with validations and checks
   const handleAddComboItem = () => {
     if (!selectedComboItem || selectedComboItem === "none" || comboItemQuantity <= 0) {
-      addNotification('Seleccione un producto y una cantidad válida', 'warning');
+      addNotification('Select a product and valid quantity', 'warning');
       return;
     }
 
-    // Verificar que el producto no esté ya en el combo
+    // Check if product is already in the combo
     const productExists = formData.itemsCombo?.some(
       item => item.productoId === selectedComboItem
     );
 
     if (productExists) {
-      addNotification('Este producto ya está en el combo', 'warning');
+      addNotification('This product is already in the combo', 'warning');
       return;
     }
 
-    // Verificar que el producto no sea un combo (no se permiten combos dentro de combos)
+    // Check that product is not a combo (combos inside combos not allowed)
     const selectedProduct = products.find(p => p._id === selectedComboItem);
     if (!selectedProduct) {
-      addNotification('Producto no encontrado', 'error');
+      addNotification('Product not found', 'error');
       return;
     }
     
     if (selectedProduct.esCombo) {
-      addNotification('No se pueden agregar combos dentro de combos', 'error');
+      addNotification('Cannot add combos inside combos', 'error');
       return;
     }
 
-    // Validar stock disponible
+    // Validate available stock
     if (selectedProduct.stock < comboItemQuantity) {
-      addNotification(`Solo hay ${selectedProduct.stock} unidades disponibles de este producto`, 'warning');
-      // No bloqueamos la acción, solo advertimos
+      addNotification(`Only ${selectedProduct.stock} units available for this product`, 'warning');
+      // Don't block action, just warn
     }
 
-    // Agregar al combo
+    // Add to combo
     setFormData(prev => ({
       ...prev,
       itemsCombo: [
@@ -1897,13 +1757,13 @@ const InventorySection: React.FC = () => {
       ]
     }));
 
-    // Reset selección
+    // Reset selection
     setSelectedComboItem('');
     setComboItemQuantity(1);
     setShowComboModal(false);
   };
 
-  // Eliminar item del combo
+  // Remove item from combo
   const handleRemoveComboItem = (index: number) => {
     const updatedItems = [...(formData.itemsCombo || [])];
     updatedItems.splice(index, 1);
@@ -1914,26 +1774,26 @@ const InventorySection: React.FC = () => {
     }));
   };
 
-  // Función para cambiar de página
+  // Function to change page
   const handlePageChange = useCallback((pageNumber: number) => {
     setCurrentPage(pageNumber);
     setIsFetching(true);
     
-    // Al cambiar de página, hacemos scroll hacia arriba
+    // When changing page, scroll to top
     window.scrollTo({ top: 0, behavior: 'smooth' });
     
-    // Hacer scroll al inicio de la lista en móvil
+    // Scroll to beginning of list on mobile
     if (windowWidth < 768 && mobileListRef.current) {
       mobileListRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [windowWidth]);
 
-  // Manejar la subida de imagen con el nuevo componente
+  // Handle image upload with new component
   const handleImageUploaded = (success: boolean, productId?: string) => {
     if (success && productId) {
       setIsFetching(true);
       
-      // Actualizar el caché directamente
+      // Update cache directly
       queryClient.setQueryData(
         getProductsCacheKey(currentPage, selectedCategory, debouncedSearchTerm),
         (old: any) => {
@@ -1943,7 +1803,7 @@ const InventorySection: React.FC = () => {
             ...old,
             items: old.items.map((p: ProductExtended) => {
               if (p._id === productId) {
-                // Actualizar el producto para indicar que ahora tiene imagen
+                // Update product to indicate it now has an image
                 return {
                   ...p,
                   hasImage: true
@@ -1955,7 +1815,7 @@ const InventorySection: React.FC = () => {
         }
       );
       
-      // Actualizar el estado local de products para mostrar el cambio inmediatamente
+      // Update local products state to show change immediately
       setProducts(prevProducts => 
         prevProducts.map(p => 
           p._id === productId 
@@ -1964,31 +1824,31 @@ const InventorySection: React.FC = () => {
         )
       );
       
-      // Invalidar caché de imágenes para forzar una recarga
+      // Invalidate image cache to force a reload
       imageService.invalidateCache(productId);
       imageCache.current.delete(productId);
       
-      // Forzar refresco para asegurar datos actualizados
+      // Force refresh to ensure updated data
       refetch().then(() => {
         setIsFetching(false);
       });
     }
   };
 
-  // Obtener nombre de producto por ID para combos - Mejorado con validación adicional
+  // Get product name by ID for combos - Improved with additional validation
   const getProductNameById = (id: string) => {
     if (!id) {
-      console.warn('ID de producto inválido en combo:', id);
-      return 'ID inválido';
+      console.warn('Invalid product ID in combo:', id);
+      return 'Invalid ID';
     }
     
-    // Buscar por ID exacto
+    // Search by exact ID
     const product = products.find(p => p._id === id);
     if (product) {
       return product.nombre;
     }
     
-    // Si no lo encuentra, intentar buscar sin importar el formato (para manejar posibles problemas de tipo de datos)
+    // If not found, try searching regardless of format (to handle possible data type problems)
     const productByStringComp = products.find(p => 
       p._id.toString() === id.toString()
     );
@@ -1997,18 +1857,18 @@ const InventorySection: React.FC = () => {
       return productByStringComp.nombre;
     }
     
-    console.warn('Producto no encontrado para ID:', id);
-    return 'Producto no encontrado';
+    console.warn('Product not found for ID:', id);
+    return 'Product not found';
   };
 
-  // Calcular precio total del combo
+  // Calculate total combo price
   const calculateComboTotal = useCallback(() => {
     if (!formData.itemsCombo || formData.itemsCombo.length === 0) return 0;
     
     return formData.itemsCombo.reduce((total, item) => {
       if (!Array.isArray(products)) return total;
       
-      // Manejar tanto si productoId es un string como si es un objeto
+      // Handle both if productoId is a string or an object
       const productId = typeof item.productoId === 'object'
         ? item.productoId._id
         : item.productoId;
@@ -2020,27 +1880,27 @@ const InventorySection: React.FC = () => {
     }, 0);
   }, [formData.itemsCombo, products]);
 
-  // Mostrar información detallada sobre la paginación
+  // Show detailed information about pagination
   const indexOfLastProduct = currentPage * itemsPerPage;
   const indexOfFirstProduct = indexOfLastProduct - itemsPerPage;
   const showingFromTo = totalItems > 0 
-    ? `${indexOfFirstProduct + 1}-${Math.min(indexOfLastProduct, totalItems)} de ${totalItems}`
-    : '0 de 0';
+    ? `${indexOfFirstProduct + 1}-${Math.min(indexOfLastProduct, totalItems)} of ${totalItems}`
+    : '0 of 0';
 
-  // Obtener productos no combo para selector - Optimizado con useMemo
+  // Get non-combo products for selector - Optimized with useMemo
   const nonComboProducts = useMemo(() => {
     if (!Array.isArray(productOptions)) return [];
     return productOptions.filter(p => !p.esCombo);
   }, [productOptions]);
 
-  // Cuando cambia la categoría seleccionada, actualizamos la UI
+  // When selected category changes, update UI
   useEffect(() => {
     setIsFetching(true);
   }, [selectedCategory]);
 
   return (
     <div className="p-4 md:p-6 space-y-6 bg-[#DFEFE6]/30">
-      {/* Alertas */}
+      {/* Alerts */}
       {error && (
         <Alert className="bg-red-50 border border-red-200 text-red-800 rounded-lg">
           <AlertCircle className="h-4 w-4 text-red-600" />
@@ -2055,14 +1915,14 @@ const InventorySection: React.FC = () => {
         </Alert>
       )}
 
-      {/* Barra de herramientas */}
+      {/* Toolbar */}
       <div className="flex flex-col md:flex-row justify-between items-start gap-4 bg-white rounded-xl shadow-sm p-4 border border-[#91BEAD]/20">
         <div className="w-full md:w-64">
           <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
             <Input
               type="text"
-              placeholder="Buscar productos..."
+              placeholder="Search products..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
@@ -2080,21 +1940,21 @@ const InventorySection: React.FC = () => {
                 value="all" 
                 className="flex-1 data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
               >
-                Todos
+                All
               </TabsTrigger>
               <TabsTrigger 
                 value="limpieza" 
                 className="flex-1 data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
                 disabled={userSections === 'mantenimiento'}
               >
-                Limpieza
+                Cleaning
               </TabsTrigger>
               <TabsTrigger 
                 value="mantenimiento" 
                 className="flex-1 data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
                 disabled={userSections === 'limpieza'}
               >
-                Mantenimiento
+                Maintenance
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -2110,22 +1970,22 @@ const InventorySection: React.FC = () => {
             disabled={userSections !== 'ambos' && selectedCategory !== 'all' && selectedCategory !== userSections}
           >
             <Plus className="w-4 h-4 mr-2" />
-            Nuevo Producto
+            New Product
           </Button>
         </div>
       </div>
 
-      {/* Alerta para productos con stock bajo */}
+      {/* Alert for products with low stock */}
       {!isLoading && lowStockProducts.length > 0 && (
         <Alert className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg">
           <AlertTriangle className="h-4 w-4 text-yellow-500" />
           <AlertDescription className="ml-2">
-            Hay {lowStockProducts.length} productos con stock bajo. Por favor, revise el inventario.
+            There are {lowStockProducts.length} products with low stock. Please review the inventory.
           </AlertDescription>
         </Alert>
       )}
 
-      {/* Mensaje cuando no hay productos */}
+      {/* Message when there are no products */}
       {!isLoading && products.length === 0 && (
         <div className="bg-white rounded-xl shadow-sm p-8 text-center border border-[#91BEAD]/20">
           <div className="inline-flex items-center justify-center w-12 h-12 bg-[#DFEFE6] rounded-full mb-4">
@@ -2137,36 +1997,36 @@ const InventorySection: React.FC = () => {
           </div>
           <p className="text-[#7AA79C]">
             {isFetching 
-              ? 'Cargando productos...'
-              : 'No se encontraron productos que coincidan con la búsqueda'
+              ? 'Loading products...'
+              : 'No products found matching the search'
             }
           </p>
         </div>
       )}
 
-      {/* Contador de resultados con información detallada */}
+      {/* Results counter with detailed information */}
       {!isLoading && products.length > 0 && (
         <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm text-[#29696B] flex flex-col sm:flex-row sm:justify-between items-center">
           <span>
-            Total: {totalItems} {totalItems === 1 ? 'producto' : 'productos'}
+            Total: {totalItems} {totalItems === 1 ? 'product' : 'products'}
           </span>
           <span className="text-[#29696B] font-medium">
-            Mostrando: {showingFromTo}
+            Showing: {showingFromTo}
           </span>
         </div>
       )}
 
-      {/* Estado de carga */}
+      {/* Loading state */}
       {isLoading && (
         <div className="bg-white rounded-xl shadow-sm p-8 text-center border border-[#91BEAD]/20">
           <div className="inline-flex items-center justify-center w-12 h-12 bg-[#DFEFE6] rounded-full mb-4">
             <Loader2 className="w-6 h-6 text-[#29696B] animate-spin" />
           </div>
-          <p className="text-[#7AA79C]">Cargando productos...</p>
+          <p className="text-[#7AA79C]">Loading products...</p>
         </div>
       )}
 
-      {/* Tabla para pantallas medianas y grandes - IMPLEMENTACIÓN VIRTUALIZADA */}
+      {/* Table for medium and large screens - VIRTUALIZED IMPLEMENTATION */}
       <div ref={tableRef} className="hidden md:block bg-white rounded-xl shadow-sm overflow-hidden border border-[#91BEAD]/20 h-[70vh]">
         {!isLoading && products.length > 0 && (
           <div className="overflow-auto h-full">
@@ -2180,7 +2040,7 @@ const InventorySection: React.FC = () => {
           </div>
         )}
         
-        {/* Paginación para la tabla */}
+        {/* Pagination for table */}
         {!isLoading && totalPages > 1 && (
           <div className="py-4 border-t border-[#91BEAD]/20">
             <Pagination
@@ -2194,9 +2054,9 @@ const InventorySection: React.FC = () => {
         )}
       </div>
 
-      {/* Vista de Tarjetas para dispositivos móviles - IMPLEMENTACIÓN VIRTUALIZADA */}
+      {/* Card View for mobile devices - VIRTUALIZED IMPLEMENTATION */}
       <div ref={mobileListRef} id="mobile-products-list" className="md:hidden">
-        {/* Paginación visible en la parte superior para móvil */}
+        {/* Pagination visible at top for mobile */}
         {!isLoading && totalPages > 1 && (
           <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20">
             <Pagination
@@ -2217,24 +2077,24 @@ const InventorySection: React.FC = () => {
           />
         )}
         
-        {/* Indicador de carga en móvil */}
+        {/* Loading indicator on mobile */}
         {isFetching && (
           <div className="flex justify-center items-center py-4">
             <Loader2 className="w-5 h-5 text-[#29696B] animate-spin mr-2" />
-            <span className="text-[#29696B] text-sm">Actualizando...</span>
+            <span className="text-[#29696B] text-sm">Updating...</span>
           </div>
         )}
         
-        {/* Mensaje que muestra la página actual y el total */}
+        {/* Message showing current page and total */}
         {!isLoading && totalPages > 1 && (
           <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm">
             <span className="text-[#29696B] font-medium">
-              Página {currentPage} de {totalPages}
+              Page {currentPage} of {totalPages}
             </span>
           </div>
         )}
         
-        {/* Paginación duplicada al final de la lista para mayor visibilidad */}
+        {/* Duplicated pagination at end of list for better visibility */}
         {!isLoading && totalPages > 1 && (
           <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20 mt-2">
             <Pagination
@@ -2247,19 +2107,19 @@ const InventorySection: React.FC = () => {
         )}
       </div>
 
-      {/* Modal de Producto */}
+      {/* Product Modal */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
         <DialogContent className="sm:max-w-md max-h-[90vh] overflow-auto bg-white border border-[#91BEAD]/20">
           <DialogHeader className="sticky top-0 bg-white pt-4 pb-2 z-10">
             <DialogTitle className="text-[#29696B]">
-              {editingProduct ? 'Editar Producto' : 'Nuevo Producto'}
+              {editingProduct ? 'Edit Product' : 'New Product'}
             </DialogTitle>
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4 py-2">
             <div className="grid gap-3">
               <div>
-                <Label htmlFor="nombre" className="text-sm text-[#29696B]">Nombre</Label>
+                <Label htmlFor="nombre" className="text-sm text-[#29696B]">Name</Label>
                 <Input
                   id="nombre"
                   value={formData.nombre}
@@ -2270,7 +2130,7 @@ const InventorySection: React.FC = () => {
               </div>
 
               <div>
-                <Label htmlFor="descripcion" className="text-sm text-[#29696B]">Descripción</Label>
+                <Label htmlFor="descripcion" className="text-sm text-[#29696B]">Description</Label>
                 <Textarea
                   id="descripcion"
                   value={formData.descripcion}
@@ -2282,33 +2142,33 @@ const InventorySection: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label htmlFor="categoria" className="text-sm text-[#29696B]">Categoría</Label>
+                  <Label htmlFor="categoria" className="text-sm text-[#29696B]">Category</Label>
                   <Select
                     value={formData.categoria}
                     onValueChange={(value: 'limpieza' | 'mantenimiento') => handleCategoryChange(value)}
                     disabled={
-                      // Deshabilitar si el usuario no tiene permiso para esta categoría
+                      // Disable if user doesn't have permission for this category
                       userSections !== 'ambos' && formData.categoria !== userSections
                     }
                   >
                     <SelectTrigger id="categoria" className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
-                      <SelectValue placeholder="Seleccionar categoría" />
+                      <SelectValue placeholder="Select category" />
                     </SelectTrigger>
                     <SelectContent className="border-[#91BEAD]">
-                    <SelectItem value="limpieza" disabled={userSections === 'mantenimiento'}>Limpieza</SelectItem>
-                      <SelectItem value="mantenimiento" disabled={userSections === 'limpieza'}>Mantenimiento</SelectItem>
+                    <SelectItem value="limpieza" disabled={userSections === 'mantenimiento'}>Cleaning</SelectItem>
+                      <SelectItem value="mantenimiento" disabled={userSections === 'limpieza'}>Maintenance</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div>
-                  <Label htmlFor="subCategoria" className="text-sm text-[#29696B]">Subcategoría</Label>
+                  <Label htmlFor="subCategoria" className="text-sm text-[#29696B]">Subcategory</Label>
                   <Select
                     value={formData.subCategoria}
                     onValueChange={(value) => setFormData({ ...formData, subCategoria: value })}
                   >
                     <SelectTrigger id="subCategoria" className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
-                      <SelectValue placeholder="Seleccionar subcategoría" />
+                      <SelectValue placeholder="Select subcategory" />
                     </SelectTrigger>
                     <SelectContent className="border-[#91BEAD]">
                       {subCategorias[formData.categoria]?.map((sub) => (
@@ -2323,7 +2183,7 @@ const InventorySection: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label htmlFor="precio" className="text-sm text-[#29696B]">Precio</Label>
+                  <Label htmlFor="precio" className="text-sm text-[#29696B]">Price</Label>
                   <Input
                     id="precio"
                     type="number"
@@ -2351,7 +2211,7 @@ const InventorySection: React.FC = () => {
               </div>
 
               <div>
-                <Label htmlFor="proovedorInfo" className="text-sm text-[#29696B]">Información del Proveedor</Label>
+                <Label htmlFor="proovedorInfo" className="text-sm text-[#29696B]">Supplier Information</Label>
                 <Input
                   id="proovedorInfo"
                   value={formData.proovedorInfo}
@@ -2360,21 +2220,21 @@ const InventorySection: React.FC = () => {
                 />
               </div>
               
-              {/* Switch para combos */}
+              {/* Switch for combos */}
               <div className="flex items-center space-x-2 pt-2">
                 <Switch
                   id="isCombo"
                   checked={formData.esCombo}
                   onCheckedChange={handleComboChange}
                 />
-                <Label htmlFor="isCombo" className="text-sm text-[#29696B]">¿Es un combo?</Label>
+                <Label htmlFor="isCombo" className="text-sm text-[#29696B]">Is this a combo?</Label>
               </div>
               
-              {/* Sección de productos en combo */}
+              {/* Combo products section */}
               {formData.esCombo && (
                 <div className="space-y-3 p-3 border border-[#91BEAD]/30 rounded-lg bg-[#DFEFE6]/10">
                   <div className="flex justify-between items-center">
-                    <Label className="text-sm text-[#29696B] font-medium">Productos en el combo</Label>
+                    <Label className="text-sm text-[#29696B] font-medium">Products in combo</Label>
                     <Button
                       type="button"
                       size="sm"
@@ -2382,7 +2242,7 @@ const InventorySection: React.FC = () => {
                       className="bg-[#29696B] hover:bg-[#29696B]/90 text-white text-xs"
                     >
                       <Plus className="w-3 h-3 mr-1" />
-                      Agregar
+                      Add
                     </Button>
                   </div>
                   
@@ -2407,33 +2267,33 @@ const InventorySection: React.FC = () => {
                       ))}
                       
                       <div className="mt-2 pt-2 border-t border-[#91BEAD]/20 flex justify-between items-center">
-                        <span className="text-sm text-[#7AA79C]">Total calculado:</span>
+                        <span className="text-sm text-[#7AA79C]">Calculated total:</span>
                         <span className="font-medium text-[#29696B]">${calculateComboTotal().toFixed(2)}</span>
                       </div>
                     </div>
                   ) : (
                     <div className="text-center py-3 text-sm text-[#7AA79C] bg-[#DFEFE6]/20 rounded">
-                      No hay productos en el combo
+                      No products in combo
                     </div>
                   )}
                   
                   <div className="text-xs text-amber-600">
-                    Recuerde que el precio del combo puede ser diferente al total calculado.
+                    Remember that the combo price can be different from the calculated total.
                   </div>
                 </div>
               )}
 
               <div>
-                <Label className="text-sm text-[#29696B] block mb-2">Imagen del Producto</Label>
+                <Label className="text-sm text-[#29696B] block mb-2">Product Image</Label>
                 
-                {/* Mostrar el componente de carga de imágenes cuando estamos editando */}
+                {/* Show image upload component when editing */}
                 {editingProduct ? (
                   <div className="mt-2">
                     {formData.imagenPreview ? (
                       <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
                         <img 
                           src={formData.imagenPreview} 
-                          alt="Vista previa" 
+                          alt="Preview" 
                           className="w-full h-full object-contain" 
                         />
                         <Button
@@ -2459,43 +2319,43 @@ const InventorySection: React.FC = () => {
                     )}
                   </div>
                 ) : (
-                  // Para nuevos productos, mantenemos la UI original
+                  // For new products, keep original UI
                   <div className="mt-1 flex flex-col space-y-2">
-                  {formData.imagenPreview ? (
-                    <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
-                      <img 
-                        src={formData.imagenPreview} 
-                        alt="Vista previa" 
-                        className="w-full h-full object-contain" 
-                      />
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        onClick={handleRemoveImage}
-                        className="absolute top-2 right-2 h-8 w-8 p-0 bg-red-500 hover:bg-red-600"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-center w-full">
-                      <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#91BEAD]/30 border-dashed rounded-md cursor-pointer bg-[#DFEFE6]/20 hover:bg-[#DFEFE6]/40 transition-colors">
-                        <div className="flex flex-col items-center justify-center pt-3 pb-4">
-                          <ImageIcon className="w-8 h-8 text-[#7AA79C] mb-1" />
-                          <p className="text-xs text-[#7AA79C]">
-                            Haz clic para subir una imagen
-                          </p>
-                          <p className="text-xs text-[#7AA79C]">
-                            Máximo 5MB
-                          </p>
-                        </div>
-                        <input 
-                          ref={fileInputRef}
-                          type="file" 
-                          accept="image/*" 
-                          className="hidden" 
-                          onChange={handleImageChange}
+                    {formData.imagenPreview ? (
+                      <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
+                        <img 
+                          src={formData.imagenPreview} 
+                          alt="Preview" 
+                          className="w-full h-full object-contain" 
+                        />
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          onClick={handleRemoveImage}
+                          className="absolute top-2 right-2 h-8 w-8 p-0 bg-red-500 hover:bg-red-600"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center w-full">
+                        <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#91BEAD]/30 border-dashed rounded-md cursor-pointer bg-[#DFEFE6]/20 hover:bg-[#DFEFE6]/40 transition-colors">
+                          <div className="flex flex-col items-center justify-center pt-3 pb-4">
+                            <ImageIcon className="w-8 h-8 text-[#7AA79C] mb-1" />
+                            <p className="text-xs text-[#7AA79C]">
+                              Click to upload an image
+                            </p>
+                            <p className="text-xs text-[#7AA79C]">
+                              Maximum 5MB
+                            </p>
+                          </div>
+                          <input 
+                            ref={fileInputRef}
+                            type="file" 
+                            accept="image/*" 
+                            className="hidden" 
+                            onChange={handleImageChange}
                         />
                       </label>
                     </div>
