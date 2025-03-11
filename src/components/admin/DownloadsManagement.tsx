@@ -14,7 +14,9 @@ import {
   Building,
   X,
   Filter,
-  RefreshCw
+  RefreshCw,
+  AlertCircle,
+  CheckCircle
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from "@/components/ui/button";
@@ -58,6 +60,22 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import Pagination from "@/components/ui/pagination";
 import api from '../../services/api';
+// Importamos (o creamos) el observable para actualizaciones en tiempo real
+import { inventoryObservable } from '@/utils/inventoryUtils';
+
+// Creamos un observable específico para pedidos si no existe
+const pedidosObservable = {
+  observers: [],
+  subscribe(callback) {
+    this.observers.push(callback);
+    return () => {
+      this.observers = this.observers.filter(obs => obs !== callback);
+    };
+  },
+  notify() {
+    this.observers.forEach(callback => callback());
+  }
+};
 
 // Interface definitions
 interface DateRange {
@@ -134,89 +152,20 @@ interface CacheState {
     clientes: number;
     pedidos: number;
   };
+  lastUpdated: {
+    productos: number;
+    supervisores: number;
+    clientes: number;
+    pedidos: number;
+  };
 }
 
-// Sistema de control para prevenir múltiples peticiones simultáneas
-const requestManager = {
-  activeRequests: new Map<string, Promise<any>>(),
-  pendingRequests: new Map<string, number>(),
-  maxRequestsPerEndpoint: 1,
-
-  // Método para controlar peticiones y evitar duplicados
-  async makeRequest<T>(key: string, requestFn: () => Promise<T>): Promise<T> {
-    // Si ya hay una petición activa para esta clave, reutilizarla
-    if (this.activeRequests.has(key)) {
-      return this.activeRequests.get(key) as Promise<T>;
-    }
-
-    // Si hay demasiadas peticiones pendientes para este endpoint, rechazar
-    const pendingCount = this.pendingRequests.get(key) || 0;
-    if (pendingCount >= this.maxRequestsPerEndpoint) {
-      throw new Error(`Demasiadas peticiones pendientes para: ${key}`);
-    }
-
-    // Incrementar contador de peticiones pendientes
-    this.pendingRequests.set(key, pendingCount + 1);
-
-    // Crear la promesa de la petición
-    const requestPromise = (async () => {
-      try {
-        return await requestFn();
-      } finally {
-        // Limpiar al finalizar
-        this.activeRequests.delete(key);
-        const newCount = (this.pendingRequests.get(key) || 1) - 1;
-        if (newCount <= 0) {
-          this.pendingRequests.delete(key);
-        } else {
-          this.pendingRequests.set(key, newCount);
-        }
-      }
-    })();
-
-    // Guardar la promesa activa
-    this.activeRequests.set(key, requestPromise);
-    
-    return requestPromise;
-  }
-};
-
-// Constante para tiempo de caché en milisegundos
-const CACHE_EXPIRY_TIME = {
-  productos: 30 * 60 * 1000,     // 30 minutos para productos
-  supervisores: 40 * 60 * 1000,  // 40 minutos para supervisores
-  clientes: 25 * 60 * 1000,      // 25 minutos para clientes
-  pedidos: 10 * 60 * 1000         // 10 minutos para pedidos (cambian con más frecuencia)
-};
-
-// Función para almacenar datos en localStorage para persistir el caché entre recargas
-const persistCacheToStorage = (key: string, data: any) => {
-  try {
-    localStorage.setItem(
-      `cache_${key}`, 
-      JSON.stringify({
-        data,
-        timestamp: Date.now()
-      })
-    );
-  } catch (error) {
-    console.warn(`No se pudo guardar caché de ${key} en localStorage:`, error);
-    // Silenciar error - el guardado en localStorage es opcional
-  }
-};
-
-// Función para cargar datos de caché desde localStorage
-const loadCacheFromStorage = <T>(key: string): { data: T | null, timestamp: number } => {
-  try {
-    const cached = localStorage.getItem(`cache_${key}`);
-    if (cached) {
-      return JSON.parse(cached);
-    }
-  } catch (error) {
-    console.warn(`Error al cargar caché de ${key} desde localStorage:`, error);
-  }
-  return { data: null, timestamp: 0 };
-};
+// Incrementamos el tiempo de caché (30 minutos) para reducir peticiones innecesarias
+const CACHE_EXPIRY_TIME = 30 * 60 * 1000;
+// Tiempo más corto para datos que cambian con más frecuencia como pedidos (5 minutos)
+const PEDIDOS_CACHE_EXPIRY_TIME = 5 * 60 * 1000;
+// Tiempo máximo sin actualizar, incluso si no hay eventos (1 hora)
+const MAX_TIME_WITHOUT_UPDATE = 60 * 60 * 1000;
 
 const DownloadsManagement: React.FC = () => {
   // Estados para Excel
@@ -250,27 +199,28 @@ const DownloadsManagement: React.FC = () => {
     cliente: ''
   });
   
-  // Estado para el cache
-  const [cacheState, setCacheState] = useState<CacheState>(() => {
-    // Intentar cargar estado inicial del caché desde localStorage
-    const cachedProductos = loadCacheFromStorage<Producto[]>('productos');
-    const cachedSupervisores = loadCacheFromStorage<Usuario[]>('supervisores');
-    const cachedClientes = loadCacheFromStorage<Cliente[]>('clientes');
-    const cachedPedidos = loadCacheFromStorage<Pedido[]>('pedidos');
-    
-    return {
-      productos: cachedProductos.data || [],
-      supervisores: cachedSupervisores.data || [],
-      clientes: cachedClientes.data || [],
-      pedidos: cachedPedidos.data || [],
-      lastRefreshed: {
-        productos: cachedProductos.timestamp,
-        supervisores: cachedSupervisores.timestamp,
-        clientes: cachedClientes.timestamp,
-        pedidos: cachedPedidos.timestamp
-      }
-    };
+  // Estado para el cache mejorado
+  const [cacheState, setCacheState] = useState<CacheState>({
+    productos: [],
+    supervisores: [],
+    clientes: [],
+    pedidos: [],
+    lastRefreshed: {
+      productos: 0,
+      supervisores: 0,
+      clientes: 0,
+      pedidos: 0
+    },
+    lastUpdated: {
+      productos: 0,
+      supervisores: 0,
+      clientes: 0,
+      pedidos: 0
+    }
   });
+
+  // Referencia para controlar si la pantalla ya ha sido inicializada
+  const initialLoadDone = useRef(false);
   
   // Filtros
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({
@@ -298,17 +248,6 @@ const DownloadsManagement: React.FC = () => {
   // Estado para controlar qué selector de filtro está abierto
   const [activeFilterSelector, setActiveFilterSelector] = useState<string | null>(null);
   
-  // Estado para controlar si es la primera carga
-  const isInitialMount = useRef(true);
-  
-  // Estado para control de carga de datos
-  const dataLoaded = useRef({
-    clientes: false,
-    productos: false,
-    supervisores: false,
-    pedidos: false
-  });
-  
   // Estado compartido
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -319,23 +258,12 @@ const DownloadsManagement: React.FC = () => {
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
   const mobileListRef = useRef<HTMLDivElement>(null);
 
-  // Referencia para rastrear si el componente está montado
-  const isMounted = useRef(true);
-  
-  // Control de montaje para evitar actualizar estado en componentes desmontados
-  useEffect(() => {
-    isMounted.current = true;
-    return () => {
-      isMounted.current = false;
-    };
-  }, []);
-
   // IMPORTANTE: Tamaños fijos para cada tipo de dispositivo
   const ITEMS_PER_PAGE_MOBILE = 5;
   const ITEMS_PER_PAGE_DESKTOP = 10;
   const itemsPerPage = windowWidth < 768 ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP;
 
-  // Función para formatear fechas
+  // Formatear fechas
   const formatDate = (date: Date) => date.toISOString().split('T')[0];
   
   const formatDisplayDate = (dateString: string) => {
@@ -369,6 +297,28 @@ const DownloadsManagement: React.FC = () => {
     }
   }, [windowWidth]);
 
+  // Función para verificar si el caché está actualizado con lógica mejorada
+  const isCacheValid = useCallback((cacheType: 'productos' | 'supervisores' | 'clientes' | 'pedidos') => {
+    const lastRefreshed = cacheState.lastRefreshed[cacheType];
+    const lastUpdated = cacheState.lastUpdated[cacheType];
+    const now = Date.now();
+    
+    // Si nunca se ha refrescado, no es válido
+    if (lastRefreshed === 0) return false;
+    
+    // Tiempos de expiración diferentes según el tipo de dato
+    const expiryTime = cacheType === 'pedidos' ? PEDIDOS_CACHE_EXPIRY_TIME : CACHE_EXPIRY_TIME;
+    
+    // Si ha pasado demasiado tiempo sin actualizar, el caché ya no es válido
+    if (now - lastRefreshed > MAX_TIME_WITHOUT_UPDATE) return false;
+    
+    // Si ha habido una actualización reciente, el caché no es válido
+    if (lastUpdated > lastRefreshed) return false;
+    
+    // Si no ha pasado el tiempo de expiración, el caché sigue siendo válido
+    return (now - lastRefreshed) < expiryTime;
+  }, [cacheState.lastRefreshed, cacheState.lastUpdated]);
+
   // Resetear la página actual cuando cambian los filtros
   useEffect(() => {
     setCurrentPage(1);
@@ -387,185 +337,82 @@ const DownloadsManagement: React.FC = () => {
     }
   };
 
-  // Función para verificar si el caché está actualizado
-  const isCacheValid = (cacheType: 'productos' | 'supervisores' | 'clientes' | 'pedidos') => {
-    const lastRefreshed = cacheState.lastRefreshed[cacheType];
-    const now = Date.now();
-    // Usar el tiempo de expiración específico para cada tipo de datos
-    return lastRefreshed > 0 && (now - lastRefreshed) < CACHE_EXPIRY_TIME[cacheType];
-  };
-
-  // Función para retry con delay exponencial para errores 429
-  const fetchWithRetry = async (url: string, retries = 3, backoff = 1000) => {
-    // Crear una clave única para esta solicitud
-    const requestKey = `${url}`;
-    
-    // Usar el requestManager para evitar duplicados
-    try {
-      return await requestManager.makeRequest(requestKey, async () => {
-        try {
-          return await api.getClient().get(url);
-        } catch (err) {
-          // Si el error es 429 (Too Many Requests) y quedan reintentos
-          if (err?.response?.status === 429 && retries > 0) {
-            console.log(`Recibido error 429, reintentando en ${backoff}ms. Reintentos restantes: ${retries}`);
-            // Esperar antes de reintentar (backoff exponencial)
-            await new Promise(resolve => setTimeout(resolve, backoff));
-            // Reintentar con un backoff exponencial (ej. 1s, 2s, 4s)
-            return fetchWithRetry(url, retries - 1, backoff * 2);
-          }
-          throw err;
-        }
-      });
-    } catch (error) {
-      console.error(`Error en fetchWithRetry para ${url}:`, error);
-      throw error;
-    }
-  };
-
   // Cargar datos de productos (con caché mejorado)
   const loadProductos = useCallback(async (forceRefresh = false) => {
-    // Si ya se han cargado los datos y no estamos forzando actualización, evitamos una nueva carga
-    if (dataLoaded.current.productos && !forceRefresh) {
-      console.log('Productos ya cargados previamente, omitiendo carga');
-      return;
-    }
-    
     // Si ya tenemos productos en caché y no forzamos actualización, usamos el caché
     if (!forceRefresh && isCacheValid('productos') && cacheState.productos.length > 0) {
-      console.log('Usando productos desde caché válido');
       setProductos(cacheState.productos);
-      
-      // Marcar como cargados
-      dataLoaded.current.productos = true;
-      return;
+      return cacheState.productos;
     }
     
-    setLoadingCacheData(true);
     try {
-      console.log('Cargando productos desde API...');
+      // Indicamos que estamos cargando datos
+      setLoadingCacheData(true);
       
-      // Usar fetchWithRetry para manejar errores 429
-      const response = await fetchWithRetry('/producto');
+      // Llamada a la API para obtener todos los productos
+      const response = await api.getClient().get('/producto');
       
-      if (!isMounted.current) return;
+      let processedProductos: Producto[] = [];
       
       if (response.data && Array.isArray(response.data.items)) {
         // Si estamos usando la estructura paginada
-        const processedProductos = response.data.items.map((prod: any) => ({
+        processedProductos = response.data.items.map((prod: any) => ({
           _id: prod._id,
           nombre: prod.nombre,
           categoria: prod.categoria,
           precio: prod.precio,
           stock: prod.stock
         }));
-        
-        setProductos(processedProductos);
-        
-        // Actualizar caché
-        setCacheState(prev => {
-          const updated = {
-            ...prev,
-            productos: processedProductos,
-            lastRefreshed: {
-              ...prev.lastRefreshed,
-              productos: Date.now()
-            }
-          };
-          
-          // Persistir en localStorage
-          persistCacheToStorage('productos', processedProductos);
-          
-          return updated;
-        });
-        
-        // Marcar como cargados
-        dataLoaded.current.productos = true;
       } else if (response.data && Array.isArray(response.data)) {
         // Si estamos usando la estructura de array simple
-        const processedProductos = response.data.map((prod: any) => ({
+        processedProductos = response.data.map((prod: any) => ({
           _id: prod._id,
           nombre: prod.nombre,
           categoria: prod.categoria,
           precio: prod.precio,
           stock: prod.stock
         }));
-        
-        setProductos(processedProductos);
-        
-        // Actualizar caché
-        setCacheState(prev => {
-          const updated = {
-            ...prev,
-            productos: processedProductos,
-            lastRefreshed: {
-              ...prev.lastRefreshed,
-              productos: Date.now()
-            }
-          };
-          
-          // Persistir en localStorage
-          persistCacheToStorage('productos', processedProductos);
-          
-          return updated;
-        });
-        
-        // Marcar como cargados
-        dataLoaded.current.productos = true;
       }
+      
+      // Actualizar el estado y el caché
+      setProductos(processedProductos);
+      
+      // Actualizar caché con timestamp
+      setCacheState(prev => ({
+        ...prev,
+        productos: processedProductos,
+        lastRefreshed: {
+          ...prev.lastRefreshed,
+          productos: Date.now()
+        }
+      }));
+      
+      return processedProductos;
     } catch (error) {
       console.error('Error al cargar productos:', error);
-      
-      if (!isMounted.current) return;
-      
-      // Si hay datos en caché, usarlos aunque estén vencidos
-      if (cacheState.productos.length > 0) {
-        console.log('Usando productos desde caché vencido debido a error');
-        setProductos(cacheState.productos);
-      } else {
-        setProductos([]);
-        // Mostrar error solo si no hay productos en caché
-        setError(error.response?.status === 429 
-          ? 'Demasiadas solicitudes al servidor. Por favor, espere un momento antes de volver a intentarlo.' 
-          : 'Error al cargar los productos. Por favor, intente nuevamente más tarde.');
-      }
+      return cacheState.productos; // Devolver caché anterior en caso de error
     } finally {
-      if (isMounted.current) {
-        setLoadingCacheData(false);
-      }
+      setLoadingCacheData(false);
     }
-  }, [cacheState.productos, cacheState.lastRefreshed]);
+  }, [cacheState.productos, isCacheValid]);
 
   // Cargar supervisores (usuarios con rol de supervisor)
   const loadSupervisores = useCallback(async (forceRefresh = false) => {
-    // Si ya se han cargado los datos y no estamos forzando actualización, evitamos una nueva carga
-    if (dataLoaded.current.supervisores && !forceRefresh) {
-      console.log('Supervisores ya cargados previamente, omitiendo carga');
-      return;
-    }
-    
     // Si ya tenemos supervisores en caché y no forzamos actualización, usamos el caché
     if (!forceRefresh && isCacheValid('supervisores') && cacheState.supervisores.length > 0) {
-      console.log('Usando supervisores desde caché válido');
       setSupervisores(cacheState.supervisores);
-      
-      // Marcar como cargados
-      dataLoaded.current.supervisores = true;
-      return;
+      return cacheState.supervisores;
     }
     
-    setLoadingCacheData(true);
     try {
-      console.log('Cargando supervisores desde API...');
+      // Llamada a la API para obtener todos los usuarios
+      const response = await api.getClient().get('/auth/users');
       
-      // Usar fetchWithRetry para manejar errores 429
-      const response = await fetchWithRetry('/auth/users');
-      
-      if (!isMounted.current) return;
+      let filteredUsers: Usuario[] = [];
       
       if (response.data && Array.isArray(response.data)) {
         // Filtrar solo usuarios activos con roles relevantes (supervisor, admin, etc.)
-        const filteredUsers = response.data
+        filteredUsers = response.data
           .filter((user: any) => user.isActive)
           .map((user: any) => ({
             _id: user._id,
@@ -581,155 +428,72 @@ const DownloadsManagement: React.FC = () => {
         setSupervisores(filteredUsers);
         
         // Actualizar caché
-        setCacheState(prev => {
-          const updated = {
-            ...prev,
-            supervisores: filteredUsers,
-            lastRefreshed: {
-              ...prev.lastRefreshed,
-              supervisores: Date.now()
-            }
-          };
-          
-          // Persistir en localStorage
-          persistCacheToStorage('supervisores', filteredUsers);
-          
-          return updated;
-        });
-        
-        // Marcar como cargados
-        dataLoaded.current.supervisores = true;
+        setCacheState(prev => ({
+          ...prev,
+          supervisores: filteredUsers,
+          lastRefreshed: {
+            ...prev.lastRefreshed,
+            supervisores: Date.now()
+          }
+        }));
       }
+      
+      return filteredUsers;
     } catch (error) {
       console.error('Error al cargar supervisores:', error);
-      
-      if (!isMounted.current) return;
-      
-      // Si hay datos en caché, usarlos aunque estén vencidos
-      if (cacheState.supervisores.length > 0) {
-        console.log('Usando supervisores desde caché vencido debido a error');
-        setSupervisores(cacheState.supervisores);
-      } else {
-        setSupervisores([]);
-        // Mostrar error solo si no hay supervisores en caché
-        setError(error.response?.status === 429 
-          ? 'Demasiadas solicitudes al servidor. Por favor, espere un momento antes de volver a intentarlo.' 
-          : 'Error al cargar supervisores. Por favor, intente nuevamente más tarde.');
-      }
-    } finally {
-      if (isMounted.current) {
-        setLoadingCacheData(false);
-      }
+      return cacheState.supervisores; // Devolver caché anterior en caso de error
     }
-  }, [cacheState.supervisores, cacheState.lastRefreshed]);
+  }, [cacheState.supervisores, isCacheValid]);
 
   // Cargar todos los clientes (con caché)
   const loadAllClientes = useCallback(async (forceRefresh = false) => {
-    // Si ya se han cargado los datos y no estamos forzando actualización, evitamos una nueva carga
-    if (dataLoaded.current.clientes && !forceRefresh) {
-      console.log('Clientes ya cargados previamente, omitiendo carga');
-      return;
-    }
-    
     // Si ya tenemos clientes en caché y no forzamos actualización, usamos el caché
     if (!forceRefresh && isCacheValid('clientes') && cacheState.clientes.length > 0) {
-      console.log('Usando clientes desde caché válido');
       setAllClientes(cacheState.clientes);
       setClientes(cacheState.clientes);
-      
-      // Marcar como cargados
-      dataLoaded.current.clientes = true;
-      return;
+      return cacheState.clientes;
     }
     
-    setLoadingCacheData(true);
     try {
-      console.log('Cargando clientes desde API...');
-      
-      // Usar fetchWithRetry para manejar errores 429
-      const response = await fetchWithRetry('/cliente');
-      
-      if (!isMounted.current) return;
+      const response = await api.getClient().get('/cliente');
       
       if (response.data && Array.isArray(response.data)) {
         setAllClientes(response.data);
         setClientes(response.data);
         
         // Actualizar caché
-        setCacheState(prev => {
-          const updated = {
-            ...prev,
-            clientes: response.data,
-            lastRefreshed: {
-              ...prev.lastRefreshed,
-              clientes: Date.now()
-            }
-          };
-          
-          // Persistir en localStorage
-          persistCacheToStorage('clientes', response.data);
-          
-          return updated;
-        });
+        setCacheState(prev => ({
+          ...prev,
+          clientes: response.data,
+          lastRefreshed: {
+            ...prev.lastRefreshed,
+            clientes: Date.now()
+          }
+        }));
         
-        // Marcar como cargados
-        dataLoaded.current.clientes = true;
-      } else {
-        setAllClientes([]);
-        setClientes([]);
+        return response.data;
       }
+      
+      return [];
     } catch (err) {
       console.error('Error al cargar clientes:', err);
-      
-      if (!isMounted.current) return;
-      
-      // Si hay datos en caché, usarlos aunque estén vencidos
-      if (cacheState.clientes.length > 0) {
-        console.log('Usando clientes desde caché vencido debido a error');
-        setAllClientes(cacheState.clientes);
-        setClientes(cacheState.clientes);
-      } else {
-        // Mostrar mensaje de error al usuario
-        setError(err.response?.status === 429 
-          ? 'Demasiadas solicitudes al servidor. Por favor, espere un momento antes de volver a intentarlo.' 
-          : 'Error al cargar los clientes. Por favor, intente nuevamente más tarde.');
-        setAllClientes([]);
-        setClientes([]);
-      }
-    } finally {
-      if (isMounted.current) {
-        setLoadingCacheData(false);
-      }
+      // Devolver caché anterior en caso de error
+      return cacheState.clientes;
     }
-  }, [cacheState.clientes, cacheState.lastRefreshed]);
-  
-  // Cargar todos los pedidos para la tabla (con caché)
+  }, [cacheState.clientes, isCacheValid]);
+
+  // Cargar todos los pedidos para la tabla (con caché optimizado)
   const loadAllPedidos = useCallback(async (forceRefresh = false) => {
-    // Si ya se han cargado los datos y no estamos forzando actualización, evitamos una nueva carga
-    if (dataLoaded.current.pedidos && !forceRefresh) {
-      console.log('Pedidos ya cargados previamente, omitiendo carga');
-      return;
-    }
-    
-    // Si no forzamos la actualización y el caché de pedidos es válido, usamos el caché
+    // Verificar si podemos usar el caché
     if (!forceRefresh && isCacheValid('pedidos') && cacheState.pedidos.length > 0) {
-      console.log('Usando pedidos desde caché válido');
       setAllPedidos(cacheState.pedidos);
       setFilteredPedidos(cacheState.pedidos);
-      
-      // Marcar como cargados
-      dataLoaded.current.pedidos = true;
-      return;
+      return cacheState.pedidos;
     }
     
     setLoadingPedidos(true);
     try {
-      console.log('Cargando pedidos desde API...');
-      
-      // Usar fetchWithRetry para manejar errores 429
-      const response = await fetchWithRetry('/pedido');
-      
-      if (!isMounted.current) return;
+      const response = await api.getClient().get('/pedido');
       
       // Verificar que response.data exista y sea un array
       if (response.data && Array.isArray(response.data)) {
@@ -744,7 +508,7 @@ const DownloadsManagement: React.FC = () => {
             }, 0);
           }
           
-          // Add display number that prioritizes nPedido
+          // Añadir displayNumber que prioriza nPedido
           const displayNumber = pedido.nPedido?.toString() || pedido.numero || 'S/N';
           
           return { ...pedido, total, displayNumber };
@@ -754,21 +518,14 @@ const DownloadsManagement: React.FC = () => {
         setFilteredPedidos(pedidosConTotal);
         
         // Actualizar caché
-        setCacheState(prev => {
-          const updated = {
-            ...prev,
-            pedidos: pedidosConTotal,
-            lastRefreshed: {
-              ...prev.lastRefreshed,
-              pedidos: Date.now()
-            }
-          };
-          
-          // Persistir en localStorage
-          persistCacheToStorage('pedidos', pedidosConTotal);
-          
-          return updated;
-        });
+        setCacheState(prev => ({
+          ...prev,
+          pedidos: pedidosConTotal,
+          lastRefreshed: {
+            ...prev.lastRefreshed,
+            pedidos: Date.now()
+          }
+        }));
         
         // Inicializar las opciones de filtro temporales
         setTempFilterOptions({
@@ -780,248 +537,145 @@ const DownloadsManagement: React.FC = () => {
           clienteId: ''
         });
         
-        // Marcar como cargados
-        dataLoaded.current.pedidos = true;
-      } else {
-        // Si hay datos en caché, usarlos aunque estén vencidos
-        if (cacheState.pedidos.length > 0) {
-          console.log('Usando pedidos desde caché vencido debido a error de formato');
-          setAllPedidos(cacheState.pedidos);
-          setFilteredPedidos(cacheState.pedidos);
-        } else {
-          // Si la respuesta no es un array, inicializar con array vacío
-          setAllPedidos([]);
-          setFilteredPedidos([]);
-        }
+        return pedidosConTotal;
       }
+      
+      // Si la respuesta no es un array, mantener el estado actual
+      return cacheState.pedidos;
     } catch (err) {
       console.error('Error al cargar todos los pedidos:', err);
-      
-      if (!isMounted.current) return;
-      
-      // Si hay datos en caché, usarlos aunque estén vencidos
-      if (cacheState.pedidos.length > 0) {
-        console.log('Usando pedidos desde caché vencido debido a error');
-        setAllPedidos(cacheState.pedidos);
-        setFilteredPedidos(cacheState.pedidos);
-      } else {
-        setAllPedidos([]);
-        setFilteredPedidos([]);
-        setError(err.response?.status === 429 
-          ? 'Demasiadas solicitudes al servidor. Por favor, espere un momento antes de volver a intentarlo.' 
-          : 'Error al cargar los pedidos. Por favor, intente nuevamente más tarde.');
-      }
+      return cacheState.pedidos; // Devolver caché anterior en caso de error
     } finally {
-      if (isMounted.current) {
-        setLoadingPedidos(false);
-      }
+      setLoadingPedidos(false);
     }
-  }, [cacheState.pedidos, cacheState.lastRefreshed]);
+  }, [cacheState.pedidos, isCacheValid]);
 
-  // Cargar pedidos cuando se selecciona un cliente en la pestaña de remitos (con debounce)
-  const clientePedidosDebounceTimer = useRef<NodeJS.Timeout | null>(null);
-  
-  // Efecto con debounce para cargar pedidos al seleccionar cliente
-  useEffect(() => {
-    if (!selectedCliente) {
+  // Cargar pedidos específicos por cliente
+  const loadPedidosByCliente = useCallback(async (clienteId: string) => {
+    if (!clienteId) {
       setPedidos([]);
-      return;
+      return [];
     }
-    
-    // Limpiar el temporizador anterior
-    if (clientePedidosDebounceTimer.current) {
-      clearTimeout(clientePedidosDebounceTimer.current);
-    }
-    
-    // Configurar un nuevo temporizador de debounce (300ms)
-    clientePedidosDebounceTimer.current = setTimeout(async () => {
-      try {
-        setError('');
-        
-        // Buscar primero en los pedidos ya cargados en memoria
-        if (allPedidos.length > 0) {
-          console.log('Buscando pedidos para cliente en memoria...');
-          
-          // Buscar el cliente seleccionado
-          const cliente = allClientes.find(c => c._id === selectedCliente);
-          
-          if (cliente) {
-            // Filtrar pedidos que coincidan con este cliente
-            const pedidosFiltrados = allPedidos.filter(pedido => {
-              // Un pedido coincide con un cliente si:
-              // 1. Mismo servicio
-              const servicioMatch = pedido.servicio === cliente.servicio;
-              
-              // 2. Misma sección de servicio (si está especificada)
-              const seccionMatch = !cliente.seccionDelServicio || 
-                                pedido.seccionDelServicio === cliente.seccionDelServicio;
-              
-              // 3. Mismo userId (si está asignado)
-              let userMatch = true;
-              if (typeof cliente.userId === 'object' && cliente.userId && cliente.userId._id) {
-                if (typeof pedido.userId === 'object') {
-                  userMatch = pedido.userId && pedido.userId._id === cliente.userId._id;
-                } else {
-                  userMatch = pedido.userId === cliente.userId._id;
-                }
-              }
-              
-              return servicioMatch && seccionMatch && userMatch;
-            });
-            
-            if (pedidosFiltrados.length > 0) {
-              console.log(`Encontrados ${pedidosFiltrados.length} pedidos en memoria para el cliente seleccionado`);
-              setPedidos(pedidosFiltrados);
-              return;
-            }
-          }
-        }
-        
-        // Si no se encuentran en memoria, hacer solicitud al servidor
-        console.log('Cargando pedidos para cliente desde API...');
-        const pedidosResponse = await fetchWithRetry(`/pedido/cliente/${selectedCliente}`);
-        
-        if (!isMounted.current) return;
-        
-        if (pedidosResponse.data && Array.isArray(pedidosResponse.data)) {
-          // Procesar los pedidos para asegurar que displayNumber esté definido
-          const processedPedidos = pedidosResponse.data.map((pedido: any) => {
-            return {
-              ...pedido,
-              displayNumber: pedido.nPedido?.toString() || pedido.numero || 'S/N'
-            };
-          });
-          setPedidos(processedPedidos);
-        } else {
-          setPedidos([]);
-          setError('Formato de respuesta inválido al cargar pedidos');
-        }
-      } catch (err) {
-        console.error('Error al cargar pedidos:', err);
-        
-        if (!isMounted.current) return;
-        
-        setPedidos([]);
-        setError('Error al cargar pedidos para este cliente');
-      }
-    }, 300); // 300ms de espera para debounce
-    
-    // Limpiar temporizador al desmontar
-    return () => {
-      if (clientePedidosDebounceTimer.current) {
-        clearTimeout(clientePedidosDebounceTimer.current);
-      }
-    };
-  }, [selectedCliente, allPedidos, allClientes]);
-
-  // Cargar datos iniciales con retraso entre solicitudes (sólo una vez)
-  useEffect(() => {
-    if (!isInitialMount.current) return;
-    isInitialMount.current = false;
-
-    const loadInitialData = async () => {
-      // Iniciar estableciendo errores a vacío
-      setError('');
-      
-      console.log('Carga inicial de datos comenzando...');
-      
-      try {
-        // Intentar cargar datos en orden de prioridad con retrasos entre ellos
-        
-        // 1. Primero cargar los clientes (probablemente los más importantes)
-        console.log('Paso 1: Cargar clientes...');
-        await loadAllClientes();
-        
-        // Pequeño retraso para evitar errores 429
-        await new Promise(resolve => setTimeout(resolve, 800));
-        
-        // 2. Luego cargar pedidos (siguiente prioridad)
-        console.log('Paso 2: Cargar pedidos...');
-        await loadAllPedidos();
-        
-        // Otro pequeño retraso
-        await new Promise(resolve => setTimeout(resolve, 800));
-        
-        // 3. Finalmente cargar datos menos importantes
-        console.log('Paso 3: Cargar productos y supervisores...');
-        
-        // Cargar productos
-        loadProductos();
-        
-        // Pequeño retraso final
-        await new Promise(resolve => setTimeout(resolve, 800));
-        
-        // Cargar supervisores en último lugar
-        loadSupervisores();
-        
-        console.log('Carga inicial completada con éxito');
-      } catch (err) {
-        console.error("Error al cargar datos iniciales:", err);
-        
-        if (isMounted.current) {
-          setError('Hubo un problema al cargar los datos. Por favor, intente nuevamente más tarde.');
-        }
-      }
-    };
-    
-    // Comenzar la carga de datos
-    loadInitialData();
-  }, [loadAllClientes, loadProductos, loadSupervisores, loadAllPedidos]);
-  
-  // Función para forzar la recarga de todos los datos (de forma secuencial para evitar 429)
-  const forceRefreshAllData = async () => {
-    if (loadingCacheData) {
-      // Ya se está actualizando, no iniciar otra actualización
-      return;
-    }
-    
-    setLoadingCacheData(true);
-    setError(''); // Limpiar errores previos
     
     try {
-      // Reiniciar el estado de datos cargados
-      dataLoaded.current = {
-        clientes: false,
-        productos: false,
-        supervisores: false,
-        pedidos: false
-      };
+      setError('');
+      const pedidosResponse = await api.getClient().get(`/pedido/cliente/${clienteId}`);
       
-      // Cargar datos de forma secuencial para evitar errores 429
-      await loadAllClientes(true);
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      await loadAllPedidos(true);
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      await loadProductos(true);
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      await loadSupervisores(true);
-      
-      // Mostrar mensaje de éxito
-      if (isMounted.current) {
-        setSuccessMessage('Datos actualizados correctamente');
-        setTimeout(() => {
-          if (isMounted.current) {
-            setSuccessMessage('');
-          }
-        }, 3000);
+      if (pedidosResponse.data && Array.isArray(pedidosResponse.data)) {
+        // Procesar los pedidos para asegurar que displayNumber esté definido
+        const processedPedidos = pedidosResponse.data.map((pedido: any) => {
+          return {
+            ...pedido,
+            displayNumber: pedido.nPedido?.toString() || pedido.numero || 'S/N'
+          };
+        });
+        
+        setPedidos(processedPedidos);
+        return processedPedidos;
+      } else {
+        setPedidos([]);
+        return [];
       }
     } catch (err) {
-      console.error('Error al actualizar datos:', err);
-      
-      if (isMounted.current) {
-        setError('Error al actualizar los datos. Por favor intente nuevamente más tarde.');
-      }
-    } finally {
-      if (isMounted.current) {
-        setLoadingCacheData(false);
-      }
+      console.error('Error al cargar pedidos:', err);
+      setPedidos([]);
+      setError('Error al cargar pedidos para este cliente');
+      return [];
     }
-  };
-  
-  // Función para aplicar filtros con memoización para evitar recálculos innecesarios
+  }, []);
+
+  // Efecto para cargar pedidos cuando se selecciona un cliente
+  useEffect(() => {
+    if (selectedCliente) {
+      loadPedidosByCliente(selectedCliente);
+    }
+  }, [selectedCliente, loadPedidosByCliente]);
+
+  // Cargar datos iniciales solo una vez al montar el componente
+  useEffect(() => {
+    if (!initialLoadDone.current) {
+      // Cargar datos iniciales
+      Promise.all([
+        loadProductos(),
+        loadSupervisores(),
+        loadAllClientes(),
+        loadAllPedidos()
+      ]).then(() => {
+        initialLoadDone.current = true;
+      });
+    }
+  }, [loadProductos, loadSupervisores, loadAllClientes, loadAllPedidos]);
+
+  // Suscribirse a eventos de actualización
+  useEffect(() => {
+    // Suscribirse a actualizaciones de inventario (productos)
+    const unsubscribeInventory = inventoryObservable.subscribe(() => {
+      console.log('DownloadsManagement: Actualización de inventario notificada');
+      
+      // Marcar productos como actualizados
+      setCacheState(prev => ({
+        ...prev,
+        lastUpdated: {
+          ...prev.lastUpdated,
+          productos: Date.now()
+        }
+      }));
+      
+      // Cargar los productos actualizados
+      loadProductos(true);
+    });
+    
+    // Suscribirse a actualizaciones de pedidos
+    const unsubscribePedidos = pedidosObservable.subscribe(() => {
+      console.log('DownloadsManagement: Actualización de pedidos notificada');
+      
+      // Marcar pedidos como actualizados
+      setCacheState(prev => ({
+        ...prev,
+        lastUpdated: {
+          ...prev.lastUpdated,
+          pedidos: Date.now()
+        }
+      }));
+      
+      // Actualizar los pedidos
+      loadAllPedidos(true);
+      
+      // Si hay un cliente seleccionado, actualizar sus pedidos también
+      if (selectedCliente) {
+        loadPedidosByCliente(selectedCliente);
+      }
+    });
+    
+    // Limpiar suscripciones al desmontar
+    return () => {
+      unsubscribeInventory();
+      unsubscribePedidos();
+    };
+  }, [loadProductos, loadAllPedidos, loadPedidosByCliente, selectedCliente]);
+
+  // Función para forzar la recarga de todos los datos (usada solo en casos especiales)
+  const forceRefreshAllData = useCallback(() => {
+    setLoadingCacheData(true);
+    Promise.all([
+      loadProductos(true),
+      loadSupervisores(true),
+      loadAllClientes(true),
+      loadAllPedidos(true)
+    ]).then(() => {
+      // Si hay un cliente seleccionado, actualizar sus pedidos también
+      if (selectedCliente) {
+        return loadPedidosByCliente(selectedCliente);
+      }
+    }).finally(() => {
+      setLoadingCacheData(false);
+      // Mostrar mensaje de éxito
+      setSuccessMessage('Datos actualizados correctamente');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    });
+  }, [loadProductos, loadSupervisores, loadAllClientes, loadAllPedidos, loadPedidosByCliente, selectedCliente]);
+
+  // Función para aplicar filtros
   const applyFilters = useCallback(() => {
     if (!allPedidos.length) return;
     
@@ -1112,12 +766,9 @@ const DownloadsManagement: React.FC = () => {
       }
     }
     
-    // Actualizar lista filtrada solo si es necesario
-    if (JSON.stringify(filteredPedidos) !== JSON.stringify(filtered)) {
-      setFilteredPedidos(filtered);
-      setCurrentPage(1); // Reset to first page when filters change
-    }
-  }, [allPedidos, allClientes, filterOptions, filteredPedidos]);
+    setFilteredPedidos(filtered);
+    setCurrentPage(1); // Reset to first page when filters change
+  }, [allPedidos, allClientes, filterOptions]);
   
   // Reaccionar a cambios en filterOptions
   useEffect(() => {
@@ -1157,25 +808,20 @@ const DownloadsManagement: React.FC = () => {
       link.setAttribute('download', `reporte_${formatDate(dateRange.from)}_${formatDate(dateRange.to)}.xlsx`);
       document.body.appendChild(link);
       link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      
+      // Limpiar
+      setTimeout(() => {
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }, 100);
       
       setSuccessMessage('Excel descargado correctamente');
-      setTimeout(() => {
-        if (isMounted.current) {
-          setSuccessMessage('');
-        }
-      }, 3000);
+      setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err: any) {
       console.error('Error downloading Excel:', err);
-      
-      if (isMounted.current) {
-        setError(err.response?.data?.mensaje || 'Error al descargar el Excel');
-      }
+      setError(err.response?.data?.mensaje || 'Error al descargar el Excel');
     } finally {
-      if (isMounted.current) {
-        setIsLoading(false);
-      }
+      setIsLoading(false);
     }
   };
 
@@ -1199,8 +845,6 @@ const DownloadsManagement: React.FC = () => {
         timeout: 60000 // Incrementar a 60 segundos
       });
       
-      if (!isMounted.current) return;
-      
       // Verificar que la respuesta sea válida
       if (!response.data || response.data.size === 0) {
         throw new Error('La respuesta del servidor está vacía');
@@ -1214,13 +858,9 @@ const DownloadsManagement: React.FC = () => {
         reader.onload = () => {
           try {
             const errorObj = JSON.parse(reader.result as string);
-            if (isMounted.current) {
-              setError(errorObj.mensaje || 'Error al generar el PDF');
-            }
+            setError(errorObj.mensaje || 'Error al generar el PDF');
           } catch (parseErr) {
-            if (isMounted.current) {
-              setError('Error al procesar la respuesta del servidor');
-            }
+            setError('Error al procesar la respuesta del servidor');
           }
         };
         reader.readAsText(response.data);
@@ -1250,18 +890,10 @@ const DownloadsManagement: React.FC = () => {
         window.URL.revokeObjectURL(url);
       }, 100);
       
-      if (isMounted.current) {
-        setSuccessMessage('Remito descargado correctamente');
-        setTimeout(() => {
-          if (isMounted.current) {
-            setSuccessMessage('');
-          }
-        }, 3000);
-      }
+      setSuccessMessage('Remito descargado correctamente');
+      setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err: any) {
       console.error('Error downloading remito:', err);
-      
-      if (!isMounted.current) return;
       
       // Proporcionar mensaje de error más específico
       let errorMessage = 'Error al descargar el remito';
@@ -1274,14 +906,10 @@ const DownloadsManagement: React.FC = () => {
           reader.onload = () => {
             try {
               const errorObj = JSON.parse(reader.result as string);
-              if (isMounted.current) {
-                setError(errorObj.mensaje || errorMessage);
-              }
+              setError(errorObj.mensaje || errorMessage);
             } catch (parseErr) {
               // No se puede parsear como JSON
-              if (isMounted.current) {
-                setError(errorMessage);
-              }
+              setError(errorMessage);
             }
           };
           reader.readAsText(err.response.data);
@@ -1290,8 +918,6 @@ const DownloadsManagement: React.FC = () => {
           errorMessage = 'No se encontró el pedido solicitado';
         } else if (err.response.status === 500) {
           errorMessage = 'Error en el servidor al generar el PDF. Intente nuevamente.';
-        } else if (err.response.status === 429) {
-          errorMessage = 'Demasiadas solicitudes. Por favor, espere un momento antes de volver a intentarlo.';
         }
       } else if (err.request) {
         // No se recibió respuesta
@@ -1303,9 +929,7 @@ const DownloadsManagement: React.FC = () => {
       
       setError(errorMessage);
     } finally {
-      if (isMounted.current) {
-        setIsLoading(false);
-      }
+      setIsLoading(false);
     }
   };
 
@@ -1435,32 +1059,36 @@ const DownloadsManagement: React.FC = () => {
       {/* Alertas */}
       {error && (
         <Alert className="mb-4 bg-red-50 border border-red-200 text-red-800 rounded-lg">
-          <AlertDescription className="text-red-700">{error}</AlertDescription>
+          <AlertCircle className="h-4 w-4 text-red-600 shrink-0" />
+          <AlertDescription className="text-red-700 ml-2">{error}</AlertDescription>
         </Alert>
       )}
       
       {successMessage && (
         <Alert className="mb-4 bg-[#DFEFE6] border border-[#91BEAD] text-[#29696B] rounded-lg">
-          <AlertDescription className="text-[#29696B]">{successMessage}</AlertDescription>
+          <CheckCircle className="h-4 w-4 text-[#29696B] shrink-0" />
+          <AlertDescription className="text-[#29696B] ml-2">{successMessage}</AlertDescription>
         </Alert>
       )}
 
-      {/* Botón para refrescar todos los datos del caché */}
-      <div className="flex justify-end">
-        <Button
-          variant="outline"
-          onClick={forceRefreshAllData}
-          disabled={loadingCacheData}
-          className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/40"
-        >
-          {loadingCacheData ? (
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-          ) : (
-            <RefreshCw className="w-4 h-4 mr-2" />
-          )}
-          Actualizar datos
-        </Button>
-      </div>
+      {/* Botón para refrescar solo cuando sea necesario */}
+      {(loadingCacheData || (!isCacheValid('productos') || !isCacheValid('supervisores') || !isCacheValid('clientes') || !isCacheValid('pedidos'))) && (
+        <div className="flex justify-end">
+          <Button
+            variant="outline"
+            onClick={forceRefreshAllData}
+            disabled={loadingCacheData}
+            className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/40"
+          >
+            {loadingCacheData ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4 mr-2" />
+            )}
+            Actualizar datos
+          </Button>
+        </div>
+      )}
 
       {/* NAVEGACIÓN MEJORADA: Espacio vertical fijo para las tabs */}
       <div className="min-h-[60px]">
