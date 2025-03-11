@@ -135,8 +135,13 @@ interface CacheState {
   };
 }
 
-// Constante para tiempo de caché en milisegundos (10 minutos)
-const CACHE_EXPIRY_TIME = 10 * 60 * 1000;
+// Constante para tiempo de caché en milisegundos
+const CACHE_EXPIRY_TIME = {
+  productos: 15 * 60 * 1000,     // 15 minutos para productos
+  supervisores: 20 * 60 * 1000,  // 20 minutos para supervisores
+  clientes: 15 * 60 * 1000,      // 15 minutos para clientes
+  pedidos: 5 * 60 * 1000         // 5 minutos para pedidos (cambian con más frecuencia)
+};
 
 const DownloadsManagement: React.FC = () => {
   // Estados para Excel
@@ -280,7 +285,8 @@ const DownloadsManagement: React.FC = () => {
   const isCacheValid = (cacheType: 'productos' | 'supervisores' | 'clientes' | 'pedidos') => {
     const lastRefreshed = cacheState.lastRefreshed[cacheType];
     const now = Date.now();
-    return lastRefreshed > 0 && (now - lastRefreshed) < CACHE_EXPIRY_TIME;
+    // Usar el tiempo de expiración específico para cada tipo de datos
+    return lastRefreshed > 0 && (now - lastRefreshed) < CACHE_EXPIRY_TIME[cacheType];
   };
 
   // Cargar datos de productos (con caché)
@@ -293,8 +299,8 @@ const DownloadsManagement: React.FC = () => {
     
     setLoadingCacheData(true);
     try {
-      // Llamada a la API para obtener todos los productos
-      const response = await api.getClient().get('/producto');
+      // Usar fetchWithRetry para manejar errores 429
+      const response = await fetchWithRetry('/producto');
       
       if (response.data && Array.isArray(response.data.items)) {
         // Si estamos usando la estructura paginada
@@ -342,6 +348,12 @@ const DownloadsManagement: React.FC = () => {
     } catch (error) {
       console.error('Error al cargar productos:', error);
       setProductos([]);
+      // Mostrar error solo si no hay productos en caché
+      if (cacheState.productos.length === 0) {
+        setError(error.response?.status === 429 
+          ? 'Demasiadas solicitudes al servidor. Por favor, espere un momento antes de volver a intentarlo.' 
+          : 'Error al cargar los productos. Por favor, intente nuevamente más tarde.');
+      }
     } finally {
       setLoadingCacheData(false);
     }
@@ -357,8 +369,8 @@ const DownloadsManagement: React.FC = () => {
     
     setLoadingCacheData(true);
     try {
-      // Llamada a la API para obtener todos los usuarios
-      const response = await api.getClient().get('/auth/users');
+      // Usar fetchWithRetry para manejar errores 429
+      const response = await fetchWithRetry('/auth/users');
       
       if (response.data && Array.isArray(response.data)) {
         // Filtrar solo usuarios activos con roles relevantes (supervisor, admin, etc.)
@@ -390,10 +402,33 @@ const DownloadsManagement: React.FC = () => {
     } catch (error) {
       console.error('Error al cargar supervisores:', error);
       setSupervisores([]);
+      // Mostrar error solo si no hay supervisores en caché
+      if (cacheState.supervisores.length === 0) {
+        setError(error.response?.status === 429 
+          ? 'Demasiadas solicitudes al servidor. Por favor, espere un momento antes de volver a intentarlo.' 
+          : 'Error al cargar supervisores. Por favor, intente nuevamente más tarde.');
+      }
     } finally {
       setLoadingCacheData(false);
     }
   }, [cacheState.supervisores, cacheState.lastRefreshed]);
+
+  // Función para retry con delay exponencial para errores 429
+  const fetchWithRetry = async (url, retries = 3, backoff = 1000) => {
+    try {
+      return await api.getClient().get(url);
+    } catch (err) {
+      // Si el error es 429 (Too Many Requests) y quedan reintentos
+      if (err?.response?.status === 429 && retries > 0) {
+        console.log(`Recibido error 429, reintentando en ${backoff}ms. Reintentos restantes: ${retries}`);
+        // Esperar antes de reintentar (backoff exponencial)
+        await new Promise(resolve => setTimeout(resolve, backoff));
+        // Reintentar con un backoff exponencial (ej. 1s, 2s, 4s)
+        return fetchWithRetry(url, retries - 1, backoff * 2);
+      }
+      throw err;
+    }
+  };
 
   // Cargar todos los clientes (con caché)
   const loadAllClientes = useCallback(async (forceRefresh = false) => {
@@ -406,7 +441,8 @@ const DownloadsManagement: React.FC = () => {
     
     setLoadingCacheData(true);
     try {
-      const response = await api.getClient().get('/cliente');
+      // Usar fetchWithRetry para manejar errores 429
+      const response = await fetchWithRetry('/cliente');
       
       if (response.data && Array.isArray(response.data)) {
         setAllClientes(response.data);
@@ -427,6 +463,10 @@ const DownloadsManagement: React.FC = () => {
       }
     } catch (err) {
       console.error('Error al cargar clientes:', err);
+      // Mostrar mensaje de error al usuario
+      setError(err.response?.status === 429 
+        ? 'Demasiadas solicitudes al servidor. Por favor, espere un momento antes de volver a intentarlo.' 
+        : 'Error al cargar los clientes. Por favor, intente nuevamente más tarde.');
       setAllClientes([]);
       setClientes([]);
     } finally {
@@ -486,7 +526,8 @@ const DownloadsManagement: React.FC = () => {
     
     setLoadingPedidos(true);
     try {
-      const response = await api.getClient().get('/pedido');
+      // Usar fetchWithRetry para manejar errores 429
+      const response = await fetchWithRetry('/pedido');
       
       // Verificar que response.data exista y sea un array
       if (response.data && Array.isArray(response.data)) {
@@ -537,30 +578,73 @@ const DownloadsManagement: React.FC = () => {
       console.error('Error al cargar todos los pedidos:', err);
       setAllPedidos([]);
       setFilteredPedidos([]);
+      setError(err.response?.status === 429 
+        ? 'Demasiadas solicitudes al servidor. Por favor, espere un momento antes de volver a intentarlo.' 
+        : 'Error al cargar los pedidos. Por favor, intente nuevamente más tarde.');
     } finally {
       setLoadingPedidos(false);
     }
   }, [allPedidos.length]);
 
-  // Cargar datos iniciales
+  // Cargar datos iniciales con retraso entre solicitudes para evitar errores 429
   useEffect(() => {
-    loadAllPedidos();
-  }, [loadAllPedidos]);
+    const loadInitialData = async () => {
+      try {
+        // Cargar primero los clientes (probablemente los más importantes)
+        await loadAllClientes();
+        
+        // Pequeño retraso para evitar errores 429
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // Luego cargar productos
+        await loadProductos();
+        
+        // Otro pequeño retraso
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // Finalmente cargar supervisores
+        await loadSupervisores();
+        
+        // Un retraso final antes de cargar pedidos
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // Cargar los pedidos al final
+        await loadAllPedidos();
+      } catch (err) {
+        console.error("Error al cargar datos iniciales:", err);
+      }
+    };
+    
+    loadInitialData();
+  }, [loadAllClientes, loadProductos, loadSupervisores, loadAllPedidos]);
   
-  // Función para forzar la recarga de todos los datos
-  const forceRefreshAllData = () => {
+  // Función para forzar la recarga de todos los datos (de forma secuencial para evitar 429)
+  const forceRefreshAllData = async () => {
     setLoadingCacheData(true);
-    Promise.all([
-      loadProductos(true),
-      loadSupervisores(true),
-      loadAllClientes(true),
-      loadAllPedidos(true)
-    ]).finally(() => {
-      setLoadingCacheData(false);
+    setError(''); // Limpiar errores previos
+    
+    try {
+      // Cargar datos de forma secuencial para evitar errores 429
+      await loadAllClientes(true);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      await loadProductos(true);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      await loadSupervisores(true);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      await loadAllPedidos(true);
+      
       // Mostrar mensaje de éxito
       setSuccessMessage('Datos actualizados correctamente');
       setTimeout(() => setSuccessMessage(''), 3000);
-    });
+    } catch (err) {
+      console.error('Error al actualizar datos:', err);
+      setError('Error al actualizar los datos. Por favor intente nuevamente más tarde.');
+    } finally {
+      setLoadingCacheData(false);
+    }
   };
   
   // Función para aplicar filtros manualmente
