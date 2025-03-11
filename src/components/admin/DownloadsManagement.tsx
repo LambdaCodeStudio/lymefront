@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Download,
   FileSpreadsheet,
@@ -8,7 +8,13 @@ import {
   Search,
   SlidersHorizontal,
   Hash,
-  MapPin
+  MapPin,
+  Package,
+  User,
+  Building,
+  X,
+  Filter,
+  RefreshCw
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from "@/components/ui/button";
@@ -36,6 +42,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -48,9 +55,11 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import Pagination from "@/components/ui/pagination";
 import api from '../../services/api';
 
+// Interface definitions
 interface DateRange {
   from: Date | undefined;
   to: Date | undefined;
@@ -67,6 +76,30 @@ interface Cliente {
   } | string;
 }
 
+interface Usuario {
+  _id: string;
+  nombre?: string;
+  apellido?: string;
+  usuario: string;
+  role: string;
+  isActive: boolean;
+  // Display name for UI
+  displayName?: string;
+}
+
+interface Producto {
+  _id: string;
+  nombre: string;
+  categoria: string;
+  precio: number;
+  stock: number;
+}
+
+interface ProductoEnPedido {
+  productoId: string | Producto;
+  cantidad: number;
+}
+
 interface Pedido {
   _id: string;
   fecha: string;
@@ -74,16 +107,36 @@ interface Pedido {
   numero?: string;  // Campo de compatibilidad anterior
   servicio: string;
   seccionDelServicio: string;
-  productos: any[];
+  productos: ProductoEnPedido[];
   total?: number;
   displayNumber?: string; // Campo para mostrar consistentemente
+  userId?: string | Usuario; // Supervisor/Usuario asignado
+  clienteId?: string;
 }
 
 interface FilterOptions {
   servicio: string;
   fechaInicio: string;
   fechaFin: string;
+  productoId: string;
+  supervisorId: string;
+  clienteId: string;
 }
+
+interface CacheState {
+  productos: Producto[];
+  supervisores: Usuario[];
+  clientes: Cliente[];
+  lastRefreshed: {
+    productos: number;
+    supervisores: number;
+    clientes: number;
+    pedidos: number;
+  };
+}
+
+// Constante para tiempo de caché en milisegundos (10 minutos)
+const CACHE_EXPIRY_TIME = 10 * 60 * 1000;
 
 const DownloadsManagement: React.FC = () => {
   // Estados para Excel
@@ -103,10 +156,41 @@ const DownloadsManagement: React.FC = () => {
   const [allPedidos, setAllPedidos] = useState<Pedido[]>([]);
   const [filteredPedidos, setFilteredPedidos] = useState<Pedido[]>([]);
   const [loadingPedidos, setLoadingPedidos] = useState(false);
+  const [loadingCacheData, setLoadingCacheData] = useState(false);
+  
+  // Estados para los nuevos filtros
+  const [productos, setProductos] = useState<Producto[]>([]);
+  const [supervisores, setSupervisores] = useState<Usuario[]>([]);
+  const [allClientes, setAllClientes] = useState<Cliente[]>([]);
+  
+  // Estado para la búsqueda en filtros
+  const [filterSearch, setFilterSearch] = useState({
+    producto: '',
+    supervisor: '',
+    cliente: ''
+  });
+  
+  // Estado para el cache
+  const [cacheState, setCacheState] = useState<CacheState>({
+    productos: [],
+    supervisores: [],
+    clientes: [],
+    lastRefreshed: {
+      productos: 0,
+      supervisores: 0,
+      clientes: 0,
+      pedidos: 0
+    }
+  });
+  
+  // Filtros
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({
     servicio: 'todos',
     fechaInicio: '',
     fechaFin: '',
+    productoId: '',
+    supervisorId: '',
+    clienteId: ''
   });
   
   // Estado temporal para formulario de filtros
@@ -114,10 +198,16 @@ const DownloadsManagement: React.FC = () => {
     servicio: 'todos',
     fechaInicio: '',
     fechaFin: '',
+    productoId: '',
+    supervisorId: '',
+    clienteId: ''
   });
   
   // Estado para controlar el diálogo de filtros
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
+  
+  // Estado para controlar qué selector de filtro está abierto
+  const [activeFilterSelector, setActiveFilterSelector] = useState<string | null>(null);
   
   // Estado compartido
   const [isLoading, setIsLoading] = useState(false);
@@ -133,6 +223,22 @@ const DownloadsManagement: React.FC = () => {
   const ITEMS_PER_PAGE_MOBILE = 5;
   const ITEMS_PER_PAGE_DESKTOP = 10;
   const itemsPerPage = windowWidth < 768 ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP;
+
+  // Función para formatear fechas
+  const formatDate = (date: Date) => date.toISOString().split('T')[0];
+  
+  const formatDisplayDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('es-ES', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    } catch (error) {
+      return 'Fecha inválida';
+    }
+  };
 
   // Efecto para detectar el tamaño de la ventana
   useEffect(() => {
@@ -170,25 +276,172 @@ const DownloadsManagement: React.FC = () => {
     }
   };
 
-  // Cargar clientes
-  useEffect(() => {
-    const fetchClientes = async () => {
-      try {
-        const response = await api.getClient().get('/cliente');
-        if (response.data && Array.isArray(response.data)) {
-          setClientes(response.data);
-        } else {
-          setClientes([]);
-        }
-      } catch (err) {
-        console.error('Error al cargar clientes:', err);
+  // Función para verificar si el caché está actualizado
+  const isCacheValid = (cacheType: 'productos' | 'supervisores' | 'clientes' | 'pedidos') => {
+    const lastRefreshed = cacheState.lastRefreshed[cacheType];
+    const now = Date.now();
+    return lastRefreshed > 0 && (now - lastRefreshed) < CACHE_EXPIRY_TIME;
+  };
+
+  // Cargar datos de productos (con caché)
+  const loadProductos = useCallback(async (forceRefresh = false) => {
+    // Si ya tenemos productos en caché y no forzamos actualización, usamos el caché
+    if (!forceRefresh && isCacheValid('productos') && cacheState.productos.length > 0) {
+      setProductos(cacheState.productos);
+      return;
+    }
+    
+    setLoadingCacheData(true);
+    try {
+      // Llamada a la API para obtener todos los productos
+      const response = await api.getClient().get('/producto');
+      
+      if (response.data && Array.isArray(response.data.items)) {
+        // Si estamos usando la estructura paginada
+        const processedProductos = response.data.items.map((prod: any) => ({
+          _id: prod._id,
+          nombre: prod.nombre,
+          categoria: prod.categoria,
+          precio: prod.precio,
+          stock: prod.stock
+        }));
+        
+        setProductos(processedProductos);
+        
+        // Actualizar caché
+        setCacheState(prev => ({
+          ...prev,
+          productos: processedProductos,
+          lastRefreshed: {
+            ...prev.lastRefreshed,
+            productos: Date.now()
+          }
+        }));
+      } else if (response.data && Array.isArray(response.data)) {
+        // Si estamos usando la estructura de array simple
+        const processedProductos = response.data.map((prod: any) => ({
+          _id: prod._id,
+          nombre: prod.nombre,
+          categoria: prod.categoria,
+          precio: prod.precio,
+          stock: prod.stock
+        }));
+        
+        setProductos(processedProductos);
+        
+        // Actualizar caché
+        setCacheState(prev => ({
+          ...prev,
+          productos: processedProductos,
+          lastRefreshed: {
+            ...prev.lastRefreshed,
+            productos: Date.now()
+          }
+        }));
+      }
+    } catch (error) {
+      console.error('Error al cargar productos:', error);
+      setProductos([]);
+    } finally {
+      setLoadingCacheData(false);
+    }
+  }, [cacheState.productos, cacheState.lastRefreshed]);
+
+  // Cargar supervisores (usuarios con rol de supervisor)
+  const loadSupervisores = useCallback(async (forceRefresh = false) => {
+    // Si ya tenemos supervisores en caché y no forzamos actualización, usamos el caché
+    if (!forceRefresh && isCacheValid('supervisores') && cacheState.supervisores.length > 0) {
+      setSupervisores(cacheState.supervisores);
+      return;
+    }
+    
+    setLoadingCacheData(true);
+    try {
+      // Llamada a la API para obtener todos los usuarios
+      const response = await api.getClient().get('/auth/users');
+      
+      if (response.data && Array.isArray(response.data)) {
+        // Filtrar solo usuarios activos con roles relevantes (supervisor, admin, etc.)
+        const filteredUsers = response.data
+          .filter((user: any) => user.isActive)
+          .map((user: any) => ({
+            _id: user._id,
+            nombre: user.nombre || '',
+            apellido: user.apellido || '',
+            usuario: user.usuario,
+            role: user.role,
+            isActive: user.isActive,
+            // Crear un nombre para mostrar
+            displayName: `${user.nombre || ''} ${user.apellido || ''}`.trim() || user.usuario
+          }));
+        
+        setSupervisores(filteredUsers);
+        
+        // Actualizar caché
+        setCacheState(prev => ({
+          ...prev,
+          supervisores: filteredUsers,
+          lastRefreshed: {
+            ...prev.lastRefreshed,
+            supervisores: Date.now()
+          }
+        }));
+      }
+    } catch (error) {
+      console.error('Error al cargar supervisores:', error);
+      setSupervisores([]);
+    } finally {
+      setLoadingCacheData(false);
+    }
+  }, [cacheState.supervisores, cacheState.lastRefreshed]);
+
+  // Cargar todos los clientes (con caché)
+  const loadAllClientes = useCallback(async (forceRefresh = false) => {
+    // Si ya tenemos clientes en caché y no forzamos actualización, usamos el caché
+    if (!forceRefresh && isCacheValid('clientes') && cacheState.clientes.length > 0) {
+      setAllClientes(cacheState.clientes);
+      setClientes(cacheState.clientes);
+      return;
+    }
+    
+    setLoadingCacheData(true);
+    try {
+      const response = await api.getClient().get('/cliente');
+      
+      if (response.data && Array.isArray(response.data)) {
+        setAllClientes(response.data);
+        setClientes(response.data);
+        
+        // Actualizar caché
+        setCacheState(prev => ({
+          ...prev,
+          clientes: response.data,
+          lastRefreshed: {
+            ...prev.lastRefreshed,
+            clientes: Date.now()
+          }
+        }));
+      } else {
+        setAllClientes([]);
         setClientes([]);
       }
-    };
-    fetchClientes();
-  }, []);
+    } catch (err) {
+      console.error('Error al cargar clientes:', err);
+      setAllClientes([]);
+      setClientes([]);
+    } finally {
+      setLoadingCacheData(false);
+    }
+  }, [cacheState.clientes, cacheState.lastRefreshed]);
 
-  // Cargar pedidos cuando se selecciona un cliente
+  // Cargar todos los datos necesarios al iniciar
+  useEffect(() => {
+    loadProductos();
+    loadSupervisores();
+    loadAllClientes();
+  }, [loadProductos, loadSupervisores, loadAllClientes]);
+
+  // Cargar pedidos cuando se selecciona un cliente en la pestaña de remitos
   useEffect(() => {
     const fetchPedidos = async () => {
       if (!selectedCliente) {
@@ -223,60 +476,97 @@ const DownloadsManagement: React.FC = () => {
     fetchPedidos();
   }, [selectedCliente]);
   
-  // Cargar todos los pedidos para la tabla
-  useEffect(() => {
-    const fetchAllPedidos = async () => {
-      setLoadingPedidos(true);
-      try {
-        const response = await api.getClient().get('/pedido');
+  // Cargar todos los pedidos para la tabla (con caché)
+  const loadAllPedidos = useCallback(async (forceRefresh = false) => {
+    // Si no forzamos la actualización y el caché de pedidos es válido, no hacemos nada
+    // Esta función siempre carga los datos porque los pedidos cambian con frecuencia
+    if (!forceRefresh && isCacheValid('pedidos') && allPedidos.length > 0) {
+      return;
+    }
+    
+    setLoadingPedidos(true);
+    try {
+      const response = await api.getClient().get('/pedido');
+      
+      // Verificar que response.data exista y sea un array
+      if (response.data && Array.isArray(response.data)) {
+        // Calcular total para cada pedido y agregar displayNumber
+        const pedidosConTotal = response.data.map((pedido: any) => {
+          let total = 0;
+          if (pedido.productos && Array.isArray(pedido.productos)) {
+            total = pedido.productos.reduce((sum: number, prod: any) => {
+              const precio = prod.productoId?.precio || 0;
+              const cantidad = prod.cantidad || 0;
+              return sum + (precio * cantidad);
+            }, 0);
+          }
+          
+          // Add display number that prioritizes nPedido
+          const displayNumber = pedido.nPedido?.toString() || pedido.numero || 'S/N';
+          
+          return { ...pedido, total, displayNumber };
+        });
         
-        // Verificar que response.data exista y sea un array
-        if (response.data && Array.isArray(response.data)) {
-          // Calcular total para cada pedido y agregar displayNumber
-          const pedidosConTotal = response.data.map((pedido: any) => {
-            let total = 0;
-            if (pedido.productos && Array.isArray(pedido.productos)) {
-              total = pedido.productos.reduce((sum: number, prod: any) => {
-                const precio = prod.productoId?.precio || 0;
-                const cantidad = prod.cantidad || 0;
-                return sum + (precio * cantidad);
-              }, 0);
-            }
-            
-            // Add display number that prioritizes nPedido
-            const displayNumber = pedido.nPedido?.toString() || pedido.numero || 'S/N';
-            
-            return { ...pedido, total, displayNumber };
-          });
-          
-          setAllPedidos(pedidosConTotal);
-          setFilteredPedidos(pedidosConTotal);
-          
-          // Inicializar las opciones de filtro temporales
-          setTempFilterOptions({
-            servicio: 'todos',
-            fechaInicio: '',
-            fechaFin: '',
-          });
-        } else {
-          // Si la respuesta no es un array, inicializar con array vacío
-          setAllPedidos([]);
-          setFilteredPedidos([]);
-        }
-      } catch (err) {
-        console.error('Error al cargar todos los pedidos:', err);
+        setAllPedidos(pedidosConTotal);
+        setFilteredPedidos(pedidosConTotal);
+        
+        // Actualizar caché
+        setCacheState(prev => ({
+          ...prev,
+          lastRefreshed: {
+            ...prev.lastRefreshed,
+            pedidos: Date.now()
+          }
+        }));
+        
+        // Inicializar las opciones de filtro temporales
+        setTempFilterOptions({
+          servicio: 'todos',
+          fechaInicio: '',
+          fechaFin: '',
+          productoId: '',
+          supervisorId: '',
+          clienteId: ''
+        });
+      } else {
+        // Si la respuesta no es un array, inicializar con array vacío
         setAllPedidos([]);
         setFilteredPedidos([]);
-      } finally {
-        setLoadingPedidos(false);
       }
-    };
-    
-    fetchAllPedidos();
-  }, []);
+    } catch (err) {
+      console.error('Error al cargar todos los pedidos:', err);
+      setAllPedidos([]);
+      setFilteredPedidos([]);
+    } finally {
+      setLoadingPedidos(false);
+    }
+  }, [allPedidos.length]);
+
+  // Cargar datos iniciales
+  useEffect(() => {
+    loadAllPedidos();
+  }, [loadAllPedidos]);
+  
+  // Función para forzar la recarga de todos los datos
+  const forceRefreshAllData = () => {
+    setLoadingCacheData(true);
+    Promise.all([
+      loadProductos(true),
+      loadSupervisores(true),
+      loadAllClientes(true),
+      loadAllPedidos(true)
+    ]).finally(() => {
+      setLoadingCacheData(false);
+      // Mostrar mensaje de éxito
+      setSuccessMessage('Datos actualizados correctamente');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    });
+  };
   
   // Función para aplicar filtros manualmente
-  const applyFilters = () => {
+  const applyFilters = useCallback(() => {
+    if (!allPedidos.length) return;
+    
     let filtered = [...allPedidos];
     
     // Filtrar por servicio
@@ -289,6 +579,7 @@ const DownloadsManagement: React.FC = () => {
     // Filtrar por fecha inicio
     if (filterOptions.fechaInicio) {
       const fechaInicio = new Date(filterOptions.fechaInicio);
+      fechaInicio.setHours(0, 0, 0, 0);
       filtered = filtered.filter(pedido => {
         const fechaPedido = new Date(pedido.fecha);
         return fechaPedido >= fechaInicio;
@@ -298,21 +589,79 @@ const DownloadsManagement: React.FC = () => {
     // Filtrar por fecha fin
     if (filterOptions.fechaFin) {
       const fechaFin = new Date(filterOptions.fechaFin);
-      fechaFin.setHours(23, 59, 59);
+      fechaFin.setHours(23, 59, 59, 999);
       filtered = filtered.filter(pedido => {
         const fechaPedido = new Date(pedido.fecha);
         return fechaPedido <= fechaFin;
       });
     }
     
+    // Filtrar por producto
+    if (filterOptions.productoId) {
+      filtered = filtered.filter(pedido => {
+        if (!pedido.productos || !Array.isArray(pedido.productos)) return false;
+        
+        return pedido.productos.some(productoItem => {
+          // Manejar casos donde productoId es objeto o string
+          if (typeof productoItem.productoId === 'object') {
+            return productoItem.productoId && productoItem.productoId._id === filterOptions.productoId;
+          } else {
+            return productoItem.productoId === filterOptions.productoId;
+          }
+        });
+      });
+    }
+    
+    // Filtrar por supervisor
+    if (filterOptions.supervisorId) {
+      filtered = filtered.filter(pedido => {
+        // Manejar casos donde userId es objeto o string
+        if (typeof pedido.userId === 'object') {
+          return pedido.userId && pedido.userId._id === filterOptions.supervisorId;
+        } else {
+          return pedido.userId === filterOptions.supervisorId;
+        }
+      });
+    }
+    
+    // Filtrar por cliente
+    if (filterOptions.clienteId) {
+      // Primero debemos buscar el cliente seleccionado
+      const selectedCliente = allClientes.find(c => c._id === filterOptions.clienteId);
+      
+      if (selectedCliente) {
+        filtered = filtered.filter(pedido => {
+          // Un pedido coincide con un cliente si:
+          // 1. Mismo servicio
+          const servicioMatch = pedido.servicio === selectedCliente.servicio;
+          
+          // 2. Misma sección de servicio (si está especificada)
+          const seccionMatch = !selectedCliente.seccionDelServicio || 
+                            pedido.seccionDelServicio === selectedCliente.seccionDelServicio;
+          
+          // 3. Mismo userId (si está asignado)
+          let userMatch = true;
+          if (typeof selectedCliente.userId === 'object' && selectedCliente.userId && selectedCliente.userId._id) {
+            if (typeof pedido.userId === 'object') {
+              userMatch = pedido.userId && pedido.userId._id === selectedCliente.userId._id;
+            } else {
+              userMatch = pedido.userId === selectedCliente.userId._id;
+            }
+          }
+          
+          return servicioMatch && seccionMatch && userMatch;
+        });
+      }
+    }
+    
     setFilteredPedidos(filtered);
     setCurrentPage(1); // Reset to first page when filters change
-  };
+  }, [allPedidos, allClientes, filterOptions]);
   
   // Reaccionar a cambios en filterOptions
   useEffect(() => {
     applyFilters();
-  }, [filterOptions]);
+  }, [filterOptions, applyFilters]);
   
   // Manejar confirmación de filtros
   const handleApplyFilters = () => {
@@ -474,24 +823,19 @@ const DownloadsManagement: React.FC = () => {
       servicio: 'todos',
       fechaInicio: '',
       fechaFin: '',
+      productoId: '',
+      supervisorId: '',
+      clienteId: ''
     };
     setTempFilterOptions(emptyFilters);
     setFilterOptions(emptyFilters);
-  };
-
-  const formatDate = (date: Date) => date.toISOString().split('T')[0];
-  
-  const formatDisplayDate = (dateString: string) => {
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString('es-ES', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      });
-    } catch (error) {
-      return 'Fecha inválida';
-    }
+    
+    // Limpiar búsquedas de filtros
+    setFilterSearch({
+      producto: '',
+      supervisor: '',
+      cliente: ''
+    });
   };
 
   // Función para obtener el nombre del cliente
@@ -518,6 +862,29 @@ const DownloadsManagement: React.FC = () => {
     return nombreCompleto.toLowerCase().includes(searchTerm.toLowerCase());
   });
   
+  // Obtener clientes filtrados para el selector de filtros
+  const getFilteredClientesForSelector = () => {
+    return allClientes.filter(cliente => {
+      const nombreCompleto = getClientName(cliente);
+      return nombreCompleto.toLowerCase().includes(filterSearch.cliente.toLowerCase());
+    });
+  };
+  
+  // Obtener productos filtrados para el selector de filtros
+  const getFilteredProductosForSelector = () => {
+    return productos.filter(producto => 
+      producto.nombre.toLowerCase().includes(filterSearch.producto.toLowerCase())
+    );
+  };
+  
+  // Obtener supervisores filtrados para el selector de filtros
+  const getFilteredSupervisoresForSelector = () => {
+    return supervisores.filter(supervisor => {
+      const nombreCompleto = supervisor.displayName || '';
+      return nombreCompleto.toLowerCase().includes(filterSearch.supervisor.toLowerCase());
+    });
+  };
+  
   // Obtener servicios únicos para filtro
   const serviciosUnicos = [...new Set(allPedidos.map(p => p.servicio).filter(Boolean))];
 
@@ -533,6 +900,43 @@ const DownloadsManagement: React.FC = () => {
   const showingFromTo = filteredPedidos.length > 0 
     ? `${indexOfFirstPedido + 1}-${Math.min(indexOfLastPedido, filteredPedidos.length)} de ${filteredPedidos.length}`
     : '0 de 0';
+    
+  // Calcular si hay filtros activos
+  const hasActiveFilters = 
+    filterOptions.servicio !== 'todos' || 
+    filterOptions.fechaInicio !== '' || 
+    filterOptions.fechaFin !== '' ||
+    filterOptions.productoId !== '' ||
+    filterOptions.supervisorId !== '' ||
+    filterOptions.clienteId !== '';
+  
+  // Obtener conteo de filtros activos
+  const getActiveFilterCount = () => {
+    let count = 0;
+    if (filterOptions.servicio !== 'todos') count++;
+    if (filterOptions.fechaInicio !== '') count++;
+    if (filterOptions.fechaFin !== '') count++;
+    if (filterOptions.productoId !== '') count++;
+    if (filterOptions.supervisorId !== '') count++;
+    if (filterOptions.clienteId !== '') count++;
+    return count;
+  };
+  
+  // Obtener nombres de los elementos seleccionados en filtros
+  const getSelectedProductoName = () => {
+    const producto = productos.find(p => p._id === filterOptions.productoId);
+    return producto ? producto.nombre : 'Producto no encontrado';
+  };
+  
+  const getSelectedSupervisorName = () => {
+    const supervisor = supervisores.find(s => s._id === filterOptions.supervisorId);
+    return supervisor ? supervisor.displayName : 'Supervisor no encontrado';
+  };
+  
+  const getSelectedClienteName = () => {
+    const cliente = allClientes.find(c => c._id === filterOptions.clienteId);
+    return cliente ? getClientName(cliente) : 'Cliente no encontrado';
+  };
 
   return (
     <div className="space-y-6 bg-[#DFEFE6]/20 p-4 md:p-6 rounded-xl">
@@ -548,6 +952,23 @@ const DownloadsManagement: React.FC = () => {
           <AlertDescription className="text-[#29696B]">{successMessage}</AlertDescription>
         </Alert>
       )}
+
+      {/* Botón para refrescar todos los datos del caché */}
+      <div className="flex justify-end">
+        <Button
+          variant="outline"
+          onClick={forceRefreshAllData}
+          disabled={loadingCacheData}
+          className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/40"
+        >
+          {loadingCacheData ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : (
+            <RefreshCw className="w-4 h-4 mr-2" />
+          )}
+          Actualizar datos
+        </Button>
+      </div>
 
       {/* NAVEGACIÓN MEJORADA: Espacio vertical fijo para las tabs */}
       <div className="min-h-[60px]">
@@ -742,7 +1163,7 @@ const DownloadsManagement: React.FC = () => {
             </Card>
           </TabsContent>
           
-          {/* Pestaña de Tabla de Pedidos */}
+          {/* Pestaña de Tabla de Pedidos con filtros avanzados */}
           <TabsContent value="tabla" className="mt-4 pt-4">
             <Card className="border border-[#91BEAD]/20 shadow-sm">
               <CardHeader className="bg-[#DFEFE6]/20 border-b border-[#91BEAD]/20">
@@ -754,23 +1175,23 @@ const DownloadsManagement: React.FC = () => {
                     </CardDescription>
                   </div>
                   
-                  {/* Filtros */}
+                  {/* Botón de filtros con indicador de filtros activos */}
                   <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
                     <DialogTrigger asChild>
                       <Button 
                         variant="outline" 
                         className="flex items-center gap-2 border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/40"
                       >
-                        <SlidersHorizontal className="w-4 h-4" />
-                        Filtros
-                        {(filterOptions.servicio && filterOptions.servicio !== 'todos' || filterOptions.fechaInicio || filterOptions.fechaFin) && (
+                        <Filter className="w-4 h-4" />
+                        <span>Filtros</span>
+                        {hasActiveFilters && (
                           <Badge className="ml-1 bg-[#29696B] text-white">
-                            Activos
+                            {getActiveFilterCount()}
                           </Badge>
                         )}
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="bg-white border border-[#91BEAD]/20">
+                    <DialogContent className="bg-white border border-[#91BEAD]/20 max-w-lg">
                       <DialogHeader>
                         <DialogTitle className="text-[#29696B]">Filtrar Pedidos</DialogTitle>
                         <DialogDescription className="text-[#7AA79C]">
@@ -778,7 +1199,8 @@ const DownloadsManagement: React.FC = () => {
                         </DialogDescription>
                       </DialogHeader>
                       
-                      <div className="space-y-4 py-4">
+                      <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
+                        {/* Servicio */}
                         <div className="space-y-2">
                           <Label htmlFor="servicio-filter" className="text-[#29696B]">Servicio</Label>
                           <Select 
@@ -802,6 +1224,7 @@ const DownloadsManagement: React.FC = () => {
                           </Select>
                         </div>
                         
+                        {/* Rango de fechas */}
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <Label htmlFor="fecha-inicio-filter" className="text-[#29696B]">Desde</Label>
@@ -825,18 +1248,335 @@ const DownloadsManagement: React.FC = () => {
                             />
                           </div>
                         </div>
+                        
+                        {/* Producto - Selector con búsqueda */}
+                        <div className="space-y-2">
+                          <Label className="text-[#29696B] flex items-center gap-2">
+                            <Package className="w-4 h-4" />
+                            Filtrar por Producto
+                          </Label>
+                          
+                          <Dialog 
+                            open={activeFilterSelector === 'producto'} 
+                            onOpenChange={(open) => setActiveFilterSelector(open ? 'producto' : null)}
+                          >
+                            <DialogTrigger asChild>
+                              <Button 
+                                variant="outline" 
+                                className="w-full justify-between border-[#91BEAD] text-left font-normal"
+                              >
+                                {tempFilterOptions.productoId ? (
+                                  <span className="truncate">
+                                    {productos.find(p => p._id === tempFilterOptions.productoId)?.nombre || 'Producto seleccionado'}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground">Seleccionar producto</span>
+                                )}
+                                
+                                {tempFilterOptions.productoId && (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setTempFilterOptions({...tempFilterOptions, productoId: ''});
+                                    }}
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-md">
+                              <DialogHeader>
+                                <DialogTitle>Seleccionar Producto</DialogTitle>
+                                <DialogDescription>
+                                  Busca y selecciona un producto específico
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="py-4 space-y-4">
+                                <div className="relative">
+                                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
+                                  <Input
+                                    placeholder="Buscar productos..."
+                                    value={filterSearch.producto}
+                                    onChange={(e) => setFilterSearch({...filterSearch, producto: e.target.value})}
+                                    className="pl-10 border-[#91BEAD]"
+                                  />
+                                </div>
+                                <div className="max-h-60 overflow-y-auto border rounded-md">
+                                  {getFilteredProductosForSelector().length === 0 ? (
+                                    <div className="p-4 text-center text-[#7AA79C]">
+                                      No se encontraron productos
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-1 p-1">
+                                      {getFilteredProductosForSelector().map(producto => (
+                                        <div 
+                                          key={producto._id}
+                                          className={`px-3 py-2 rounded-md cursor-pointer flex justify-between items-center ${
+                                            tempFilterOptions.productoId === producto._id 
+                                              ? 'bg-[#29696B] text-white' 
+                                              : 'hover:bg-[#DFEFE6]/40'
+                                          }`}
+                                          onClick={() => {
+                                            setTempFilterOptions({...tempFilterOptions, productoId: producto._id});
+                                            setActiveFilterSelector(null);
+                                          }}
+                                        >
+                                          <div>
+                                            <div>{producto.nombre}</div>
+                                            <div className="text-xs opacity-70">
+                                              {producto.categoria} - ${producto.precio}
+                                            </div>
+                                          </div>
+                                          {tempFilterOptions.productoId === producto._id && (
+                                            <Checkbox checked={true} className="data-[state=checked]:bg-white data-[state=checked]:text-[#29696B]" />
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              <DialogFooter>
+                                <Button
+                                  variant="outline"
+                                  onClick={() => {
+                                    setActiveFilterSelector(null);
+                                    setFilterSearch({...filterSearch, producto: ''});
+                                  }}
+                                >
+                                  Cancelar
+                                </Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+                        </div>
+                        
+                        {/* Supervisor - Selector con búsqueda */}
+                        <div className="space-y-2">
+                          <Label className="text-[#29696B] flex items-center gap-2">
+                            <User className="w-4 h-4" />
+                            Filtrar por Supervisor
+                          </Label>
+                          
+                          <Dialog 
+                            open={activeFilterSelector === 'supervisor'} 
+                            onOpenChange={(open) => setActiveFilterSelector(open ? 'supervisor' : null)}
+                          >
+                            <DialogTrigger asChild>
+                              <Button 
+                                variant="outline" 
+                                className="w-full justify-between border-[#91BEAD] text-left font-normal"
+                              >
+                                {tempFilterOptions.supervisorId ? (
+                                  <span className="truncate">
+                                    {supervisores.find(s => s._id === tempFilterOptions.supervisorId)?.displayName || 'Supervisor seleccionado'}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground">Seleccionar supervisor</span>
+                                )}
+                                
+                                {tempFilterOptions.supervisorId && (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setTempFilterOptions({...tempFilterOptions, supervisorId: ''});
+                                    }}
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-md">
+                              <DialogHeader>
+                                <DialogTitle>Seleccionar Supervisor</DialogTitle>
+                                <DialogDescription>
+                                  Busca y selecciona un supervisor específico
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="py-4 space-y-4">
+                                <div className="relative">
+                                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
+                                  <Input
+                                    placeholder="Buscar supervisores..."
+                                    value={filterSearch.supervisor}
+                                    onChange={(e) => setFilterSearch({...filterSearch, supervisor: e.target.value})}
+                                    className="pl-10 border-[#91BEAD]"
+                                  />
+                                </div>
+                                <div className="max-h-60 overflow-y-auto border rounded-md">
+                                  {getFilteredSupervisoresForSelector().length === 0 ? (
+                                    <div className="p-4 text-center text-[#7AA79C]">
+                                      No se encontraron supervisores
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-1 p-1">
+                                      {getFilteredSupervisoresForSelector().map(supervisor => (
+                                        <div 
+                                          key={supervisor._id}
+                                          className={`px-3 py-2 rounded-md cursor-pointer flex justify-between items-center ${
+                                            tempFilterOptions.supervisorId === supervisor._id 
+                                              ? 'bg-[#29696B] text-white' 
+                                              : 'hover:bg-[#DFEFE6]/40'
+                                          }`}
+                                          onClick={() => {
+                                            setTempFilterOptions({...tempFilterOptions, supervisorId: supervisor._id});
+                                            setActiveFilterSelector(null);
+                                          }}
+                                        >
+                                          <div>
+                                            <div>{supervisor.displayName}</div>
+                                            <div className="text-xs opacity-70">
+                                              {supervisor.role}
+                                            </div>
+                                          </div>
+                                          {tempFilterOptions.supervisorId === supervisor._id && (
+                                            <Checkbox checked={true} className="data-[state=checked]:bg-white data-[state=checked]:text-[#29696B]" />
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              <DialogFooter>
+                                <Button
+                                  variant="outline"
+                                  onClick={() => {
+                                    setActiveFilterSelector(null);
+                                    setFilterSearch({...filterSearch, supervisor: ''});
+                                  }}
+                                >
+                                  Cancelar
+                                </Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+                        </div>
+                        
+                        {/* Cliente - Selector con búsqueda */}
+                        <div className="space-y-2">
+                          <Label className="text-[#29696B] flex items-center gap-2">
+                            <Building className="w-4 h-4" />
+                            Filtrar por Cliente
+                          </Label>
+                          
+                          <Dialog 
+                            open={activeFilterSelector === 'cliente'} 
+                            onOpenChange={(open) => setActiveFilterSelector(open ? 'cliente' : null)}
+                          >
+                            <DialogTrigger asChild>
+                              <Button 
+                                variant="outline" 
+                                className="w-full justify-between border-[#91BEAD] text-left font-normal"
+                              >
+                                {tempFilterOptions.clienteId ? (
+                                  <span className="truncate">
+                                    {getClientName(allClientes.find(c => c._id === tempFilterOptions.clienteId) as Cliente)}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground">Seleccionar cliente</span>
+                                )}
+                                
+                                {tempFilterOptions.clienteId && (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setTempFilterOptions({...tempFilterOptions, clienteId: ''});
+                                    }}
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-md">
+                              <DialogHeader>
+                                <DialogTitle>Seleccionar Cliente</DialogTitle>
+                                <DialogDescription>
+                                  Busca y selecciona un cliente específico
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="py-4 space-y-4">
+                                <div className="relative">
+                                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
+                                  <Input
+                                    placeholder="Buscar clientes..."
+                                    value={filterSearch.cliente}
+                                    onChange={(e) => setFilterSearch({...filterSearch, cliente: e.target.value})}
+                                    className="pl-10 border-[#91BEAD]"
+                                  />
+                                </div>
+                                <div className="max-h-60 overflow-y-auto border rounded-md">
+                                  {getFilteredClientesForSelector().length === 0 ? (
+                                    <div className="p-4 text-center text-[#7AA79C]">
+                                      No se encontraron clientes
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-1 p-1">
+                                      {getFilteredClientesForSelector().map(cliente => (
+                                        <div 
+                                          key={cliente._id}
+                                          className={`px-3 py-2 rounded-md cursor-pointer flex justify-between items-center ${
+                                            tempFilterOptions.clienteId === cliente._id 
+                                              ? 'bg-[#29696B] text-white' 
+                                              : 'hover:bg-[#DFEFE6]/40'
+                                          }`}
+                                          onClick={() => {
+                                            setTempFilterOptions({...tempFilterOptions, clienteId: cliente._id});
+                                            setActiveFilterSelector(null);
+                                          }}
+                                        >
+                                          <div>
+                                            <div>{cliente.servicio}</div>
+                                            {cliente.seccionDelServicio && (
+                                              <div className="text-xs opacity-70">
+                                                {cliente.seccionDelServicio}
+                                              </div>
+                                            )}
+                                          </div>
+                                          {tempFilterOptions.clienteId === cliente._id && (
+                                            <Checkbox checked={true} className="data-[state=checked]:bg-white data-[state=checked]:text-[#29696B]" />
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              <DialogFooter>
+                                <Button
+                                  variant="outline"
+                                  onClick={() => {
+                                    setActiveFilterSelector(null);
+                                    setFilterSearch({...filterSearch, cliente: ''});
+                                  }}
+                                >
+                                  Cancelar
+                                </Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+                        </div>
                       </div>
                       
-                      <div className="flex justify-between">
+                      <DialogFooter className="flex justify-between">
                         <Button 
                           variant="outline" 
-                          onClick={() => {
-                            setTempFilterOptions({
-                              servicio: 'todos',
-                              fechaInicio: '',
-                              fechaFin: '',
-                            });
-                          }}
+                          onClick={resetFilters}
                           className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/40"
                         >
                           Restablecer
@@ -848,31 +1588,115 @@ const DownloadsManagement: React.FC = () => {
                         >
                           Aplicar filtros
                         </Button>
-                      </div>
+                      </DialogFooter>
                     </DialogContent>
                   </Dialog>
                 </div>
                 
                 {/* Barra de filtros activos */}
-                {(filterOptions.servicio && filterOptions.servicio !== 'todos' || filterOptions.fechaInicio || filterOptions.fechaFin) && (
+                {hasActiveFilters && (
                   <div className="flex flex-wrap items-center gap-2 mt-2 p-2 bg-[#DFEFE6]/30 rounded-md border border-[#91BEAD]/20">
                     <span className="text-xs text-[#29696B] font-medium">Filtros activos:</span>
                     
-                    {filterOptions.servicio && filterOptions.servicio !== 'todos' && (
-                      <Badge variant="outline" className="bg-[#DFEFE6]/40 border-[#91BEAD] text-[#29696B]">
-                        Servicio: {filterOptions.servicio}
+                    {filterOptions.servicio !== 'todos' && (
+                      <Badge variant="outline" className="bg-[#DFEFE6]/40 border-[#91BEAD] text-[#29696B] flex items-center gap-1">
+                        <span>Servicio: {filterOptions.servicio}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setFilterOptions(prev => ({...prev, servicio: 'todos'}));
+                            setTempFilterOptions(prev => ({...prev, servicio: 'todos'}));
+                          }}
+                          className="h-4 w-4 p-0 ml-1 text-[#29696B] hover:bg-[#DFEFE6]/60"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
                       </Badge>
                     )}
                     
                     {filterOptions.fechaInicio && (
-                      <Badge variant="outline" className="bg-[#DFEFE6]/40 border-[#91BEAD] text-[#29696B]">
-                        Desde: {new Date(filterOptions.fechaInicio).toLocaleDateString()}
+                      <Badge variant="outline" className="bg-[#DFEFE6]/40 border-[#91BEAD] text-[#29696B] flex items-center gap-1">
+                        <span>Desde: {new Date(filterOptions.fechaInicio).toLocaleDateString()}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setFilterOptions(prev => ({...prev, fechaInicio: ''}));
+                            setTempFilterOptions(prev => ({...prev, fechaInicio: ''}));
+                          }}
+                          className="h-4 w-4 p-0 ml-1 text-[#29696B] hover:bg-[#DFEFE6]/60"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
                       </Badge>
                     )}
                     
                     {filterOptions.fechaFin && (
-                      <Badge variant="outline" className="bg-[#DFEFE6]/40 border-[#91BEAD] text-[#29696B]">
-                        Hasta: {new Date(filterOptions.fechaFin).toLocaleDateString()}
+                      <Badge variant="outline" className="bg-[#DFEFE6]/40 border-[#91BEAD] text-[#29696B] flex items-center gap-1">
+                        <span>Hasta: {new Date(filterOptions.fechaFin).toLocaleDateString()}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setFilterOptions(prev => ({...prev, fechaFin: ''}));
+                            setTempFilterOptions(prev => ({...prev, fechaFin: ''}));
+                          }}
+                          className="h-4 w-4 p-0 ml-1 text-[#29696B] hover:bg-[#DFEFE6]/60"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </Badge>
+                    )}
+                    
+                    {filterOptions.productoId && (
+                      <Badge variant="outline" className="bg-[#DFEFE6]/40 border-[#91BEAD] text-[#29696B] flex items-center gap-1">
+                        <span>Producto: {getSelectedProductoName()}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setFilterOptions(prev => ({...prev, productoId: ''}));
+                            setTempFilterOptions(prev => ({...prev, productoId: ''}));
+                          }}
+                          className="h-4 w-4 p-0 ml-1 text-[#29696B] hover:bg-[#DFEFE6]/60"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </Badge>
+                    )}
+                    
+                    {filterOptions.supervisorId && (
+                      <Badge variant="outline" className="bg-[#DFEFE6]/40 border-[#91BEAD] text-[#29696B] flex items-center gap-1">
+                        <span>Supervisor: {getSelectedSupervisorName()}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setFilterOptions(prev => ({...prev, supervisorId: ''}));
+                            setTempFilterOptions(prev => ({...prev, supervisorId: ''}));
+                          }}
+                          className="h-4 w-4 p-0 ml-1 text-[#29696B] hover:bg-[#DFEFE6]/60"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </Badge>
+                    )}
+                    
+                    {filterOptions.clienteId && (
+                      <Badge variant="outline" className="bg-[#DFEFE6]/40 border-[#91BEAD] text-[#29696B] flex items-center gap-1">
+                        <span>Cliente: {getSelectedClienteName()}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setFilterOptions(prev => ({...prev, clienteId: ''}));
+                            setTempFilterOptions(prev => ({...prev, clienteId: ''}));
+                          }}
+                          className="h-4 w-4 p-0 ml-1 text-[#29696B] hover:bg-[#DFEFE6]/60"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
                       </Badge>
                     )}
                     
@@ -882,7 +1706,7 @@ const DownloadsManagement: React.FC = () => {
                       onClick={resetFilters} 
                       className="ml-auto text-xs h-7 px-2 text-[#29696B]"
                     >
-                      Limpiar filtros
+                      Limpiar todos
                     </Button>
                   </div>
                 )}
