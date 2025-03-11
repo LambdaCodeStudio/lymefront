@@ -82,6 +82,7 @@ interface UserExtended {
   isActive?: boolean;
   celular?: string;
   secciones?: 'limpieza' | 'mantenimiento' | 'ambos';
+  expiresAt?: string; // Para usuarios temporales
 }
 
 // Interfaz extendida para manejar tanto ID como objeto poblado
@@ -565,20 +566,40 @@ const ClientsSection: React.FC = () => {
       }
 
       const data = await response.json();
-      // Filtrar solo usuarios básicos y activos
-      const activeBasicUsers = data.filter((user: any) =>
-        user.role === 'basic' && user.isActive === true
-      );
-      console.log("Usuarios básicos activos:", activeBasicUsers.length);
+      
+      // Filtrar usuarios válidos para asignar a clientes:
+      // - Supervisores (antes 'basic')
+      // - Operarios (antes 'temporario')
+      // - Solo usuarios activos
+      const activeValidUsers = data.filter((user: any) => {
+        // Verificar si es un rol válido (supervisor, operario) y está activo
+        const isValidRole = (user.role === 'supervisor' || user.role === 'operario');
+        const isActive = user.isActive === true;
+        
+        // Si es operario y tiene fecha de expiración, verificar que no haya expirado
+        if (isValidRole && isActive && user.role === 'operario' && user.expiresAt) {
+          const now = new Date();
+          const expirationDate = new Date(user.expiresAt);
+          if (now > expirationDate) {
+            return false; // Excluir operarios con expiresAt en el pasado
+          }
+        }
+        
+        return isValidRole && isActive;
+      });
+      
+      console.log("Usuarios válidos activos:", activeValidUsers.length);
+      console.log("- Supervisores:", activeValidUsers.filter(u => u.role === 'supervisor').length);
+      console.log("- Operarios:", activeValidUsers.filter(u => u.role === 'operario').length);
 
       // Guardar en caché
-      saveToCache(USERS_CACHE_KEY, activeBasicUsers);
+      saveToCache(USERS_CACHE_KEY, activeValidUsers);
 
-      setUsers(activeBasicUsers);
+      setUsers(activeValidUsers);
 
       // Si hay un usuario activo seleccionado, mostrar en consola para depuración
       if (activeUserId !== "all") {
-        const activeUser = activeBasicUsers.find((u: { _id: string; }) => u._id === activeUserId);
+        const activeUser = activeValidUsers.find((u: { _id: string; }) => u._id === activeUserId);
         console.log("Usuario activo seleccionado:", activeUser?.email || "Email no disponible");
       }
     } catch (err) {
@@ -1058,13 +1079,26 @@ const ClientsSection: React.FC = () => {
     const user = users.find(u => u._id === userId);
     if (!user) return 'Usuario no encontrado';
 
+    // Crear el identificador con rol
+    let identifier = '';
+    
     // Priorizar mostrar el email, ya que es lo que se usa principalmente para identificar usuarios
-    if (user.email) return user.email;
-    if (user.usuario) return user.usuario;
-    if (user.nombre && user.apellido) return `${user.nombre} ${user.apellido}`;
-    if (user.nombre) return user.nombre;
+    if (user.email) identifier = user.email;
+    else if (user.usuario) identifier = user.usuario;
+    else if (user.nombre && user.apellido) identifier = `${user.nombre} ${user.apellido}`;
+    else if (user.nombre) identifier = user.nombre;
+    else identifier = `ID: ${userId.substring(0, 8)}`;
 
-    return `Usuario ID: ${userId.substring(0, 8)}`;
+    // Agregar etiqueta de rol para más claridad
+    const roleName = user.role === 'supervisor' ? 'Supervisor' : 
+                     user.role === 'operario' ? 'Operario' : 
+                     user.role || 'Usuario';
+    
+    // Agregar "(temp)" para operarios con fecha de expiración
+    const isTempOperario = user.role === 'operario' && user.expiresAt;
+    const tempLabel = isTempOperario ? ' (temp)' : '';
+    
+    return `${identifier} - ${roleName}${tempLabel}`;
   };
 
   // Función para obtener el correo del creador del cliente
@@ -1193,7 +1227,7 @@ const ClientsSection: React.FC = () => {
           />
         </div>
 
-        {/* Filtro por usuario */}
+                  {/* Filtro por usuario */}
         <div>
           <Select
             value={activeUserId}
@@ -1204,11 +1238,43 @@ const ClientsSection: React.FC = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos los usuarios</SelectItem>
-              {users.map(user => (
-                <SelectItem key={user._id} value={user._id}>
-                  {getUserIdentifierById(user._id)}
-                </SelectItem>
-              ))}
+              
+              {/* Agrupar por supervisores */}
+              {users.filter(user => user.role === 'supervisor').length > 0 && (
+                <>
+                  <SelectItem value="" disabled className="font-semibold text-[#29696B] cursor-default bg-[#DFEFE6]/30">
+                    -- Supervisores --
+                  </SelectItem>
+                  {users
+                    .filter(user => user.role === 'supervisor')
+                    .sort((a, b) => (a.email || a.usuario || '').localeCompare(b.email || b.usuario || ''))
+                    .map(user => (
+                      <SelectItem key={user._id} value={user._id}>
+                        {user.email || user.usuario || `${user.nombre || ''} ${user.apellido || ''}`.trim() || user._id}
+                      </SelectItem>
+                    ))
+                  }
+                </>
+              )}
+              
+              {/* Agrupar por operarios */}
+              {users.filter(user => user.role === 'operario').length > 0 && (
+                <>
+                  <SelectItem value="" disabled className="font-semibold text-[#29696B] cursor-default bg-[#DFEFE6]/30">
+                    -- Operarios --
+                  </SelectItem>
+                  {users
+                    .filter(user => user.role === 'operario')
+                    .sort((a, b) => (a.email || a.usuario || '').localeCompare(b.email || b.usuario || ''))
+                    .map(user => (
+                      <SelectItem key={user._id} value={user._id}>
+                        {user.email || user.usuario || `${user.nombre || ''} ${user.apellido || ''}`.trim() || user._id}
+                        {user.expiresAt ? ' (temp)' : ''}
+                      </SelectItem>
+                    ))
+                  }
+                </>
+              )}
             </SelectContent>
           </Select>
         </div>
@@ -1474,7 +1540,7 @@ const ClientsSection: React.FC = () => {
                                       <Users className="w-3 h-3 mr-1 inline" />
                                       Usuario Asignado: <strong className="ml-1 text-[#29696B]">{
                                         typeof client.userId === 'object' && client.userId.email
-                                          ? client.userId.email
+                                          ? `${client.userId.email}${client.userId.role ? ` - ${client.userId.role === 'supervisor' ? 'Supervisor' : 'Operario'}` : ''}`
                                           : typeof client.userId === 'string'
                                             ? getUserIdentifierById(client.userId)
                                             : 'No disponible'
@@ -1494,7 +1560,7 @@ const ClientsSection: React.FC = () => {
                                   <Users className="w-3 h-3 mr-1 inline" />
                                   Usuario Asignado: <strong className="ml-1 text-[#29696B]">{
                                     typeof client.userId === 'object' && client.userId.email
-                                      ? client.userId.email
+                                      ? `${client.userId.email}${client.userId.role ? ` - ${client.userId.role === 'supervisor' ? 'Supervisor' : 'Operario'}` : ''}`
                                       : typeof client.userId === 'string'
                                         ? getUserIdentifierById(client.userId)
                                         : 'No disponible'
@@ -1653,7 +1719,7 @@ const ClientsSection: React.FC = () => {
                               <Users className="w-3 h-3 mr-1" />
                               <span>Usuario Asignado: <strong className="text-[#29696B]">{
                                 typeof client.userId === 'object' && client.userId.email
-                                  ? client.userId.email
+                                  ? `${client.userId.email}${client.userId.role ? ` - ${client.userId.role === 'supervisor' ? 'Supervisor' : 'Operario'}` : ''}`
                                   : typeof client.userId === 'string'
                                     ? getUserIdentifierById(client.userId)
                                     : 'No disponible'
@@ -1828,11 +1894,42 @@ const ClientsSection: React.FC = () => {
                       <SelectValue placeholder="Seleccionar usuario" />
                     </SelectTrigger>
                     <SelectContent>
-                      {users.map(user => (
-                        <SelectItem key={user._id} value={user._id}>
-                          {user.email || user.usuario || `${user.nombre || ''} ${user.apellido || ''}`.trim() || user._id}
-                        </SelectItem>
-                      ))}
+                      {/* Agrupar por supervisores */}
+                      {users.filter(user => user.role === 'supervisor').length > 0 && (
+                        <>
+                          <SelectItem value="" disabled className="font-semibold text-[#29696B] cursor-default bg-[#DFEFE6]/30">
+                            -- Supervisores --
+                          </SelectItem>
+                          {users
+                            .filter(user => user.role === 'supervisor')
+                            .sort((a, b) => (a.email || a.usuario || '').localeCompare(b.email || b.usuario || ''))
+                            .map(user => (
+                              <SelectItem key={user._id} value={user._id}>
+                                {user.email || user.usuario || `${user.nombre || ''} ${user.apellido || ''}`.trim() || user._id}
+                              </SelectItem>
+                            ))
+                          }
+                        </>
+                      )}
+                      
+                      {/* Agrupar por operarios */}
+                      {users.filter(user => user.role === 'operario').length > 0 && (
+                        <>
+                          <SelectItem value="" disabled className="font-semibold text-[#29696B] cursor-default bg-[#DFEFE6]/30">
+                            -- Operarios --
+                          </SelectItem>
+                          {users
+                            .filter(user => user.role === 'operario')
+                            .sort((a, b) => (a.email || a.usuario || '').localeCompare(b.email || b.usuario || ''))
+                            .map(user => (
+                              <SelectItem key={user._id} value={user._id}>
+                                {user.email || user.usuario || `${user.nombre || ''} ${user.apellido || ''}`.trim() || user._id}
+                                {user.expiresAt ? ' (temp)' : ''}
+                              </SelectItem>
+                            ))
+                          }
+                        </>
+                      )}
                     </SelectContent>
                   </Select>
 
