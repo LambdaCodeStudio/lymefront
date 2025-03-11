@@ -275,42 +275,35 @@ const ClientsSection: React.FC = () => {
   // Efecto para cargar datos iniciales
   useEffect(() => {
     console.log("ClientSection montado, selectedUserId:", selectedUserId);
+    
+    // Siempre iniciar con "all" seleccionado
+    setActiveUserId("all");
+    
+    // Cargar datos
     fetchClients(false);
     fetchUsers(false);
-    // Cargar también clientes sin asignar
     fetchClientsWithoutUser(false);
 
-    // Verificar si hay un usuario preseleccionado (de AdminUserManagement)
+    // Los valores de localStorage ya no modificarán la selección por defecto
+    // pero aún se usarán para el formulario si es necesario
     if (typeof window !== 'undefined') {
       const storedSelectedUserId = localStorage.getItem('selectedUserId');
       const lastCreatedUserId = localStorage.getItem('lastCreatedUserId');
 
-      // Priorizar el userId del contexto, luego el almacenado, luego el último creado
-      if (selectedUserId) {
-        console.log("Usando selectedUserId del contexto:", selectedUserId);
-        setActiveUserId(selectedUserId);
-
+      // Solo usar estos valores para el formulario, no para el filtro activo
+      if (selectedUserId || storedSelectedUserId || lastCreatedUserId) {
+        const userId = selectedUserId || storedSelectedUserId || lastCreatedUserId;
+        console.log("Se encontró un userId para usar en el formulario:", userId);
+        
         // Inicializar el formulario con este usuario si se abre para agregar un nuevo cliente
         setFormData(prev => ({
           ...prev,
-          userId: selectedUserId
+          userId: userId
         }));
-      } else if (storedSelectedUserId) {
-        console.log("Usando selectedUserId del localStorage:", storedSelectedUserId);
-        setActiveUserId(storedSelectedUserId);
-        setFormData(prev => ({
-          ...prev,
-          userId: storedSelectedUserId
-        }));
-        localStorage.removeItem('selectedUserId');
-      } else if (lastCreatedUserId) {
-        console.log("Usando lastCreatedUserId del localStorage:", lastCreatedUserId);
-        setActiveUserId(lastCreatedUserId);
-        setFormData(prev => ({
-          ...prev,
-          userId: lastCreatedUserId
-        }));
-        localStorage.removeItem('lastCreatedUserId');
+        
+        // Limpiar valores de localStorage
+        if (storedSelectedUserId) localStorage.removeItem('selectedUserId');
+        if (lastCreatedUserId) localStorage.removeItem('lastCreatedUserId');
       }
     }
   }, [selectedUserId]);
@@ -324,7 +317,8 @@ const ClientsSection: React.FC = () => {
   useEffect(() => {
     if (selectedUserId) {
       console.log("selectedUserId cambió a:", selectedUserId);
-      setActiveUserId(selectedUserId);
+      
+      // Ya no cambiamos activeUserId, solo actualizamos el formulario
       setFormData(prev => ({
         ...prev,
         userId: selectedUserId
