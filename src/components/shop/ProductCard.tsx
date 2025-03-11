@@ -227,24 +227,24 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       >
         {/* Imagen del producto - CORREGIDO PARA CENTRADO PERFECTO */}
         <div className="pt-2 sm:pt-3 px-2 sm:px-3">
-          <div className="aspect-square w-full rounded-lg overflow-hidden bg-white/10 relative">
+        <div className="aspect-square w-full rounded-lg overflow-hidden bg-white/10 relative">
             {useBase64 && product.imageBase64 ? (
-              <div className="absolute inset-0 flex items-center justify-center p-2">
+              <div className="absolute inset-0 flex items-center justify-center">
                 <img
                   src={product.imageBase64}
                   alt={product.nombre}
-                  className="max-h-full max-w-full w-auto h-auto object-contain"
+                  className="w-full h-full object-contain"
                 />
               </div>
             ) : (
-              <div className="absolute inset-0 flex items-center justify-center p-2">
+              <div className="absolute inset-0 flex items-center justify-center">
                 <OptimizedProductImage
                   productId={product._id}
                   alt={product.nombre}
                   width={300}
                   height={300}
                   quality={compact ? 60 : 75}
-                  className="max-h-full max-w-full w-auto h-auto object-contain"
+                  className="w-full h-full object-contain"
                   containerClassName="flex items-center justify-center w-full h-full"
                   fallbackClassName="flex items-center justify-center w-full h-full text-white/70"
                   placeholderText={product.esCombo ? "Combo" : "Sin imagen"}
