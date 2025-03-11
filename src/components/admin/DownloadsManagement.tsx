@@ -127,6 +127,7 @@ interface CacheState {
   productos: Producto[];
   supervisores: Usuario[];
   clientes: Cliente[];
+  pedidos: Pedido[];
   lastRefreshed: {
     productos: number;
     supervisores: number;
@@ -135,12 +136,86 @@ interface CacheState {
   };
 }
 
+// Sistema de control para prevenir múltiples peticiones simultáneas
+const requestManager = {
+  activeRequests: new Map<string, Promise<any>>(),
+  pendingRequests: new Map<string, number>(),
+  maxRequestsPerEndpoint: 1,
+
+  // Método para controlar peticiones y evitar duplicados
+  async makeRequest<T>(key: string, requestFn: () => Promise<T>): Promise<T> {
+    // Si ya hay una petición activa para esta clave, reutilizarla
+    if (this.activeRequests.has(key)) {
+      return this.activeRequests.get(key) as Promise<T>;
+    }
+
+    // Si hay demasiadas peticiones pendientes para este endpoint, rechazar
+    const pendingCount = this.pendingRequests.get(key) || 0;
+    if (pendingCount >= this.maxRequestsPerEndpoint) {
+      throw new Error(`Demasiadas peticiones pendientes para: ${key}`);
+    }
+
+    // Incrementar contador de peticiones pendientes
+    this.pendingRequests.set(key, pendingCount + 1);
+
+    // Crear la promesa de la petición
+    const requestPromise = (async () => {
+      try {
+        return await requestFn();
+      } finally {
+        // Limpiar al finalizar
+        this.activeRequests.delete(key);
+        const newCount = (this.pendingRequests.get(key) || 1) - 1;
+        if (newCount <= 0) {
+          this.pendingRequests.delete(key);
+        } else {
+          this.pendingRequests.set(key, newCount);
+        }
+      }
+    })();
+
+    // Guardar la promesa activa
+    this.activeRequests.set(key, requestPromise);
+    
+    return requestPromise;
+  }
+};
+
 // Constante para tiempo de caché en milisegundos
 const CACHE_EXPIRY_TIME = {
-  productos: 15 * 60 * 1000,     // 15 minutos para productos
-  supervisores: 20 * 60 * 1000,  // 20 minutos para supervisores
-  clientes: 15 * 60 * 1000,      // 15 minutos para clientes
-  pedidos: 5 * 60 * 1000         // 5 minutos para pedidos (cambian con más frecuencia)
+  productos: 30 * 60 * 1000,     // 30 minutos para productos
+  supervisores: 40 * 60 * 1000,  // 40 minutos para supervisores
+  clientes: 25 * 60 * 1000,      // 25 minutos para clientes
+  pedidos: 10 * 60 * 1000         // 10 minutos para pedidos (cambian con más frecuencia)
+};
+
+// Función para almacenar datos en localStorage para persistir el caché entre recargas
+const persistCacheToStorage = (key: string, data: any) => {
+  try {
+    localStorage.setItem(
+      `cache_${key}`, 
+      JSON.stringify({
+        data,
+        timestamp: Date.now()
+      })
+    );
+  } catch (error) {
+    console.warn(`No se pudo guardar caché de ${key} en localStorage:`, error);
+    // Silenciar error - el guardado en localStorage es opcional
+  }
+};
+
+// Función para cargar datos de caché desde localStorage
+const loadCacheFromStorage = <T>(key: string): { data: T | null, timestamp: number } => {
+  try {
+    const cached = localStorage.getItem(`cache_${key}`);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+  } catch (error) {
+    console.warn(`Error al cargar caché de ${key} desde localStorage:`, error);
+  }
+  return { data: null, timestamp: 0 };
 };
 
 const DownloadsManagement: React.FC = () => {
@@ -176,16 +251,25 @@ const DownloadsManagement: React.FC = () => {
   });
   
   // Estado para el cache
-  const [cacheState, setCacheState] = useState<CacheState>({
-    productos: [],
-    supervisores: [],
-    clientes: [],
-    lastRefreshed: {
-      productos: 0,
-      supervisores: 0,
-      clientes: 0,
-      pedidos: 0
-    }
+  const [cacheState, setCacheState] = useState<CacheState>(() => {
+    // Intentar cargar estado inicial del caché desde localStorage
+    const cachedProductos = loadCacheFromStorage<Producto[]>('productos');
+    const cachedSupervisores = loadCacheFromStorage<Usuario[]>('supervisores');
+    const cachedClientes = loadCacheFromStorage<Cliente[]>('clientes');
+    const cachedPedidos = loadCacheFromStorage<Pedido[]>('pedidos');
+    
+    return {
+      productos: cachedProductos.data || [],
+      supervisores: cachedSupervisores.data || [],
+      clientes: cachedClientes.data || [],
+      pedidos: cachedPedidos.data || [],
+      lastRefreshed: {
+        productos: cachedProductos.timestamp,
+        supervisores: cachedSupervisores.timestamp,
+        clientes: cachedClientes.timestamp,
+        pedidos: cachedPedidos.timestamp
+      }
+    };
   });
   
   // Filtros
@@ -214,6 +298,17 @@ const DownloadsManagement: React.FC = () => {
   // Estado para controlar qué selector de filtro está abierto
   const [activeFilterSelector, setActiveFilterSelector] = useState<string | null>(null);
   
+  // Estado para controlar si es la primera carga
+  const isInitialMount = useRef(true);
+  
+  // Estado para control de carga de datos
+  const dataLoaded = useRef({
+    clientes: false,
+    productos: false,
+    supervisores: false,
+    pedidos: false
+  });
+  
   // Estado compartido
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -223,6 +318,17 @@ const DownloadsManagement: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
   const mobileListRef = useRef<HTMLDivElement>(null);
+
+  // Referencia para rastrear si el componente está montado
+  const isMounted = useRef(true);
+  
+  // Control de montaje para evitar actualizar estado en componentes desmontados
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   // IMPORTANTE: Tamaños fijos para cada tipo de dispositivo
   const ITEMS_PER_PAGE_MOBILE = 5;
@@ -289,18 +395,60 @@ const DownloadsManagement: React.FC = () => {
     return lastRefreshed > 0 && (now - lastRefreshed) < CACHE_EXPIRY_TIME[cacheType];
   };
 
-  // Cargar datos de productos (con caché)
+  // Función para retry con delay exponencial para errores 429
+  const fetchWithRetry = async (url: string, retries = 3, backoff = 1000) => {
+    // Crear una clave única para esta solicitud
+    const requestKey = `${url}`;
+    
+    // Usar el requestManager para evitar duplicados
+    try {
+      return await requestManager.makeRequest(requestKey, async () => {
+        try {
+          return await api.getClient().get(url);
+        } catch (err) {
+          // Si el error es 429 (Too Many Requests) y quedan reintentos
+          if (err?.response?.status === 429 && retries > 0) {
+            console.log(`Recibido error 429, reintentando en ${backoff}ms. Reintentos restantes: ${retries}`);
+            // Esperar antes de reintentar (backoff exponencial)
+            await new Promise(resolve => setTimeout(resolve, backoff));
+            // Reintentar con un backoff exponencial (ej. 1s, 2s, 4s)
+            return fetchWithRetry(url, retries - 1, backoff * 2);
+          }
+          throw err;
+        }
+      });
+    } catch (error) {
+      console.error(`Error en fetchWithRetry para ${url}:`, error);
+      throw error;
+    }
+  };
+
+  // Cargar datos de productos (con caché mejorado)
   const loadProductos = useCallback(async (forceRefresh = false) => {
+    // Si ya se han cargado los datos y no estamos forzando actualización, evitamos una nueva carga
+    if (dataLoaded.current.productos && !forceRefresh) {
+      console.log('Productos ya cargados previamente, omitiendo carga');
+      return;
+    }
+    
     // Si ya tenemos productos en caché y no forzamos actualización, usamos el caché
     if (!forceRefresh && isCacheValid('productos') && cacheState.productos.length > 0) {
+      console.log('Usando productos desde caché válido');
       setProductos(cacheState.productos);
+      
+      // Marcar como cargados
+      dataLoaded.current.productos = true;
       return;
     }
     
     setLoadingCacheData(true);
     try {
+      console.log('Cargando productos desde API...');
+      
       // Usar fetchWithRetry para manejar errores 429
       const response = await fetchWithRetry('/producto');
+      
+      if (!isMounted.current) return;
       
       if (response.data && Array.isArray(response.data.items)) {
         // Si estamos usando la estructura paginada
@@ -315,14 +463,24 @@ const DownloadsManagement: React.FC = () => {
         setProductos(processedProductos);
         
         // Actualizar caché
-        setCacheState(prev => ({
-          ...prev,
-          productos: processedProductos,
-          lastRefreshed: {
-            ...prev.lastRefreshed,
-            productos: Date.now()
-          }
-        }));
+        setCacheState(prev => {
+          const updated = {
+            ...prev,
+            productos: processedProductos,
+            lastRefreshed: {
+              ...prev.lastRefreshed,
+              productos: Date.now()
+            }
+          };
+          
+          // Persistir en localStorage
+          persistCacheToStorage('productos', processedProductos);
+          
+          return updated;
+        });
+        
+        // Marcar como cargados
+        dataLoaded.current.productos = true;
       } else if (response.data && Array.isArray(response.data)) {
         // Si estamos usando la estructura de array simple
         const processedProductos = response.data.map((prod: any) => ({
@@ -336,41 +494,74 @@ const DownloadsManagement: React.FC = () => {
         setProductos(processedProductos);
         
         // Actualizar caché
-        setCacheState(prev => ({
-          ...prev,
-          productos: processedProductos,
-          lastRefreshed: {
-            ...prev.lastRefreshed,
-            productos: Date.now()
-          }
-        }));
+        setCacheState(prev => {
+          const updated = {
+            ...prev,
+            productos: processedProductos,
+            lastRefreshed: {
+              ...prev.lastRefreshed,
+              productos: Date.now()
+            }
+          };
+          
+          // Persistir en localStorage
+          persistCacheToStorage('productos', processedProductos);
+          
+          return updated;
+        });
+        
+        // Marcar como cargados
+        dataLoaded.current.productos = true;
       }
     } catch (error) {
       console.error('Error al cargar productos:', error);
-      setProductos([]);
-      // Mostrar error solo si no hay productos en caché
-      if (cacheState.productos.length === 0) {
+      
+      if (!isMounted.current) return;
+      
+      // Si hay datos en caché, usarlos aunque estén vencidos
+      if (cacheState.productos.length > 0) {
+        console.log('Usando productos desde caché vencido debido a error');
+        setProductos(cacheState.productos);
+      } else {
+        setProductos([]);
+        // Mostrar error solo si no hay productos en caché
         setError(error.response?.status === 429 
           ? 'Demasiadas solicitudes al servidor. Por favor, espere un momento antes de volver a intentarlo.' 
           : 'Error al cargar los productos. Por favor, intente nuevamente más tarde.');
       }
     } finally {
-      setLoadingCacheData(false);
+      if (isMounted.current) {
+        setLoadingCacheData(false);
+      }
     }
   }, [cacheState.productos, cacheState.lastRefreshed]);
 
   // Cargar supervisores (usuarios con rol de supervisor)
   const loadSupervisores = useCallback(async (forceRefresh = false) => {
+    // Si ya se han cargado los datos y no estamos forzando actualización, evitamos una nueva carga
+    if (dataLoaded.current.supervisores && !forceRefresh) {
+      console.log('Supervisores ya cargados previamente, omitiendo carga');
+      return;
+    }
+    
     // Si ya tenemos supervisores en caché y no forzamos actualización, usamos el caché
     if (!forceRefresh && isCacheValid('supervisores') && cacheState.supervisores.length > 0) {
+      console.log('Usando supervisores desde caché válido');
       setSupervisores(cacheState.supervisores);
+      
+      // Marcar como cargados
+      dataLoaded.current.supervisores = true;
       return;
     }
     
     setLoadingCacheData(true);
     try {
+      console.log('Cargando supervisores desde API...');
+      
       // Usar fetchWithRetry para manejar errores 429
       const response = await fetchWithRetry('/auth/users');
+      
+      if (!isMounted.current) return;
       
       if (response.data && Array.isArray(response.data)) {
         // Filtrar solo usuarios activos con roles relevantes (supervisor, admin, etc.)
@@ -390,144 +581,155 @@ const DownloadsManagement: React.FC = () => {
         setSupervisores(filteredUsers);
         
         // Actualizar caché
-        setCacheState(prev => ({
-          ...prev,
-          supervisores: filteredUsers,
-          lastRefreshed: {
-            ...prev.lastRefreshed,
-            supervisores: Date.now()
-          }
-        }));
+        setCacheState(prev => {
+          const updated = {
+            ...prev,
+            supervisores: filteredUsers,
+            lastRefreshed: {
+              ...prev.lastRefreshed,
+              supervisores: Date.now()
+            }
+          };
+          
+          // Persistir en localStorage
+          persistCacheToStorage('supervisores', filteredUsers);
+          
+          return updated;
+        });
+        
+        // Marcar como cargados
+        dataLoaded.current.supervisores = true;
       }
     } catch (error) {
       console.error('Error al cargar supervisores:', error);
-      setSupervisores([]);
-      // Mostrar error solo si no hay supervisores en caché
-      if (cacheState.supervisores.length === 0) {
+      
+      if (!isMounted.current) return;
+      
+      // Si hay datos en caché, usarlos aunque estén vencidos
+      if (cacheState.supervisores.length > 0) {
+        console.log('Usando supervisores desde caché vencido debido a error');
+        setSupervisores(cacheState.supervisores);
+      } else {
+        setSupervisores([]);
+        // Mostrar error solo si no hay supervisores en caché
         setError(error.response?.status === 429 
           ? 'Demasiadas solicitudes al servidor. Por favor, espere un momento antes de volver a intentarlo.' 
           : 'Error al cargar supervisores. Por favor, intente nuevamente más tarde.');
       }
     } finally {
-      setLoadingCacheData(false);
+      if (isMounted.current) {
+        setLoadingCacheData(false);
+      }
     }
   }, [cacheState.supervisores, cacheState.lastRefreshed]);
 
-  // Función para retry con delay exponencial para errores 429
-  const fetchWithRetry = async (url, retries = 3, backoff = 1000) => {
-    try {
-      return await api.getClient().get(url);
-    } catch (err) {
-      // Si el error es 429 (Too Many Requests) y quedan reintentos
-      if (err?.response?.status === 429 && retries > 0) {
-        console.log(`Recibido error 429, reintentando en ${backoff}ms. Reintentos restantes: ${retries}`);
-        // Esperar antes de reintentar (backoff exponencial)
-        await new Promise(resolve => setTimeout(resolve, backoff));
-        // Reintentar con un backoff exponencial (ej. 1s, 2s, 4s)
-        return fetchWithRetry(url, retries - 1, backoff * 2);
-      }
-      throw err;
-    }
-  };
-
   // Cargar todos los clientes (con caché)
   const loadAllClientes = useCallback(async (forceRefresh = false) => {
+    // Si ya se han cargado los datos y no estamos forzando actualización, evitamos una nueva carga
+    if (dataLoaded.current.clientes && !forceRefresh) {
+      console.log('Clientes ya cargados previamente, omitiendo carga');
+      return;
+    }
+    
     // Si ya tenemos clientes en caché y no forzamos actualización, usamos el caché
     if (!forceRefresh && isCacheValid('clientes') && cacheState.clientes.length > 0) {
+      console.log('Usando clientes desde caché válido');
       setAllClientes(cacheState.clientes);
       setClientes(cacheState.clientes);
+      
+      // Marcar como cargados
+      dataLoaded.current.clientes = true;
       return;
     }
     
     setLoadingCacheData(true);
     try {
+      console.log('Cargando clientes desde API...');
+      
       // Usar fetchWithRetry para manejar errores 429
       const response = await fetchWithRetry('/cliente');
+      
+      if (!isMounted.current) return;
       
       if (response.data && Array.isArray(response.data)) {
         setAllClientes(response.data);
         setClientes(response.data);
         
         // Actualizar caché
-        setCacheState(prev => ({
-          ...prev,
-          clientes: response.data,
-          lastRefreshed: {
-            ...prev.lastRefreshed,
-            clientes: Date.now()
-          }
-        }));
+        setCacheState(prev => {
+          const updated = {
+            ...prev,
+            clientes: response.data,
+            lastRefreshed: {
+              ...prev.lastRefreshed,
+              clientes: Date.now()
+            }
+          };
+          
+          // Persistir en localStorage
+          persistCacheToStorage('clientes', response.data);
+          
+          return updated;
+        });
+        
+        // Marcar como cargados
+        dataLoaded.current.clientes = true;
       } else {
         setAllClientes([]);
         setClientes([]);
       }
     } catch (err) {
       console.error('Error al cargar clientes:', err);
-      // Mostrar mensaje de error al usuario
-      setError(err.response?.status === 429 
-        ? 'Demasiadas solicitudes al servidor. Por favor, espere un momento antes de volver a intentarlo.' 
-        : 'Error al cargar los clientes. Por favor, intente nuevamente más tarde.');
-      setAllClientes([]);
-      setClientes([]);
+      
+      if (!isMounted.current) return;
+      
+      // Si hay datos en caché, usarlos aunque estén vencidos
+      if (cacheState.clientes.length > 0) {
+        console.log('Usando clientes desde caché vencido debido a error');
+        setAllClientes(cacheState.clientes);
+        setClientes(cacheState.clientes);
+      } else {
+        // Mostrar mensaje de error al usuario
+        setError(err.response?.status === 429 
+          ? 'Demasiadas solicitudes al servidor. Por favor, espere un momento antes de volver a intentarlo.' 
+          : 'Error al cargar los clientes. Por favor, intente nuevamente más tarde.');
+        setAllClientes([]);
+        setClientes([]);
+      }
     } finally {
-      setLoadingCacheData(false);
+      if (isMounted.current) {
+        setLoadingCacheData(false);
+      }
     }
   }, [cacheState.clientes, cacheState.lastRefreshed]);
-
-  // Cargar todos los datos necesarios al iniciar
-  useEffect(() => {
-    loadProductos();
-    loadSupervisores();
-    loadAllClientes();
-  }, [loadProductos, loadSupervisores, loadAllClientes]);
-
-  // Cargar pedidos cuando se selecciona un cliente en la pestaña de remitos
-  useEffect(() => {
-    const fetchPedidos = async () => {
-      if (!selectedCliente) {
-        setPedidos([]);
-        return;
-      }
-      
-      try {
-        setError('');
-        const pedidosResponse = await api.getClient().get(`/pedido/cliente/${selectedCliente}`);
-        
-        if (pedidosResponse.data && Array.isArray(pedidosResponse.data)) {
-          // Procesar los pedidos para asegurar que displayNumber esté definido
-          const processedPedidos = pedidosResponse.data.map((pedido: any) => {
-            return {
-              ...pedido,
-              displayNumber: pedido.nPedido?.toString() || pedido.numero || 'S/N'
-            };
-          });
-          setPedidos(processedPedidos);
-        } else {
-          setPedidos([]);
-          setError('Formato de respuesta inválido al cargar pedidos');
-        }
-      } catch (err) {
-        console.error('Error al cargar pedidos:', err);
-        setPedidos([]);
-        setError('Error al cargar pedidos para este cliente');
-      }
-    };
-    
-    fetchPedidos();
-  }, [selectedCliente]);
   
   // Cargar todos los pedidos para la tabla (con caché)
   const loadAllPedidos = useCallback(async (forceRefresh = false) => {
-    // Si no forzamos la actualización y el caché de pedidos es válido, no hacemos nada
-    // Esta función siempre carga los datos porque los pedidos cambian con frecuencia
-    if (!forceRefresh && isCacheValid('pedidos') && allPedidos.length > 0) {
+    // Si ya se han cargado los datos y no estamos forzando actualización, evitamos una nueva carga
+    if (dataLoaded.current.pedidos && !forceRefresh) {
+      console.log('Pedidos ya cargados previamente, omitiendo carga');
+      return;
+    }
+    
+    // Si no forzamos la actualización y el caché de pedidos es válido, usamos el caché
+    if (!forceRefresh && isCacheValid('pedidos') && cacheState.pedidos.length > 0) {
+      console.log('Usando pedidos desde caché válido');
+      setAllPedidos(cacheState.pedidos);
+      setFilteredPedidos(cacheState.pedidos);
+      
+      // Marcar como cargados
+      dataLoaded.current.pedidos = true;
       return;
     }
     
     setLoadingPedidos(true);
     try {
+      console.log('Cargando pedidos desde API...');
+      
       // Usar fetchWithRetry para manejar errores 429
       const response = await fetchWithRetry('/pedido');
+      
+      if (!isMounted.current) return;
       
       // Verificar que response.data exista y sea un array
       if (response.data && Array.isArray(response.data)) {
@@ -552,13 +754,21 @@ const DownloadsManagement: React.FC = () => {
         setFilteredPedidos(pedidosConTotal);
         
         // Actualizar caché
-        setCacheState(prev => ({
-          ...prev,
-          lastRefreshed: {
-            ...prev.lastRefreshed,
-            pedidos: Date.now()
-          }
-        }));
+        setCacheState(prev => {
+          const updated = {
+            ...prev,
+            pedidos: pedidosConTotal,
+            lastRefreshed: {
+              ...prev.lastRefreshed,
+              pedidos: Date.now()
+            }
+          };
+          
+          // Persistir en localStorage
+          persistCacheToStorage('pedidos', pedidosConTotal);
+          
+          return updated;
+        });
         
         // Inicializar las opciones de filtro temporales
         setTempFilterOptions({
@@ -569,85 +779,249 @@ const DownloadsManagement: React.FC = () => {
           supervisorId: '',
           clienteId: ''
         });
+        
+        // Marcar como cargados
+        dataLoaded.current.pedidos = true;
       } else {
-        // Si la respuesta no es un array, inicializar con array vacío
-        setAllPedidos([]);
-        setFilteredPedidos([]);
+        // Si hay datos en caché, usarlos aunque estén vencidos
+        if (cacheState.pedidos.length > 0) {
+          console.log('Usando pedidos desde caché vencido debido a error de formato');
+          setAllPedidos(cacheState.pedidos);
+          setFilteredPedidos(cacheState.pedidos);
+        } else {
+          // Si la respuesta no es un array, inicializar con array vacío
+          setAllPedidos([]);
+          setFilteredPedidos([]);
+        }
       }
     } catch (err) {
       console.error('Error al cargar todos los pedidos:', err);
-      setAllPedidos([]);
-      setFilteredPedidos([]);
-      setError(err.response?.status === 429 
-        ? 'Demasiadas solicitudes al servidor. Por favor, espere un momento antes de volver a intentarlo.' 
-        : 'Error al cargar los pedidos. Por favor, intente nuevamente más tarde.');
+      
+      if (!isMounted.current) return;
+      
+      // Si hay datos en caché, usarlos aunque estén vencidos
+      if (cacheState.pedidos.length > 0) {
+        console.log('Usando pedidos desde caché vencido debido a error');
+        setAllPedidos(cacheState.pedidos);
+        setFilteredPedidos(cacheState.pedidos);
+      } else {
+        setAllPedidos([]);
+        setFilteredPedidos([]);
+        setError(err.response?.status === 429 
+          ? 'Demasiadas solicitudes al servidor. Por favor, espere un momento antes de volver a intentarlo.' 
+          : 'Error al cargar los pedidos. Por favor, intente nuevamente más tarde.');
+      }
     } finally {
-      setLoadingPedidos(false);
+      if (isMounted.current) {
+        setLoadingPedidos(false);
+      }
     }
-  }, [allPedidos.length]);
+  }, [cacheState.pedidos, cacheState.lastRefreshed]);
 
-  // Cargar datos iniciales con retraso entre solicitudes para evitar errores 429
+  // Cargar pedidos cuando se selecciona un cliente en la pestaña de remitos (con debounce)
+  const clientePedidosDebounceTimer = useRef<NodeJS.Timeout | null>(null);
+  
+  // Efecto con debounce para cargar pedidos al seleccionar cliente
   useEffect(() => {
-    const loadInitialData = async () => {
+    if (!selectedCliente) {
+      setPedidos([]);
+      return;
+    }
+    
+    // Limpiar el temporizador anterior
+    if (clientePedidosDebounceTimer.current) {
+      clearTimeout(clientePedidosDebounceTimer.current);
+    }
+    
+    // Configurar un nuevo temporizador de debounce (300ms)
+    clientePedidosDebounceTimer.current = setTimeout(async () => {
       try {
-        // Cargar primero los clientes (probablemente los más importantes)
+        setError('');
+        
+        // Buscar primero en los pedidos ya cargados en memoria
+        if (allPedidos.length > 0) {
+          console.log('Buscando pedidos para cliente en memoria...');
+          
+          // Buscar el cliente seleccionado
+          const cliente = allClientes.find(c => c._id === selectedCliente);
+          
+          if (cliente) {
+            // Filtrar pedidos que coincidan con este cliente
+            const pedidosFiltrados = allPedidos.filter(pedido => {
+              // Un pedido coincide con un cliente si:
+              // 1. Mismo servicio
+              const servicioMatch = pedido.servicio === cliente.servicio;
+              
+              // 2. Misma sección de servicio (si está especificada)
+              const seccionMatch = !cliente.seccionDelServicio || 
+                                pedido.seccionDelServicio === cliente.seccionDelServicio;
+              
+              // 3. Mismo userId (si está asignado)
+              let userMatch = true;
+              if (typeof cliente.userId === 'object' && cliente.userId && cliente.userId._id) {
+                if (typeof pedido.userId === 'object') {
+                  userMatch = pedido.userId && pedido.userId._id === cliente.userId._id;
+                } else {
+                  userMatch = pedido.userId === cliente.userId._id;
+                }
+              }
+              
+              return servicioMatch && seccionMatch && userMatch;
+            });
+            
+            if (pedidosFiltrados.length > 0) {
+              console.log(`Encontrados ${pedidosFiltrados.length} pedidos en memoria para el cliente seleccionado`);
+              setPedidos(pedidosFiltrados);
+              return;
+            }
+          }
+        }
+        
+        // Si no se encuentran en memoria, hacer solicitud al servidor
+        console.log('Cargando pedidos para cliente desde API...');
+        const pedidosResponse = await fetchWithRetry(`/pedido/cliente/${selectedCliente}`);
+        
+        if (!isMounted.current) return;
+        
+        if (pedidosResponse.data && Array.isArray(pedidosResponse.data)) {
+          // Procesar los pedidos para asegurar que displayNumber esté definido
+          const processedPedidos = pedidosResponse.data.map((pedido: any) => {
+            return {
+              ...pedido,
+              displayNumber: pedido.nPedido?.toString() || pedido.numero || 'S/N'
+            };
+          });
+          setPedidos(processedPedidos);
+        } else {
+          setPedidos([]);
+          setError('Formato de respuesta inválido al cargar pedidos');
+        }
+      } catch (err) {
+        console.error('Error al cargar pedidos:', err);
+        
+        if (!isMounted.current) return;
+        
+        setPedidos([]);
+        setError('Error al cargar pedidos para este cliente');
+      }
+    }, 300); // 300ms de espera para debounce
+    
+    // Limpiar temporizador al desmontar
+    return () => {
+      if (clientePedidosDebounceTimer.current) {
+        clearTimeout(clientePedidosDebounceTimer.current);
+      }
+    };
+  }, [selectedCliente, allPedidos, allClientes]);
+
+  // Cargar datos iniciales con retraso entre solicitudes (sólo una vez)
+  useEffect(() => {
+    if (!isInitialMount.current) return;
+    isInitialMount.current = false;
+
+    const loadInitialData = async () => {
+      // Iniciar estableciendo errores a vacío
+      setError('');
+      
+      console.log('Carga inicial de datos comenzando...');
+      
+      try {
+        // Intentar cargar datos en orden de prioridad con retrasos entre ellos
+        
+        // 1. Primero cargar los clientes (probablemente los más importantes)
+        console.log('Paso 1: Cargar clientes...');
         await loadAllClientes();
         
         // Pequeño retraso para evitar errores 429
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 800));
         
-        // Luego cargar productos
-        await loadProductos();
+        // 2. Luego cargar pedidos (siguiente prioridad)
+        console.log('Paso 2: Cargar pedidos...');
+        await loadAllPedidos();
         
         // Otro pequeño retraso
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 800));
         
-        // Finalmente cargar supervisores
-        await loadSupervisores();
+        // 3. Finalmente cargar datos menos importantes
+        console.log('Paso 3: Cargar productos y supervisores...');
         
-        // Un retraso final antes de cargar pedidos
-        await new Promise(resolve => setTimeout(resolve, 300));
+        // Cargar productos
+        loadProductos();
         
-        // Cargar los pedidos al final
-        await loadAllPedidos();
+        // Pequeño retraso final
+        await new Promise(resolve => setTimeout(resolve, 800));
+        
+        // Cargar supervisores en último lugar
+        loadSupervisores();
+        
+        console.log('Carga inicial completada con éxito');
       } catch (err) {
         console.error("Error al cargar datos iniciales:", err);
+        
+        if (isMounted.current) {
+          setError('Hubo un problema al cargar los datos. Por favor, intente nuevamente más tarde.');
+        }
       }
     };
     
+    // Comenzar la carga de datos
     loadInitialData();
   }, [loadAllClientes, loadProductos, loadSupervisores, loadAllPedidos]);
   
   // Función para forzar la recarga de todos los datos (de forma secuencial para evitar 429)
   const forceRefreshAllData = async () => {
+    if (loadingCacheData) {
+      // Ya se está actualizando, no iniciar otra actualización
+      return;
+    }
+    
     setLoadingCacheData(true);
     setError(''); // Limpiar errores previos
     
     try {
+      // Reiniciar el estado de datos cargados
+      dataLoaded.current = {
+        clientes: false,
+        productos: false,
+        supervisores: false,
+        pedidos: false
+      };
+      
       // Cargar datos de forma secuencial para evitar errores 429
       await loadAllClientes(true);
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      await loadProductos(true);
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      await loadSupervisores(true);
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 800));
       
       await loadAllPedidos(true);
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      await loadProductos(true);
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      await loadSupervisores(true);
       
       // Mostrar mensaje de éxito
-      setSuccessMessage('Datos actualizados correctamente');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      if (isMounted.current) {
+        setSuccessMessage('Datos actualizados correctamente');
+        setTimeout(() => {
+          if (isMounted.current) {
+            setSuccessMessage('');
+          }
+        }, 3000);
+      }
     } catch (err) {
       console.error('Error al actualizar datos:', err);
-      setError('Error al actualizar los datos. Por favor intente nuevamente más tarde.');
+      
+      if (isMounted.current) {
+        setError('Error al actualizar los datos. Por favor intente nuevamente más tarde.');
+      }
     } finally {
-      setLoadingCacheData(false);
+      if (isMounted.current) {
+        setLoadingCacheData(false);
+      }
     }
   };
   
-  // Función para aplicar filtros manualmente
+  // Función para aplicar filtros con memoización para evitar recálculos innecesarios
   const applyFilters = useCallback(() => {
     if (!allPedidos.length) return;
     
@@ -738,9 +1112,12 @@ const DownloadsManagement: React.FC = () => {
       }
     }
     
-    setFilteredPedidos(filtered);
-    setCurrentPage(1); // Reset to first page when filters change
-  }, [allPedidos, allClientes, filterOptions]);
+    // Actualizar lista filtrada solo si es necesario
+    if (JSON.stringify(filteredPedidos) !== JSON.stringify(filtered)) {
+      setFilteredPedidos(filtered);
+      setCurrentPage(1); // Reset to first page when filters change
+    }
+  }, [allPedidos, allClientes, filterOptions, filteredPedidos]);
   
   // Reaccionar a cambios en filterOptions
   useEffect(() => {
@@ -784,12 +1161,21 @@ const DownloadsManagement: React.FC = () => {
       window.URL.revokeObjectURL(url);
       
       setSuccessMessage('Excel descargado correctamente');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      setTimeout(() => {
+        if (isMounted.current) {
+          setSuccessMessage('');
+        }
+      }, 3000);
     } catch (err: any) {
       console.error('Error downloading Excel:', err);
-      setError(err.response?.data?.mensaje || 'Error al descargar el Excel');
+      
+      if (isMounted.current) {
+        setError(err.response?.data?.mensaje || 'Error al descargar el Excel');
+      }
     } finally {
-      setIsLoading(false);
+      if (isMounted.current) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -813,6 +1199,8 @@ const DownloadsManagement: React.FC = () => {
         timeout: 60000 // Incrementar a 60 segundos
       });
       
+      if (!isMounted.current) return;
+      
       // Verificar que la respuesta sea válida
       if (!response.data || response.data.size === 0) {
         throw new Error('La respuesta del servidor está vacía');
@@ -826,9 +1214,13 @@ const DownloadsManagement: React.FC = () => {
         reader.onload = () => {
           try {
             const errorObj = JSON.parse(reader.result as string);
-            setError(errorObj.mensaje || 'Error al generar el PDF');
+            if (isMounted.current) {
+              setError(errorObj.mensaje || 'Error al generar el PDF');
+            }
           } catch (parseErr) {
-            setError('Error al procesar la respuesta del servidor');
+            if (isMounted.current) {
+              setError('Error al procesar la respuesta del servidor');
+            }
           }
         };
         reader.readAsText(response.data);
@@ -858,10 +1250,18 @@ const DownloadsManagement: React.FC = () => {
         window.URL.revokeObjectURL(url);
       }, 100);
       
-      setSuccessMessage('Remito descargado correctamente');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      if (isMounted.current) {
+        setSuccessMessage('Remito descargado correctamente');
+        setTimeout(() => {
+          if (isMounted.current) {
+            setSuccessMessage('');
+          }
+        }, 3000);
+      }
     } catch (err: any) {
       console.error('Error downloading remito:', err);
+      
+      if (!isMounted.current) return;
       
       // Proporcionar mensaje de error más específico
       let errorMessage = 'Error al descargar el remito';
@@ -874,10 +1274,14 @@ const DownloadsManagement: React.FC = () => {
           reader.onload = () => {
             try {
               const errorObj = JSON.parse(reader.result as string);
-              setError(errorObj.mensaje || errorMessage);
+              if (isMounted.current) {
+                setError(errorObj.mensaje || errorMessage);
+              }
             } catch (parseErr) {
               // No se puede parsear como JSON
-              setError(errorMessage);
+              if (isMounted.current) {
+                setError(errorMessage);
+              }
             }
           };
           reader.readAsText(err.response.data);
@@ -886,6 +1290,8 @@ const DownloadsManagement: React.FC = () => {
           errorMessage = 'No se encontró el pedido solicitado';
         } else if (err.response.status === 500) {
           errorMessage = 'Error en el servidor al generar el PDF. Intente nuevamente.';
+        } else if (err.response.status === 429) {
+          errorMessage = 'Demasiadas solicitudes. Por favor, espere un momento antes de volver a intentarlo.';
         }
       } else if (err.request) {
         // No se recibió respuesta
@@ -897,7 +1303,9 @@ const DownloadsManagement: React.FC = () => {
       
       setError(errorMessage);
     } finally {
-      setIsLoading(false);
+      if (isMounted.current) {
+        setIsLoading(false);
+      }
     }
   };
 
