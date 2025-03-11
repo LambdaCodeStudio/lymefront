@@ -2,10 +2,10 @@
  * Hook personalizado que centraliza la lógica de gestión de usuarios
  * Implementa la nueva estructura de roles
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import userService, { type AdminUser, type CreateUserData } from '../../../services/userService';
 import { useNotification } from '@/context/NotificationContext';
-import { getAvailableRoles, ROLES } from '../shared/UserRolesConfig';
+import { getAvailableRoles, ROLES, roleOptions } from '../shared/UserRolesConfig';
 
 /**
  * Hook para gestionar usuarios
@@ -19,21 +19,10 @@ export const useUserManagement = () => {
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showInactiveUsers, setShowInactiveUsers] = useState(false);
-  const [currentUserRole, setCurrentUserRole] = useState(ROLES.ADMIN); // Por defecto asumimos admin
-  
-  // Opciones de roles disponibles según el rol del usuario actual
-  const availableRoles = getAvailableRoles(currentUserRole);
+  const [currentUserRole, setCurrentUserRole] = useState<string>(ROLES.ADMIN); // Por defecto asumimos admin
   
   // Contexto de notificaciones
   const { addNotification } = useNotification();
-
-  // Estado del formulario
-  const [formData, setFormData] = useState<CreateUserData>({
-    usuario: '',
-    password: '',
-    role: ROLES.OPERARIO,
-    secciones: 'ambos'
-  });
 
   // Obtener el rol del usuario actual al cargar la página
   useEffect(() => {
@@ -53,6 +42,37 @@ export const useUserManagement = () => {
 
     getUserRole();
   }, []);
+
+  // Opciones de roles disponibles según el rol del usuario actual
+  // Usamos useMemo para calcular esto sólo cuando cambia el rol actual
+  const availableRoles = useMemo(() => {
+    // Verificar cuál es el rol actual del usuario
+    console.log('Current user role:', currentUserRole);
+    
+    // Verificar las opciones disponibles para ese rol
+    const options = roleOptions[currentUserRole] || [];
+    console.log('Available role options:', options);
+    
+    return options;
+  }, [currentUserRole]);
+
+  // Estado del formulario
+  const [formData, setFormData] = useState<CreateUserData>({
+    usuario: '',
+    password: '',
+    role: '',
+    secciones: 'ambos'
+  });
+
+  // Actualizar el rol predeterminado cuando cambien las opciones disponibles
+  useEffect(() => {
+    if (availableRoles.length > 0 && !editingUser) {
+      setFormData(prev => ({
+        ...prev,
+        role: availableRoles[0].value
+      }));
+    }
+  }, [availableRoles, editingUser]);
 
   // Cargar usuarios
   const fetchUsers = useCallback(async () => {
@@ -88,11 +108,12 @@ export const useUserManagement = () => {
 
   // Resetear formulario
   const resetForm = useCallback(() => {
-    // Determinar el rol por defecto para el nuevo usuario
-    let defaultRole = ROLES.OPERARIO;
-    if (availableRoles.length > 0) {
-      defaultRole = availableRoles[0].value;
-    }
+    // Determinar el rol por defecto basado en las opciones disponibles
+    const defaultRole = availableRoles.length > 0 
+      ? availableRoles[0].value 
+      : ROLES.OPERARIO;
+    
+    console.log('Resetting form with default role:', defaultRole);
     
     setFormData({
       usuario: '',
@@ -116,6 +137,13 @@ export const useUserManagement = () => {
       if (!formData.secciones) {
         formData.secciones = 'ambos';
       }
+      
+      // Asegurarse de que el rol sea válido
+      if (!formData.role && availableRoles.length > 0) {
+        formData.role = availableRoles[0].value;
+      }
+      
+      console.log('Submitting form data:', formData);
       
       if (editingUser) {
         // Actualizar usuario existente
@@ -198,13 +226,13 @@ export const useUserManagement = () => {
     setFormData({
       usuario: user.usuario,
       password: '', // No enviamos la contraseña actual por seguridad
-      nombre: user.nombre,
-      apellido: user.apellido,
-      celular: user.celular,
+      nombre: user.nombre || '',
+      apellido: user.apellido || '',
+      celular: user.celular || '',
       role: user.role,
       secciones: user.secciones || 'ambos',
-      direccion: user.direccion,
-      ciudad: user.ciudad,
+      direccion: user.direccion || '',
+      ciudad: user.ciudad || '',
       expirationMinutes: user.expiresAt && 
         (user.role === ROLES.TEMPORARIO || 
          (user.role === ROLES.OPERARIO && user.expiresAt)) ? 30 : undefined

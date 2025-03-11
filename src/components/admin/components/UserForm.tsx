@@ -1,6 +1,7 @@
 /**
  * Componente de formulario para crear y editar usuarios
  * Actualizado para la nueva estructura de roles y agregar soporte para operarios temporales
+ * Corregido el manejo del desplegable de roles
  */
 import React, { useState, useEffect } from 'react';
 import { AlertCircle, Info } from 'lucide-react';
@@ -99,8 +100,15 @@ const UserForm: React.FC<UserFormProps> = ({
       isTemporary: formData.role === ROLES.OPERARIO ? isTemporary : undefined
     };
     
+    console.log("Submitting user data:", submissionData);
+    
     await onSubmit(submissionData);
   };
+
+  // Debugging logs
+  console.log("Available roles:", availableRoles);
+  console.log("Current form data:", formData);
+  console.log("Current user role:", currentUserRole);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -161,34 +169,40 @@ const UserForm: React.FC<UserFormProps> = ({
               </div>
               <div>
                 <Label htmlFor="role">Rol <span className="text-red-500">*</span></Label>
-                <Select
-                  value={formData.role}
-                  onValueChange={(value: string) => {
-                    setFormData({
-                      ...formData,
-                      role: value,
-                      // Resetear tiempo de expiración si se cambia a temporario
-                      expirationMinutes: value === ROLES.TEMPORARIO ? 30 : undefined
-                    });
-                    
-                    // Resetear isTemporary si no es operario
-                    if (value !== ROLES.OPERARIO) {
-                      setIsTemporary(false);
-                    }
-                  }}
-                  required
-                >
-                  <SelectTrigger id="role">
-                    <SelectValue placeholder="Seleccionar rol" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableRoles.map((role) => (
-                      <SelectItem key={role.value} value={role.value}>
-                        {role.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {availableRoles.length > 0 ? (
+                  <Select
+                    value={formData.role}
+                    onValueChange={(value: string) => {
+                      console.log("Selected role:", value);
+                      setFormData({
+                        ...formData,
+                        role: value,
+                        // Resetear tiempo de expiración si se cambia a temporario
+                        expirationMinutes: value === ROLES.TEMPORARIO ? 30 : undefined
+                      });
+                      
+                      // Resetear isTemporary si no es operario
+                      if (value !== ROLES.OPERARIO) {
+                        setIsTemporary(false);
+                      }
+                    }}
+                  >
+                    <SelectTrigger id="role">
+                      <SelectValue placeholder="Seleccionar rol" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableRoles.map((role) => (
+                        <SelectItem key={role.value} value={role.value}>
+                          {role.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="text-red-500 text-sm p-2 border rounded-md">
+                    No hay roles disponibles para este usuario
+                  </div>
+                )}
               </div>
             </div>
 
