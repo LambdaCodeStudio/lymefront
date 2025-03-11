@@ -487,7 +487,7 @@ const InventorySection: React.FC = () => {
   }, [getAuthToken]);
 
   // Mejorar la función fetch con reintentos para manejar "failed to fetch"
-  const fetchWithRetry = async (url: string, options: RequestInit, maxRetries = 3) => {
+  const fetchWithRetry = async (url: string, options: RequestInit, maxRetries = 2) => {
     let retries = 0;
     
     while (retries < maxRetries) {
@@ -518,8 +518,8 @@ const InventorySection: React.FC = () => {
           throw error;
         }
         
-        // Esperar antes de reintentar (espera exponencial)
-        const delay = Math.min(1000 * Math.pow(2, retries), 10000);
+        // Esperar antes de reintentar (espera menor y más corta)
+        const delay = Math.min(500 * retries, 3000);
         console.log(`Esperando ${delay}ms antes de reintentar...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
@@ -540,9 +540,10 @@ const InventorySection: React.FC = () => {
     () => fetchProductsData(currentPage, itemsPerPage, selectedCategory, debouncedSearchTerm),
     {
       keepPreviousData: true,
-      staleTime: 30000, // 30 segundos (reducido para actualizar más frecuentemente)
+      staleTime: 120000, // Aumentado a 2 minutos (120000ms)
       cacheTime: 300000, // 5 minutos
-      refetchOnWindowFocus: true, // Habilitar actualización al enfocar la ventana
+      refetchOnWindowFocus: false, // Deshabilitar auto refresh al enfocar la ventana
+      refetchOnMount: false, // No refrescar al montar componentes
       onSuccess: (data) => {
         setProducts(data.items);
         setTotalItems(data.totalItems);
