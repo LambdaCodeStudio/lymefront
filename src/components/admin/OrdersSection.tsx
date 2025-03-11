@@ -62,7 +62,7 @@ import Pagination from "@/components/ui/pagination";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 
 // Importamos los servicios en lugar de usar fetch directamente
-import { pedidoService } from '@/services/pedidoService';
+import { pedidoService } from '@/services/orderService';
 import { inventoryService } from '@/services/inventoryService';
 import api from '@/services/api';
 import eventService from '@/services/EventService';
