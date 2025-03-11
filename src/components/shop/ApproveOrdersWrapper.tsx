@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ShopNavbar } from './shop/ShopNavbar';
-import { ApproveOrderList } from './shop/ApproveOrderList';
+import { ShopNavbar } from './ShopNavbar';
+import { ApproveOrderList } from './ApproveOrderList';
 import { 
   AlertCircle, 
   Loader2, 

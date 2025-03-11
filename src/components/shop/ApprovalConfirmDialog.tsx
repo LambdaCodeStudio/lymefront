@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
+import { Label } from "@/components/ui/label";
 import { Loader2, CheckCircle2, XCircle, AlertTriangle, ClipboardList } from 'lucide-react';
 
 interface ApprovalConfirmDialogProps {

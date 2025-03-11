@@ -62,8 +62,8 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
-import { OrderDetailsDialog } from './OrderDetailsDialog';
-import { ApprovalConfirmDialog } from './ApprovalConfirmDialog';
+import type { OrderDetailsDialog } from './OrderDetailsDialog';
+import ApprovalConfirmDialog  from './ApprovalConfirmDialog';
 
 // Intentar usar el contexto de notificaciones de forma segura
 let useNotification;
