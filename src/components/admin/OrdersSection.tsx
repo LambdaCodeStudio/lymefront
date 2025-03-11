@@ -1,10 +1,12 @@
-// CAMBIOS PRINCIPALES:
-// 1. Agregado campo nPedido a la interfaz Order
-// 2. Modificado la visualización para mostrar el número de pedido en desktop y móvil
-// 3. Corregido la visualización del correo de usuario en lugar del ID al editar
-// 4. Implementado sistema de paginación similar a InventorySection
+// OrdersSection.tsx - VERSIÓN OPTIMIZADA
+// Cambios principales implementados:
+// 1. Sistema de caché persistente usando localStorage
+// 2. Carga en lotes de detalles de productos
+// 3. Prefetching inteligente
+// 4. Reducción de solicitudes redundantes
+// 5. Optimización de filtros usando el backend directamente
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNotification } from '@/context/NotificationContext';
 import {
   Plus,
@@ -26,7 +28,9 @@ import {
   Calendar,
   User,
   DollarSign,
-  Hash
+  Hash,
+  Download,
+  RefreshCw
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
@@ -34,7 +38,8 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter
+  DialogFooter,
+  DialogDescription
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -47,6 +52,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Card,
   CardContent,
@@ -61,6 +67,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import Pagination from "@/components/ui/pagination";
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 // Importamos la función de actualización del inventario
 import { refreshInventory, getAuthToken } from '@/utils/inventoryUtils';
 
@@ -70,6 +77,7 @@ interface User {
   id?: string;
   email: string;
   nombre?: string;
+  apellido?: string;
   role: string;
 }
 
@@ -87,6 +95,8 @@ interface Product {
   stock: number;
   categoria: string;
   subCategoria: string;
+  esCombo?: boolean;
+  hasImage?: boolean;
 }
 
 interface OrderProduct {
@@ -98,7 +108,7 @@ interface OrderProduct {
 
 interface Order {
   _id: string;
-  nPedido: number; // Agregado el campo nPedido
+  nPedido: number;
   servicio: string;
   seccionDelServicio: string;
   userId: string | User;
@@ -115,15 +125,104 @@ interface CreateOrderData {
   detalle?: string;
 }
 
-// Componente ProductDetail mejorado
+// Cache constants
+const CACHE_KEYS = {
+  PRODUCTS: 'lyme_products_cache',
+  USERS: 'lyme_users_cache',
+  CLIENTS: 'lyme_clients_cache',
+  CURRENT_USER: 'lyme_current_user',
+  LAST_PRODUCTS_FETCH: 'lyme_last_products_fetch',
+  LAST_USERS_FETCH: 'lyme_last_users_fetch',
+  LAST_CLIENTS_FETCH: 'lyme_last_clients_fetch'
+};
+
+// Cache expiration times (in milliseconds)
+const CACHE_EXPIRATION = {
+  PRODUCTS: 15 * 60 * 1000, // 15 minutes
+  USERS: 30 * 60 * 1000, // 30 minutes
+  CLIENTS: 30 * 60 * 1000, // 30 minutes
+  CURRENT_USER: 60 * 60 * 1000 // 1 hour
+};
+
+// Utility functions for cache management
+const CacheManager = {
+  // Store data in cache with timestamp
+  set: (key, data) => {
+    try {
+      const cacheItem = {
+        data,
+        timestamp: Date.now()
+      };
+      localStorage.setItem(key, JSON.stringify(cacheItem));
+      return true;
+    } catch (error) {
+      console.error(`Error storing cache for ${key}:`, error);
+      return false;
+    }
+  },
+
+  // Get data from cache if not expired
+  get: (key, expirationTime = 0) => {
+    try {
+      const cachedItem = localStorage.getItem(key);
+      if (!cachedItem) return null;
+
+      const { data, timestamp } = JSON.parse(cachedItem);
+      const now = Date.now();
+
+      // Return null if expired
+      if (expirationTime > 0 && now - timestamp > expirationTime) {
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      console.error(`Error retrieving cache for ${key}:`, error);
+      return null;
+    }
+  },
+
+  // Remove item from cache
+  remove: (key) => {
+    try {
+      localStorage.removeItem(key);
+      return true;
+    } catch (error) {
+      console.error(`Error removing cache for ${key}:`, error);
+      return false;
+    }
+  },
+
+  // Check if cache is expired
+  isExpired: (key, expirationTime) => {
+    try {
+      const cachedItem = localStorage.getItem(key);
+      if (!cachedItem) return true;
+
+      const { timestamp } = JSON.parse(cachedItem);
+      const now = Date.now();
+
+      return now - timestamp > expirationTime;
+    } catch (error) {
+      console.error(`Error checking expiration for ${key}:`, error);
+      return true;
+    }
+  }
+};
+
+// Componente ProductDetail mejorado con mejor manejo de caché
 const ProductDetail = ({ item, cachedProducts, products, getProductDetails }) => {
   const [productName, setProductName] = useState("Cargando...");
   const [productPrice, setProductPrice] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
+    // Función para cargar detalles del producto con gestión de cancelación
     const fetchProductDetails = async () => {
+      if (!mountedRef.current) return;
       setIsLoading(true);
+      
       try {
         // Extraer el ID del producto de manera segura
         const productId = typeof item.productoId === 'object' && item.productoId && item.productoId._id 
@@ -133,56 +232,73 @@ const ProductDetail = ({ item, cachedProducts, products, getProductDetails }) =>
             : null;
             
         if (!productId) {
-          setProductName("ID de producto inválido");
-          setProductPrice(0);
-          setIsLoading(false);
+          if (mountedRef.current) {
+            setProductName("ID de producto inválido");
+            setProductPrice(0);
+            setIsLoading(false);
+          }
           return;
         }
         
         // Si ya tenemos nombre y precio en el item, usarlos
         if (item.nombre && typeof item.precio === 'number') {
-          setProductName(item.nombre);
-          setProductPrice(item.precio);
-          setIsLoading(false);
+          if (mountedRef.current) {
+            setProductName(item.nombre);
+            setProductPrice(item.precio);
+            setIsLoading(false);
+          }
           return;
         }
 
         // Si el producto está en caché, usar esa información
         if (cachedProducts[productId]) {
-          setProductName(cachedProducts[productId].nombre);
-          setProductPrice(cachedProducts[productId].precio);
-          setIsLoading(false);
+          if (mountedRef.current) {
+            setProductName(cachedProducts[productId].nombre);
+            setProductPrice(cachedProducts[productId].precio);
+            setIsLoading(false);
+          }
           return;
         }
 
         // Si el producto está en la lista de productos, usar esa información
-        const localProduct = products.find((p: { _id: any; }) => p._id === productId);
+        const localProduct = products.find((p) => p._id === productId);
         if (localProduct) {
-          setProductName(localProduct.nombre);
-          setProductPrice(localProduct.precio);
-          setIsLoading(false);
+          if (mountedRef.current) {
+            setProductName(localProduct.nombre);
+            setProductPrice(localProduct.precio);
+            setIsLoading(false);
+          }
           return;
         }
 
         // Si no tenemos la información, obtenerla del servidor
         const productDetails = await getProductDetails(productId);
-        if (productDetails) {
+        if (productDetails && mountedRef.current) {
           setProductName(productDetails.nombre);
           setProductPrice(productDetails.precio);
-        } else {
+        } else if (mountedRef.current) {
           setProductName("Producto no encontrado");
           setProductPrice(0);
         }
       } catch (error) {
         console.error("Error al cargar detalles del producto:", error);
-        setProductName("Error al cargar");
-        setProductPrice(0);
+        if (mountedRef.current) {
+          setProductName("Error al cargar");
+          setProductPrice(0);
+        }
       } finally {
-        setIsLoading(false);
+        if (mountedRef.current) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchProductDetails();
+
+    // Cleanup function to prevent memory leaks and state updates after unmount
+    return () => {
+      mountedRef.current = false;
+    };
   }, [item, cachedProducts, products, getProductDetails]);
 
   // Mostrar un indicador de carga mientras se obtienen los datos
@@ -214,10 +330,13 @@ const ProductDetailCard = ({ item, cachedProducts, products, getProductDetails }
   const [productName, setProductName] = useState("Cargando...");
   const [productPrice, setProductPrice] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
     const fetchProductDetails = async () => {
+      if (!mountedRef.current) return;
       setIsLoading(true);
+      
       try {
         // Extraer el ID del producto de manera segura
         const productId = typeof item.productoId === 'object' && item.productoId && item.productoId._id 
@@ -227,56 +346,73 @@ const ProductDetailCard = ({ item, cachedProducts, products, getProductDetails }
             : null;
             
         if (!productId) {
-          setProductName("ID de producto inválido");
-          setProductPrice(0);
-          setIsLoading(false);
+          if (mountedRef.current) {
+            setProductName("ID de producto inválido");
+            setProductPrice(0);
+            setIsLoading(false);
+          }
           return;
         }
         
         // Si ya tenemos nombre y precio en el item, usarlos
         if (item.nombre && typeof item.precio === 'number') {
-          setProductName(item.nombre);
-          setProductPrice(item.precio);
-          setIsLoading(false);
+          if (mountedRef.current) {
+            setProductName(item.nombre);
+            setProductPrice(item.precio);
+            setIsLoading(false);
+          }
           return;
         }
 
         // Si el producto está en caché, usar esa información
         if (cachedProducts[productId]) {
-          setProductName(cachedProducts[productId].nombre);
-          setProductPrice(cachedProducts[productId].precio);
-          setIsLoading(false);
+          if (mountedRef.current) {
+            setProductName(cachedProducts[productId].nombre);
+            setProductPrice(cachedProducts[productId].precio);
+            setIsLoading(false);
+          }
           return;
         }
 
         // Si el producto está en la lista de productos, usar esa información
-        const localProduct = products.find((p: { _id: any; }) => p._id === productId);
+        const localProduct = products.find((p) => p._id === productId);
         if (localProduct) {
-          setProductName(localProduct.nombre);
-          setProductPrice(localProduct.precio);
-          setIsLoading(false);
+          if (mountedRef.current) {
+            setProductName(localProduct.nombre);
+            setProductPrice(localProduct.precio);
+            setIsLoading(false);
+          }
           return;
         }
 
         // Si no tenemos la información, obtenerla del servidor
         const productDetails = await getProductDetails(productId);
-        if (productDetails) {
+        if (productDetails && mountedRef.current) {
           setProductName(productDetails.nombre);
           setProductPrice(productDetails.precio);
-        } else {
+        } else if (mountedRef.current) {
           setProductName("Producto no encontrado");
           setProductPrice(0);
         }
       } catch (error) {
         console.error("Error al cargar detalles del producto:", error);
-        setProductName("Error al cargar");
-        setProductPrice(0);
+        if (mountedRef.current) {
+          setProductName("Error al cargar");
+          setProductPrice(0);
+        }
       } finally {
-        setIsLoading(false);
+        if (mountedRef.current) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchProductDetails();
+
+    // Cleanup function
+    return () => {
+      mountedRef.current = false;
+    };
   }, [item, cachedProducts, products, getProductDetails]);
 
   if (isLoading) {
@@ -302,32 +438,49 @@ const ProductDetailCard = ({ item, cachedProducts, products, getProductDetails }
   );
 };
 
-// Componente para calcular el total del pedido
+// Componente para calcular el total del pedido, mejorado para ser más eficiente
 const OrderTotalCalculator = ({ order, cachedProducts, products, getProductDetails }) => {
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const calculationCompleted = useRef(false);
+  const pendingProducts = useRef(new Set());
+  const mountedRef = useRef(true);
 
+  // Usamos useEffect con mejor manejo del ciclo de vida
   useEffect(() => {
+    pendingProducts.current = new Set();
+    calculationCompleted.current = false;
+    
     const calculateTotal = async () => {
+      if (!mountedRef.current) return;
       setIsLoading(true);
       let calculatedTotal = 0;
       
       if (!order || !Array.isArray(order.productos)) {
-        setTotal(0);
-        setIsLoading(false);
+        if (mountedRef.current) {
+          setTotal(0);
+          setIsLoading(false);
+          calculationCompleted.current = true;
+        }
         return;
       }
       
       // Si no hay productos, establecer el total en 0
       if (order.productos.length === 0) {
-        setTotal(0);
-        setIsLoading(false);
+        if (mountedRef.current) {
+          setTotal(0);
+          setIsLoading(false);
+          calculationCompleted.current = true;
+        }
         return;
       }
       
-      // Crear un array de promesas para cargar todos los productos no cacheados
-      const productPromises = order.productos.map(async (item: { productoId: { _id: any; }; precio: any; cantidad: any; }) => {
-        if (!item) return null;
+      // Lista de IDs de productos que necesitamos cargar
+      const productIdsToLoad = [];
+      
+      // Primero intentamos calcular con la información que ya tenemos
+      for (const item of order.productos) {
+        if (!item) continue;
         
         // Obtener el ID del producto de manera segura
         const productId = typeof item.productoId === 'object' && item.productoId && item.productoId._id 
@@ -336,72 +489,90 @@ const OrderTotalCalculator = ({ order, cachedProducts, products, getProductDetai
             ? item.productoId 
             : null;
             
-        if (!productId) return null;
+        if (!productId) continue;
         
         // Si ya tenemos el precio en el item, lo usamos
         if (typeof item.precio === 'number') {
-          return {
-            id: productId,
-            precio: item.precio,
-            cantidad: item.cantidad || 1
-          };
+          calculatedTotal += item.precio * (item.cantidad || 1);
+          continue;
         }
         
         // Si el producto está en caché, usamos su precio
         if (cachedProducts[productId] && typeof cachedProducts[productId].precio === 'number') {
-          return {
-            id: productId,
-            precio: cachedProducts[productId].precio,
-            cantidad: item.cantidad || 1
-          };
+          calculatedTotal += cachedProducts[productId].precio * (item.cantidad || 1);
+          continue;
         }
         
         // Si el producto está en la lista de productos, usamos su precio
-        const localProduct = products.find((p: { _id: any; }) => p._id === productId);
+        const localProduct = products.find((p) => p._id === productId);
         if (localProduct && typeof localProduct.precio === 'number') {
-          return {
-            id: productId,
-            precio: localProduct.precio,
-            cantidad: item.cantidad || 1
-          };
+          calculatedTotal += localProduct.precio * (item.cantidad || 1);
+          continue;
         }
         
-        // Si no encontramos el precio, cargamos el producto del servidor
+        // Si no tenemos el precio, agregamos el ID a la lista para cargar
+        productIdsToLoad.push(productId);
+        pendingProducts.current.add(productId);
+      }
+      
+      // Si ya calculamos todos los productos, actualizamos el estado
+      if (productIdsToLoad.length === 0) {
+        if (mountedRef.current) {
+          setTotal(calculatedTotal);
+          setIsLoading(false);
+          calculationCompleted.current = true;
+        }
+        return;
+      }
+      
+      // Cargamos los productos que faltan en paralelo (pero en lotes para no sobrecargar)
+      const batchSize = 5;
+      for (let i = 0; i < productIdsToLoad.length; i += batchSize) {
+        const batch = productIdsToLoad.slice(i, i + batchSize);
+        const promises = batch.map(productId => getProductDetails(productId));
+        
         try {
-          const productDetails = await getProductDetails(productId);
-          if (productDetails && typeof productDetails.precio === 'number') {
-            return {
-              id: productId,
-              precio: productDetails.precio,
-              cantidad: item.cantidad || 1
-            };
+          const results = await Promise.all(promises);
+          
+          // Actualizamos el total con los resultados
+          for (let j = 0; j < results.length; j++) {
+            const productDetails = results[j];
+            const productId = batch[j];
+            
+            if (productDetails && typeof productDetails.precio === 'number') {
+              // Encontrar la cantidad correcta para este producto
+              const item = order.productos.find(p => {
+                const itemId = typeof p.productoId === 'object' ? p.productoId._id : p.productoId;
+                return itemId === productId;
+              });
+              
+              if (item) {
+                calculatedTotal += productDetails.precio * (item.cantidad || 1);
+              }
+            }
+            
+            // Marcar este producto como procesado
+            pendingProducts.current.delete(productId);
+          }
+          
+          // Actualizamos el total parcial para mostrar progreso
+          if (mountedRef.current && pendingProducts.current.size === 0) {
+            setTotal(calculatedTotal);
+            setIsLoading(false);
+            calculationCompleted.current = true;
           }
         } catch (error) {
-          console.error(`Error al cargar detalles del producto ${productId}:`, error);
+          console.error(`Error al cargar lote de productos:`, error);
         }
-        
-        // Si no pudimos obtener el precio, devolvemos un objeto con precio 0
-        return {
-          id: productId,
-          precio: 0,
-          cantidad: item.cantidad || 1
-        };
-      });
-      
-      // Esperar a que todas las promesas se resuelvan
-      const resolvedProducts = await Promise.all(productPromises);
-      
-      // Calcular el total
-      calculatedTotal = resolvedProducts.reduce((sum, product) => {
-        if (!product) return sum;
-        return sum + (product.precio * product.cantidad);
-      }, 0);
-      
-      setTotal(calculatedTotal);
-      setIsLoading(false);
+      }
     };
     
     calculateTotal();
+
+    // Cleanup function
+    return () => {
+      mountedRef.current = false;
+    };
   }, [order, cachedProducts, products, getProductDetails]);
   
   if (isLoading) {
@@ -424,14 +595,16 @@ const OrdersSection = () => {
   const [cachedProducts, setCachedProducts] = useState<{ [key: string]: Product }>({});
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
   const [orderDetailsOpen, setOrderDetailsOpen] = useState<string | null>(null);
   const [mobileOrderDetailsOpen, setMobileOrderDetailsOpen] = useState<string | null>(null);
-  const [debugInfo, setDebugInfo] = useState<string>('');
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [orderToDelete, setOrderToDelete] = useState<string | null>(null);
 
   // Estados para paginación
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -439,6 +612,15 @@ const OrdersSection = () => {
 
   // Referencias para el scroll en móvil
   const mobileListRef = useRef<HTMLDivElement>(null);
+  
+  // Referencia para control de montaje/desmontaje
+  const mountedRef = useRef(true);
+  
+  // Referencia para la solicitud pendiente de productos
+  const pendingProductsRequest = useRef<boolean>(false);
+  
+  // Cola de productos a cargar
+  const productLoadQueue = useRef<Set<string>>(new Set());
 
   // IMPORTANTE: Tamaños fijos para cada tipo de dispositivo
   const ITEMS_PER_PAGE_MOBILE = 5;
@@ -446,11 +628,6 @@ const OrdersSection = () => {
 
   // Calculamos dinámicamente itemsPerPage basado en el ancho de la ventana
   const itemsPerPage = windowWidth < 768 ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP;
-
-  // Verificar disponibilidad del contexto de notificaciones
-  useEffect(() => {
-    console.log('NotificationContext disponible:', addNotification ? true : false);
-  }, [addNotification]);
 
   // Estados para filtros
   const [dateFilter, setDateFilter] = useState({
@@ -477,14 +654,185 @@ const OrdersSection = () => {
 
   // Estados para el usuario actual
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  
+  // Flag de primera carga completada
+  const initialLoadComplete = useRef(false);
 
-  // Efecto inicial para cargar datos
+  // Función memoizada para cargar productos en lotes desde la cola
+  const processProductQueue = useCallback(async () => {
+    // Si ya hay una solicitud pendiente o la cola está vacía, no hacer nada
+    if (pendingProductsRequest.current || productLoadQueue.current.size === 0) {
+      return;
+    }
+    
+    try {
+      pendingProductsRequest.current = true;
+      
+      // Convertir el Set a array
+      const productIds = Array.from(productLoadQueue.current);
+      // Limpiar la cola
+      productLoadQueue.current.clear();
+      
+      // Agrupar en lotes de 10 para no sobrecargar el servidor
+      const batchSize = 10;
+      const batches = [];
+      
+      for (let i = 0; i < productIds.length; i += batchSize) {
+        batches.push(productIds.slice(i, i + batchSize));
+      }
+      
+      // Procesar cada lote
+      for (const batch of batches) {
+        if (!mountedRef.current) break;
+        
+        const token = getAuthToken();
+        if (!token) break;
+        
+        // Filtrar IDs ya en caché o productos locales
+        const idsToFetch = batch.filter(id => {
+          return !cachedProducts[id] && !products.find(p => p._id === id);
+        });
+        
+        if (idsToFetch.length === 0) continue;
+        
+        // Hacer una sola petición por lote - idealmente el backend tendría un endpoint para obtener múltiples productos
+        // De momento, hacemos solicitudes en paralelo
+        const promises = idsToFetch.map(id => 
+          fetch(`https://lyme-back.vercel.app/api/producto/${id}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          }).then(resp => resp.ok ? resp.json() : null)
+        );
+        
+        const results = await Promise.allSettled(promises);
+        
+        // Procesar resultados y actualizar caché
+        const newCachedProducts = { ...cachedProducts };
+        let cacheUpdated = false;
+        
+        results.forEach((result, index) => {
+          if (result.status === 'fulfilled' && result.value) {
+            const product = result.value;
+            newCachedProducts[product._id] = product;
+            cacheUpdated = true;
+          }
+        });
+        
+        // Actualizar estado solo si hay cambios y el componente sigue montado
+        if (cacheUpdated && mountedRef.current) {
+          setCachedProducts(newCachedProducts);
+          
+          // Actualizar caché persistente
+          CacheManager.set(CACHE_KEYS.PRODUCTS, {
+            ...newCachedProducts,
+            ...Object.fromEntries(products.map(p => [p._id, p]))
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error procesando cola de productos:', error);
+    } finally {
+      pendingProductsRequest.current = false;
+      
+      // Si quedan productos en la cola, procesarlos
+      if (mountedRef.current && productLoadQueue.current.size > 0) {
+        setTimeout(processProductQueue, 100);
+      }
+    }
+  }, [cachedProducts, products]);
+
+  // Agregar a la cola de carga de productos
+  const queueProductForLoading = useCallback((productId: string) => {
+    if (!productId || cachedProducts[productId] || products.find(p => p._id === productId)) {
+      return;
+    }
+    
+    productLoadQueue.current.add(productId);
+    
+    // Iniciar procesamiento si no hay solicitud pendiente
+    if (!pendingProductsRequest.current) {
+      processProductQueue();
+    }
+  }, [cachedProducts, products, processProductQueue]);
+
+  // Cargar datos de caché al montar el componente
   useEffect(() => {
-    fetchCurrentUser();
+    // Cargar productos de caché
+    const cachedProductsData = CacheManager.get(CACHE_KEYS.PRODUCTS, CACHE_EXPIRATION.PRODUCTS);
+    if (cachedProductsData) {
+      setCachedProducts(cachedProductsData);
+    }
+    
+    // Cargar usuarios de caché
+    const cachedUsers = CacheManager.get(CACHE_KEYS.USERS, CACHE_EXPIRATION.USERS);
+    if (cachedUsers) {
+      setUsers(cachedUsers);
+    }
+    
+    // Cargar usuario actual de caché
+    const cachedCurrentUser = CacheManager.get(CACHE_KEYS.CURRENT_USER, CACHE_EXPIRATION.CURRENT_USER);
+    if (cachedCurrentUser) {
+      setCurrentUser(cachedCurrentUser);
+      
+      // Actualizar el formulario con el userId correcto
+      setOrderForm(prev => ({
+        ...prev,
+        userId: cachedCurrentUser._id || cachedCurrentUser.id || ""
+      }));
+      
+      // Cargar clientes si tenemos el ID del usuario
+      const userId = cachedCurrentUser._id || cachedCurrentUser.id;
+      if (userId) {
+        // Cargar clientes de caché
+        const cachedClients = CacheManager.get(
+          `${CACHE_KEYS.CLIENTS}_${userId}`, 
+          CACHE_EXPIRATION.CLIENTS
+        );
+        
+        if (cachedClients) {
+          setClients(cachedClients);
+          
+          // Agrupar clientes por servicio
+          const grouped = cachedClients.reduce((acc, client) => {
+            if (!acc[client.servicio]) {
+              acc[client.servicio] = [];
+            }
+            acc[client.servicio].push(client);
+            return acc;
+          }, {});
+          
+          setClientSections(grouped);
+        }
+      }
+    }
+    
+    // Cargar productos del backend
     fetchProducts();
-    fetchUsers(); // Cargar usuarios primero para tener los datos disponibles
-    fetchOrders();
+    
+    // Configurar flag de componente montado
+    mountedRef.current = true;
+    
+    // Limpieza al desmontar
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
+
+  // Efecto para iniciar carga de datos después de obtener el usuario
+  useEffect(() => {
+    // Solo ejecutar una vez
+    if (!initialLoadComplete.current && currentUser) {
+      initialLoadComplete.current = true;
+      
+      // Fetch data in sequence to reduce concurrent requests
+      const loadData = async () => {
+        await fetchCurrentUser();
+        await fetchUsers();
+        await fetchOrders();
+      };
+      
+      loadData();
+    }
+  }, [currentUser]);
 
   // Efecto para detectar el tamaño de la ventana
   useEffect(() => {
@@ -509,8 +857,13 @@ const OrdersSection = () => {
     setCurrentPage(1);
   }, [searchTerm, dateFilter.fechaInicio, dateFilter.fechaFin]);
 
-  // Cargar usuario actual
+  // Cargar usuario actual - optimizado para usar caché
   const fetchCurrentUser = async () => {
+    // Si ya tenemos el usuario actual en caché y no está expirado, no lo volvemos a cargar
+    if (currentUser && !CacheManager.isExpired(CACHE_KEYS.CURRENT_USER, CACHE_EXPIRATION.CURRENT_USER)) {
+      return currentUser;
+    }
+    
     try {
       const token = getAuthToken();
       if (!token) {
@@ -526,8 +879,14 @@ const OrdersSection = () => {
       }
 
       const userData = await response.json();
+      
+      if (!mountedRef.current) return null;
+      
       console.log("Usuario cargado:", userData);
       setCurrentUser(userData);
+      
+      // Guardar en caché
+      CacheManager.set(CACHE_KEYS.CURRENT_USER, userData);
 
       // Usamos _id en lugar de id para cargar los clientes
       if (userData._id) {
@@ -545,6 +904,8 @@ const OrdersSection = () => {
         }));
         fetchClients(userData.id);
       }
+      
+      return userData;
     } catch (err) {
       const errorMsg = 'Error al cargar información del usuario: ' + 
         (err instanceof Error ? err.message : String(err));
@@ -554,19 +915,32 @@ const OrdersSection = () => {
       if (addNotification) {
         addNotification(errorMsg, 'error');
       }
+      
+      return null;
     }
   };
 
-  // Cargar pedidos
-  const fetchOrders = async () => {
+  // Cargar pedidos - optimizado para reducir peticiones
+  const fetchOrders = async (force = false) => {
+    if (loading && !force) return; // Evitar solicitudes múltiples
+    
     try {
       setLoading(true);
+      setRefreshing(true);
+      
       const token = getAuthToken();
       if (!token) {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('https://lyme-back.vercel.app/api/pedido', {
+      // Verificar si estamos filtrando por fecha
+      let url = 'https://lyme-back.vercel.app/api/pedido';
+      
+      if (dateFilter.fechaInicio && dateFilter.fechaFin) {
+        url = `https://lyme-back.vercel.app/api/pedido/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
+      }
+
+      const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -574,20 +948,29 @@ const OrdersSection = () => {
         if (response.status === 401) {
           localStorage.removeItem('token');
           window.location.href = '/login';
-          return;
+          return [];
         }
         throw new Error('Error al cargar los pedidos');
       }
 
       const data = await response.json();
+      
+      if (!mountedRef.current) return [];
+      
       console.log("Pedidos recibidos:", data);
       setOrders(data);
       setError(null);
+      setCurrentPage(1); // Resetear a la primera página al obtener nuevos datos
       
       // Notificación opcional para indicar que los pedidos se cargaron correctamente
-      if (addNotification && data.length > 0) {
+      if (addNotification && data.length > 0 && force) {
         addNotification(`Se cargaron ${data.length} pedidos correctamente`, 'info');
       }
+      
+      // Prefetch de productos relevantes
+      prefetchProductsFromOrders(data);
+      
+      return data;
     } catch (err) {
       const errorMsg = 'Error al cargar los pedidos: ' +
         (err instanceof Error ? err.message : String(err));
@@ -597,13 +980,53 @@ const OrdersSection = () => {
       if (addNotification) {
         addNotification(errorMsg, 'error');
       }
+      
+      return [];
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
-  // Obtener detalles de producto por ID
-  const getProductDetails = async (productId: string | { _id: string;[key: string]: any }) => {
+  // Prefetch de productos relevantes para los pedidos visibles
+  const prefetchProductsFromOrders = useCallback((ordersData: Order[]) => {
+    // Si no hay pedidos, no hacer nada
+    if (!Array.isArray(ordersData) || ordersData.length === 0) return;
+    
+    // Recopilar todos los IDs de productos en los pedidos
+    const productIds = new Set<string>();
+    
+    // Sólo prefetch para los primeros 50 pedidos (para no sobrecargar)
+    const ordersToProcess = ordersData.slice(0, 50);
+    
+    for (const order of ordersToProcess) {
+      if (Array.isArray(order.productos)) {
+        for (const product of order.productos) {
+          if (!product) continue;
+          
+          const productId = typeof product.productoId === 'object' && product.productoId 
+            ? product.productoId._id 
+            : typeof product.productoId === 'string'
+              ? product.productoId
+              : null;
+              
+          if (productId) {
+            productIds.add(productId);
+          }
+        }
+      }
+    }
+    
+    // Quedar a cargar productos que no están en caché ni en productos locales
+    for (const productId of productIds) {
+      queueProductForLoading(productId);
+    }
+  }, [queueProductForLoading]);
+
+  // Obtener detalles de producto por ID - versión optimizada
+  const getProductDetails = useCallback(async (productId: string | { _id: string;[key: string]: any }) => {
     // Extraer el ID de manera segura
     const id = typeof productId === 'object' ? productId._id : productId;
 
@@ -622,10 +1045,15 @@ const OrdersSection = () => {
     const localProduct = products.find(p => p._id === id);
     if (localProduct) {
       // Agregar a caché
-      setCachedProducts(prev => ({
-        ...prev,
-        [id]: localProduct
-      }));
+      setCachedProducts(prev => {
+        const updated = { ...prev, [id]: localProduct };
+        // Actualizar caché persistente
+        CacheManager.set(CACHE_KEYS.PRODUCTS, {
+          ...updated,
+          ...Object.fromEntries(products.map(p => [p._id, p]))
+        });
+        return updated;
+      });
       return localProduct;
     }
 
@@ -634,7 +1062,10 @@ const OrdersSection = () => {
       if (!token) return null;
 
       const response = await fetch(`https://lyme-back.vercel.app/api/producto/${id}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache' 
+        }
       });
 
       if (!response.ok) {
@@ -643,12 +1074,19 @@ const OrdersSection = () => {
       }
 
       const product = await response.json();
+      
+      if (!mountedRef.current) return null;
 
       // Agregar a caché
-      setCachedProducts(prev => ({
-        ...prev,
-        [id]: product
-      }));
+      setCachedProducts(prev => {
+        const updated = { ...prev, [id]: product };
+        // Actualizar caché persistente
+        CacheManager.set(CACHE_KEYS.PRODUCTS, {
+          ...updated,
+          ...Object.fromEntries(products.map(p => [p._id, p]))
+        });
+        return updated;
+      });
 
       return product;
     } catch (error) {
@@ -661,113 +1099,63 @@ const OrdersSection = () => {
       
       return null;
     }
-  };
+  }, [cachedProducts, products, addNotification]);
 
-  // Función para toggleOrderDetails - versión escritorio
-  const toggleOrderDetails = async (orderId: string) => {
+  // Función para toggleOrderDetails - versión escritorio (optimizada)
+  const toggleOrderDetails = useCallback(async (orderId: string) => {
     if (orderDetailsOpen === orderId) {
       setOrderDetailsOpen(null);
     } else {
       setOrderDetailsOpen(orderId);
       
-      // Cargar los detalles de los productos
+      // Cargar los detalles de los productos en lote
       const order = orders.find(o => o._id === orderId);
       if (order && Array.isArray(order.productos)) {
-        try {
-          const productPromises = order.productos.map(async (item) => {
-            // Extraer ID de manera segura
-            const productId = typeof item.productoId === 'object' && item.productoId && item.productoId._id 
-              ? item.productoId._id 
-              : typeof item.productoId === 'string' 
-                ? item.productoId 
-                : null;
-                
-            if (!productId) return;
-            
-            // Si no está en caché y no está en la lista de productos, cargarlo
-            if (!cachedProducts[productId] && !products.find(p => p._id === productId)) {
-              try {
-                const product = await getProductDetails(productId);
-                if (product) {
-                  // Actualizar caché
-                  setCachedProducts(prev => ({
-                    ...prev,
-                    [productId]: product
-                  }));
-                }
-              } catch (error) {
-                console.error(`Error al cargar detalles del producto ${productId}:`, error);
-              }
-            }
-          });
-          
-          // Esperar a que todas las cargas se completen
-          await Promise.all(productPromises);
-        } catch (error) {
-          console.error("Error al cargar detalles de productos:", error);
-          
-          // Notificación para error de carga de detalles
-          if (addNotification) {
-            addNotification('Error al cargar detalles de los productos del pedido', 'error');
+        // Recopilar IDs de productos a cargar
+        for (const item of order.productos) {
+          // Extraer ID de manera segura
+          const productId = typeof item.productoId === 'object' && item.productoId && item.productoId._id 
+            ? item.productoId._id 
+            : typeof item.productoId === 'string' 
+              ? item.productoId 
+              : null;
+              
+          if (productId) {
+            queueProductForLoading(productId);
           }
         }
       }
     }
-  };
+  }, [orderDetailsOpen, orders, queueProductForLoading]);
 
-  // Función para toggleMobileOrderDetails - versión móvil
-  const toggleMobileOrderDetails = async (orderId: string) => {
+  // Función para toggleMobileOrderDetails - versión móvil (optimizada)
+  const toggleMobileOrderDetails = useCallback(async (orderId: string) => {
     if (mobileOrderDetailsOpen === orderId) {
       setMobileOrderDetailsOpen(null);
     } else {
       setMobileOrderDetailsOpen(orderId);
       
-      // Cargar los detalles de los productos
+      // Cargar los detalles de los productos en lote
       const order = orders.find(o => o._id === orderId);
       if (order && Array.isArray(order.productos)) {
-        try {
-          const productPromises = order.productos.map(async (item) => {
-            // Extraer ID de manera segura
-            const productId = typeof item.productoId === 'object' && item.productoId && item.productoId._id 
-              ? item.productoId._id 
-              : typeof item.productoId === 'string' 
-                ? item.productoId 
-                : null;
-                
-            if (!productId) return;
-            
-            // Si no está en caché y no está en la lista de productos, cargarlo
-            if (!cachedProducts[productId] && !products.find(p => p._id === productId)) {
-              try {
-                const product = await getProductDetails(productId);
-                if (product) {
-                  // Actualizar caché
-                  setCachedProducts(prev => ({
-                    ...prev,
-                    [productId]: product
-                  }));
-                }
-              } catch (error) {
-                console.error(`Error al cargar detalles del producto ${productId}:`, error);
-              }
-            }
-          });
-          
-          // Esperar a que todas las cargas se completen
-          await Promise.all(productPromises);
-        } catch (error) {
-          console.error("Error al cargar detalles de productos:", error);
-          
-          // Notificación para error de carga de detalles en móvil
-          if (addNotification) {
-            addNotification('Error al cargar detalles de los productos del pedido', 'error');
+        // Recopilar IDs de productos a cargar
+        for (const item of order.productos) {
+          // Extraer ID de manera segura
+          const productId = typeof item.productoId === 'object' && item.productoId && item.productoId._id 
+            ? item.productoId._id 
+            : typeof item.productoId === 'string' 
+              ? item.productoId 
+              : null;
+              
+          if (productId) {
+            queueProductForLoading(productId);
           }
         }
       }
     }
-  };
+  }, [mobileOrderDetailsOpen, orders, queueProductForLoading]);
 
-  // Cargar pedidos por rango de fechas
+  // Función para formatear fecha
   const formatDateForAPI = (dateString) => {
     const d = new Date(dateString);
     if (isNaN(d.getTime())) return dateString; // Si la fecha no es válida, devolver el string original
@@ -862,6 +1250,9 @@ const OrdersSection = () => {
       }
 
       const data = await response.json();
+      
+      if (!mountedRef.current) return;
+      
       console.log(`Pedidos obtenidos en el rango de fechas: ${data.length}`);
       setOrders(data);
       setError(null);
@@ -883,10 +1274,17 @@ const OrdersSection = () => {
       }
       
       // Eliminar mensaje después de 3 segundos
-      setTimeout(() => setSuccessMessage(''), 3000);
+      setTimeout(() => {
+        if (mountedRef.current) {
+          setSuccessMessage('');
+        }
+      }, 3000);
       
       // Cerrar filtros móviles si están abiertos
       setShowMobileFilters(false);
+      
+      // Prefetch de productos para los pedidos
+      prefetchProductsFromOrders(data);
     } catch (err) {
       const errorMsg = 'Error al filtrar por fecha: ' +
         (err instanceof Error ? err.message : String(err));
@@ -898,12 +1296,22 @@ const OrdersSection = () => {
         addNotification(errorMsg, 'error');
       }
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+      }
     }
   };
 
-  // Cargar productos
-  const fetchProducts = async () => {
+  // Cargar productos - optimizado con caché
+  const fetchProducts = async (forceRefresh = false) => {
+    // Si ya tenemos productos en caché y no está expirado, no volvemos a cargar
+    const cachedLastFetch = CacheManager.get(CACHE_KEYS.LAST_PRODUCTS_FETCH);
+    const hasRecentFetch = cachedLastFetch && Date.now() - cachedLastFetch < CACHE_EXPIRATION.PRODUCTS;
+    
+    if (!forceRefresh && products.length > 0 && hasRecentFetch) {
+      return products;
+    }
+    
     try {
       const token = getAuthToken();
       if (!token) {
@@ -911,7 +1319,10 @@ const OrdersSection = () => {
       }
 
       const response = await fetch('https://lyme-back.vercel.app/api/producto', {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
+        }
       });
 
       if (!response.ok) {
@@ -919,36 +1330,69 @@ const OrdersSection = () => {
       }
 
       const productsData = await response.json();
+      
+      if (!mountedRef.current) return products;
+      
+      // Determinar el formato de la respuesta
+      let productsList = [];
+      if (Array.isArray(productsData)) {
+        productsList = productsData;
+      } else if (productsData && Array.isArray(productsData.items)) {
+        productsList = productsData.items;
+      }
+      
       // Filtrar productos con stock > 0
-      const availableProducts = productsData.filter((p: Product) => p.stock > 0);
+      const availableProducts = productsList.filter((p: Product) => p.stock > 0);
       setProducts(availableProducts);
 
-      // También añadirlos al caché
-      const productsCache = productsData.reduce((cache: { [key: string]: Product }, product: Product) => {
+      // También añadirlos al caché (aunque estén fuera de stock)
+      const productsCache = productsList.reduce((cache: { [key: string]: Product }, product: Product) => {
         cache[product._id] = product;
         return cache;
       }, {});
-      setCachedProducts(productsCache);
+      
+      setCachedProducts(prevCache => {
+        const combined = { ...prevCache, ...productsCache };
+        
+        // Actualizar caché persistente
+        CacheManager.set(CACHE_KEYS.PRODUCTS, combined);
+        
+        return combined;
+      });
+      
+      // Actualizar timestamp de la última carga
+      CacheManager.set(CACHE_KEYS.LAST_PRODUCTS_FETCH, Date.now());
 
-      console.log(`Productos cargados: ${productsData.length}, con stock > 0: ${availableProducts.length}`);
+      console.log(`Productos cargados: ${productsList.length}, con stock > 0: ${availableProducts.length}`);
       
       // Notificación opcional para productos disponibles
       if (addNotification && availableProducts.length === 0) {
         addNotification('No hay productos con stock disponible para crear pedidos', 'warning');
       }
+      
+      return availableProducts;
     } catch (err) {
       console.error('Error al cargar productos:', err);
-      setDebugInfo(prev => prev + "\nError productos: " + (err instanceof Error ? err.message : String(err)));
       
       // Notificación para error crítico de carga de productos
       if (addNotification) {
         addNotification('Error al cargar productos. Algunas funcionalidades pueden estar limitadas.', 'error');
       }
+      
+      return products;
     }
   };
 
-  // Cargar usuarios
-  const fetchUsers = async () => {
+  // Cargar usuarios - optimizado con caché
+  const fetchUsers = async (forceRefresh = false) => {
+    // Si ya tenemos usuarios en caché y no está expirado, no volvemos a cargar
+    const cachedLastFetch = CacheManager.get(CACHE_KEYS.LAST_USERS_FETCH);
+    const hasRecentFetch = cachedLastFetch && Date.now() - cachedLastFetch < CACHE_EXPIRATION.USERS;
+    
+    if (!forceRefresh && users.length > 0 && hasRecentFetch) {
+      return users;
+    }
+    
     try {
       const token = getAuthToken();
       if (!token) {
@@ -956,7 +1400,10 @@ const OrdersSection = () => {
       }
 
       const response = await fetch('https://lyme-back.vercel.app/api/auth/users', {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
+        }
       });
 
       if (!response.ok) {
@@ -964,21 +1411,41 @@ const OrdersSection = () => {
       }
 
       const data = await response.json();
+      
+      if (!mountedRef.current) return users;
+      
       setUsers(data);
+      
+      // Guardar en caché
+      CacheManager.set(CACHE_KEYS.USERS, data);
+      CacheManager.set(CACHE_KEYS.LAST_USERS_FETCH, Date.now());
+      
       console.log("Usuarios cargados:", data.length);
+      
+      return data;
     } catch (err) {
       console.error('Error al cargar usuarios:', err);
-      setDebugInfo(prev => prev + "\nError usuarios: " + (err instanceof Error ? err.message : String(err)));
       
       // Notificación para error de carga de usuarios
       if (addNotification) {
         addNotification('Error al cargar usuarios. Algunas funcionalidades pueden estar limitadas.', 'warning');
       }
+      
+      return users;
     }
   };
 
-  // Cargar clientes del usuario
-  const fetchClients = async (userId: string) => {
+  // Cargar clientes del usuario - optimizado con caché
+  const fetchClients = async (userId: string, forceRefresh = false) => {
+    // Si ya tenemos clientes en caché y no está expirado, no volvemos a cargar
+    const cachedClientsKey = `${CACHE_KEYS.CLIENTS}_${userId}`;
+    const cachedLastFetch = CacheManager.get(`${cachedClientsKey}_last_fetch`);
+    const hasRecentFetch = cachedLastFetch && Date.now() - cachedLastFetch < CACHE_EXPIRATION.CLIENTS;
+    
+    if (!forceRefresh && clients.length > 0 && hasRecentFetch) {
+      return clients;
+    }
+    
     try {
       const token = getAuthToken();
       if (!token) {
@@ -987,7 +1454,10 @@ const OrdersSection = () => {
 
       console.log(`Cargando clientes para usuario ID: ${userId}`);
       const response = await fetch(`https://lyme-back.vercel.app/api/cliente/user/${userId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
+        }
       });
 
       if (!response.ok) {
@@ -995,6 +1465,9 @@ const OrdersSection = () => {
       }
 
       const clientsData = await response.json();
+      
+      if (!mountedRef.current) return clients;
+      
       console.log(`Clientes cargados: ${clientsData.length}`);
       setClients(clientsData);
 
@@ -1008,16 +1481,21 @@ const OrdersSection = () => {
       }, {});
 
       setClientSections(grouped);
-      setDebugInfo(`Clientes cargados: ${clientsData.length}, Servicios: ${Object.keys(grouped).length}`);
       
+      // Guardar en caché
+      CacheManager.set(cachedClientsKey, clientsData);
+      CacheManager.set(`${cachedClientsKey}_last_fetch`, Date.now());
+      
+      return clientsData;
     } catch (err) {
       console.error('Error al cargar clientes:', err);
-      setDebugInfo(prev => prev + "\nError clientes: " + (err instanceof Error ? err.message : String(err)));
       
       // Notificación para error de carga de clientes
       if (addNotification) {
         addNotification('Error al cargar clientes. No podrá crear nuevos pedidos.', 'error');
       }
+      
+      return clients;
     }
   };
 
@@ -1087,8 +1565,8 @@ const OrdersSection = () => {
       }
 
       // Éxito
-      await fetchOrders();
-      await fetchProducts(); // Recargar productos para actualizar stock
+      await fetchOrders(true);
+      await fetchProducts(true); // Recargar productos para actualizar stock
       
       // Notificar a todos los componentes sobre el cambio en el inventario
       await refreshInventory();
@@ -1105,7 +1583,11 @@ const OrdersSection = () => {
         addNotification(successMsg, 'success');
       }
       
-      setTimeout(() => setSuccessMessage(''), 3000);
+      setTimeout(() => {
+        if (mountedRef.current) {
+          setSuccessMessage('');
+        }
+      }, 3000);
     } catch (err) {
       const errorMsg = 'Error al crear pedido: ' +
         (err instanceof Error ? err.message : String(err));
@@ -1116,7 +1598,9 @@ const OrdersSection = () => {
         addNotification(errorMsg, 'error');
       }
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -1161,8 +1645,8 @@ const OrdersSection = () => {
         throw new Error(errorData.mensaje || 'Error al actualizar el pedido');
       }
 
-      await fetchOrders();
-      await fetchProducts(); // Recargar productos para actualizar stock
+      await fetchOrders(true);
+      await fetchProducts(true); // Recargar productos para actualizar stock
       
       // Notificar a todos los componentes sobre el cambio en el inventario
       await refreshInventory();
@@ -1179,7 +1663,11 @@ const OrdersSection = () => {
         addNotification(successMsg, 'success');
       }
       
-      setTimeout(() => setSuccessMessage(''), 3000);
+      setTimeout(() => {
+        if (mountedRef.current) {
+          setSuccessMessage('');
+        }
+      }, 3000);
     } catch (err) {
       const errorMsg = 'Error al actualizar pedido: ' +
         (err instanceof Error ? err.message : String(err));
@@ -1190,14 +1678,14 @@ const OrdersSection = () => {
         addNotification(errorMsg, 'error');
       }
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+      }
     }
   };
 
   // Eliminar pedido
   const handleDeleteOrder = async (id: string) => {
-    if (!window.confirm('¿Está seguro de eliminar este pedido?')) return;
-
     try {
       setLoading(true);
       const token = getAuthToken();
@@ -1217,8 +1705,8 @@ const OrdersSection = () => {
         throw new Error(errorData.mensaje || 'Error al eliminar el pedido');
       }
 
-      await fetchOrders();
-      await fetchProducts(); // Recargar productos para actualizar stock
+      await fetchOrders(true);
+      await fetchProducts(true); // Recargar productos para actualizar stock
       
       // Notificar a todos los componentes sobre el cambio en el inventario
       await refreshInventory();
@@ -1232,7 +1720,11 @@ const OrdersSection = () => {
         addNotification(successMsg, 'success');
       }
       
-      setTimeout(() => setSuccessMessage(''), 3000);
+      setTimeout(() => {
+        if (mountedRef.current) {
+          setSuccessMessage('');
+        }
+      }, 3000);
     } catch (err) {
       const errorMsg = 'Error al eliminar pedido: ' +
         (err instanceof Error ? err.message : String(err));
@@ -1243,8 +1735,18 @@ const OrdersSection = () => {
         addNotification(errorMsg, 'error');
       }
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+        setOrderToDelete(null);
+        setDeleteConfirmOpen(false);
+      }
     }
+  };
+
+  // Preparar eliminación de pedido
+  const confirmDeleteOrder = (id: string) => {
+    setOrderToDelete(id);
+    setDeleteConfirmOpen(true);
   };
 
   // Preparar edición de pedido
@@ -1302,7 +1804,7 @@ const OrdersSection = () => {
       
       // Notificación informativa opcional para edición
       if (addNotification) {
-        addNotification(`Editando pedido de ${order.servicio}`, 'info');
+        addNotification(`Editando pedido #${order.nPedido}`, 'info');
       }
     });
   };
@@ -1403,7 +1905,7 @@ const OrdersSection = () => {
       const newQuantity = currentQuantity + productQuantity;
       
       if (product.stock < newQuantity) {
-        const errorMsg = `Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`;
+        const errorMsg = `Stock insuficiente. Solo hay ${product.stock} unidades disponibles y ya tienes ${currentQuantity} en el pedido.`;
         setError(errorMsg);
         
         // Notificación para stock insuficiente
@@ -1488,7 +1990,7 @@ const OrdersSection = () => {
   };
 
   // Calcular total del pedido
-  const calculateTotal = (productos: OrderProduct[]) => {
+  const calculateTotal = useCallback((productos: OrderProduct[]) => {
     return productos.reduce((total, item) => {
       let precio = 0;
       
@@ -1513,22 +2015,22 @@ const OrdersSection = () => {
       
       return total + (precio * item.cantidad);
     }, 0);
-  };
+  }, [cachedProducts, products]);
 
-  // Obtener nombre de producto por ID
-  const getProductName = (id: string) => {
+  // Obtener nombre de producto por ID - memoizado
+  const getProductName = useCallback((id: string) => {
     const product = cachedProducts[id] || products.find(p => p._id === id);
     return product?.nombre || 'Producto no encontrado';
-  };
+  }, [cachedProducts, products]);
 
-  // Obtener precio de producto por ID
-  const getProductPrice = (id: string) => {
+  // Obtener precio de producto por ID - memoizado
+  const getProductPrice = useCallback((id: string) => {
     const product = cachedProducts[id] || products.find(p => p._id === id);
     return product?.precio || 0;
-  };
+  }, [cachedProducts, products]);
 
-  // Obtener email de usuario por ID
-  const getUserEmail = (userId: any) => {
+  // Obtener email de usuario por ID - memoizado
+  const getUserEmail = useCallback((userId: any) => {
     // Si userId es un objeto con email
     if (typeof userId === 'object' && userId !== null && userId.email) {
       return userId.email;
@@ -1541,10 +2043,10 @@ const OrdersSection = () => {
     }
 
     return 'Usuario no encontrado';
-  };
+  }, [users]);
   
-  // Obtener nombre completo del usuario
-  const getUserFullName = (userId: string) => {
+  // Obtener nombre completo del usuario - memoizado
+  const getUserFullName = useCallback((userId: string) => {
     if (!userId) return 'No asignado';
     
     const user = users.find(u => u._id === userId);
@@ -1568,13 +2070,13 @@ const OrdersSection = () => {
     
     // Si no tiene nombre ni email, mostrar el ID acortado
     return `ID: ${userId.substring(0, 8)}...`;
-  };
+  }, [users]);
 
   // Limpiar todos los filtros
   const clearAllFilters = () => {
     setSearchTerm('');
     setDateFilter({ fechaInicio: '', fechaFin: '' });
-    fetchOrders();
+    fetchOrders(true);
     setShowMobileFilters(false);
     setCurrentPage(1); // Resetear a la primera página
     
@@ -1596,18 +2098,68 @@ const OrdersSection = () => {
       mobileListRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   };
+  
+  // Función para descargar recibo en PDF
+  const handleDownloadRemito = async (pedidoId: string) => {
+    try {
+      const token = getAuthToken();
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
+      
+      // Notificación para indicar que se está generando
+      if (addNotification) {
+        addNotification('Generando recibo PDF, por favor espere...', 'info');
+      }
+      
+      // Generar URL para descargar remito
+      const url = `https://lyme-back.vercel.app/api/downloads/remito/${pedidoId}`;
+      
+      // Abrir en una nueva pestaña
+      window.open(url, '_blank');
+    } catch (error) {
+      console.error('Error al descargar remito:', error);
+      // Notificación para error
+      if (addNotification) {
+        addNotification(`Error al generar el recibo PDF: ${error instanceof Error ? error.message : 'Desconocido'}`, 'error');
+      }
+    }
+  };
+  
+  // Función para actualizar manualmente los datos
+  const handleManualRefresh = async () => {
+    setRefreshing(true);
+    
+    // Recargar pedidos y productos
+    await Promise.all([
+      fetchOrders(true),
+      fetchProducts(true)
+    ]);
+    
+    setRefreshing(false);
+    
+    // Notificación de actualización
+    if (addNotification) {
+      addNotification('Datos actualizados correctamente', 'success');
+    }
+  };
 
-  // Filtrar pedidos por término de búsqueda
-  const filteredOrders = orders.filter(order =>
-    order.servicio.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (order.seccionDelServicio || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    getUserEmail(order.userId).toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Filtrar pedidos por término de búsqueda - memoizado
+  const filteredOrders = useMemo(() => {
+    return orders.filter(order =>
+      order.servicio.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      String(order.nPedido).includes(searchTerm) ||
+      (order.seccionDelServicio || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      getUserEmail(order.userId).toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [orders, searchTerm, getUserEmail]);
 
   // Calcular paginación
   const indexOfLastOrder = currentPage * itemsPerPage;
   const indexOfFirstOrder = indexOfLastOrder - itemsPerPage;
-  const currentOrders = filteredOrders.slice(indexOfFirstOrder, indexOfLastOrder);
+  const currentOrders = useMemo(() => {
+    return filteredOrders.slice(indexOfFirstOrder, indexOfLastOrder);
+  }, [filteredOrders, indexOfFirstOrder, indexOfLastOrder]);
   
   // Calcular el total de páginas
   const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
@@ -1657,23 +2209,35 @@ const OrdersSection = () => {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
             <Input
               type="text"
-              placeholder="Buscar pedidos..."
+              placeholder="Buscar por cliente, sección, usuario o número..."
               className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
 
-          <Button
-            onClick={() => {
-              resetOrderForm();
-              setShowCreateModal(true);
-            }}
-            className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
-          >
-            <ShoppingCart className="w-4 h-4 mr-2" />
-            Nuevo Pedido
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={handleManualRefresh}
+              disabled={refreshing}
+              className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50"
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+              Actualizar
+            </Button>
+            
+            <Button
+              onClick={() => {
+                resetOrderForm();
+                setShowCreateModal(true);
+              }}
+              className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
+            >
+              <ShoppingCart className="w-4 h-4 mr-2" />
+              Nuevo Pedido
+            </Button>
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-4 items-end">
