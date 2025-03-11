@@ -165,14 +165,14 @@ export const ShopNavbar: React.FC = () => {
               )}
               
               {/* Supervisores tienen acceso a aprobar pedidos */}
-              {isSupervisor && (
+              {/* {isSupervisor && (
                 <a 
                   href="/approve-orders" 
                   className="text-white hover:text-[#F8F9FA] transition-colors text-sm font-medium uppercase tracking-wide"
                 >
                   Aprobar Pedidos
                 </a>
-              )}
+              )} */}
             </nav>
 
             {/* Action Buttons */}
