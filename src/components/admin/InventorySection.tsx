@@ -54,9 +54,6 @@ import { imageService } from '@/services/imageService';
 import ImageUpload from '@/components/admin/components/ImageUpload';
 import { Switch } from "@/components/ui/switch";
 
-// Import the optimized ProductImage component
-import OptimizedProductImage from './components/ProductImage';
-
 // Define interfaces according to the backend
 interface ProductExtended {
   _id: string;
@@ -131,6 +128,288 @@ const LOW_STOCK_THRESHOLD = 10;
 // Key for products cache
 const PRODUCTS_CACHE_KEY = 'products';
 
+// Caché de memoria global para optimizar el rendimiento entre componentes
+// Evita volver a verificar imágenes que ya sabemos que existen o no
+const imageStatusCache = new Map<string, 'loading' | 'loaded' | 'error' | 'notExists'>();
+
+// Extended imageService with additional helper methods
+const imageServiceExt = {
+  ...imageService,
+  /**
+   * Checks if a product has an image
+   */
+  async checkImageExists(productId: string): Promise<boolean> {
+    try {
+      // If already in cache, don't check again
+      if (imageStatusCache.has(productId)) {
+        return imageStatusCache.get(productId) === 'loaded';
+      }
+      
+      const token = localStorage.getItem('token');
+      if (!token) return false;
+      
+      const response = await fetch(
+        `https://lyme-back.vercel.app/api/producto/${productId}/imagen?width=1&height=1&quality=1&v=${Date.now()}`,
+        {
+          headers: { 'Authorization': `Bearer ${token}` },
+          method: 'HEAD'
+        }
+      );
+      
+      const hasImage = response.ok && response.status !== 204;
+      imageStatusCache.set(productId, hasImage ? 'loaded' : 'notExists');
+      return hasImage;
+    } catch (error) {
+      console.warn(`Error checking image for ${productId}:`, error);
+      return false;
+    }
+  },
+  
+  /**
+   * Preloads images for visible products to improve user experience
+   */
+  preloadImages(productIds: string[]): void {
+    if (!productIds.length) return;
+    
+    // Limit to first 10 products to avoid overloading
+    const idsToPreload = productIds.slice(0, 10);
+    
+    idsToPreload.forEach(id => {
+      // Check if already cached
+      if (imageStatusCache.has(id) && imageStatusCache.get(id) !== 'loading') {
+        return;
+      }
+      
+      // Start preloading image
+      this.checkImageExists(id).then(hasImage => {
+        if (hasImage) {
+          const img = new Image();
+          img.src = `https://lyme-back.vercel.app/api/producto/${id}/imagen?quality=60&width=64&height=64&v=${Date.now()}`;
+        }
+      });
+    });
+  }
+};
+
+// Enhanced OptimizedProductImage component with onLoadComplete callback
+interface ProductImageProps {
+  productId: string;
+  alt?: string;
+  width?: number;
+  height?: number;
+  quality?: number;
+  className?: string;
+  fallbackClassName?: string;
+  containerClassName?: string;
+  useBase64?: boolean;
+  priority?: boolean;
+  placeholderText?: string;
+  onLoadComplete?: () => void;
+}
+
+const OptimizedProductImage: React.FC<ProductImageProps> = ({
+  productId,
+  alt = 'Product image',
+  width = 80,
+  height = 80,
+  quality = 75, // Increased default quality
+  className = '',
+  fallbackClassName = '',
+  containerClassName = '',
+  useBase64 = false,
+  priority = false,
+  placeholderText,
+  onLoadComplete
+}) => {
+  // Use the state of the cache global if exists, or 'loading' by default
+  const [loadState, setLoadState] = useState<'loading' | 'loaded' | 'error' | 'notExists'>(
+    imageStatusCache.get(productId) || 'loading'
+  );
+  
+  const [imageSrc, setImageSrc] = useState<string>('');
+  const imgRef = useRef<HTMLImageElement>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [timestamp, setTimestamp] = useState<number>(Date.now());
+  
+  // Create the URL of the image with version parameter to avoid obsolete caches
+  const imageUrl = useBase64 
+    ? `https://lyme-back.vercel.app/api/producto/${productId}/imagen-base64`
+    : `https://lyme-back.vercel.app/api/producto/${productId}/imagen?quality=${quality}&width=${width}&height=${height}&v=${timestamp}`;
+
+  useEffect(() => {
+    // If no product ID, do nothing
+    if (!productId) return;
+
+    // If we already have the state in cache and it's not loading, simply use it
+    if (imageStatusCache.has(productId) && imageStatusCache.get(productId) !== 'loading') {
+      const cachedState = imageStatusCache.get(productId)!;
+      setLoadState(cachedState);
+      
+      // If image is already known to be loaded from cache, notify parent
+      if (cachedState === 'loaded' && onLoadComplete) {
+        onLoadComplete();
+      }
+      return;
+    }
+
+    const loadImage = () => {
+      // For base64 images, we need to do a fetch
+      if (useBase64) {
+        setLoadState('loading');
+        fetch(imageUrl)
+          .then(response => {
+            if (!response.ok) {
+              if (response.status === 204) {
+                // The product doesn't have an image
+                imageStatusCache.set(productId, 'notExists');
+                setLoadState('notExists');
+                return;
+              }
+              throw new Error('Failed to load image');
+            }
+            return response.json();
+          })
+          .then(data => {
+            if (data && data.image) {
+              setImageSrc(data.image);
+              imageStatusCache.set(productId, 'loaded');
+              setLoadState('loaded');
+              if (onLoadComplete) onLoadComplete();
+            } else {
+              throw new Error('Invalid image data');
+            }
+          })
+          .catch(err => {
+            console.error(`Error loading base64 image for ${productId}:`, err);
+            imageStatusCache.set(productId, 'error');
+            setLoadState('error');
+          });
+      } else {
+        // For direct images, set the URL
+        setImageSrc(imageUrl);
+        setLoadState('loading');
+      }
+    };
+
+    // If prioritized, load immediately
+    if (priority) {
+      loadImage();
+      return;
+    }
+
+    // Use IntersectionObserver for lazy loading
+    if ('IntersectionObserver' in window && imgRef.current) {
+      // Destroy previous observer if it exists
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+
+      // Create new observer
+      observerRef.current = new IntersectionObserver(
+        (entries) => {
+          const [entry] = entries;
+          if (entry.isIntersecting) {
+            // Load image when visible
+            loadImage();
+            // Stop observing this element
+            if (observerRef.current) {
+              observerRef.current.disconnect();
+              observerRef.current = null;
+            }
+          }
+        },
+        {
+          rootMargin: '200px', // Preload when within 200px of being visible
+          threshold: 0.01 // Load when barely visible
+        }
+      );
+
+      // Start observing
+      observerRef.current.observe(imgRef.current);
+    } else {
+      // Fallback for browsers without IntersectionObserver
+      loadImage();
+    }
+
+    // Cleanup
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+        observerRef.current = null;
+      }
+    };
+  }, [productId, imageUrl, priority, useBase64, onLoadComplete]);
+
+  // Handle successful image load
+  const handleImageLoad = () => {
+    imageStatusCache.set(productId, 'loaded');
+    setLoadState('loaded');
+    setRetryCount(0); // Reset retry counter
+    // Notify parent component that image is loaded
+    if (onLoadComplete) onLoadComplete();
+  };
+
+  // Handle load error with retry
+  const handleImageError = () => {
+    if (retryCount < 2) { // Increase max retries for better chance of success
+      // Retry once with a new timestamp to avoid cache
+      setRetryCount(prev => prev + 1);
+      setTimestamp(Date.now());
+    } else {
+      imageStatusCache.set(productId, 'error');
+      setLoadState('error');
+    }
+  };
+
+  const isLoading = loadState === 'loading';
+  const hasError = loadState === 'error' || loadState === 'notExists';
+
+  return (
+    <div 
+      className={`relative ${containerClassName}`} 
+      style={{ width: width, height: height }}
+      ref={imgRef}
+    >
+      {/* Placeholder/Fallback while loading or if there's an error */}
+      {(isLoading || hasError) && (
+        <div className={`flex items-center justify-center ${fallbackClassName || 'bg-gray-100 rounded-md'}`} 
+          style={{ width: width, height: height }}>
+          <div className="flex flex-col items-center justify-center">
+            <ImageIcon className="w-6 h-6 text-gray-400" />
+            {placeholderText && <span className="text-xs text-gray-400 mt-1">{placeholderText}</span>}
+          </div>
+        </div>
+      )}
+      
+      {/* Real image - for base64 */}
+      {useBase64 && imageSrc && loadState === 'loaded' && (
+        <img
+          src={imageSrc}
+          alt={alt}
+          width={width}
+          height={height}
+          className={`${className} absolute top-0 left-0 transition-opacity duration-300 opacity-100`}
+        />
+      )}
+      
+      {/* Real image - for direct image */}
+      {!useBase64 && (
+        <img
+          src={loadState === 'loading' ? undefined : imageUrl}
+          alt={alt}
+          width={width}
+          height={height}
+          onLoad={handleImageLoad}
+          onError={handleImageError}
+          className={`${className} ${loadState === 'loaded' ? 'opacity-100' : 'opacity-0'} absolute top-0 left-0 transition-opacity duration-300`}
+          loading="lazy"
+        />
+      )}
+    </div>
+  );
+};
+
 // Component for stock input with maximum limit
 const ProductStockInput: React.FC<{
   value: string;
@@ -203,16 +482,48 @@ const ProductStockInput: React.FC<{
   );
 };
 
-// OPTIMIZED PRODUCT ROW COMPONENT
+// Function to render stock indicator
+const renderStockIndicator = (stock: number) => {
+  if (stock <= 0) {
+    return (
+      <div className="flex items-center gap-1">
+        <AlertCircle className="w-4 h-4 text-red-500" />
+        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+          Sin stock
+        </span>
+      </div>
+    );
+  } else if (stock <= LOW_STOCK_THRESHOLD) {
+    return (
+      <div className="flex items-center gap-1">
+        <AlertTriangle className="w-4 h-4 text-yellow-500 animate-pulse" />
+        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800 border border-yellow-300">
+          {stock} unidades - ¡Stock bajo!
+        </span>
+      </div>
+    );
+  } else {
+    return (
+      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-[#DFEFE6] text-[#29696B]">
+        {stock} unidades
+      </span>
+    );
+  }
+};
+
+// IMPROVED PRODUCT ROW COMPONENT
 const ProductRow = React.memo(({ 
   product, 
   onEdit, 
   onDelete, 
   userSections,
-  isInViewport = false // New prop to optimize image loading
+  isInViewport = false 
 }) => {
   // Check permissions
   const canEdit = userSections === 'ambos' || product.categoria === userSections;
+  
+  // Track image load state
+  const [imageLoaded, setImageLoaded] = useState(false);
 
   return (
     <tr 
@@ -232,13 +543,14 @@ const ProductRow = React.memo(({
               alt={product.nombre}
               width={40}
               height={40}
-              quality={60} // Reduced quality for better performance
-              className="h-10 w-10 rounded-full object-cover border border-[#91BEAD]/30"
+              quality={75}
+              className={`h-10 w-10 rounded-full object-cover border border-[#91BEAD]/30 transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
               fallbackClassName="h-10 w-10 rounded-full bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30"
               containerClassName="h-10 w-10"
               useBase64={false}
-              priority={isInViewport} // Load with priority only if visible
+              priority={isInViewport}
               key={`img-${product._id}-${product.hasImage ? 'has-image' : 'no-image'}`}
+              onLoadComplete={() => setImageLoaded(true)}
             />
           </div>
           <div>
@@ -304,48 +616,28 @@ const ProductRow = React.memo(({
   );
 });
 
-// Function to render stock indicator
-const renderStockIndicator = (stock: number) => {
-  if (stock <= 0) {
-    return (
-      <div className="flex items-center gap-1">
-        <AlertCircle className="w-4 h-4 text-red-500" />
-        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
-          Sin stock
-        </span>
-      </div>
-    );
-  } else if (stock <= LOW_STOCK_THRESHOLD) {
-    return (
-      <div className="flex items-center gap-1">
-        <AlertTriangle className="w-4 h-4 text-yellow-500 animate-pulse" />
-        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800 border border-yellow-300">
-          {stock} unidades - ¡Stock bajo!
-        </span>
-      </div>
-    );
-  } else {
-    return (
-      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-[#DFEFE6] text-[#29696B]">
-        {stock} unidades
-      </span>
-    );
-  }
-};
-
 // VIRTUALIZED TABLE COMPONENT
 const VirtualizedProductTable = ({ 
   products, 
   onEdit, 
   onDelete, 
   userSections,
-  tableContainerRef
+  tableContainerRef,
+  onVisibleItemsChanged
 }) => {
   const rowVirtualizer = useVirtualizer({
     count: products.length,
     getScrollElement: () => tableContainerRef.current,
     estimateSize: () => 70, // Estimated row height
-    overscan: 5 // How many items to render before/after the visible area
+    overscan: 5, // How many items to render before/after the visible area
+    onChange: (instance) => {
+      // Notify parent when visible items change
+      const visibleItems = products.slice(
+        instance.range.startIndex,
+        instance.range.endIndex + 1
+      );
+      onVisibleItemsChanged?.(visibleItems);
+    }
   });
 
   return (
@@ -415,60 +707,12 @@ const VirtualizedProductTable = ({
   );
 };
 
-// OPTIMIZED MOBILE VIEW COMPONENT
-const MobileProductList = React.memo(({ products, onEdit, onDelete, userSections }) => {
-  const parentRef = useRef(null);
-  
-  const virtualizer = useVirtualizer({
-    count: products.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 200, // Estimated card height
-    overscan: 3
-  });
-  
-  return (
-    <div ref={parentRef} className="h-[70vh] overflow-auto">
-      <div
-        style={{
-          height: `${virtualizer.getTotalSize()}px`,
-          width: '100%',
-          position: 'relative',
-        }}
-      >
-        {virtualizer.getVirtualItems().map(virtualRow => {
-          const product = products[virtualRow.index];
-          return (
-            <div
-              key={`${product._id}-${product.hasImage ? 'has-image' : 'no-image'}`}
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: virtualRow.size,
-                transform: `translateY(${virtualRow.start}px)`,
-                padding: '4px',
-              }}
-            >
-              <ProductCard 
-                product={product} 
-                onEdit={onEdit} 
-                onDelete={onDelete} 
-                userSections={userSections}
-                isInViewport={true}
-              />
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-});
-
-// PRODUCT CARD COMPONENT FOR MOBILE
+// IMPROVED PRODUCT CARD COMPONENT FOR MOBILE
 const ProductCard = React.memo(({ product, onEdit, onDelete, userSections, isInViewport }) => {
   // Check permissions
   const canEdit = userSections === 'ambos' || product.categoria === userSections;
+  // Track image load state
+  const [imageLoaded, setImageLoaded] = useState(false);
 
   return (
     <Card 
@@ -505,13 +749,14 @@ const ProductCard = React.memo(({ product, onEdit, onDelete, userSections, isInV
               alt={product.nombre}
               width={64}
               height={64}
-              quality={60}
-              className="h-16 w-16 rounded-md object-cover border border-[#91BEAD]/30"
+              quality={75}
+              className={`h-16 w-16 rounded-md object-cover border border-[#91BEAD]/30 transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
               fallbackClassName="h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30"
               containerClassName="h-16 w-16"
               useBase64={false}
               priority={isInViewport}
               key={`img-${product._id}-${product.hasImage ? 'has-image' : 'no-image'}`}
+              onLoadComplete={() => setImageLoaded(true)}
             />
           </div>
           <div className="flex-1 min-w-0">
@@ -572,6 +817,64 @@ const ProductCard = React.memo(({ product, onEdit, onDelete, userSections, isInV
         </Button>
       </CardFooter>
     </Card>
+  );
+});
+
+// OPTIMIZED MOBILE VIEW COMPONENT
+const MobileProductList = React.memo(({ products, onEdit, onDelete, userSections, onVisibleItemsChanged }) => {
+  const parentRef = useRef(null);
+  
+  const virtualizer = useVirtualizer({
+    count: products.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 200, // Estimated card height
+    overscan: 3,
+    onChange: (instance) => {
+      // Notify parent component about visible items
+      const visibleItems = products.slice(
+        instance.range.startIndex,
+        instance.range.endIndex + 1
+      );
+      onVisibleItemsChanged?.(visibleItems);
+    }
+  });
+  
+  return (
+    <div ref={parentRef} className="h-[70vh] overflow-auto">
+      <div
+        style={{
+          height: `${virtualizer.getTotalSize()}px`,
+          width: '100%',
+          position: 'relative',
+        }}
+      >
+        {virtualizer.getVirtualItems().map(virtualRow => {
+          const product = products[virtualRow.index];
+          return (
+            <div
+              key={`${product._id}-${product.hasImage ? 'has-image' : 'no-image'}`}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: virtualRow.size,
+                transform: `translateY(${virtualRow.start}px)`,
+                padding: '4px',
+              }}
+            >
+              <ProductCard 
+                product={product} 
+                onEdit={onEdit} 
+                onDelete={onDelete} 
+                userSections={userSections}
+                isInViewport={true}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 });
 
@@ -642,6 +945,17 @@ const InventorySection: React.FC = () => {
     imagen: null,
     imagenPreview: null
   });
+
+  // Function to preload images for visible products
+  const preloadVisibleImages = useCallback((visibleProducts: ProductExtended[]) => {
+    if (!visibleProducts.length || isInitialLoad) return;
+    
+    // Extract IDs from visible products
+    const visibleIds = visibleProducts.map(p => p._id);
+    
+    // Use the extended imageService to preload these images
+    imageServiceExt.preloadImages(visibleIds);
+  }, [isInitialLoad]);
 
   // Get auth token
   const getAuthToken = useCallback(() => {
@@ -810,6 +1124,9 @@ const InventorySection: React.FC = () => {
             () => fetchProductsData(currentPage + 1, itemsPerPage, selectedCategory, debouncedSearchTerm)
           );
         }
+        
+        // Preload images for first page products
+        preloadVisibleImages(data.items);
       },
       onError: (err: any) => {
         // Don't show errors if request was cancelled
@@ -898,6 +1215,7 @@ const InventorySection: React.FC = () => {
         // Remove image from image caches
         imageService.invalidateCache(deletedId);
         imageCache.current.delete(deletedId);
+        imageStatusCache.delete(deletedId);
         
         const successMsg = 'Product deleted successfully';
         setSuccessMessage(successMsg);
@@ -956,6 +1274,7 @@ const InventorySection: React.FC = () => {
         // Clear any existing image cache
         imageService.invalidateCache(productId);
         imageCache.current.delete(productId);
+        imageStatusCache.delete(productId);
         
         // Update form if it's open
         if (editingProduct && editingProduct._id === productId) {
@@ -997,6 +1316,7 @@ const InventorySection: React.FC = () => {
         // Invalidate image caches
         imageService.invalidateCache(productId);
         imageCache.current.delete(productId);
+        imageStatusCache.delete(productId);
         
         // Update local products state to show change immediately
         setProducts(prevProducts => 
@@ -1466,6 +1786,7 @@ const InventorySection: React.FC = () => {
           // Invalidate image cache to force a reload
           imageService.invalidateCache(productId);
           imageCache.current.delete(productId);
+          imageStatusCache.delete(productId);
           
           // Force data refresh
           queryClient.invalidateQueries({
@@ -1827,6 +2148,7 @@ const InventorySection: React.FC = () => {
       // Invalidate image cache to force a reload
       imageService.invalidateCache(productId);
       imageCache.current.delete(productId);
+      imageStatusCache.delete(productId);
       
       // Force refresh to ensure updated data
       refetch().then(() => {
@@ -1892,6 +2214,13 @@ const InventorySection: React.FC = () => {
     if (!Array.isArray(productOptions)) return [];
     return productOptions.filter(p => !p.esCombo);
   }, [productOptions]);
+
+  // Handler for visible items changed - This improves performance by preloading only what's visible
+  const handleVisibleItemsChanged = useCallback((visibleItems: ProductExtended[]) => {
+    if (visibleItems.length > 0) {
+      preloadVisibleImages(visibleItems);
+    }
+  }, [preloadVisibleImages]);
 
   // When selected category changes, update UI
   useEffect(() => {
@@ -2036,6 +2365,7 @@ const InventorySection: React.FC = () => {
               onDelete={confirmDelete}
               userSections={userSections}
               tableContainerRef={tableRef}
+              onVisibleItemsChanged={handleVisibleItemsChanged}
             />
           </div>
         )}
@@ -2074,6 +2404,7 @@ const InventorySection: React.FC = () => {
             onEdit={handleEdit}
             onDelete={confirmDelete}
             userSections={userSections}
+            onVisibleItemsChanged={handleVisibleItemsChanged}
           />
         )}
         
