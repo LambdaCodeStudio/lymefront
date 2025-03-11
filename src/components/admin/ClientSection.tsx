@@ -65,9 +65,15 @@ import Pagination from '@/components/ui/pagination';
 import { useDashboard } from '@/hooks/useDashboard';
 import type { UserRole } from '@/types/users';
 
-// Tipo extendido para los usuarios con la estructura que viene del backend
+// Constantes para el caché
+const CACHE_EXPIRY_TIME = 5 * 60 * 1000; // 5 minutos
+const CLIENTS_CACHE_KEY = 'lyme_clients_cache';
+const USERS_CACHE_KEY = 'lyme_users_cache';
+const UNASSIGNED_CLIENTS_CACHE_KEY = 'lyme_unassigned_clients_cache';
+
+// Tipos extendidos para los usuarios con la estructura que viene del backend
 interface UserExtended {
-  _id: string;       // El backend usa _id, no id como en el tipo User
+  _id: string;
   email?: string;
   usuario?: string;
   nombre?: string;
@@ -108,6 +114,45 @@ interface UpdateClientData {
   userId: string;
 }
 
+// Funciones para gestionar la caché
+const getFromCache = (key: string) => {
+  if (typeof window === 'undefined') return null;
+  
+  const cachedData = localStorage.getItem(key);
+  if (!cachedData) return null;
+  
+  try {
+    const { data, timestamp } = JSON.parse(cachedData);
+    // Verificar si la caché ha expirado
+    if (Date.now() - timestamp > CACHE_EXPIRY_TIME) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    
+    return data;
+  } catch (error) {
+    console.error(`Error parsing cached ${key}:`, error);
+    localStorage.removeItem(key);
+    return null;
+  }
+};
+
+const saveToCache = (key: string, data: any) => {
+  if (typeof window === 'undefined') return;
+  
+  const cacheData = {
+    data,
+    timestamp: Date.now()
+  };
+  
+  localStorage.setItem(key, JSON.stringify(cacheData));
+};
+
+const invalidateCache = (keys: string[]) => {
+  if (typeof window === 'undefined') return;
+  keys.forEach(key => localStorage.removeItem(key));
+};
+
 const ClientsSection: React.FC = () => {
   // Acceder al contexto del dashboard
   const { selectedUserId } = useDashboard();
@@ -132,6 +177,7 @@ const ClientsSection: React.FC = () => {
   const [serviceFormData, setServiceFormData] = useState<{ nuevoNombre: string }>({ nuevoNombre: '' });
   const [deletingOperation, setDeletingOperation] = useState(false);
   const [showAddingSectionMode, setShowAddingSectionMode] = useState(false);
+  const [isDataRefreshing, setIsDataRefreshing] = useState(false);
 
   // Estado para el modal de confirmación de eliminación de clientes individuales
   const [showDeleteClientModal, setShowDeleteClientModal] = useState(false);
@@ -228,10 +274,10 @@ const ClientsSection: React.FC = () => {
   // Efecto para cargar datos iniciales
   useEffect(() => {
     console.log("ClientSection montado, selectedUserId:", selectedUserId);
-    fetchClients();
-    fetchUsers();
+    fetchClients(false);
+    fetchUsers(false);
     // Cargar también clientes sin asignar
-    fetchClientsWithoutUser();
+    fetchClientsWithoutUser(false);
 
     // Verificar si hay un usuario preseleccionado (de AdminUserManagement)
     if (typeof window !== 'undefined') {
@@ -290,9 +336,9 @@ const ClientsSection: React.FC = () => {
     // Función para manejar eventos globales
     const handleUserUpdated = () => {
       console.log("Detectado cambio de usuarios, actualizando lista...");
-      fetchUsers();
+      fetchUsers(true);
       // También revisamos clientes sin asignar por si alguno quedó así tras eliminar un usuario
-      fetchClientsWithoutUser();
+      fetchClientsWithoutUser(true);
     };
   
     // Verificar localStorage para eventos
@@ -335,55 +381,39 @@ const ClientsSection: React.FC = () => {
     };
   }, []);
 
-  // Corregir problema de apertura automática de modal al recargar con usuario seleccionado
-  useEffect(() => {
-    let modalAutoOpening = false;
-    if (activeUserId !== "all" && !loading) {
-      const userClients = clients.filter(c => {
-        return typeof c.userId === 'object' && c.userId !== null
-          ? c.userId._id === activeUserId
-          : c.userId === activeUserId;
-      });
-      
-      // Solo abrir automáticamente si no hay clientes para este usuario y no estamos ya abriendo el modal
-      modalAutoOpening = userClients.length === 0 && !showModal;
-      
-      if (modalAutoOpening) {
-        // Comprobar si acabamos de recargar la página (F5)
-        const isPageReload = typeof window !== 'undefined' && 
-          (performance.navigation.type === 1 || document.referrer === window.location.href);
-          
-        // Si es recarga, no abrir el modal automáticamente y limpiar usuario seleccionado
-        if (isPageReload) {
-          console.log("Detección de recarga de página - evitando apertura automática de modal");
-          // Restablecer a todos los usuarios para evitar el comportamiento no deseado
-          setActiveUserId("all");
+  // Cargar clientes con soporte de caché
+  const fetchClients = async (forceRefresh: boolean = false) => {
+    try {
+      // Si no es una actualización forzada, intentar obtener datos de la caché
+      if (!forceRefresh && !isDataRefreshing) {
+        const cachedClients = getFromCache(CLIENTS_CACHE_KEY);
+        if (cachedClients) {
+          console.log("Usando clientes desde caché");
+          setClients(cachedClients);
+          setLoading(false);
           return;
         }
-        
-        console.log("Abriendo modal automáticamente para usuario:", activeUserId);
-        resetForm();
-        setShowModal(true);
-
-        // Notificación informativa
-        if (addNotification) {
-          addNotification(`No se encontraron clientes para el usuario seleccionado. Puede crear uno nuevo.`, 'info');
-        }
       }
-    }
-  }, [activeUserId, loading, clients, showModal, addNotification]);
 
-  // Cargar clientes
-  const fetchClients = async () => {
-    try {
+      if (isDataRefreshing) {
+        console.log("Ya se está actualizando la lista de clientes, evitando petición duplicada");
+        return;
+      }
+
+      setIsDataRefreshing(true);
       setLoading(true);
+      setError(null);
+
       const token = getAuthToken();
       if (!token) {
         throw new Error('No hay token de autenticación');
       }
 
       const response = await fetch('https://lyme-back.vercel.app/api/cliente', {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
+        }
       });
 
       if (!response.ok) {
@@ -400,6 +430,10 @@ const ClientsSection: React.FC = () => {
 
       const data: Client[] = await response.json();
       console.log("Clientes cargados:", data.length);
+      
+      // Guardar en caché
+      saveToCache(CLIENTS_CACHE_KEY, data);
+      
       setClients(data);
       setError(null);
     } catch (err) {
@@ -412,20 +446,51 @@ const ClientsSection: React.FC = () => {
       }
     } finally {
       setLoading(false);
+      setIsDataRefreshing(false);
     }
   };
 
-  // Cargar clientes sin asignar
-  const fetchClientsWithoutUser = async () => {
+  // Cargar clientes sin asignar con soporte de caché
+  const fetchClientsWithoutUser = async (forceRefresh: boolean = false) => {
     try {
-      setLoading(true);
+      // Si no es una actualización forzada, intentar obtener datos de la caché
+      if (!forceRefresh) {
+        const cachedUnassignedClients = getFromCache(UNASSIGNED_CLIENTS_CACHE_KEY);
+        if (cachedUnassignedClients) {
+          console.log("Usando clientes sin asignar desde caché");
+          
+          // Agregar estos clientes al estado, marcándolos especialmente
+          setClients(prevClients => {
+            const clientsWithoutDuplicates = [...prevClients];
+            
+            // Añadir solo los que no están ya en la lista
+            cachedUnassignedClients.forEach((newClient: Client) => {
+              if (!clientsWithoutDuplicates.some(c => c._id === newClient._id)) {
+                // Añadir propiedad para identificarlos visualmente
+                clientsWithoutDuplicates.push({
+                  ...newClient,
+                  requiereAsignacion: true
+                });
+              }
+            });
+            
+            return clientsWithoutDuplicates;
+          });
+          
+          return;
+        }
+      }
+
       const token = getAuthToken();
       if (!token) {
         throw new Error('No hay token de autenticación');
       }
 
       const response = await fetch('https://lyme-back.vercel.app/api/cliente/sin-asignar', {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
+        }
       });
 
       if (!response.ok) {
@@ -434,6 +499,9 @@ const ClientsSection: React.FC = () => {
 
       const data: Client[] = await response.json();
       console.log("Clientes sin asignar:", data.length);
+      
+      // Guardar en caché
+      saveToCache(UNASSIGNED_CLIENTS_CACHE_KEY, data);
       
       // Agregar estos clientes al estado, marcándolos especialmente
       setClients(prevClients => {
@@ -460,25 +528,36 @@ const ClientsSection: React.FC = () => {
       
     } catch (err) {
       const errorMsg = 'Error al cargar clientes sin asignar: ' + (err instanceof Error ? err.message : String(err));
-      setError(errorMsg);
+      console.error(errorMsg);
       if (addNotification) {
         addNotification(errorMsg, 'error');
       }
-    } finally {
-      setLoading(false);
     }
   };
 
-  // Cargar usuarios (para asignar a clientes)
-  const fetchUsers = async () => {
+  // Cargar usuarios con soporte de caché
+  const fetchUsers = async (forceRefresh: boolean = false) => {
     try {
+      // Si no es una actualización forzada, intentar obtener datos de la caché
+      if (!forceRefresh) {
+        const cachedUsers = getFromCache(USERS_CACHE_KEY);
+        if (cachedUsers) {
+          console.log("Usando usuarios desde caché");
+          setUsers(cachedUsers);
+          return;
+        }
+      }
+
       const token = getAuthToken();
       if (!token) {
         throw new Error('No hay token de autenticación');
       }
 
       const response = await fetch('https://lyme-back.vercel.app/api/auth/users', {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
+        }
       });
 
       if (!response.ok) {
@@ -492,10 +571,8 @@ const ClientsSection: React.FC = () => {
       );
       console.log("Usuarios básicos activos:", activeBasicUsers.length);
 
-      // Asegurar que tenemos los emails para todos los usuarios
-      activeBasicUsers.forEach((user: UserExtended) => {
-        console.log(`Usuario: ${user._id}, Email: ${user.email || 'No disponible'}`);
-      });
+      // Guardar en caché
+      saveToCache(USERS_CACHE_KEY, activeBasicUsers);
 
       setUsers(activeBasicUsers);
 
@@ -538,7 +615,10 @@ const ClientsSection: React.FC = () => {
         throw new Error(errorData.mensaje || 'Error al crear cliente');
       }
 
-      await fetchClients();
+      // Invalidar caché después de crear cliente
+      invalidateCache([CLIENTS_CACHE_KEY, UNASSIGNED_CLIENTS_CACHE_KEY]);
+      
+      await fetchClients(true);
       setShowModal(false);
       resetForm();
 
@@ -600,7 +680,10 @@ const ClientsSection: React.FC = () => {
         throw new Error(errorData.mensaje || 'Error al actualizar cliente');
       }
 
-      await fetchClients();
+      // Invalidar caché después de actualizar cliente
+      invalidateCache([CLIENTS_CACHE_KEY, UNASSIGNED_CLIENTS_CACHE_KEY]);
+      
+      await fetchClients(true);
       setShowModal(false);
       resetForm();
 
@@ -664,7 +747,10 @@ const ClientsSection: React.FC = () => {
         throw new Error(`Error al eliminar cliente (${statusCode}): ${responseBody?.mensaje || responseBody || 'Error desconocido'}`);
       }
 
-      await fetchClients();
+      // Invalidar caché después de eliminar cliente
+      invalidateCache([CLIENTS_CACHE_KEY, UNASSIGNED_CLIENTS_CACHE_KEY]);
+      
+      await fetchClients(true);
 
       const successMsg = 'Cliente eliminado correctamente';
       setSuccessMessage(successMsg);
@@ -786,7 +872,10 @@ const ClientsSection: React.FC = () => {
         });
       }
 
-      await fetchClients();
+      // Invalidar caché después de actualizar servicio
+      invalidateCache([CLIENTS_CACHE_KEY, UNASSIGNED_CLIENTS_CACHE_KEY]);
+      
+      await fetchClients(true);
       setShowServiceModal(false);
 
       const successMsg = `Servicio "${currentService}" actualizado a "${serviceFormData.nuevoNombre}"`;
@@ -883,8 +972,11 @@ const ClientsSection: React.FC = () => {
         return newState;
       });
 
+      // Invalidar caché después de eliminar servicio
+      invalidateCache([CLIENTS_CACHE_KEY, UNASSIGNED_CLIENTS_CACHE_KEY]);
+      
       // Asegurarse de que la lista de clientes se actualiza
-      await fetchClients();
+      await fetchClients(true);
       setShowDeleteServiceModal(false);
 
       const successMsg = `Servicio "${currentService}" y todas sus secciones eliminados correctamente`;
@@ -1694,23 +1786,23 @@ const ClientsSection: React.FC = () => {
 
             <div>
               <Label htmlFor="seccionDelServicio" className="text-sm text-[#29696B]">
-                {(currentClient?.seccionDelServicio || (!currentClient && formData.servicio))
+                {(currentClient?.seccionDelServicio || (!currentClient && formData.servicio && showAddingSectionMode))
                   ? "Nombre de la Sección"
                   : "Sección del Servicio (opcional)"}
               </Label>
               <Input
                 id="seccionDelServicio"
                 placeholder={
-                  (currentClient?.seccionDelServicio || (!currentClient && formData.servicio))
+                  (currentClient?.seccionDelServicio || (!currentClient && formData.servicio && showAddingSectionMode))
                     ? "Ej: Edificio Avellaneda, Puerto Madero"
                     : "Deje en blanco si no aplica una sección específica"
                 }
                 value={formData.seccionDelServicio}
                 onChange={(e) => setFormData({ ...formData, seccionDelServicio: e.target.value })}
                 className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
-                required={!currentClient && formData.servicio ? true : false}
+                required={showAddingSectionMode}
               />
-              {!(currentClient?.seccionDelServicio || (!currentClient && formData.servicio)) && (
+              {!(currentClient?.seccionDelServicio || (!currentClient && formData.servicio && showAddingSectionMode)) && (
                 <p className="text-xs text-[#7AA79C] mt-1">
                   Deje en blanco si no aplica una sección específica
                 </p>
