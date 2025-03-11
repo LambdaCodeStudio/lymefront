@@ -149,16 +149,15 @@ export const ShopHome: React.FC = () => {
       if (!token) {
         throw new Error('No hay token de autenticación');
       }
-
+  
       const response = await fetch('https://lyme-back.vercel.app/api/producto', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
-
+  
       if (!response.ok) {
         if (response.status === 401) {
-          // Token expirado o inválido
           localStorage.removeItem('token');
           localStorage.removeItem('userRole');
           window.location.href = '/login';
@@ -166,12 +165,28 @@ export const ShopHome: React.FC = () => {
         }
         throw new Error('Error al cargar productos');
       }
-
+  
       const data = await response.json();
-      setProducts(data);
-      setFilteredProducts(data.filter(product => product.stock > 0));
+      
+      // Verificar que data sea un array - AQUÍ ESTÁ LA CORRECCIÓN
+      if (!Array.isArray(data)) {
+        // Si data.items existe, usar eso (formato paginado)
+        if (data && data.items && Array.isArray(data.items)) {
+          setProducts(data.items);
+          setFilteredProducts(data.items.filter(product => product.stock > 0));
+        } else {
+          console.error('Formato de respuesta inesperado:', data);
+          throw new Error('Formato de respuesta inesperado: los datos no son un array');
+        }
+      } else {
+        // La respuesta ya es un array
+        setProducts(data);
+        setFilteredProducts(data.filter(product => product.stock > 0));
+      }
+      
       setError(null);
-    } catch (err: any) {
+    } catch (err) {
+      console.error('Error en fetchProducts:', err);
       setError(`Error al cargar productos: ${err.message}`);
     } finally {
       setLoading(false);

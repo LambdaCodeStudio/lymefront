@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useQuery, useQueryClient, useMutation } from 'react-query';
-// import { FixedSizeList } from 'react-window';
+import { useVirtualizer } from '@tanstack/react-virtual'; // Necesitarás instalar este paquete
 import debounce from 'lodash/debounce';
 import {
   Dialog,
@@ -51,9 +51,151 @@ import Pagination from "@/components/ui/pagination";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { useNotification } from '@/context/NotificationContext';
 import { imageService } from '@/services/imageService';
-import ProductImage from '@/components/admin/components/ProductImage';
 import ImageUpload from '@/components/admin/components/ImageUpload';
 import { Switch } from "@/components/ui/switch";
+
+// Importar el ProductImage optimizado (asegúrate de haberlo implementado)
+import OptimizedProductImage from './OptimizedProductImage';
+
+// COMPONENTE OPTIMIZADO DE IMAGEN DE PRODUCTO
+// Implementa este componente en un archivo separado
+const ProductImage = ({ 
+  productId, 
+  alt = "Product image", 
+  width = 80, 
+  height = 80, 
+  quality = 70, 
+  className = "", 
+  fallbackClassName = "", 
+  containerClassName = "", 
+  useBase64 = false, 
+  priority = false 
+}) => {
+  const [loadState, setLoadState] = useState('loading');
+  const imageRef = useRef(null);
+  const observerRef = useRef(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [timestamp, setTimestamp] = useState(Date.now());
+  
+  // Construir URL de la imagen con cache busting
+  const imageUrl = useBase64 
+    ? `https://lyme-back.vercel.app/api/producto/${productId}/imagen-base64`
+    : `https://lyme-back.vercel.app/api/producto/${productId}/imagen?quality=${quality}&width=${width}&height=${height}&v=${timestamp}`;
+
+  useEffect(() => {
+    if (!productId) return;
+
+    const loadImage = () => {
+      // Para imágenes base64, se manejaría diferente
+      if (useBase64) {
+        fetch(imageUrl)
+          .then(response => {
+            if (!response.ok) {
+              if (response.status === 204) {
+                setLoadState('notExists');
+                return;
+              }
+              throw new Error('Failed to load image');
+            }
+            return response.json();
+          })
+          .then(() => {
+            setLoadState('loaded');
+          })
+          .catch(() => {
+            setLoadState('error');
+          });
+      } else {
+        // Para imágenes directas, se maneja en el evento onload/onerror
+        setLoadState('loading');
+      }
+    };
+
+    // Cargar inmediatamente si es prioritaria
+    if (priority) {
+      loadImage();
+      return;
+    }
+
+    // Lazy loading con IntersectionObserver
+    if ('IntersectionObserver' in window && imageRef.current) {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+
+      observerRef.current = new IntersectionObserver(
+        (entries) => {
+          const [entry] = entries;
+          if (entry.isIntersecting) {
+            loadImage();
+            observerRef.current?.disconnect();
+            observerRef.current = null;
+          }
+        },
+        {
+          rootMargin: '200px', // Precargar cuando esté a 200px de ser visible
+          threshold: 0.01 // Cargar cuando apenas sea visible
+        }
+      );
+
+      observerRef.current.observe(imageRef.current);
+    } else {
+      // Fallback
+      loadImage();
+    }
+
+    return () => {
+      observerRef.current?.disconnect();
+    };
+  }, [productId, imageUrl, priority, useBase64]);
+
+  // Manejar carga correcta
+  const handleImageLoad = () => {
+    setLoadState('loaded');
+    setRetryCount(0);
+  };
+
+  // Manejar error con reintento
+  const handleImageError = () => {
+    if (retryCount < 1) {
+      // Reintentar una vez con un nuevo timestamp
+      setRetryCount(prev => prev + 1);
+      setTimestamp(Date.now());
+    } else {
+      setLoadState('error');
+    }
+  };
+
+  const isLoading = loadState === 'loading';
+  const hasError = loadState === 'error' || loadState === 'notExists';
+
+  return (
+    <div className={`relative ${containerClassName}`} style={{ width, height }}>
+      {/* Placeholder mientras carga o si hay error */}
+      {(isLoading || hasError) && (
+        <div className={`flex items-center justify-center ${fallbackClassName || 'bg-gray-100 rounded-md'}`} 
+          style={{ width, height }}>
+          <ImageIcon className="w-6 h-6 text-gray-400" />
+        </div>
+      )}
+      
+      {/* Solo renderizar si no se usa base64 */}
+      {!useBase64 && (
+        <img
+          ref={imageRef}
+          src={!isLoading ? imageUrl : undefined}
+          alt={alt}
+          width={width}
+          height={height}
+          onLoad={handleImageLoad}
+          onError={handleImageError}
+          className={`${className} ${loadState === 'loaded' ? 'opacity-100' : 'opacity-0'} absolute top-0 left-0 transition-opacity duration-300`}
+          loading="lazy"
+        />
+      )}
+    </div>
+  );
+};
 
 // Definir interfaces según el backend
 interface ProductExtended {
@@ -201,13 +343,14 @@ const ProductStockInput: React.FC<{
   );
 };
 
-// Componente de fila de producto para virtualización
-const ProductRow: React.FC<{
-  product: ProductExtended;
-  onEdit: (product: ProductExtended) => void;
-  onDelete: (id: string) => void;
-  userSections: string;
-}> = React.memo(({ product, onEdit, onDelete, userSections }) => {
+// COMPONENTE DE FILA DE PRODUCTO OPTIMIZADO
+const ProductRow = React.memo(({ 
+  product, 
+  onEdit, 
+  onDelete, 
+  userSections,
+  isInViewport = false // Nueva prop para optimizar la carga de imágenes
+}) => {
   // Verificar permisos
   const canEdit = userSections === 'ambos' || product.categoria === userSections;
 
@@ -229,12 +372,13 @@ const ProductRow: React.FC<{
               alt={product.nombre}
               width={40}
               height={40}
-              quality={80}
+              quality={60} // Calidad reducida para mejor rendimiento
               className="h-10 w-10 rounded-full object-cover border border-[#91BEAD]/30"
               fallbackClassName="h-10 w-10 rounded-full bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30"
               containerClassName="h-10 w-10"
               useBase64={false}
-              key={`img-${product._id}-${product.hasImage ? 'has-image' : 'no-image'}`} // Forzar actualización cuando cambia hasImage
+              priority={isInViewport} // Cargar con prioridad solo si está visible
+              key={`img-${product._id}-${product.hasImage ? 'has-image' : 'no-image'}`}
             />
           </div>
           <div>
@@ -329,6 +473,248 @@ const renderStockIndicator = (stock: number) => {
   }
 };
 
+// COMPONENTE DE TABLA VIRTUALIZADA
+const VirtualizedProductTable = ({ 
+  products, 
+  onEdit, 
+  onDelete, 
+  userSections,
+  tableContainerRef
+}) => {
+  const rowVirtualizer = useVirtualizer({
+    count: products.length,
+    getScrollElement: () => tableContainerRef.current,
+    estimateSize: () => 70, // Altura estimada de fila
+    overscan: 5 // Cuántos elementos renderizar antes/después del área visible
+  });
+
+  return (
+    <table className="w-full">
+      <thead className="bg-[#DFEFE6]/50 border-b border-[#91BEAD]/20 sticky top-0 z-10">
+        <tr>
+          <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
+            Nombre
+          </th>
+          <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
+            Categoría
+          </th>
+          <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
+            Precio
+          </th>
+          <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
+            Stock
+          </th>
+          <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
+            Vendidos
+          </th>
+          <th className="px-6 py-3 text-right text-xs font-medium text-[#29696B] uppercase tracking-wider">
+            Acciones
+          </th>
+        </tr>
+      </thead>
+      <tbody className="bg-white divide-y divide-[#91BEAD]/20 relative">
+        <tr style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
+          <td colSpan={6} className="p-0">
+            <div
+              style={{
+                position: 'relative',
+                width: '100%',
+                height: '100%',
+              }}
+            >
+              {rowVirtualizer.getVirtualItems().map(virtualRow => {
+                const product = products[virtualRow.index];
+                return (
+                  <div
+                    key={`${product._id}-${product.hasImage ? 'has-image' : 'no-image'}`}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: virtualRow.size,
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                    className="contents"
+                  >
+                    <ProductRow
+                      product={product}
+                      onEdit={onEdit}
+                      onDelete={onDelete}
+                      userSections={userSections}
+                      isInViewport={true}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  );
+};
+
+// COMPONENTE PARA VISTA MÓVIL OPTIMIZADA
+const MobileProductList = React.memo(({ products, onEdit, onDelete, userSections }) => {
+  const parentRef = useRef(null);
+  
+  const virtualizer = useVirtualizer({
+    count: products.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 200, // Altura estimada de tarjeta
+    overscan: 3
+  });
+  
+  return (
+    <div ref={parentRef} className="h-[70vh] overflow-auto">
+      <div
+        style={{
+          height: `${virtualizer.getTotalSize()}px`,
+          width: '100%',
+          position: 'relative',
+        }}
+      >
+        {virtualizer.getVirtualItems().map(virtualRow => {
+          const product = products[virtualRow.index];
+          return (
+            <div
+              key={`${product._id}-${product.hasImage ? 'has-image' : 'no-image'}`}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: virtualRow.size,
+                transform: `translateY(${virtualRow.start}px)`,
+                padding: '4px',
+              }}
+            >
+              <ProductCard 
+                product={product} 
+                onEdit={onEdit} 
+                onDelete={onDelete} 
+                userSections={userSections}
+                isInViewport={true}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+});
+
+// COMPONENTE DE TARJETA DE PRODUCTO PARA MÓVIL
+const ProductCard = React.memo(({ product, onEdit, onDelete, userSections, isInViewport }) => {
+  // Verificar permisos
+  const canEdit = userSections === 'ambos' || product.categoria === userSections;
+
+  return (
+    <Card 
+      className={`overflow-hidden shadow-sm border ${
+        product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD 
+          ? 'border-yellow-300 bg-yellow-50' 
+          : product.stock <= 0 
+            ? 'border-red-300 bg-red-50'
+            : 'border-[#91BEAD]/20 bg-white'
+      }`}
+    >
+      <CardHeader className="p-4 pb-2">
+        <div className="flex justify-between items-center">
+          <CardTitle className="text-base truncate mr-2 text-[#29696B]">
+            <div className="flex items-center">
+              {product.nombre}
+              {product.esCombo && (
+                <Badge variant="outline" className="ml-2 text-xs border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/40">
+                  Combo
+                </Badge>
+              )}
+            </div>
+          </CardTitle>
+          <Badge variant="outline" className="capitalize text-xs border-[#91BEAD] text-[#29696B]">
+            {product.categoria}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="p-4 pt-2 pb-3">
+        <div className="flex gap-4 mb-3">
+          <div className="flex-shrink-0 h-16 w-16">
+            <ProductImage
+              productId={product._id}
+              alt={product.nombre}
+              width={64}
+              height={64}
+              quality={60}
+              className="h-16 w-16 rounded-md object-cover border border-[#91BEAD]/30"
+              fallbackClassName="h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30"
+              containerClassName="h-16 w-16"
+              useBase64={false}
+              priority={isInViewport}
+              key={`img-${product._id}-${product.hasImage ? 'has-image' : 'no-image'}`}
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            {product.descripcion && (
+              <p className="text-sm text-[#7AA79C] line-clamp-2 mb-2">
+                {product.descripcion}
+              </p>
+            )}
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div className="flex items-center">
+                <DollarSign className="w-4 h-4 text-[#91BEAD] mr-1" />
+                <span className="font-medium text-[#29696B]">${product.precio.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center">
+                <PackageOpen className="w-4 h-4 text-[#91BEAD] mr-1" />
+                <span className={`font-medium ${
+                  product.stock <= 0 
+                    ? 'text-red-600' 
+                    : product.stock <= LOW_STOCK_THRESHOLD
+                      ? 'text-yellow-600 flex items-center gap-1'
+                      : 'text-[#29696B]'
+                }`}>
+                  {product.stock <= LOW_STOCK_THRESHOLD && product.stock > 0 && (
+                    <AlertTriangle className="w-3 h-3 text-yellow-500 animate-pulse" />
+                  )}
+                  {product.stock <= 0 ? 'Sin stock' : `${product.stock} unid.`}
+                </span>
+              </div>
+            </div>
+            <div className="mt-2 text-xs text-[#7AA79C]">
+              <span className="block">Subcategoría: <span className="capitalize">{product.subCategoria}</span></span>
+              <span className="block">Vendidos: {product.vendidos || 0}</span>
+              {product.esCombo && product.itemsCombo && (
+                <span className="block">Contiene: {product.itemsCombo.length} productos</span>
+              )}
+            </div>
+          </div>
+        </div>
+      </CardContent>
+      <CardFooter className="p-2 flex justify-end gap-2 bg-[#DFEFE6]/20 border-t border-[#91BEAD]/10">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onEdit(product)}
+          className="text-[#29696B] hover:bg-[#DFEFE6]"
+          disabled={!canEdit}
+        >
+          <Edit className="w-4 h-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onDelete(product._id)}
+          className="text-red-600 hover:text-red-800 hover:bg-red-50"
+          disabled={!canEdit}
+        >
+          <Trash2 className="w-4 h-4" />
+        </Button>
+      </CardFooter>
+    </Card>
+  );
+});
+
 const InventorySection: React.FC = () => {
   // Inicializar React Query
   const queryClient = useQueryClient();
@@ -413,7 +799,7 @@ const InventorySection: React.FC = () => {
     [itemsPerPage]
   );
 
-  // Función para obtener productos con React Query
+  // Función para obtener productos con React Query - Optimizada
   const fetchProductsData = useCallback(async (
     page: number, 
     limit: number, 
@@ -529,7 +915,7 @@ const InventorySection: React.FC = () => {
     throw new Error(`Failed after ${maxRetries} retries`);
   };
 
-  // Usar React Query para cargar productos
+  // Usar React Query para cargar productos - Configuración optimizada
   const { 
     data, 
     isLoading, 
@@ -540,10 +926,11 @@ const InventorySection: React.FC = () => {
     () => fetchProductsData(currentPage, itemsPerPage, selectedCategory, debouncedSearchTerm),
     {
       keepPreviousData: true,
-      staleTime: 120000, // Aumentado a 2 minutos (120000ms)
-      cacheTime: 300000, // 5 minutos
-      refetchOnWindowFocus: false, // Deshabilitar auto refresh al enfocar la ventana
-      refetchOnMount: false, // No refrescar al montar componentes
+      staleTime: 300000, // Aumentado a 5 minutos
+      cacheTime: 3600000, // 1 hora - para mantener datos en caché más tiempo
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
+      refetchOnReconnect: false, // Deshabilitar auto refresh al reconectar
       onSuccess: (data) => {
         setProducts(data.items);
         setTotalItems(data.totalItems);
@@ -848,7 +1235,7 @@ const InventorySection: React.FC = () => {
     }
   );
 
-  // Debounced search
+  // Debounced search - optimizado con useCallback
   const debouncedSearch = useCallback(
     debounce((value: string) => {
       setDebouncedSearchTerm(value);
@@ -866,21 +1253,14 @@ const InventorySection: React.FC = () => {
     );
   }, [products]);
 
-  // Función para comprimir imágenes usando Canvas
+  // Función para comprimir imágenes usando Canvas - optimizada
   const compressImage = (file: File, maxWidth = 800, maxHeight = 800, quality = 0.7): Promise<File> => {
     return new Promise((resolve, reject) => {
       try {
         // Crear elementos para la manipulación de la imagen
         const reader = new FileReader();
         const img = new Image();
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
         
-        if (!ctx) {
-          console.warn('No se pudo obtener contexto 2D del canvas');
-          return resolve(file); // Devolver archivo original si hay error
-        }
-
         reader.onload = (event) => {
           if (!event.target?.result) {
             return resolve(file);
@@ -888,7 +1268,24 @@ const InventorySection: React.FC = () => {
           
           img.onload = () => {
             try {
-              // Calcular nuevas dimensiones manteniendo la relación de aspecto
+              // Usar OffscreenCanvas si está disponible para mejor rendimiento
+              let canvas: HTMLCanvasElement | OffscreenCanvas;
+              let ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
+              
+              if (typeof OffscreenCanvas !== 'undefined') {
+                canvas = new OffscreenCanvas(img.width, img.height);
+                ctx = canvas.getContext('2d');
+              } else {
+                canvas = document.createElement('canvas');
+                ctx = canvas.getContext('2d');
+              }
+              
+              if (!ctx) {
+                console.warn('No se pudo obtener contexto 2D del canvas');
+                return resolve(file);
+              }
+
+              // Calcular dimensiones
               let width = img.width;
               let height = img.height;
               
@@ -904,81 +1301,73 @@ const InventorySection: React.FC = () => {
                 }
               }
               
-              // Redondear para evitar problemas con píxeles
               width = Math.floor(width);
               height = Math.floor(height);
               
               // Configurar canvas con las nuevas dimensiones
-              canvas.width = width;
-              canvas.height = height;
-              
-              // Dibujar la imagen en el canvas redimensionada
-              ctx.drawImage(img, 0, 0, width, height);
-              
-              // Determinar el tipo de salida (preferir WebP si está disponible)
-              let outputType = 'image/jpeg'; // Por defecto
-              let fileName = file.name;
-              
-              if (file.type === 'image/png') {
-                outputType = 'image/png'; // Mantener transparencia si es PNG
-              } else if (file.type === 'image/webp' || 'toBlob' in canvas) {
-                outputType = 'image/webp'; // Usar WebP si es posible
-                // Actualizar extensión si cambiamos a WebP
-                if (!fileName.toLowerCase().endsWith('.webp')) {
-                  const nameParts = fileName.split('.');
-                  if (nameParts.length > 1) {
-                    nameParts.pop(); // Quitar extensión actual
-                    fileName = nameParts.join('.') + '.webp';
-                  } else {
-                    fileName += '.webp';
-                  }
-                }
+              if (canvas instanceof HTMLCanvasElement) {
+                canvas.width = width;
+                canvas.height = height;
+              } else {
+                // Para OffscreenCanvas
+                canvas.width = width;
+                canvas.height = height;
               }
               
-              // Exportar imagen a Blob/File
-              canvas.toBlob(
-                (blob) => {
-                  if (!blob) {
-                    console.warn('Error al generar blob, devolviendo archivo original');
-                    return resolve(file);
-                  }
-                  
-                  // Crear un nuevo File a partir del Blob
-                  const compressedFile = new File([blob], fileName, {
-                    type: outputType,
-                    lastModified: new Date().getTime()
-                  });
-                  
-                  console.log(`Imagen comprimida: ${formatFileSize(file.size)} -> ${formatFileSize(compressedFile.size)} (${Math.round((1 - compressedFile.size / file.size) * 100)}% reducción)`);
-                  
-                  resolve(compressedFile);
-                },
-                outputType,
-                quality
-              );
+              // Dibujar imagen
+              ctx.drawImage(img, 0, 0, width, height);
+              
+              // Determinar tipo de salida
+              const outputType = file.type === 'image/png' ? 'image/png' : 'image/webp';
+              
+              // Crear blob
+              const canvasToBlob = (canvas: HTMLCanvasElement | OffscreenCanvas, callback: (blob: Blob | null) => void) => {
+                if (canvas instanceof HTMLCanvasElement) {
+                  canvas.toBlob(callback, outputType, quality);
+                } else {
+                  // Para OffscreenCanvas
+                  canvas.convertToBlob({ type: outputType, quality }).then(callback);
+                }
+              };
+              
+              canvasToBlob(canvas, (blob) => {
+                if (!blob) {
+                  return resolve(file);
+                }
+                
+                // Crear filename con extensión apropiada
+                let fileName = file.name;
+                if (outputType === 'image/webp' && !fileName.toLowerCase().endsWith('.webp')) {
+                  const nameParts = fileName.split('.');
+                  fileName = nameParts.length > 1 
+                    ? nameParts.slice(0, -1).join('.') + '.webp'
+                    : fileName + '.webp';
+                }
+                
+                const compressedFile = new File([blob], fileName, {
+                  type: outputType,
+                  lastModified: Date.now()
+                });
+                
+                resolve(compressedFile);
+              });
+              
             } catch (err) {
               console.error('Error durante la compresión:', err);
-              resolve(file); // Devolver archivo original si hay error
+              resolve(file);
             }
           };
           
-          img.onerror = () => {
-            console.warn('Error al cargar imagen para compresión');
-            resolve(file); // Devolver archivo original si hay error
-          };
-          
+          img.onerror = () => resolve(file);
           img.src = event.target.result as string;
         };
         
-        reader.onerror = () => {
-          console.warn('Error al leer archivo para compresión');
-          resolve(file); // Devolver archivo original si hay error
-        };
-        
+        reader.onerror = () => resolve(file);
         reader.readAsDataURL(file);
+        
       } catch (err) {
         console.error('Error general en compresión:', err);
-        resolve(file); // Devolver archivo original si hay algún error
+        resolve(file);
       }
     });
   };
@@ -1638,7 +2027,7 @@ const InventorySection: React.FC = () => {
     ? `${indexOfFirstProduct + 1}-${Math.min(indexOfLastProduct, totalItems)} de ${totalItems}`
     : '0 de 0';
 
-  // Obtener productos no combo para selector de combo - Optimizado con useMemo
+  // Obtener productos no combo para selector - Optimizado con useMemo
   const nonComboProducts = useMemo(() => {
     if (!Array.isArray(productOptions)) return [];
     return productOptions.filter(p => !p.esCombo);
@@ -1777,45 +2166,17 @@ const InventorySection: React.FC = () => {
         </div>
       )}
 
-      {/* Tabla para pantallas medianas y grandes */}
-      <div ref={tableRef} className="hidden md:block bg-white rounded-xl shadow-sm overflow-hidden border border-[#91BEAD]/20">
+      {/* Tabla para pantallas medianas y grandes - IMPLEMENTACIÓN VIRTUALIZADA */}
+      <div ref={tableRef} className="hidden md:block bg-white rounded-xl shadow-sm overflow-hidden border border-[#91BEAD]/20 h-[70vh]">
         {!isLoading && products.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-[#DFEFE6]/50 border-b border-[#91BEAD]/20">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
-                    Nombre
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
-                    Categoría
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
-                    Precio
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
-                    Stock
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
-                    Vendidos
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-[#29696B] uppercase tracking-wider">
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-[#91BEAD]/20">
-                {products.map((product) => (
-                  <ProductRow 
-                    key={`${product._id}-${product.hasImage ? 'has-image' : 'no-image'}`}
-                    product={product}
-                    onEdit={handleEdit}
-                    onDelete={confirmDelete}
-                    userSections={userSections}
-                  />
-                ))}
-              </tbody>
-            </table>
+          <div className="overflow-auto h-full">
+            <VirtualizedProductTable
+              products={products}
+              onEdit={handleEdit}
+              onDelete={confirmDelete}
+              userSections={userSections}
+              tableContainerRef={tableRef}
+            />
           </div>
         )}
         
@@ -1833,8 +2194,8 @@ const InventorySection: React.FC = () => {
         )}
       </div>
 
-      {/* Vista de Tarjetas para dispositivos móviles */}
-      <div ref={mobileListRef} id="mobile-products-list" className="md:hidden grid grid-cols-1 gap-4">
+      {/* Vista de Tarjetas para dispositivos móviles - IMPLEMENTACIÓN VIRTUALIZADA */}
+      <div ref={mobileListRef} id="mobile-products-list" className="md:hidden">
         {/* Paginación visible en la parte superior para móvil */}
         {!isLoading && totalPages > 1 && (
           <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20">
@@ -1847,115 +2208,14 @@ const InventorySection: React.FC = () => {
           </div>
         )}
         
-        {!isLoading && products.map(product => (
-          <Card 
-            key={`${product._id}-${product.hasImage ? 'has-image' : 'no-image'}`} 
-            className={`overflow-hidden shadow-sm border ${
-              product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD 
-                ? 'border-yellow-300 bg-yellow-50' 
-                : product.stock <= 0 
-                  ? 'border-red-300 bg-red-50'
-                  : 'border-[#91BEAD]/20 bg-white'
-            }`}
-          >
-            <CardHeader className="p-4 pb-2">
-              <div className="flex justify-between items-center">
-                <CardTitle className="text-base truncate mr-2 text-[#29696B]">
-                  <div className="flex items-center">
-                    {product.nombre}
-                    {product.esCombo && (
-                      <Badge variant="outline" className="ml-2 text-xs border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/40">
-                        Combo
-                      </Badge>
-                    )}
-                  </div>
-                </CardTitle>
-                <Badge variant="outline" className="capitalize text-xs border-[#91BEAD] text-[#29696B]">
-                  {product.categoria}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="p-4 pt-2 pb-3">
-              <div className="flex gap-4 mb-3">
-                <div className="flex-shrink-0 h-16 w-16">
-                  <ProductImage
-                    productId={product._id}
-                    alt={product.nombre}
-                    width={64}
-                    height={64}
-                    quality={80}
-                    className="h-16 w-16 rounded-md object-cover border border-[#91BEAD]/30"
-                    fallbackClassName="h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30"
-                    containerClassName="h-16 w-16"
-                    useBase64={false}
-                    key={`img-${product._id}-${product.hasImage ? 'has-image' : 'no-image'}`} // Forzar actualización cuando cambia hasImage
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  {product.descripcion && (
-                    <p className="text-sm text-[#7AA79C] line-clamp-2 mb-2">
-                      {product.descripcion}
-                    </p>
-                  )}
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div className="flex items-center">
-                      <DollarSign className="w-4 h-4 text-[#91BEAD] mr-1" />
-                      <span className="font-medium text-[#29696B]">${product.precio.toFixed(2)}</span>
-                    </div>
-                    <div className="flex items-center">
-                      <PackageOpen className="w-4 h-4 text-[#91BEAD] mr-1" />
-                      <span className={`font-medium ${
-                        product.stock <= 0 
-                          ? 'text-red-600' 
-                          : product.stock <= LOW_STOCK_THRESHOLD
-                            ? 'text-yellow-600 flex items-center gap-1'
-                            : 'text-[#29696B]'
-                      }`}>
-                        {product.stock <= LOW_STOCK_THRESHOLD && product.stock > 0 && (
-                          <AlertTriangle className="w-3 h-3 text-yellow-500 animate-pulse" />
-                        )}
-                        {product.stock <= 0 ? 'Sin stock' : `${product.stock} unid.`}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="mt-2 text-xs text-[#7AA79C]">
-                    <span className="block">Subcategoría: <span className="capitalize">{product.subCategoria}</span></span>
-                    <span className="block">Vendidos: {product.vendidos || 0}</span>
-                    {product.esCombo && product.itemsCombo && (
-                      <span className="block">Contiene: {product.itemsCombo.length} productos</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-            <CardFooter className="p-2 flex justify-end gap-2 bg-[#DFEFE6]/20 border-t border-[#91BEAD]/10">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleEdit(product)}
-                className="text-[#29696B] hover:bg-[#DFEFE6]"
-                disabled={
-                  (userSections === 'limpieza' && product.categoria !== 'limpieza') ||
-                  (userSections === 'mantenimiento' && product.categoria !== 'mantenimiento')
-                }
-              >
-                <Edit className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => confirmDelete(product._id)}
-                className="text-red-600 hover:text-red-800 hover:bg-red-50"
-                disabled={
-                  (userSections === 'limpieza' && product.categoria !== 'limpieza') ||
-                  (userSections === 'mantenimiento' && product.categoria !== 'mantenimiento')
-                }
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            </CardFooter>
-          </Card>
-        ))}
+        {!isLoading && products.length > 0 && (
+          <MobileProductList
+            products={products}
+            onEdit={handleEdit}
+            onDelete={confirmDelete}
+            userSections={userSections}
+          />
+        )}
         
         {/* Indicador de carga en móvil */}
         {isFetching && (
@@ -2035,7 +2295,7 @@ const InventorySection: React.FC = () => {
                       <SelectValue placeholder="Seleccionar categoría" />
                     </SelectTrigger>
                     <SelectContent className="border-[#91BEAD]">
-                      <SelectItem value="limpieza" disabled={userSections === 'mantenimiento'}>Limpieza</SelectItem>
+                    <SelectItem value="limpieza" disabled={userSections === 'mantenimiento'}>Limpieza</SelectItem>
                       <SelectItem value="mantenimiento" disabled={userSections === 'limpieza'}>Mantenimiento</SelectItem>
                     </SelectContent>
                   </Select>

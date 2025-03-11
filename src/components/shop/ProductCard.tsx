@@ -13,8 +13,8 @@ import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-// Importar el componente ProductImage
-import ProductImage from '@/components/admin/components/ProductImage';
+// Importar el componente OptimizedProductImage en lugar del original
+import OptimizedProductImage from '@/components/OptimizedProductImage';
 
 interface Product {
   _id: string;
@@ -142,17 +142,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                   className="max-w-full max-h-full object-contain"
                 />
               ) : (
-                <ProductImage
+                <OptimizedProductImage
                   productId={product._id}
                   alt={product.nombre}
                   width={300}
                   height={300}
-                  quality={compact ? 75 : 85} // Reducir calidad en modo compacto para mejor rendimiento
+                  quality={compact ? 60 : 75} // Calidad reducida para mejor rendimiento
                   className="max-w-full max-h-full object-contain"
                   containerClassName="h-full w-full flex items-center justify-center"
                   fallbackClassName="h-full w-full flex items-center justify-center"
                   placeholderText="Sin imagen"
                   useBase64={useBase64}
+                  priority={false} // Solo priorizar imágenes críticas
                 />
               )}
             </div>
