@@ -84,6 +84,14 @@ const UserForm: React.FC<UserFormProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Asegurarnos que secciones tiene un valor válido
+    if (!formData.secciones) {
+      setFormData({
+        ...formData,
+        secciones: 'ambos'
+      });
+    }
+    
     // Preparar datos con la configuración temporal correcta
     const submissionData = {
       ...formData,
@@ -105,28 +113,16 @@ const UserForm: React.FC<UserFormProps> = ({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid gap-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="usuario">Nombre de Usuario <span className="text-red-500">*</span></Label>
-                <Input
-                  id="usuario"
-                  type="text"
-                  value={formData.usuario}
-                  onChange={(e) => setFormData({ ...formData, usuario: e.target.value })}
-                  placeholder="usuario123"
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email || ''}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="ejemplo@correo.com"
-                />
-              </div>
+            <div>
+              <Label htmlFor="usuario">Nombre de Usuario <span className="text-red-500">*</span></Label>
+              <Input
+                id="usuario"
+                type="text"
+                value={formData.usuario}
+                onChange={(e) => setFormData({ ...formData, usuario: e.target.value })}
+                placeholder="usuario123"
+                required
+              />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

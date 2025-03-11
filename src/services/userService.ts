@@ -9,15 +9,15 @@ const API_URL = 'https://lyme-back.vercel.app/api/auth';
 // Tipo para el creador de un usuario
 export interface UserCreator {
   _id: string;
-  email?: string;
   usuario?: string;
+  nombre?: string;
+  apellido?: string;
 }
 
 // Tipo para un usuario administrado
 export interface AdminUser {
   _id: string;
   usuario: string;
-  email?: string;
   nombre?: string;
   apellido?: string;
   role: string;
@@ -28,13 +28,14 @@ export interface AdminUser {
   createdBy?: UserCreator;
   expiresAt?: string;
   secciones?: 'limpieza' | 'mantenimiento' | 'ambos';
+  direccion?: string;
+  ciudad?: string;
 }
 
 // Tipo para datos de creación o actualización de usuario
 export interface CreateUserData {
   usuario: string;
   password: string;
-  email?: string;
   nombre?: string;
   apellido?: string;
   celular?: string;
@@ -42,6 +43,8 @@ export interface CreateUserData {
   expirationMinutes?: number;
   secciones: 'limpieza' | 'mantenimiento' | 'ambos';
   isTemporary?: boolean;
+  direccion?: string;
+  ciudad?: string;
 }
 
 /**
@@ -131,6 +134,11 @@ export const getUserById = async (id: string): Promise<AdminUser> => {
  * Crear un nuevo usuario
  */
 export const createUser = async (userData: CreateUserData): Promise<AdminUser> => {
+  // Asegurarnos que secciones es obligatorio
+  if (!userData.secciones) {
+    userData.secciones = 'ambos';
+  }
+  
   return await fetchApi('/register', {
     method: 'POST',
     body: JSON.stringify(userData)

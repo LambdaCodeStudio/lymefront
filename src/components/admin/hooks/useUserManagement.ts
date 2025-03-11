@@ -3,7 +3,7 @@
  * Implementa la nueva estructura de roles
  */
 import { useState, useEffect, useCallback } from 'react';
-import userService, {  type AdminUser, type CreateUserData } from '../../../services/userService';
+import userService, { AdminUser, CreateUserData } from '../services/userService';
 import { useNotification } from '@/context/NotificationContext';
 import { getAvailableRoles, ROLES } from '../shared/UserRolesConfig';
 
@@ -88,11 +88,20 @@ export const useUserManagement = () => {
 
   // Resetear formulario
   const resetForm = useCallback(() => {
+    // Determinar el rol por defecto para el nuevo usuario
+    let defaultRole = ROLES.OPERARIO;
+    if (availableRoles.length > 0) {
+      defaultRole = availableRoles[0].value;
+    }
+    
     setFormData({
       usuario: '',
       password: '',
-      role: availableRoles.length > 0 ? availableRoles[0].value : ROLES.OPERARIO,
-      secciones: 'ambos'
+      role: defaultRole,
+      secciones: 'ambos',
+      nombre: '',
+      apellido: '',
+      celular: ''
     });
     setEditingUser(null);
   }, [availableRoles]);
@@ -103,6 +112,11 @@ export const useUserManagement = () => {
     setError('');
     
     try {
+      // Validar que secciones sea obligatorio
+      if (!formData.secciones) {
+        formData.secciones = 'ambos';
+      }
+      
       if (editingUser) {
         // Actualizar usuario existente
         await userService.updateUser(editingUser._id, formData);
@@ -180,16 +194,20 @@ export const useUserManagement = () => {
     setEditingUser(user);
     
     // Preparar datos del formulario con la información del usuario
+    // Nota: No incluimos email ya que no es parte del esquema actual
     setFormData({
       usuario: user.usuario,
       password: '', // No enviamos la contraseña actual por seguridad
-      email: user.email,
       nombre: user.nombre,
       apellido: user.apellido,
       celular: user.celular,
       role: user.role,
       secciones: user.secciones || 'ambos',
-      expirationMinutes: user.expiresAt && user.role === ROLES.TEMPORARIO ? 30 : undefined
+      direccion: user.direccion,
+      ciudad: user.ciudad,
+      expirationMinutes: user.expiresAt && 
+        (user.role === ROLES.TEMPORARIO || 
+         (user.role === ROLES.OPERARIO && user.expiresAt)) ? 30 : undefined
     });
     
     setShowModal(true);

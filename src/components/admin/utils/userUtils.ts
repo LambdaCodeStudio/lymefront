@@ -1,97 +1,110 @@
 /**
- * Utilidades para el manejo de usuarios en el panel administrativo
- * Funciones auxiliares para mostrar información de usuario y filtrado
+ * Utilidades para gestionar usuarios en el panel de administración
+ * Actualizado para reflejar el nuevo esquema de usuario
  */
 import type { AdminUser } from '../services/userService';
+import { ROLES } from '../shared/UserRolesConfig';
 
 /**
- * Obtiene el identificador principal del usuario (email, usuario o ID)
- * @param user - Usuario a procesar
- * @returns Cadena con el identificador principal
+ * Obtener identificador principal del usuario para mostrar
+ * Ahora el identificador principal es 'usuario' en lugar de 'email'
  */
-export function getUserIdentifier(user: AdminUser): string {
-  return user.email || user.usuario || `Usuario ID: ${user._id.substring(0, 8)}`;
-}
+export const getUserIdentifier = (user: AdminUser): string => {
+  if (!user) return 'Usuario no disponible';
+  
+  return user.usuario || `ID:${user._id.substring(0, 8)}`;
+};
 
 /**
- * Obtiene el nombre completo del usuario si está disponible
- * @param user - Usuario a procesar
- * @returns Nombre completo o null si no hay información
+ * Obtener nombre completo del usuario si está disponible
  */
-export function getFullName(user: AdminUser): string | null {
-  if (user.nombre || user.apellido) {
-    return `${user.nombre || ''} ${user.apellido || ''}`.trim();
+export const getFullName = (user: AdminUser): string | null => {
+  if (!user) return null;
+  
+  const nombre = user.nombre ? user.nombre.trim() : '';
+  const apellido = user.apellido ? user.apellido.trim() : '';
+  
+  if (nombre || apellido) {
+    return `${nombre} ${apellido}`.trim();
   }
+  
   return null;
-}
+};
 
 /**
- * Filtra una lista de usuarios según criterios de búsqueda
- * @param users - Lista de usuarios a filtrar
- * @param searchTerm - Término de búsqueda
- * @param showInactive - Si se deben mostrar usuarios inactivos
- * @returns Lista filtrada de usuarios
+ * Filtrar usuarios basado en término de búsqueda y estado activo
  */
-export function filterUsers(
-  users: AdminUser[],
-  searchTerm: string,
-  showInactive: boolean
-): AdminUser[] {
+export const filterUsers = (users: AdminUser[], searchTerm: string, showInactiveUsers: boolean): AdminUser[] => {
+  if (!Array.isArray(users)) return [];
+  
   return users.filter(user => {
-    // Filtro por texto de búsqueda
-    const searchFields = [
-      user.email?.toLowerCase() || '',
-      user.usuario?.toLowerCase() || '',
-      user.nombre?.toLowerCase() || '',
-      user.apellido?.toLowerCase() || '',
-      user.role.toLowerCase()
-    ];
+    // Filtrar por estado activo
+    if (!showInactiveUsers && !user.isActive) {
+      return false;
+    }
     
-    const matchesSearch = searchFields.some(field => 
-      field.includes(searchTerm.toLowerCase())
+    // Si no hay término de búsqueda, mostrar todos
+    if (!searchTerm) {
+      return true;
+    }
+    
+    const term = searchTerm.toLowerCase();
+    
+    // Buscar en campos relevantes del usuario
+    return (
+      (user.usuario && user.usuario.toLowerCase().includes(term)) ||
+      (user.nombre && user.nombre.toLowerCase().includes(term)) ||
+      (user.apellido && user.apellido.toLowerCase().includes(term)) ||
+      (user.celular && user.celular.toLowerCase().includes(term)) ||
+      (user.role && user.role.toLowerCase().includes(term))
     );
-    
-    // Filtro por estado activo/inactivo
-    return matchesSearch && (showInactive || user.isActive);
   });
-}
+};
 
 /**
- * Obtiene el estado de activación en formato legible
- * @param user - Usuario a evaluar
- * @returns Cadena con el estado de activación
+ * Verificar si un usuario es temporal (temporario o operario con expiración)
  */
-export function getUserStatus(user: AdminUser): string {
-  if (!user.isActive) {
-    return 'Inactivo';
-  }
-  
-  if (user.role === 'temporal') {
-    if (user.expiresAt && new Date(user.expiresAt) > new Date()) {
-      return 'Temporal Activo';
-    }
-    return 'Expirado';
-  }
-  
-  return 'Activo';
-}
+export const isTemporaryUser = (user: AdminUser): boolean => {
+  return user.role === ROLES.TEMPORARIO || 
+    (user.role === ROLES.OPERARIO && !!user.expiresAt);
+};
 
 /**
- * Obtiene las clases CSS para el estado de un usuario
- * @param user - Usuario a evaluar
- * @returns Clases CSS para mostrar el estado
+ * Verificar si un usuario puede ser modificado por el usuario actual
  */
-export function getUserStatusClasses(user: AdminUser): string {
-  if (!user.isActive) {
-    return 'bg-red-100 text-red-800';
+export const canModifyUser = (currentUserRole: string, targetUserRole: string): boolean => {
+  // Administrador puede modificar a cualquiera
+  if (currentUserRole === ROLES.ADMIN) return true;
+  
+  // Supervisor de supervisores puede modificar a supervisores y roles inferiores
+  if (currentUserRole === ROLES.SUPERVISOR_DE_SUPERVISORES) {
+    return ![ROLES.ADMIN, ROLES.SUPERVISOR_DE_SUPERVISORES].includes(targetUserRole);
   }
   
-  if (user.role === 'temporal') {
-    if (user.expiresAt && new Date(user.expiresAt) > new Date()) {
-      return 'bg-yellow-100 text-yellow-800';
-    }
-    return 'bg-red-100 text-red-800';
-  }
+  // Otros roles no pueden modificar usuarios
+  return false;
+};
+
+/**
+ * Obtener información sobre la expiración de un usuario temporal
+ */
+export const getExpirationInfo = (user: AdminUser): { expired: boolean, minutes: number } | null => {
+  if (!user.expiresAt) return null;
   
-  return 'bg-green-100 text-green-800';
-}
+  const now = new Date();
+  const expirationDate = new Date(user.expiresAt);
+  
+  return {
+    expired: now > expirationDate,
+    minutes: Math.max(0, Math.floor((expirationDate.getTime() - now.getTime()) / (1000 * 60)))
+  };
+};
+
+export default {
+  getUserIdentifier,
+  getFullName,
+  filterUsers,
+  isTemporaryUser,
+  canModifyUser,
+  getExpirationInfo
+};
