@@ -225,75 +225,76 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         className={`h-full flex flex-col bg-gradient-to-br ${getGradientClass()} backdrop-blur-sm border ${getBorderClass()} hover:shadow-lg transition-all overflow-hidden`}
         onClick={onShowDetails}
       >
-        {/* Imagen del producto */}
-        <div className="relative pt-2 sm:pt-3 px-2 sm:px-3">
-          <div className="aspect-square rounded-lg overflow-hidden bg-white/10 flex items-center justify-center">
-            <div className="w-full h-full flex items-center justify-center">
-              {/* Usar la imagen base64 directamente si está disponible */}
-              {useBase64 && product.imageBase64 ? (
+        {/* Imagen del producto - CORREGIDO PARA CENTRADO PERFECTO */}
+        <div className="pt-2 sm:pt-3 px-2 sm:px-3">
+          <div className="aspect-square w-full rounded-lg overflow-hidden bg-white/10 relative">
+            {useBase64 && product.imageBase64 ? (
+              <div className="absolute inset-0 flex items-center justify-center p-2">
                 <img
                   src={product.imageBase64}
                   alt={product.nombre}
-                  className="max-w-full max-h-full object-contain"
+                  className="max-h-full max-w-full w-auto h-auto object-contain"
                 />
-              ) : (
+              </div>
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center p-2">
                 <OptimizedProductImage
                   productId={product._id}
                   alt={product.nombre}
                   width={300}
                   height={300}
-                  quality={compact ? 60 : 75} // Calidad reducida para mejor rendimiento
-                  className="max-w-full max-h-full object-contain"
-                  containerClassName="h-full w-full flex items-center justify-center"
-                  fallbackClassName="h-full w-full flex items-center justify-center"
+                  quality={compact ? 60 : 75}
+                  className="max-h-full max-w-full w-auto h-auto object-contain"
+                  containerClassName="flex items-center justify-center w-full h-full"
+                  fallbackClassName="flex items-center justify-center w-full h-full text-white/70"
                   placeholderText={product.esCombo ? "Combo" : "Sin imagen"}
                   useBase64={useBase64}
-                  priority={false} // Solo priorizar imágenes críticas
+                  priority={false}
                 />
-              )}
-            </div>
-          </div>
+              </div>
+            )}
 
-          {/* Badge de combo */}
-          {product.esCombo && (
-            <Badge 
-              className="absolute top-3 sm:top-4 left-3 sm:left-4 bg-purple-100 text-purple-800 border border-purple-300"
+            {/* Badge de combo */}
+            {product.esCombo && (
+              <Badge 
+                className="absolute top-2 left-2 z-10 bg-purple-100 text-purple-800 border border-purple-300"
+              >
+                <PackagePlus size={12} className="mr-1" />
+                Combo
+              </Badge>
+            )}
+
+            {/* Indicador de stock - solo para productos de limpieza o con otra lógica para mantenimiento */}
+            {(product.categoria === 'limpieza' || product.categoria === 'mantenimiento') && (
+              <Badge className={`absolute ${product.esCombo ? 'top-9' : 'top-2'} left-2 z-10
+                ${stockStyle.bg} ${stockStyle.text} border ${stockStyle.border}
+                ${compact ? 'text-xs px-1.5 py-0.5' : ''}`}>
+                {compact ? (
+                  <span>{product.categoria === 'mantenimiento' ? 'Disponible' : `Stock: ${product.stock}`}</span>
+                ) : (
+                  <>
+                    {stockStyle.icon}
+                    {stockStyle.label}
+                  </>
+                )}
+              </Badge>
+            )}
+
+            {/* Botón de favorito - más pequeño en modo compacto */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`absolute top-2 right-2 z-10 bg-white/50 backdrop-blur-md hover:bg-red/70 rounded-full 
+                ${compact ? 'h-6 w-6' : 'h-8 w-8'} 
+                ${isFavorite ? 'text-red-500' : 'text-[#00888A]/70'}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleFavorite();
+              }}
             >
-              <PackagePlus size={12} className="mr-1" />
-              Combo
-            </Badge>
-          )}
-
-          {/* Indicador de stock - solo para productos de limpieza o con otra lógica para mantenimiento */}
-          {(product.categoria === 'limpieza' || product.categoria === 'mantenimiento') && (
-            <Badge className={`absolute ${product.esCombo ? 'top-10 sm:top-12' : 'top-3 sm:top-4'} left-3 sm:left-4 
-              ${stockStyle.bg} ${stockStyle.text} border ${stockStyle.border}
-              ${compact ? 'text-xs px-1.5 py-0.5' : ''}`}>
-              {compact ? (
-                <span>{product.categoria === 'mantenimiento' ? 'Disponible' : `Stock: ${product.stock}`}</span>
-              ) : (
-                <>
-                  {stockStyle.icon}
-                  {stockStyle.label}
-                </>
-              )}
-            </Badge>
-          )}
-
-          {/* Botón de favorito - más pequeño en modo compacto */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className={`absolute top-3 sm:top-4 right-3 sm:right-4 bg-white/50 backdrop-blur-md hover:bg-red/70 rounded-full 
-              ${compact ? 'h-6 w-6' : 'h-8 w-8'} 
-              ${isFavorite ? 'text-red-500' : 'text-[#00888A]/70'}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleFavorite();
-            }}
-          >
-            <Heart className={isFavorite ? 'fill-current' : ''} size={compact ? 12 : 16} />
-          </Button>
+              <Heart className={isFavorite ? 'fill-current' : ''} size={compact ? 12 : 16} />
+            </Button>
+          </div>
         </div>
 
         <CardContent className={`flex-grow ${compact ? 'pt-2 px-3' : 'pt-4'}`}>

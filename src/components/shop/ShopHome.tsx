@@ -401,41 +401,6 @@ export const ShopHome: React.FC = () => {
                 </div>
               )}
 
-              {/* Sección de información */}
-              {!showFavorites && selectedCategory === 'all' && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-                  <div className="bg-white/10 backdrop-blur-sm p-6 rounded-lg border border-[#80CFB0]/30 text-center">
-                    <div className="inline-flex items-center justify-center w-12 h-12 bg-[#00888A]/20 rounded-full mb-4">
-                      <Package className="h-6 w-6 text-[#D4F5E6]" />
-                    </div>
-                    <h3 className="text-lg font-medium mb-2 text-white">Productos de calidad</h3>
-                    <p className="text-[#D4F5E6]/80 text-sm">
-                      Todos nuestros productos cumplen con los más altos estándares de calidad.
-                    </p>
-                  </div>
-
-                  <div className="bg-white/10 backdrop-blur-sm p-6 rounded-lg border border-[#80CFB0]/30 text-center">
-                    <div className="inline-flex items-center justify-center w-12 h-12 bg-[#00888A]/20 rounded-full mb-4">
-                      <Truck className="h-6 w-6 text-[#D4F5E6]" />
-                    </div>
-                    <h3 className="text-lg font-medium mb-2 text-white">Entrega rápida</h3>
-                    <p className="text-[#D4F5E6]/80 text-sm">
-                      Coordinamos la entrega de tus productos en el menor tiempo posible.
-                    </p>
-                  </div>
-
-                  <div className="bg-white/10 backdrop-blur-sm p-6 rounded-lg border border-[#80CFB0]/30 text-center">
-                    <div className="inline-flex items-center justify-center w-12 h-12 bg-[#00888A]/20 rounded-full mb-4">
-                      <Clock className="h-6 w-6 text-[#D4F5E6]" />
-                    </div>
-                    <h3 className="text-lg font-medium mb-2 text-white">Soporte técnico</h3>
-                    <p className="text-[#D4F5E6]/80 text-sm">
-                      Nuestro equipo está disponible para resolver cualquier duda o problema.
-                    </p>
-                  </div>
-                </div>
-              )}
-
               {/* Lista de productos */}
               <div>
                 {showFavorites && favorites.length === 0 ? (
