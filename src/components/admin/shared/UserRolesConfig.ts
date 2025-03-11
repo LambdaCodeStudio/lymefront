@@ -1,72 +1,102 @@
 /**
- * Configuración de roles de usuario y sus permisos
- * Define los tipos de roles y las funciones para gestionar permisos
+ * Configuración de roles y permisos para el sistema
+ * Actualizada con la nueva estructura de roles
  */
-export type RoleType = 'admin' | 'supervisor_de_supervisores' | 'supervisor' | 'operario' | 'temporario';
 
+// Constantes de roles
+export const ROLES = {
+  ADMIN: 'admin',
+  SUPERVISOR_DE_SUPERVISORES: 'supervisor_de_supervisores',
+  SUPERVISOR: 'supervisor',
+  OPERARIO: 'operario',
+  TEMPORARIO: 'temporario'
+};
+
+// Tipo para opciones de rol en UI
 export interface RoleOption {
-  value: RoleType;
+  value: string;
   label: string;
 }
 
-/**
- * Obtiene los roles disponibles para crear o editar usuarios
- * basados en el rol del usuario actual
- * @param userRole - Rol del usuario actual
- * @returns Lista de roles disponibles
- */
-export function getAvailableRoles(userRole: RoleType | null): RoleOption[] {
-  switch (userRole) {
-    case 'admin':
-      return [
-        { value: 'admin', label: 'Administrador' },
-        { value: 'supervisor_de_supervisores', label: 'Supervisor de Supervisores' },
-        { value: 'supervisor', label: 'Supervisor' },
-        { value: 'operario', label: 'Operario' },
-        { value: 'temporario', label: 'Temporario' }
-      ];
-    case 'supervisor_de_supervisores':
-      return [
-        { value: 'supervisor', label: 'Supervisor' },
-        { value: 'operario', label: 'Operario' },
-        { value: 'temporario', label: 'Temporario' }
-      ];
-    case 'supervisor':
-      return [
-        { value: 'operario', label: 'Operario' },
-        { value: 'temporario', label: 'Temporario' }
-      ];
+// Opciones de roles para la UI
+export const roleOptions: Record<string, RoleOption[]> = {
+  // Opciones disponibles para administrador
+  [ROLES.ADMIN]: [
+    { value: ROLES.ADMIN, label: 'Administrador' },
+    { value: ROLES.SUPERVISOR_DE_SUPERVISORES, label: 'Supervisor de Supervisores' },
+    { value: ROLES.SUPERVISOR, label: 'Supervisor' },
+    { value: ROLES.OPERARIO, label: 'Operario' },
+    { value: ROLES.TEMPORARIO, label: 'Temporario' }
+  ],
+  // Opciones disponibles para supervisor de supervisores
+  [ROLES.SUPERVISOR_DE_SUPERVISORES]: [
+    { value: ROLES.SUPERVISOR, label: 'Supervisor' },
+    { value: ROLES.OPERARIO, label: 'Operario' },
+    { value: ROLES.TEMPORARIO, label: 'Temporario' }
+  ],
+  // Roles sin permisos de creación
+  [ROLES.SUPERVISOR]: [],
+  [ROLES.OPERARIO]: [],
+  [ROLES.TEMPORARIO]: []
+};
+
+// Función para verificar permisos de creación
+export const canCreateRole = (creatorRole: string, newRole: string): boolean => {
+  switch (creatorRole) {
+    case ROLES.ADMIN:
+      return [ROLES.ADMIN, ROLES.SUPERVISOR_DE_SUPERVISORES, ROLES.SUPERVISOR, ROLES.OPERARIO, ROLES.TEMPORARIO].includes(newRole);
+    case ROLES.SUPERVISOR_DE_SUPERVISORES:
+      return [ROLES.SUPERVISOR, ROLES.OPERARIO, ROLES.TEMPORARIO].includes(newRole);
     default:
-      return [
-        { value: 'temporario', label: 'Temporario' }
-      ];
+      return false;
   }
-}
+};
 
-/**
- * Verifica si un usuario con cierto rol puede crear usuarios con otro rol
- * @param creatorRole - Rol del usuario creador
- * @param targetRole - Rol que se intenta crear
- * @returns true si está permitido, false si no
- */
-export function canCreateRole(creatorRole: RoleType, targetRole: RoleType): boolean {
-  const availableRoles = getAvailableRoles(creatorRole);
-  return availableRoles.some(role => role.value === targetRole);
-}
+// Función para verificar permisos de edición
+export const canEditRole = (editorRole: string, targetRole: string): boolean => {
+  return canCreateRole(editorRole, targetRole);
+};
 
-/**
- * Obtiene el nombre mostrable de un rol
- * @param role - Tipo de rol
- * @returns Nombre en español del rol
- */
-export function getRoleName(role: RoleType): string {
-  const roleMap: Record<RoleType, string> = {
-    'admin': 'Administrador',
-    'supervisor_de_supervisores': 'Supervisor de Supervisores',
-    'supervisor': 'Supervisor',
-    'operario': 'Operario',
-    'temporario': 'Temporario'
-  };
-  
-  return roleMap[role] || role;
-}
+// Función para obtener roles disponibles según el rol actual
+export const getAvailableRoles = (currentRole: string): RoleOption[] => {
+  return roleOptions[currentRole] || [];
+};
+
+// Función para verificar si un rol tiene permisos de administración
+export const hasAdminPermissions = (role: string): boolean => {
+  return [ROLES.ADMIN, ROLES.SUPERVISOR_DE_SUPERVISORES].includes(role);
+};
+
+// Función para verificar si un usuario es temporal (temporario o operario con expiración)
+export const isTemporaryUser = (role: string, expiresAt: string | null): boolean => {
+  return role === ROLES.TEMPORARIO || (role === ROLES.OPERARIO && !!expiresAt);
+};
+
+// Función para obtener el peso jerárquico de un rol (útil para ordenar)
+export const getRoleWeight = (role: string): number => {
+  switch (role) {
+    case ROLES.ADMIN:
+      return 100;
+    case ROLES.SUPERVISOR_DE_SUPERVISORES:
+      return 80;
+    case ROLES.SUPERVISOR:
+      return 60;
+    case ROLES.OPERARIO:
+      return 40;
+    case ROLES.TEMPORARIO:
+      return 20;
+    default:
+      return 0;
+  }
+};
+
+export default {
+  ROLES,
+  roleOptions,
+  canCreateRole,
+  canEditRole,
+  getAvailableRoles,
+  hasAdminPermissions,
+  isTemporaryUser,
+  getRoleWeight
+};

@@ -1,193 +1,205 @@
-// src/services/userService.ts
-import axios from 'axios';
+/**
+ * Servicio para gestionar usuarios en la aplicación
+ * Actualizado para soportar la nueva estructura de roles y expiración de usuarios
+ */
 
-// API URL desde variables de entorno
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://lyme-back.vercel.app/api';
+// URL base para el backend
+const API_URL = 'https://lyme-back.vercel.app/api/auth';
 
-// Definición de tipos que reflejan el esquema del backend
+// Tipo para el creador de un usuario
+export interface UserCreator {
+  _id: string;
+  email?: string;
+  usuario?: string;
+}
+
+// Tipo para un usuario administrado
 export interface AdminUser {
   _id: string;
   usuario: string;
+  email?: string;
   nombre?: string;
   apellido?: string;
-  email?: string;
+  role: string;
   celular?: string;
-  role: 'admin' | 'supervisor_de_supervisores' | 'supervisor' | 'operario' | 'temporario';
   isActive: boolean;
-  createdBy?: {
-    _id: string;
-    usuario?: string;
-    nombre?: string;
-    apellido?: string;
-    email?: string;
-  };
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy?: UserCreator;
   expiresAt?: string;
-  secciones: 'limpieza' | 'mantenimiento' | 'ambos';
-  expirationInfo?: {
-    expired: boolean;
-    expirationDate: string;
-    minutesRemaining: number;
-  };
+  secciones?: 'limpieza' | 'mantenimiento' | 'ambos';
 }
 
+// Tipo para datos de creación o actualización de usuario
 export interface CreateUserData {
   usuario: string;
   password: string;
-  role: 'admin' | 'supervisor_de_supervisores' | 'supervisor' | 'operario' | 'temporario';
+  email?: string;
   nombre?: string;
   apellido?: string;
-  email?: string;
   celular?: string;
+  role: string;
+  expirationMinutes?: number;
   secciones: 'limpieza' | 'mantenimiento' | 'ambos';
   isTemporary?: boolean;
-  expirationMinutes?: number;
 }
 
-export interface LoginResponse {
-  token: string;
-  role: string;
-}
-
-// Interceptor para agregar token a las peticiones
-axios.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-// Función para manejar errores de la API
-const handleApiError = (error: any): never => {
-  console.error('API Error:', error);
-  
-  // Manejar respuesta de error específica
-  if (error.response) {
-    // El servidor respondió con un código de error
-    const message = error.response.data.msg || error.response.data.error || 'Error en la petición';
-    throw new Error(message);
-  } else if (error.request) {
-    // La petición fue hecha pero no hubo respuesta
-    throw new Error('No hay respuesta del servidor. Verifica tu conexión.');
-  } else {
-    // Algo sucedió en la configuración de la petición
-    throw new Error('Error en la configuración de la petición: ' + error.message);
+/**
+ * Obtener token de autenticación
+ */
+const getAuthToken = (): string | null => {
+  try {
+    return localStorage.getItem('token');
+  } catch (error) {
+    console.error('Error al obtener token:', error);
+    return null;
   }
 };
 
-// Funciones exportadas para ser usadas por useUserManagement
-
-// Login con nombre de usuario y contraseña
-export async function login(usuario: string, password: string): Promise<LoginResponse> {
+/**
+ * Función base para realizar peticiones al API
+ */
+const fetchApi = async (endpoint: string, options: RequestInit = {}): Promise<any> => {
+  const token = getAuthToken();
+  
+  if (!token) {
+    throw new Error('No hay token de autenticación');
+  }
+  
+  const url = `${API_URL}${endpoint}`;
+  
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
+    ...options.headers
+  };
+  
   try {
-    const response = await axios.post(`${API_URL}/auth/login`, {
-      usuario,
-      password
+    const response = await fetch(url, {
+      ...options,
+      headers
     });
-    return response.data;
-  } catch (error) {
-    return handleApiError(error);
-  }
-}
-
-// Obtener usuario actual
-export async function getCurrentUser(): Promise<AdminUser> {
-  try {
-    const response = await axios.get(`${API_URL}/auth/me`);
-    return response.data;
-  } catch (error) {
-    return handleApiError(error);
-  }
-}
-
-// Obtener todos los usuarios
-export async function getAllUsers(): Promise<AdminUser[]> {
-  try {
-    const response = await axios.get(`${API_URL}/auth/users`);
-    return response.data;
-  } catch (error) {
-    return handleApiError(error);
-  }
-}
-
-// Crear nuevo usuario con cualquier rol
-export async function createUser(userData: CreateUserData): Promise<AdminUser> {
-  try {
-    // Determinar el endpoint correcto basado en si es un usuario temporal
-    const endpoint = userData.role === 'temporario' || (userData.isTemporary && userData.role === 'operario')
-      ? `${API_URL}/auth/temporary`
-      : `${API_URL}/auth/register`;
+    
+    // Si la respuesta no es exitosa
+    if (!response.ok) {
+      // Si la respuesta es 401, redirigir al login
+      if (response.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('userRole');
+        window.location.href = '/login';
+        throw new Error('Sesión expirada');
+      }
       
-    // Preparar datos para enviar al backend
-    const payload = {
-      ...userData,
-      // Asegurar que se envíe isTemporary solo para operarios
-      ...(userData.role === 'operario' && { isTemporary: !!userData.isTemporary })
-    };
+      // Intentar obtener detalles del error
+      let errorData;
+      try {
+        errorData = await response.json();
+      } catch (e) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+      
+      // Lanzar error con el mensaje del API o un mensaje genérico
+      throw Object.assign(
+        new Error(errorData.msg || errorData.error || 'Error en la solicitud'),
+        { status: response.status }
+      );
+    }
     
-    const response = await axios.post(endpoint, payload);
-    return response.data;
+    // Si todo está bien, devolver datos JSON
+    return await response.json();
   } catch (error) {
-    return handleApiError(error);
+    console.error('Error en fetchApi:', error);
+    throw error;
   }
-}
+};
 
-// Actualizar usuario existente
-export async function updateUser(id: string, userData: Partial<CreateUserData>): Promise<AdminUser> {
-  try {
-    // Filtrar la contraseña si está vacía
-    const payload = { ...userData };
-    if (!payload.password) delete payload.password;
-    
-    const response = await axios.put(`${API_URL}/auth/users/${id}`, payload);
-    return response.data;
-  } catch (error) {
-    return handleApiError(error);
-  }
-}
+/**
+ * Obtener todos los usuarios
+ */
+export const getAllUsers = async (): Promise<AdminUser[]> => {
+  return await fetchApi('/users');
+};
 
-// Activar/desactivar usuario
-export async function toggleUserStatus(id: string, activate: boolean): Promise<AdminUser> {
-  try {
-    const action = activate ? 'activate' : 'deactivate';
-    const response = await axios.put(`${API_URL}/auth/users/${id}/${action}`);
-    return response.data;
-  } catch (error) {
-    return handleApiError(error);
-  }
-}
+/**
+ * Obtener un usuario por ID
+ */
+export const getUserById = async (id: string): Promise<AdminUser> => {
+  return await fetchApi(`/users/${id}`);
+};
 
-// Eliminar usuario
-export async function deleteUser(id: string): Promise<{msg: string, clientesEnStandBy?: number}> {
-  try {
-    const response = await axios.delete(`${API_URL}/auth/users/${id}`);
-    return response.data;
-  } catch (error) {
-    return handleApiError(error);
-  }
-}
+/**
+ * Crear un nuevo usuario
+ */
+export const createUser = async (userData: CreateUserData): Promise<AdminUser> => {
+  return await fetchApi('/register', {
+    method: 'POST',
+    body: JSON.stringify(userData)
+  });
+};
 
-// Reactivar usuario temporal
-export async function reactivateTemporaryUser(): Promise<{msg: string, expiresAt: string}> {
-  try {
-    const response = await axios.post(`${API_URL}/auth/reactivate-temporary`);
-    return response.data;
-  } catch (error) {
-    return handleApiError(error);
-  }
-}
+/**
+ * Actualizar usuario existente
+ */
+export const updateUser = async (id: string, userData: Partial<CreateUserData>): Promise<AdminUser> => {
+  return await fetchApi(`/users/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(userData)
+  });
+};
 
-// Mantener el export default por compatibilidad
+/**
+ * Eliminar usuario
+ */
+export const deleteUser = async (id: string): Promise<void> => {
+  await fetchApi(`/users/${id}`, {
+    method: 'DELETE'
+  });
+};
+
+/**
+ * Activar/desactivar usuario
+ */
+export const toggleUserStatus = async (id: string, activate: boolean): Promise<AdminUser> => {
+  const action = activate ? 'activate' : 'deactivate';
+  return await fetchApi(`/users/${id}/${action}`, {
+    method: 'PUT'
+  });
+};
+
+/**
+ * Crear usuario temporal
+ */
+export const createTemporaryUser = async (userData: CreateUserData): Promise<AdminUser> => {
+  return await fetchApi('/temporary', {
+    method: 'POST',
+    body: JSON.stringify(userData)
+  });
+};
+
+/**
+ * Obtener información del usuario actual
+ */
+export const getCurrentUser = async (): Promise<AdminUser> => {
+  return await fetchApi('/me');
+};
+
+/**
+ * Reactivar usuario temporal expirado
+ */
+export const reactivateTemporaryUser = async (): Promise<{expiresAt: string}> => {
+  return await fetchApi('/reactivate-temporary', {
+    method: 'POST'
+  });
+};
+
 export default {
-  login,
-  getCurrentUser,
   getAllUsers,
+  getUserById,
   createUser,
   updateUser,
-  toggleUserStatus,
   deleteUser,
+  toggleUserStatus,
+  createTemporaryUser,
+  getCurrentUser,
   reactivateTemporaryUser
 };

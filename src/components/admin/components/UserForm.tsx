@@ -1,9 +1,9 @@
 /**
  * Componente de formulario para crear y editar usuarios
- * Reutilizable para diferentes secciones del panel administrativo
+ * Actualizado para la nueva estructura de roles y agregar soporte para operarios temporales
  */
-import React from 'react';
-import { AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { AlertCircle, Info } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -22,8 +22,19 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import type { RoleOption } from '../shared/UserRolesConfig';
 import type { AdminUser, CreateUserData } from '../services/userService';
+
+// Constante con roles para usar en el componente
+const ROLES = {
+  ADMIN: 'admin',
+  SUPERVISOR_DE_SUPERVISORES: 'supervisor_de_supervisores',
+  SUPERVISOR: 'supervisor',
+  OPERARIO: 'operario',
+  TEMPORARIO: 'temporario'
+};
 
 interface UserFormProps {
   isOpen: boolean;
@@ -35,6 +46,7 @@ interface UserFormProps {
   editingUser: AdminUser | null;
   loading: boolean;
   error: string;
+  currentUserRole: string;
 }
 
 /**
@@ -49,12 +61,37 @@ const UserForm: React.FC<UserFormProps> = ({
   setFormData,
   editingUser,
   loading,
-  error
+  error,
+  currentUserRole
 }) => {
+  // Estado para controlar la opción de usuario temporal
+  const [isTemporary, setIsTemporary] = useState(false);
+  
+  // Efecto para actualizar isTemporary cuando cambie el usuario editado
+  useEffect(() => {
+    if (editingUser) {
+      // Detectar si es un operario temporal
+      const isTemp = editingUser.role === ROLES.TEMPORARIO || 
+                    (editingUser.role === ROLES.OPERARIO && editingUser.expiresAt);
+      setIsTemporary(isTemp);
+    } else {
+      // Para nuevo usuario, inicializar en false
+      setIsTemporary(false);
+    }
+  }, [editingUser]);
+
   // Maneja el envío del formulario
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onSubmit(formData);
+    
+    // Preparar datos con la configuración temporal correcta
+    const submissionData = {
+      ...formData,
+      // Para operarios, agregar flag de temporal según corresponda
+      isTemporary: formData.role === ROLES.OPERARIO ? isTemporary : undefined
+    };
+    
+    await onSubmit(submissionData);
   };
 
   return (
@@ -70,23 +107,24 @@ const UserForm: React.FC<UserFormProps> = ({
           <div className="grid gap-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="ejemplo@correo.com"
-                />
-              </div>
-              <div>
-                <Label htmlFor="usuario">Nombre de Usuario</Label>
+                <Label htmlFor="usuario">Nombre de Usuario <span className="text-red-500">*</span></Label>
                 <Input
                   id="usuario"
                   type="text"
                   value={formData.usuario}
                   onChange={(e) => setFormData({ ...formData, usuario: e.target.value })}
                   placeholder="usuario123"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={formData.email || ''}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  placeholder="ejemplo@correo.com"
                 />
               </div>
             </div>
@@ -97,7 +135,7 @@ const UserForm: React.FC<UserFormProps> = ({
                 <Input
                   id="nombre"
                   type="text"
-                  value={formData.nombre}
+                  value={formData.nombre || ''}
                   onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
                   placeholder="Nombre"
                 />
@@ -107,7 +145,7 @@ const UserForm: React.FC<UserFormProps> = ({
                 <Input
                   id="apellido"
                   type="text"
-                  value={formData.apellido}
+                  value={formData.apellido || ''}
                   onChange={(e) => setFormData({ ...formData, apellido: e.target.value })}
                   placeholder="Apellido"
                 />
@@ -120,25 +158,31 @@ const UserForm: React.FC<UserFormProps> = ({
                 <Input
                   id="celular"
                   type="tel"
-                  value={formData.celular}
+                  value={formData.celular || ''}
                   onChange={(e) => setFormData({ ...formData, celular: e.target.value })}
                   placeholder="+123456789"
                 />
               </div>
               <div>
-                <Label htmlFor="role">Rol</Label>
+                <Label htmlFor="role">Rol <span className="text-red-500">*</span></Label>
                 <Select
                   value={formData.role}
-                  onValueChange={(value: any) => {
+                  onValueChange={(value: string) => {
                     setFormData({
                       ...formData,
                       role: value,
-                      // Resetear tiempo de expiración si se cambia a temporal
-                      expirationMinutes: value === 'temporal' ? 30 : undefined
+                      // Resetear tiempo de expiración si se cambia a temporario
+                      expirationMinutes: value === ROLES.TEMPORARIO ? 30 : undefined
                     });
+                    
+                    // Resetear isTemporary si no es operario
+                    if (value !== ROLES.OPERARIO) {
+                      setIsTemporary(false);
+                    }
                   }}
+                  required
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="role">
                     <SelectValue placeholder="Seleccionar rol" />
                   </SelectTrigger>
                   <SelectContent>
@@ -152,14 +196,84 @@ const UserForm: React.FC<UserFormProps> = ({
               </div>
             </div>
 
+            {/* Mostrar checkbox de temporal sólo para operarios */}
+            {formData.role === ROLES.OPERARIO && (
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="isTemporary" 
+                  checked={isTemporary}
+                  onCheckedChange={(checked) => {
+                    setIsTemporary(!!checked);
+                    
+                    // Si marca como temporal, establecer tiempo de expiración predeterminado
+                    if (checked) {
+                      setFormData({
+                        ...formData,
+                        expirationMinutes: 30
+                      });
+                    } else {
+                      setFormData({
+                        ...formData,
+                        expirationMinutes: undefined
+                      });
+                    }
+                  }}
+                />
+                <div className="grid gap-1.5 leading-none">
+                  <Label 
+                    htmlFor="isTemporary"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center"
+                  >
+                    Operario temporal
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="ml-1 h-3.5 w-3.5 text-gray-500" />
+                        </TooltipTrigger>
+                        <TooltipContent className="text-xs max-w-xs">
+                          Los operarios temporales tienen acceso limitado por tiempo, ideal para contratistas o personal eventual.
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </Label>
+                </div>
+              </div>
+            )}
+
+            {/* Mostrar configuración de tiempo si es temporario o operario temporal */}
+            {(formData.role === ROLES.TEMPORARIO || (formData.role === ROLES.OPERARIO && isTemporary)) && (
+              <div>
+                <Label htmlFor="expirationMinutes">
+                  Tiempo de expiración (minutos) <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="expirationMinutes"
+                  type="number"
+                  min={1}
+                  max={10080} // 7 días máximo
+                  value={formData.expirationMinutes}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    expirationMinutes: parseInt(e.target.value)
+                  })}
+                  required
+                  className="w-full"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Tiempo máximo: 7 días (10080 minutos)
+                </p>
+              </div>
+            )}
+
             <div>
               <Label htmlFor="password">
-                {editingUser ? 'Nueva Contraseña (opcional)' : 'Contraseña'}
+                {editingUser ? 'Nueva Contraseña (opcional)' : 'Contraseña'} 
+                {!editingUser && <span className="text-red-500">*</span>}
               </Label>
               <Input
                 id="password"
                 type="password"
-                value={formData.password}
+                value={formData.password || ''}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 required={!editingUser}
                 minLength={6}
@@ -173,32 +287,8 @@ const UserForm: React.FC<UserFormProps> = ({
               )}
             </div>
 
-            {formData.role === 'temporal' && (
-              <div>
-                <Label htmlFor="expirationMinutes">
-                  Tiempo de expiración (minutos)
-                </Label>
-                <Input
-                  id="expirationMinutes"
-                  type="number"
-                  min={1}
-                  max={1440} // 24 horas máximo
-                  value={formData.expirationMinutes}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    expirationMinutes: parseInt(e.target.value)
-                  })}
-                  required
-                  className="w-full"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Tiempo máximo: 24 horas (1440 minutos)
-                </p>
-              </div>
-            )}
-
             <div>
-              <Label htmlFor="secciones">Secciones</Label>
+              <Label htmlFor="secciones">Secciones <span className="text-red-500">*</span></Label>
               <Select
                 value={formData.secciones}
                 onValueChange={(value: 'limpieza' | 'mantenimiento' | 'ambos') => {
@@ -207,8 +297,9 @@ const UserForm: React.FC<UserFormProps> = ({
                     secciones: value
                   });
                 }}
+                required
               >
-                <SelectTrigger>
+                <SelectTrigger id="secciones">
                   <SelectValue placeholder="Seleccionar secciones" />
                 </SelectTrigger>
                 <SelectContent>

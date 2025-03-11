@@ -1,11 +1,61 @@
 /**
  * Componente de tabla para mostrar usuarios en pantallas medianas y grandes
  * Incluye todas las acciones disponibles para administración de usuarios
+ * Actualizado para la nueva estructura de roles
  */
 import React from 'react';
-import { UserCog, Trash2, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { UserCog, Trash2, CheckCircle, XCircle, Clock, ShieldAlert, Shield } from 'lucide-react';
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AdminUser } from '../services/userService';
+
+// Constante con roles para usar en el componente
+const ROLES = {
+  ADMIN: 'admin',
+  SUPERVISOR_DE_SUPERVISORES: 'supervisor_de_supervisores',
+  SUPERVISOR: 'supervisor',
+  OPERARIO: 'operario',
+  TEMPORARIO: 'temporario'
+};
+
+// Función auxiliar para renderizar el rol con un formato legible
+const getRoleDisplay = (role: string) => {
+  switch (role) {
+    case ROLES.ADMIN:
+      return 'Administrador';
+    case ROLES.SUPERVISOR_DE_SUPERVISORES:
+      return 'Sup. de Supervisores';
+    case ROLES.SUPERVISOR:
+      return 'Supervisor';
+    case ROLES.OPERARIO:
+      return 'Operario';
+    case ROLES.TEMPORARIO:
+      return 'Temporario';
+    default:
+      return role;
+  }
+};
+
+// Función para verificar si el usuario tiene fecha de expiración
+const hasExpiration = (user: AdminUser) => {
+  return user.role === ROLES.TEMPORARIO || 
+    (user.role === ROLES.OPERARIO && user.expiresAt);
+};
+
+// Función para verificar si un usuario puede modificar a otro según jerarquía
+const canModifyUser = (currentUserRole: string, targetUserRole: string) => {
+  // Administrador puede modificar a cualquiera
+  if (currentUserRole === ROLES.ADMIN) return true;
+  
+  // Supervisor de supervisores puede modificar a supervisores y roles inferiores
+  if (currentUserRole === ROLES.SUPERVISOR_DE_SUPERVISORES) {
+    return ![ROLES.ADMIN, ROLES.SUPERVISOR_DE_SUPERVISORES].includes(targetUserRole);
+  }
+  
+  // Otros roles no pueden modificar usuarios
+  return false;
+};
 
 interface UserTableProps {
   users: AdminUser[];
@@ -14,6 +64,7 @@ interface UserTableProps {
   onToggleStatus: (userId: string, activate: boolean) => void;
   getUserIdentifier: (user: AdminUser) => string;
   getFullName: (user: AdminUser) => string | null;
+  currentUserRole: string;
 }
 
 /**
@@ -25,7 +76,8 @@ const UserTable: React.FC<UserTableProps> = ({
   onDelete,
   onToggleStatus,
   getUserIdentifier,
-  getFullName
+  getFullName,
+  currentUserRole
 }) => {
   return (
     <div className="overflow-x-auto">
@@ -52,24 +104,35 @@ const UserTable: React.FC<UserTableProps> = ({
                     {getFullName(user)}
                   </div>
                 )}
-                {user.role === 'temporal' && user.expiresAt && (
-                  <div className="text-xs text-gray-500">
+                {hasExpiration(user) && user.expiresAt && (
+                  <div className="text-xs text-gray-500 flex items-center">
                     <Clock className="inline-block w-3 h-3 mr-1" />
                     Expira: {new Date(user.expiresAt).toLocaleString()}
                   </div>
                 )}
               </td>
               <td className="px-6 py-4">
-                <span className="capitalize text-sm text-gray-700">
-                  {user.role}
-                </span>
+                <Badge 
+                  variant="outline" 
+                  className={`
+                    ${user.role === ROLES.ADMIN ? 'border-purple-500 text-purple-700 bg-purple-50' : ''}
+                    ${user.role === ROLES.SUPERVISOR_DE_SUPERVISORES ? 'border-blue-500 text-blue-700 bg-blue-50' : ''}
+                    ${user.role === ROLES.SUPERVISOR ? 'border-cyan-500 text-cyan-700 bg-cyan-50' : ''}
+                    ${user.role === ROLES.OPERARIO ? 'border-green-500 text-green-700 bg-green-50' : ''}
+                    ${user.role === ROLES.TEMPORARIO ? 'border-yellow-500 text-yellow-700 bg-yellow-50' : ''}
+                  `}
+                >
+                  {user.role === ROLES.ADMIN && <ShieldAlert className="w-3 h-3 mr-1" />}
+                  {user.role === ROLES.SUPERVISOR_DE_SUPERVISORES && <Shield className="w-3 h-3 mr-1" />}
+                  {getRoleDisplay(user.role)}
+                </Badge>
               </td>
               <td className="px-6 py-4">
                 <div className="flex items-center gap-2">
                   <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full
                     ${!user.isActive
                       ? 'bg-red-100 text-red-800'
-                      : user.role === 'temporal'
+                      : hasExpiration(user)
                         ? user.expiresAt && new Date(user.expiresAt) > new Date()
                           ? 'bg-yellow-100 text-yellow-800'
                           : 'bg-red-100 text-red-800'
@@ -78,7 +141,7 @@ const UserTable: React.FC<UserTableProps> = ({
                   >
                     {!user.isActive
                       ? 'Inactivo'
-                      : user.role === 'temporal'
+                      : hasExpiration(user)
                         ? user.expiresAt && new Date(user.expiresAt) > new Date()
                           ? 'Temporal Activo'
                           : 'Expirado'
@@ -101,38 +164,56 @@ const UserTable: React.FC<UserTableProps> = ({
               </td>
               <td className="px-6 py-4 text-right">
                 <div className="flex justify-end space-x-2">
-                  {/* Botón de activar/desactivar */}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onToggleStatus(user._id, !user.isActive)}
-                    className={user.isActive 
-                      ? 'text-red-600 hover:text-red-800 hover:bg-red-50' 
-                      : 'text-green-600 hover:text-green-800 hover:bg-green-50'}>
-                    {user.isActive ? (
-                      <XCircle className="w-4 h-4" />
-                    ) : (
-                      <CheckCircle className="w-4 h-4" />
-                    )}
-                  </Button>
-                  
-                  {/* Botón de editar */}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onEdit(user)}
-                    className="text-blue-600 hover:text-blue-800 hover:bg-blue-50">
-                    <UserCog className="w-4 h-4" />
-                  </Button>
-                  
-                  {/* Botón de eliminar */}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onDelete(user._id)}
-                    className="text-red-600 hover:text-red-800 hover:bg-red-50">
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                  {/* Acciones basadas en permisos */}
+                  {canModifyUser(currentUserRole, user.role) ? (
+                    <>
+                      {/* Botón de activar/desactivar */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onToggleStatus(user._id, !user.isActive)}
+                        className={user.isActive 
+                          ? 'text-red-600 hover:text-red-800 hover:bg-red-50' 
+                          : 'text-green-600 hover:text-green-800 hover:bg-green-50'}>
+                        {user.isActive ? (
+                          <XCircle className="w-4 h-4" />
+                        ) : (
+                          <CheckCircle className="w-4 h-4" />
+                        )}
+                      </Button>
+                      
+                      {/* Botón de editar */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onEdit(user)}
+                        className="text-blue-600 hover:text-blue-800 hover:bg-blue-50">
+                        <UserCog className="w-4 h-4" />
+                      </Button>
+                      
+                      {/* Botón de eliminar */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onDelete(user._id)}
+                        className="text-red-600 hover:text-red-800 hover:bg-red-50">
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </>
+                  ) : (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-xs text-gray-500 italic px-2">
+                            Sin permisos
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>No tienes permisos para modificar este usuario</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
                 </div>
               </td>
             </tr>

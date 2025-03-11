@@ -1,8 +1,9 @@
 /**
  * Componente para gestión de usuarios en el panel de administración
  * Permite crear, editar, activar/desactivar y eliminar usuarios del sistema
+ * Actualizado para usar la nueva estructura de roles del sistema
  */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Plus,
   AlertCircle,
@@ -50,11 +51,9 @@ const UserManagementContent: React.FC = () => {
     handleDelete,
     handleToggleStatus,
     handleEdit,
-    resetForm
+    resetForm,
+    currentUserRole
   } = useUserManagement();
-
-  // Filtrar usuarios según criterios de búsqueda
-  const filteredUsers = filterUsers(users, searchTerm, showInactiveUsers);
 
   // Estado para la paginación
   const [currentPage, setCurrentPage] = useState(1);
@@ -92,15 +91,25 @@ const UserManagementContent: React.FC = () => {
     setCurrentPage(1);
   }, [searchTerm, showInactiveUsers]);
 
-  // Calcular los índices para el slice
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  
-  // Asegurarnos de no exceder el límite de usuarios
-  const currentUsers = filteredUsers.slice(indexOfFirstItem, indexOfLastItem);
+  // Filtrar usuarios con useMemo para evitar recálculos innecesarios
+  const filteredUsers = useMemo(() => {
+    return filterUsers(users, searchTerm, showInactiveUsers);
+  }, [users, searchTerm, showInactiveUsers]);
 
-  // Calcular el total de páginas
-  const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
+  // Calcular los índices para el slice con useMemo
+  const { indexOfFirstItem, indexOfLastItem, currentUsers, totalPages } = useMemo(() => {
+    const lastItem = currentPage * itemsPerPage;
+    const firstItem = lastItem - itemsPerPage;
+    const current = filteredUsers.slice(firstItem, lastItem);
+    const total = Math.ceil(filteredUsers.length / itemsPerPage);
+    
+    return {
+      indexOfFirstItem: firstItem,
+      indexOfLastItem: lastItem,
+      currentUsers: current,
+      totalPages: total
+    };
+  }, [filteredUsers, currentPage, itemsPerPage]);
 
   // Asegurarnos de que la página actual no exceda el número total de páginas
   useEffect(() => {
@@ -200,6 +209,7 @@ const UserManagementContent: React.FC = () => {
               onToggleStatus={handleToggleStatus}
               getUserIdentifier={getUserIdentifier}
               getFullName={getFullName}
+              currentUserRole={currentUserRole}
             />
             
             {/* Paginación debajo de la tabla */}
@@ -241,6 +251,7 @@ const UserManagementContent: React.FC = () => {
               onToggleStatus={handleToggleStatus}
               getUserIdentifier={getUserIdentifier}
               getFullName={getFullName}
+              currentUserRole={currentUserRole}
             />
           ))}
         </div>
@@ -281,6 +292,7 @@ const UserManagementContent: React.FC = () => {
         editingUser={editingUser}
         loading={loading}
         error={error}
+        currentUserRole={currentUserRole}
       />
     </div>
   );

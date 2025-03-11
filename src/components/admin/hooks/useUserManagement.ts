@@ -1,410 +1,201 @@
 /**
- * Hook personalizado para la gestión de usuarios en el panel administrativo
- * Centraliza la lógica de manejo de usuarios, estados y operaciones CRUD
- * Incluye funcionalidad de paginación para una mejor experiencia de usuario
+ * Hook personalizado que centraliza la lógica de gestión de usuarios
+ * Implementa la nueva estructura de roles
  */
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import userService, { AdminUser, CreateUserData } from '../services/userService';
 import { useNotification } from '@/context/NotificationContext';
-import { 
-  getAllUsers, 
-  createUser, 
-  updateUser, 
-  deleteUser, 
-  toggleUserStatus,
-  type AdminUser,
-  type CreateUserData
-} from '../services/userService';
-import { getAvailableRoles, type RoleType } from '../shared/UserRolesConfig';
-import { useDashboard } from '@/hooks/useDashboard';
-import eventService from '@/services/EventService';
+import { getAvailableRoles, ROLES } from '../shared/UserRolesConfig';
 
 /**
- * Hook para la gestión completa de usuarios con paginación
+ * Hook para gestionar usuarios
  */
-export function useUserManagement() {
-  // Usar directamente useNotification sin sistema de fallback, como en InventorySection
-  const { addNotification } = useNotification();
-  
-  // Registrar disponibilidad del contexto para depuración
-  useEffect(() => {
-    console.log('NotificationContext disponible:', addNotification ? true : false);
-  }, [addNotification]);
-
-  // Estado para usuarios y pantalla
+export const useUserManagement = () => {
+  // Estados para la gestión de usuarios
   const [users, setUsers] = useState<AdminUser[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [showInactiveUsers, setShowInactiveUsers] = useState(true);
-  const [successMessage, setSuccessMessage] = useState<string>('');
+  const [showInactiveUsers, setShowInactiveUsers] = useState(false);
+  const [currentUserRole, setCurrentUserRole] = useState(ROLES.ADMIN); // Por defecto asumimos admin
   
-  // Estado para paginación
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [roleFilter, setRoleFilter] = useState<string>('all');
+  // Opciones de roles disponibles según el rol del usuario actual
+  const availableRoles = getAvailableRoles(currentUserRole);
   
-  // Estado del usuario actual y roles disponibles
-  const [userRole, setUserRole] = useState<RoleType | null>(null);
-  const [availableRoles, setAvailableRoles] = useState(getAvailableRoles(null));
-  
-  // Contexto del dashboard para navegación entre secciones
-  const { changeSection } = useDashboard();
+  // Contexto de notificaciones
+  const { addNotification } = useNotification();
 
-  // Estado para el formulario
+  // Estado del formulario
   const [formData, setFormData] = useState<CreateUserData>({
-    email: '',
     usuario: '',
     password: '',
-    role: 'basic',
-    expirationMinutes: 30,
-    nombre: '',
-    apellido: '',
-    celular: '',
+    role: ROLES.OPERARIO,
     secciones: 'ambos'
   });
 
-  // Detectar el rol del usuario actual
+  // Obtener el rol del usuario actual al cargar la página
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const role = localStorage.getItem('userRole') as RoleType | null;
-      console.log('Rol recuperado del localStorage:', role);
-      
-      // Verificar que sea un rol válido
-      if (role && ['admin', 'supervisor', 'basic', 'temporal'].includes(role)) {
-        setUserRole(role);
-        setAvailableRoles(getAvailableRoles(role));
-        console.log(`Roles disponibles para ${role}:`, getAvailableRoles(role));
-      } else {
-        console.error('Rol inválido o no encontrado en localStorage:', role);
-        // Si es admin, asegurar que tenga acceso completo incluso si hay un error
-        if (role === 'admin') {
-          setUserRole('admin');
-          setAvailableRoles([
-            { value: 'admin', label: 'Administrador' },
-            { value: 'supervisor', label: 'Supervisor' },
-            { value: 'basic', label: 'Básico' },
-            { value: 'temporal', label: 'Temporal' }
-          ]);
+    const getUserRole = () => {
+      try {
+        // Obtener el rol desde localStorage (almacenado al iniciar sesión)
+        const storedRole = localStorage.getItem('userRole');
+        if (storedRole) {
+          setCurrentUserRole(storedRole);
         }
+      } catch (error) {
+        console.error('Error al obtener el rol del usuario:', error);
+        // Por seguridad, si hay un error asumimos un rol con menos privilegios
+        setCurrentUserRole(ROLES.OPERARIO);
       }
-    }
+    };
+
+    getUserRole();
   }, []);
 
   // Cargar usuarios
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    
     try {
-      setLoading(true);
-      const data = await getAllUsers();
+      const data = await userService.getAllUsers();
       setUsers(data);
-      setError('');
     } catch (err: any) {
       const errorMsg = err.message || 'Error al cargar usuarios';
       setError(errorMsg);
       
-      // Enviar notificación si está disponible
       if (addNotification) {
         addNotification(errorMsg, 'error');
-        console.log('Notificación de error enviada:', errorMsg);
-      } else {
-        console.error('addNotification no disponible:', errorMsg);
+      }
+      
+      // Si recibimos error 401, redirigir al login
+      if (err.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('userRole');
+        window.location.href = '/login';
       }
     } finally {
       setLoading(false);
     }
-  };
+  }, [addNotification]);
 
-  // Cargar usuarios inicialmente
+  // Cargar usuarios al montar el componente
   useEffect(() => {
     fetchUsers();
-  }, []);
-
-  // Filtrar usuarios basados en los criterios seleccionados
-  const filteredUsers = useMemo(() => {
-    return users.filter(user => {
-      // Filtrar por estado activo/inactivo
-      if (!showInactiveUsers && !user.isActive) {
-        return false;
-      }
-
-      // Filtrar por rol
-      if (roleFilter !== 'all' && user.role !== roleFilter) {
-        return false;
-      }
-
-      // Filtrar por término de búsqueda en múltiples campos
-      if (searchTerm) {
-        const searchLower = searchTerm.toLowerCase();
-        const userEmail = user.email?.toLowerCase() || '';
-        const userUsername = user.usuario?.toLowerCase() || '';
-        const userNombre = user.nombre?.toLowerCase() || '';
-        const userApellido = user.apellido?.toLowerCase() || '';
-
-        return (
-          userEmail.includes(searchLower) ||
-          userUsername.includes(searchLower) ||
-          userNombre.includes(searchLower) ||
-          userApellido.includes(searchLower)
-        );
-      }
-
-      return true;
-    });
-  }, [users, searchTerm, showInactiveUsers, roleFilter]);
-
-  // Calcular el número total de páginas
-  const totalPages = useMemo(() => {
-    return Math.max(1, Math.ceil(filteredUsers.length / itemsPerPage));
-  }, [filteredUsers, itemsPerPage]);
-
-  // Obtener usuarios para la página actual
-  const paginatedUsers = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    return filteredUsers.slice(startIndex, endIndex);
-  }, [filteredUsers, currentPage, itemsPerPage]);
-
-  // Resetear a la primera página cuando cambien los filtros
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, showInactiveUsers, roleFilter]);
-
-  // Crear o actualizar usuario
-  const handleSubmit = async () => {
-    setError('');
-    setLoading(true);
-
-    try {
-      if (editingUser) {
-        // Actualizar usuario existente
-        await updateUser(editingUser._id, formData);
-        const message = 'Usuario actualizado correctamente';
-        setSuccessMessage(message);
-        
-        // Disparar evento para que otros componentes actualicen sus datos
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('userUpdated', 'true');
-          
-          // Utilizar el Event Service si está disponible
-          eventService.emit('userUpdated', { 
-            userId: editingUser._id, 
-            action: 'update',
-            role: formData.role 
-          });
-        }
-        
-        if (addNotification) {
-          addNotification(message, 'success');
-        }
-      } else {
-        // Crear nuevo usuario
-        const data = await createUser(formData);
-        
-        // Disparar evento para que otros componentes actualicen sus datos
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('userUpdated', 'true');
-          
-          // Utilizar el Event Service si está disponible
-          eventService.emit('userCreated', { 
-            userId: data._id, 
-            role: formData.role 
-          });
-        }
-        
-        const message = 'Usuario creado correctamente';
-        setSuccessMessage(message);
-        
-        if (addNotification) {
-          addNotification(message, 'success');
-        }
-      }
-
-      await fetchUsers();
-      setShowModal(false);
-      resetForm();
-      
-      // Limpiar mensaje después de unos segundos
-      setTimeout(() => setSuccessMessage(''), 5000);
-    } catch (err: any) {
-      const errorMsg = err.message || 'Error en la operación';
-      setError(errorMsg);
-      
-      if (addNotification) {
-        addNotification(errorMsg, 'error');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Eliminar usuario
-  const handleDelete = async (userId: string) => {
-    if (!window.confirm('¿Estás seguro de eliminar este usuario?')) return;
-
-    try {
-      const response = await deleteUser(userId);
-      await fetchUsers();
-      
-      // Disparar evento para que otros componentes actualicen sus datos
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('userUpdated', 'true');
-        
-        // Utilizar el Event Service si está disponible
-        eventService.emit('userDeleted', { 
-          userId: userId,
-          clientesEnStandBy: response?.clientesEnStandBy || 0
-        });
-      }
-      
-      const message = response?.clientesEnStandBy > 0 
-        ? `Usuario eliminado correctamente. ${response.clientesEnStandBy} clientes quedaron pendientes de reasignación.`
-        : 'Usuario eliminado correctamente';
-      
-      setSuccessMessage(message);
-      
-      if (addNotification) {
-        addNotification(message, 'success');
-        
-        // Si hay clientes pendientes de reasignación, mostrar una notificación adicional
-        if (response?.clientesEnStandBy > 0) {
-          setTimeout(() => {
-            addNotification(
-              'Hay clientes sin usuario asignado. Por favor, vaya a la sección de clientes para reasignarlos.',
-              'warning', 
-              8000
-            );
-          }, 1000);
-        }
-      }
-      
-      // Limpiar mensaje después de unos segundos
-      setTimeout(() => setSuccessMessage(''), 5000);
-    } catch (err: any) {
-      const errorMsg = err.message || 'Error al eliminar usuario';
-      setError(errorMsg);
-      
-      if (addNotification) {
-        addNotification(errorMsg, 'error');
-      }
-    }
-  };
-
-  // Activar/desactivar usuario
-  const handleToggleStatus = async (userId: string, activate: boolean) => {
-    try {
-      await toggleUserStatus(userId, activate);
-      
-      // Actualizar el estado local inmediatamente
-      setUsers(prevUsers => prevUsers.map(user => {
-        if (user._id === userId) {
-          return {
-            ...user,
-            isActive: activate
-          };
-        }
-        return user;
-      }));
-      
-      // Disparar evento para que otros componentes actualicen sus datos
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('userUpdated', 'true');
-        
-        // Utilizar el Event Service si está disponible
-        eventService.emit('userStatusChanged', { 
-          userId: userId,
-          isActive: activate
-        });
-      }
-
-      await fetchUsers(); // Recargar todos los usuarios para asegurar sincronización
-      const message = `Usuario ${activate ? 'activado' : 'desactivado'} correctamente`;
-      setSuccessMessage(message);
-      
-      if (addNotification) {
-        addNotification(message, 'success');
-        
-        // Si se desactivó el usuario, mostrar notificación sobre clientes
-        if (!activate) {
-          setTimeout(() => {
-            addNotification(
-              'Los clientes asignados a este usuario necesitarán ser reasignados.',
-              'info', 
-              6000
-            );
-          }, 1000);
-        }
-      }
-      
-      // Limpiar mensaje después de unos segundos
-      setTimeout(() => setSuccessMessage(''), 5000);
-    } catch (err: any) {
-      const errorMsg = err.message || 'Error al cambiar estado del usuario';
-      setError(errorMsg);
-      
-      if (addNotification) {
-        addNotification(errorMsg, 'error');
-      }
-    }
-  };
-
-  // Preparar edición de usuario
-  const handleEdit = (user: AdminUser) => {
-    setEditingUser(user);
-    setFormData({
-      email: user.email || '',
-      usuario: user.usuario || '',
-      password: '', // Campo vacío para edición
-      role: user.role,
-      nombre: user.nombre || '',
-      apellido: user.apellido || '',
-      celular: user.celular || '',
-      secciones: user.secciones || 'ambos',
-      expirationMinutes: user.role === 'temporal' && user.expiresAt ?
-        Math.round((new Date(user.expiresAt).getTime() - Date.now()) / 60000) :
-        30
-    });
-    setShowModal(true);
-    
-    // Notificación informativa opcional para edición
-    if (addNotification) {
-      addNotification(`Editando usuario: ${user.email || user.usuario || user._id.substring(0, 8)}`, 'info');
-    }
-  };
+  }, [fetchUsers]);
 
   // Resetear formulario
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setFormData({
-      email: '',
       usuario: '',
       password: '',
-      role: 'basic',
-      expirationMinutes: 30,
-      nombre: '',
-      apellido: '',
-      celular: '',
+      role: availableRoles.length > 0 ? availableRoles[0].value : ROLES.OPERARIO,
       secciones: 'ambos'
     });
     setEditingUser(null);
+  }, [availableRoles]);
+
+  // Manejar envío del formulario
+  const handleSubmit = async (formData: CreateUserData) => {
+    setLoading(true);
+    setError('');
+    
+    try {
+      if (editingUser) {
+        // Actualizar usuario existente
+        await userService.updateUser(editingUser._id, formData);
+        addNotification('Usuario actualizado con éxito', 'success');
+      } else {
+        // Crear nuevo usuario
+        await userService.createUser(formData);
+        addNotification('Usuario creado con éxito', 'success');
+      }
+      
+      // Recargar lista y cerrar modal
+      fetchUsers();
+      setShowModal(false);
+      resetForm();
+    } catch (err: any) {
+      const errorMsg = err.message || 'Error al guardar usuario';
+      setError(errorMsg);
+      addNotification(errorMsg, 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Manejar cambio de página
-  const handlePageChange = useCallback((pageNumber: number) => {
-    setCurrentPage(pageNumber);
-    // Hacer scroll al inicio cuando cambiamos de página
-    if (typeof window !== 'undefined') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+  // Manejar eliminación de usuario
+  const handleDelete = async (userId: string) => {
+    if (!window.confirm('¿Está seguro de que desea eliminar este usuario?')) {
+      return;
     }
-  }, []);
+    
+    setLoading(true);
+    
+    try {
+      await userService.deleteUser(userId);
+      addNotification('Usuario eliminado con éxito', 'success');
+      
+      // Actualizar lista local quitando el usuario eliminado
+      setUsers(prevUsers => prevUsers.filter(user => user._id !== userId));
+    } catch (err: any) {
+      const errorMsg = err.message || 'Error al eliminar usuario';
+      addNotification(errorMsg, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // Manejar cambio de items por página
-  const handleItemsPerPageChange = useCallback((newItemsPerPage: number) => {
-    setItemsPerPage(newItemsPerPage);
-    setCurrentPage(1); // Resetear a primera página
-  }, []);
+  // Manejar activación/desactivación de usuario
+  const handleToggleStatus = async (userId: string, activate: boolean) => {
+    setLoading(true);
+    
+    try {
+      await userService.toggleUserStatus(userId, activate);
+      
+      // Actualizar estado local
+      setUsers(prevUsers => prevUsers.map(user => 
+        user._id === userId
+          ? { ...user, isActive: activate }
+          : user
+      ));
+      
+      const successMsg = activate 
+        ? 'Usuario activado correctamente' 
+        : 'Usuario desactivado correctamente';
+      
+      addNotification(successMsg, 'success');
+    } catch (err: any) {
+      const errorMsg = err.message || 'Error al actualizar estado del usuario';
+      addNotification(errorMsg, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Manejar edición de usuario
+  const handleEdit = (user: AdminUser) => {
+    setEditingUser(user);
+    
+    // Preparar datos del formulario con la información del usuario
+    setFormData({
+      usuario: user.usuario,
+      password: '', // No enviamos la contraseña actual por seguridad
+      email: user.email,
+      nombre: user.nombre,
+      apellido: user.apellido,
+      celular: user.celular,
+      role: user.role,
+      secciones: user.secciones || 'ambos',
+      expirationMinutes: user.expiresAt && user.role === ROLES.TEMPORARIO ? 30 : undefined
+    });
+    
+    setShowModal(true);
+  };
 
   return {
-    // Estado original
     users,
     loading,
     error,
@@ -412,38 +203,19 @@ export function useUserManagement() {
     editingUser,
     searchTerm,
     showInactiveUsers,
-    successMessage,
     formData,
     availableRoles,
-    
-    // Estados de paginación
-    filteredUsers,
-    paginatedUsers,
-    currentPage,
-    itemsPerPage,
-    totalPages,
-    totalItems: filteredUsers.length,
-    roleFilter,
-    
-    // Setters originales
+    currentUserRole,
     setSearchTerm,
     setShowInactiveUsers,
     setShowModal,
     setFormData,
-    
-    // Setters de paginación
-    setRoleFilter,
-    
-    // Acciones originales
-    fetchUsers,
     handleSubmit,
     handleDelete,
     handleToggleStatus,
     handleEdit,
-    resetForm,
-    
-    // Acciones de paginación
-    handlePageChange,
-    handleItemsPerPageChange
+    resetForm
   };
-}
+};
+
+export default useUserManagement;
