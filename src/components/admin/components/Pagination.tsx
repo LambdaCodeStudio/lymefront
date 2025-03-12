@@ -191,7 +191,7 @@ const Pagination = ({
                 onClick={() => pageNum !== page && onPageChange(pageNum)}
                 className={`h-8 w-8 p-0 rounded-none border-l-0 ${
                   pageNum === page
-                    ? "bg-[#29696B] text-white hover:bg-[#29696B]/90"
+                    ? "bg-[#29696B] text-gray-800 hover:bg-[#29696B]/90"
                     : "border-[#91BEAD]"
                 }`}
                 aria-label={`Página ${pageNum}`}
