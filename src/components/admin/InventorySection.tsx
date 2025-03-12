@@ -177,7 +177,8 @@ const InventorySection = () => {
       { value: 'indumentaria', label: 'Indumentaria' },
       { value: 'liquidos', label: 'Líquidos' },
       { value: 'papeles', label: 'Papeles' },
-      { value: 'sinClasificarLimpieza', label: 'Sin Clasificar' }
+      { value: 'sinClasificarLimpieza', label: 'Sin Clasificar' },
+      { value: 'calzado', label: 'Calzado'}
     ],
     mantenimiento: [
       { value: 'iluminaria', label: 'Iluminaria' },
