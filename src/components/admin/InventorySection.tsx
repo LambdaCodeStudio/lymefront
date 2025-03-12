@@ -190,120 +190,100 @@ const InventorySection = () => {
   };
 
   // Función mejorada para cargar productos
- // Paso 1: Modifica la función fetchProducts para que acepte y utilice parámetros de paginación
-const fetchProducts = async (forceRefresh = false, page = currentPage, limit = itemsPerPage) => {
-  try {
-    // Solo evitamos la carga si ya está cargando y no es forzada
-    if (loading && !forceRefresh) {
-      console.log('Ya se está cargando productos, evitando otra carga');
-      return;
-    }
-    
-    console.log(`Cargando productos desde el servidor para página ${page}, límite ${limit}...`);
-    setLoading(true);
-    setRefreshing(forceRefresh);
-    setError('');
-    
-    const token = getAuthToken();
-    if (!token) {
-      console.error('No se encontró token de autenticación');
-      throw new Error('No hay token de autenticación');
-    }
-
-    // Añadir parámetros de paginación a la URL
-    const url = `https://lyme-back.vercel.app/api/producto?page=${page}&limit=${limit}`;
-    
-    // Si hay filtros activos, añadirlos a la URL
-    const queryParams = new URLSearchParams();
-    queryParams.append('page', page.toString());
-    queryParams.append('limit', limit.toString());
-    
-    if (searchTerm) {
-      queryParams.append('search', searchTerm);
-    }
-    
-    if (selectedCategory !== 'all') {
-      queryParams.append('category', selectedCategory);
-    }
-    
-    const urlWithParams = `https://lyme-back.vercel.app/api/producto?${queryParams.toString()}`;
-
-    const response = await fetch(urlWithParams, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Cache-Control': 'no-cache'
-      }
-    });
-    
-    if (!response.ok) {
-      if (response.status === 401) {
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('token');
-          localStorage.removeItem('userRole');
-          window.location.href = '/login';
-        }
+  const fetchProducts = async (forceRefresh = false) => {
+    try {
+      // Solo evitamos la carga si ya está cargando y no es forzada
+      if (loading && !forceRefresh) {
+        console.log('Ya se está cargando productos, evitando otra carga');
         return;
       }
-      throw new Error('Error al cargar productos');
-    }
-    
-    // Obtenemos el JSON de la respuesta
-    let responseData;
-    try {
-      responseData = await response.json();
-    } catch (jsonError) {
-      console.error("Error al parsear JSON:", jsonError);
-      throw new Error('Error al procesar datos de productos');
-    }
-    
-    // Manejar correctamente el formato de respuesta paginada o array simple
-    let extractedProducts = [];
-    let totalItems = 0;
-    
-    if (responseData && typeof responseData === 'object') {
-      if (Array.isArray(responseData)) {
-        // Si es un array directamente
-        extractedProducts = responseData;
-        totalItems = responseData.length;
-        console.log(`Recibidos ${extractedProducts.length} productos en formato array`);
-      } else if (Array.isArray(responseData.items)) {
-        // Si es un objeto con paginación
-        extractedProducts = responseData.items;
-        totalItems = responseData.totalItems || responseData.items.length;
-        console.log(`Recibidos ${extractedProducts.length} productos en formato paginado (total: ${totalItems})`);
-      } else {
-        console.warn("Formato de respuesta no reconocido:", responseData);
-        extractedProducts = [];
-        totalItems = 0;
+      
+      console.log('Cargando productos desde el servidor...');
+      setLoading(true);
+      setRefreshing(forceRefresh);
+      setError('');
+      
+      const token = getAuthToken();
+      if (!token) {
+        console.error('No se encontró token de autenticación');
+        throw new Error('No hay token de autenticación');
       }
-    }
-    
-    // Establecer productos y total
-    setProducts(extractedProducts);
-    setTotalCount(totalItems);
-    
-    // Marcar carga inicial como completada
-    initialFetchDone.current = true;
-    
-    // Si hay pocos productos, mostrar una alerta
-    if (extractedProducts.length === 0) {
-      addNotification('No se encontraron productos', 'info');
-    }
-    
-  } catch (err) {
-    const errorMsg = 'Error al cargar productos: ' + err.message;
-    console.error(errorMsg);
-    setError(errorMsg);
-    
-    if (typeof addNotification === 'function') {
-      addNotification(errorMsg, 'error');
-    }
-  } finally {
-    setLoading(false);
-    setRefreshing(false);
-  }
-};
 
+      const response = await fetch('https://lyme-back.vercel.app/api/producto', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
+        }
+      });
+      
+      if (!response.ok) {
+        if (response.status === 401) {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('token');
+            localStorage.removeItem('userRole');
+            window.location.href = '/login';
+          }
+          return;
+        }
+        throw new Error('Error al cargar productos');
+      }
+      
+      // Obtenemos el JSON de la respuesta
+      let responseData;
+      try {
+        responseData = await response.json();
+      } catch (jsonError) {
+        console.error("Error al parsear JSON:", jsonError);
+        throw new Error('Error al procesar datos de productos');
+      }
+      
+      // Manejar correctamente el formato de respuesta paginada o array simple
+      let extractedProducts = [];
+      let totalItems = 0;
+      
+      if (responseData && typeof responseData === 'object') {
+        if (Array.isArray(responseData)) {
+          // Si es un array directamente
+          extractedProducts = responseData;
+          totalItems = responseData.length;
+          console.log(`Recibidos ${extractedProducts.length} productos en formato array`);
+        } else if (Array.isArray(responseData.items)) {
+          // Si es un objeto con paginación
+          extractedProducts = responseData.items;
+          totalItems = responseData.totalItems || responseData.items.length;
+          console.log(`Recibidos ${extractedProducts.length} productos en formato paginado (total: ${totalItems})`);
+        } else {
+          console.warn("Formato de respuesta no reconocido:", responseData);
+          extractedProducts = [];
+          totalItems = 0;
+        }
+      }
+      
+      // Establecer productos y total
+      setProducts(extractedProducts);
+      setTotalCount(totalItems);
+      
+      // Marcar carga inicial como completada
+      initialFetchDone.current = true;
+      
+      // Si hay pocos productos, mostrar una alerta
+      if (extractedProducts.length === 0) {
+        addNotification('No se encontraron productos', 'info');
+      }
+      
+    } catch (err) {
+      const errorMsg = 'Error al cargar productos: ' + err.message;
+      console.error(errorMsg);
+      setError(errorMsg);
+      
+      if (typeof addNotification === 'function') {
+        addNotification(errorMsg, 'error');
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   // Obtener un producto por ID (para actualizar después de cambios)
   const fetchProductById = async (productId) => {
