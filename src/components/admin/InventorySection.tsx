@@ -1456,7 +1456,7 @@ const showingFromTo = totalCount > 0
         {/* Mensaje que muestra la página actual y el total */}
         {!loading && filteredProducts.length > itemsPerPage && (
           <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm">
-            <span className="text-[#29696B] font-medium">
+            <span className="text-[#474747] font-medium">
               Página {currentPage} de {totalPages}
             </span>
           </div>
