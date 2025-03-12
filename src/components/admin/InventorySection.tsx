@@ -413,9 +413,7 @@ const fetchProducts = async (forceRefresh = false, page = currentPage, limit = i
 
   // Resetear la página actual cuando cambian los filtros
   useEffect(() => {
-    // Cuando cambian los filtros, volver a la primera página y recargar
     setCurrentPage(1);
-    fetchProducts(true, 1, itemsPerPage);
   }, [searchTerm, selectedCategory]);
 
   // Función segura para obtener productos filtrados
@@ -1007,11 +1005,7 @@ const fetchProducts = async (forceRefresh = false, page = currentPage, limit = i
 
   // Función para cambiar de página
   const handlePageChange = (pageNumber) => {
-    // Actualizar el estado de la página actual
     setCurrentPage(pageNumber);
-    
-    // Volver a cargar los productos con la nueva página
-    fetchProducts(true, pageNumber, itemsPerPage);
     
     // Al cambiar de página, hacemos scroll hacia arriba
     window.scrollTo({ top: 0, behavior: 'smooth' });
