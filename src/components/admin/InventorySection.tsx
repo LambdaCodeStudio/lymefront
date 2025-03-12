@@ -993,9 +993,9 @@ const InventorySection = () => {
   const filteredProducts = getFilteredProducts();
 
   // Calcular paginación
-  const indexOfLastProduct = currentPage * itemsPerPage;
-  const indexOfFirstProduct = indexOfLastProduct - itemsPerPage;
-  const currentProducts = filteredProducts.slice(indexOfFirstProduct, indexOfLastProduct);
+  // const indexOfLastProduct = currentPage * itemsPerPage;
+  // const indexOfFirstProduct = indexOfLastProduct - itemsPerPage;
+  // const currentProducts = filteredProducts.slice(indexOfFirstProduct, indexOfLastProduct);
 
   // Obtener productos disponibles para combos
   const comboProducts = getFilteredComboProducts();
@@ -1148,7 +1148,7 @@ const InventorySection = () => {
       )}
 
       {/* Mensaje cuando no hay productos */}
-      {!loading && filteredProducts.length === 0 && (
+      {!loading && totalCount === 0 && (
         <div className="bg-white rounded-xl shadow-sm p-8 text-center border border-[#91BEAD]/20">
           <div className="inline-flex items-center justify-center w-12 h-12 bg-[#DFEFE6] rounded-full mb-4">
             <Search className="w-6 h-6 text-[#29696B]" />
@@ -1201,14 +1201,14 @@ const InventorySection = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-[#91BEAD]/20">
-                {currentProducts.map((product) => (
+                {products.map((product) => (
                   <tr
                     key={product._id}
                     className={`hover:bg-[#DFEFE6]/20 transition-colors ${product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD
-                        ? 'bg-yellow-50 hover:bg-yellow-100'
-                        : product.stock <= 0
-                          ? 'bg-red-50 hover:bg-red-100'
-                          : ''
+                      ? 'bg-yellow-50 hover:bg-yellow-100'
+                      : product.stock <= 0
+                        ? 'bg-red-50 hover:bg-red-100'
+                        : ''
                       }`}
                   >
                     <td className="px-6 py-4">
@@ -1295,10 +1295,10 @@ const InventorySection = () => {
         )}
 
         {/* Paginación para la tabla */}
-        {filteredProducts.length > itemsPerPage && (
+        {!loading && totalCount > itemsPerPage && (
           <div className="py-4 border-t border-[#91BEAD]/20">
             <Pagination
-              totalItems={filteredProducts.length}
+              totalItems={totalCount}
               itemsPerPage={itemsPerPage}
               currentPage={currentPage}
               onPageChange={handlePageChange}
@@ -1306,739 +1306,738 @@ const InventorySection = () => {
             />
           </div>
         )}
-      </div>
 
-      {/* Vista de Tarjetas para dispositivos móviles */}
-      <div ref={mobileListRef} id="mobile-products-list" className="md:hidden grid grid-cols-1 gap-4">
-        {/* Paginación visible en la parte superior para móvil */}
-        {!loading && filteredProducts.length > 0 && (
-          <div className="py-4 border-t border-[#91BEAD]/20">
-            <Pagination
-              totalItems={totalCount} // Usar totalCount en lugar de filteredProducts.length
-              itemsPerPage={itemsPerPage}
-              currentPage={currentPage}
-              onPageChange={handlePageChange}
-            />
-          </div>
-        )}
+        {/* Vista de Tarjetas para dispositivos móviles */}
+        <div ref={mobileListRef} id="mobile-products-list" className="md:hidden grid grid-cols-1 gap-4">
+          {/* Paginación visible en la parte superior para móvil */}
+          {!loading && filteredProducts.length > 0 && (
+            <div className="py-4 border-t border-[#91BEAD]/20">
+              <Pagination
+                totalItems={totalCount} // Usar totalCount en lugar de filteredProducts.length
+                itemsPerPage={itemsPerPage}
+                currentPage={currentPage}
+                onPageChange={handlePageChange}
+              />
+            </div>
+          )}
 
-        {!loading && currentProducts.map(product => (
-          <Card
-            key={product._id}
-            className={`overflow-hidden shadow-sm border ${product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD
+          {!loading && currentProducts.map(product => (
+            <Card
+              key={product._id}
+              className={`overflow-hidden shadow-sm border ${product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD
                 ? 'border-yellow-300 bg-yellow-50'
                 : product.stock <= 0
                   ? 'border-red-300 bg-red-50'
                   : product.esCombo
                     ? 'border-[#00888A]/50 bg-[#00888A]/5'
                     : 'border-[#91BEAD]/20 bg-white'
-              }`}
-          >
-            <CardHeader className="p-4 pb-2">
-              <div className="flex justify-between items-center">
-                <div className="flex items-center space-x-2">
-                  <CardTitle className="text-base truncate mr-2 text-[#29696B]">{product.nombre}</CardTitle>
-                  {product.esCombo && (
-                    <Badge variant="outline" className="bg-[#00888A]/10 border-[#00888A] text-[#00888A] text-xs">
-                      Combo
-                    </Badge>
-                  )}
-                </div>
-                <Badge variant="outline" className="capitalize text-xs border-[#91BEAD] text-[#29696B]">
-                  {product.categoria}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="p-4 pt-2 pb-3">
-              <div className="flex gap-4 mb-3">
-                <div className="flex-shrink-0 h-16 w-16">
-                  {/* Usar enfoque más simplificado para imágenes en móvil */}
-                  <div className="h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30 overflow-hidden">
-                    {product.hasImage ? (
-                      <img
-                        src={`https://lyme-back.vercel.app/api/producto/${product._id}/imagen?width=64&height=64&quality=60&${Date.now()}`}
-                        alt={product.nombre}
-                        className="h-16 w-16 object-cover"
-                        loading="lazy"
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                          e.target.nextSibling.style.display = 'flex';
-                        }}
-                      />
-                    ) : null}
-                    <div className={`h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center text-xs text-[#29696B] ${product.hasImage ? 'hidden' : ''}`}>
-                      {product.esCombo ? <PackagePlus size={24} /> : "Sin imagen"}
-                    </div>
+                }`}
+            >
+              <CardHeader className="p-4 pb-2">
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center space-x-2">
+                    <CardTitle className="text-base truncate mr-2 text-[#29696B]">{product.nombre}</CardTitle>
+                    {product.esCombo && (
+                      <Badge variant="outline" className="bg-[#00888A]/10 border-[#00888A] text-[#00888A] text-xs">
+                        Combo
+                      </Badge>
+                    )}
                   </div>
+                  <Badge variant="outline" className="capitalize text-xs border-[#91BEAD] text-[#29696B]">
+                    {product.categoria}
+                  </Badge>
                 </div>
-                <div className="flex-1 min-w-0">
-                  {product.descripcion && (
-                    <p className="text-sm text-[#7AA79C] line-clamp-2 mb-2">
-                      {product.descripcion}
-                    </p>
-                  )}
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div className="flex items-center">
-                      <DollarSign className="w-4 h-4 text-[#91BEAD] mr-1" />
-                      <span className="font-medium text-[#29696B]">${product.precio.toFixed(2)}</span>
-                    </div>
-                    <div className="flex items-center">
-                      <PackageOpen className="w-4 h-4 text-[#91BEAD] mr-1" />
-                      <span className={`font-medium ${product.stock <= 0
-                          ? 'text-red-600'
-                          : product.stock <= LOW_STOCK_THRESHOLD
-                            ? 'text-yellow-600 flex items-center gap-1'
-                            : 'text-[#29696B]'
-                        }`}>
-                        {product.stock <= LOW_STOCK_THRESHOLD && product.stock > 0 && (
-                          <AlertTriangle className="w-3 h-3 text-yellow-500 animate-pulse" />
-                        )}
-                        {product.stock <= 0 ? 'Sin stock' : `${product.stock} unid.`}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="mt-2 text-xs text-[#7AA79C]">
-                    <span className="block">Subcategoría: <span className="capitalize">{product.subCategoria}</span></span>
-                    <span className="block">Vendidos: {product.vendidos || 0}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Mostrar elementos del combo si es un combo */}
-              {product.esCombo && product.itemsCombo && product.itemsCombo.length > 0 && (
-                <div className="mt-2 pt-2 border-t border-[#91BEAD]/10">
-                  <p className="text-xs font-medium text-[#29696B] mb-1">Productos en el combo:</p>
-                  <div className="text-xs text-[#7AA79C] max-h-24 overflow-y-auto pr-1">
-                    {product.itemsCombo.map((item, index) => {
-                      const productoNombre = item.productoId && typeof item.productoId === 'object'
-                        ? item.productoId.nombre
-                        : 'Producto';
-
-                      return (
-                        <div key={index} className="flex justify-between py-1 border-b border-[#91BEAD]/10 last:border-0">
-                          <span>{productoNombre}</span>
-                          <span>x{item.cantidad}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-            <CardFooter className="p-2 flex justify-end gap-2 bg-[#DFEFE6]/20 border-t border-[#91BEAD]/10">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleEdit(product)}
-                className="text-[#29696B] hover:bg-[#DFEFE6]"
-              >
-                <Edit className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => confirmDelete(product._id)}
-                className="text-red-600 hover:text-red-800 hover:bg-red-50"
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            </CardFooter>
-          </Card>
-        ))}
-
-        {/* Mensaje que muestra la página actual y el total */}
-        {!loading && filteredProducts.length > itemsPerPage && (
-          <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm">
-            <span className="text-[#29696B] font-medium">
-              Página {currentPage} de {totalPages}
-            </span>
-          </div>
-        )}
-
-        {/* Paginación duplicada al final de la lista para mayor visibilidad */}
-        {!loading && filteredProducts.length > 0 && (
-          <div className="py-4 border-t border-[#91BEAD]/20">
-            <Pagination
-              totalItems={totalCount} // Usar totalCount en lugar de filteredProducts.length
-              itemsPerPage={itemsPerPage}
-              currentPage={currentPage}
-              onPageChange={handlePageChange}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Modal de Producto */}
-      <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-auto bg-white border border-[#91BEAD]/20">
-          <DialogHeader className="sticky top-0 bg-white pt-4 pb-2 z-10">
-            <DialogTitle className="text-[#29696B] flex items-center">
-              {editingProduct ? 'Editar Producto' : (isCombo ? 'Nuevo Combo' : 'Nuevo Producto')}
-              {isCombo && (
-                <Badge className="ml-2 bg-[#00888A]/10 border-[#00888A] text-[#00888A]">
-                  Combo
-                </Badge>
-              )}
-            </DialogTitle>
-            <DialogDescription>
-              {isCombo ? 'Los combos son agrupaciones de productos individuales' : 'Complete la información del producto'}
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleSubmit} className="space-y-4 py-2">
-            <div className="grid gap-3">
-              {/* Checkbox para marcar como combo */}
-              {!editingProduct && (
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="is-combo"
-                    checked={isCombo}
-                    onCheckedChange={(checked) => {
-                      setIsCombo(checked);
-                      if (!checked) {
-                        setSelectedComboItems([]);
-                      }
-                    }}
-                  />
-                  <label
-                    htmlFor="is-combo"
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-[#29696B]"
-                  >
-                    Este producto es un combo
-                  </label>
-                </div>
-              )}
-
-              <div>
-                <Label htmlFor="nombre" className="text-sm text-[#29696B]">Nombre</Label>
-                <Input
-                  id="nombre"
-                  value={formData.nombre}
-                  onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                  required
-                  className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="descripcion" className="text-sm text-[#29696B]">Descripción</Label>
-                <Textarea
-                  id="descripcion"
-                  value={formData.descripcion}
-                  onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-                  rows={2}
-                  className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="categoria" className="text-sm text-[#29696B]">Categoría</Label>
-                  <Select
-                    value={formData.categoria}
-                    onValueChange={handleCategoryChange}
-                  >
-                    <SelectTrigger id="categoria" className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
-                      <SelectValue placeholder="Seleccionar categoría" />
-                    </SelectTrigger>
-                    <SelectContent className="border-[#91BEAD]">
-                      <SelectItem value="limpieza">Limpieza</SelectItem>
-                      <SelectItem value="mantenimiento">Mantenimiento</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label htmlFor="subCategoria" className="text-sm text-[#29696B]">Subcategoría</Label>
-                  <Select
-                    value={formData.subCategoria}
-                    onValueChange={(value) => setFormData({ ...formData, subCategoria: value })}
-                  >
-                    <SelectTrigger id="subCategoria" className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
-                      <SelectValue placeholder="Seleccionar subcategoría" />
-                    </SelectTrigger>
-                    <SelectContent className="border-[#91BEAD]">
-                      {subCategorias[formData.categoria]?.map((sub) => (
-                        <SelectItem key={sub.value} value={sub.value}>
-                          {sub.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="precio" className="text-sm text-[#29696B]">Precio</Label>
-                  <Input
-                    id="precio"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formData.precio}
-                    onChange={(e) => setFormData({ ...formData, precio: e.target.value })}
-                    required
-                    className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
-                    maxLength={10}
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="stock" className="text-sm text-[#29696B]">Stock</Label>
-                  <ProductStockInput
-                    id="stock"
-                    value={formData.stock}
-                    onChange={(value) => setFormData({ ...formData, stock: value })}
-                    required
-                    maxStock={999999999}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <Label htmlFor="proovedorInfo" className="text-sm text-[#29696B]">Información del Proveedor</Label>
-                <Input
-                  id="proovedorInfo"
-                  value={formData.proovedorInfo}
-                  onChange={(e) => setFormData({ ...formData, proovedorInfo: e.target.value })}
-                  className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
-                />
-              </div>
-
-              {/* Sección de selección de productos para el combo */}
-              {isCombo && (
-                <div className="mt-4 border rounded-md p-3 border-[#91BEAD]/30 bg-[#DFEFE6]/10">
-                  <div className="flex items-center justify-between mb-2">
-                    <Label className="text-sm font-medium text-[#29696B]">Productos en el combo</Label>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={openComboSelectionModal}
-                      className="text-xs h-8 border-[#00888A] text-[#00888A] hover:bg-[#00888A]/10"
-                    >
-                      <ShoppingBag className="w-3 h-3 mr-1" />
-                      Seleccionar productos
-                    </Button>
-                  </div>
-
-                  {selectedComboItems.length === 0 ? (
-                    <div className="text-center py-4 text-sm text-[#7AA79C]">
-                      <ShoppingBag className="w-8 h-8 mx-auto mb-2 text-[#7AA79C]/50" />
-                      <p>No hay productos seleccionados</p>
-                      <p className="text-xs">Haga clic en "Seleccionar productos" para agregar elementos al combo</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="text-xs text-[#7AA79C] grid grid-cols-5 py-1 font-medium">
-                        <div className="col-span-2 pl-2">Producto</div>
-                        <div className="text-center">Precio</div>
-                        <div className="text-center">Cant.</div>
-                        <div className="text-right pr-2">Subtotal</div>
-                      </div>
-                      <div className="max-h-40 overflow-y-auto pr-1">
-                        {selectedComboItems.map((item, index) => (
-                          <div key={index} className="text-sm text-[#29696B] grid grid-cols-5 py-2 border-b border-[#91BEAD]/10 last:border-0 items-center">
-                            <div className="col-span-2 truncate pl-2">{item.nombre}</div>
-                            <div className="text-center">${item.precio.toFixed(2)}</div>
-                            <div className="text-center">{item.cantidad}</div>
-                            <div className="text-right font-medium pr-2">${(item.precio * item.cantidad).toFixed(2)}</div>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="pt-2 flex justify-between text-sm font-medium text-[#29696B]">
-                        <span>Precio total de los productos:</span>
-                        <span>${calculateComboTotal(selectedComboItems).toFixed(2)}</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Campo de imagen */}
-              {!isCombo && (
-                <div>
-                  <Label className="text-sm text-[#29696B] block mb-2">Imagen del Producto</Label>
-
-                  <div className="mt-1 flex flex-col space-y-2">
-                    {formData.imagenPreview ? (
-                      <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
+              </CardHeader>
+              <CardContent className="p-4 pt-2 pb-3">
+                <div className="flex gap-4 mb-3">
+                  <div className="flex-shrink-0 h-16 w-16">
+                    {/* Usar enfoque más simplificado para imágenes en móvil */}
+                    <div className="h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30 overflow-hidden">
+                      {product.hasImage ? (
                         <img
-                          src={formData.imagenPreview}
-                          alt="Vista previa"
-                          className="w-full h-full object-contain"
+                          src={`https://lyme-back.vercel.app/api/producto/${product._id}/imagen?width=64&height=64&quality=60&${Date.now()}`}
+                          alt={product.nombre}
+                          className="h-16 w-16 object-cover"
+                          loading="lazy"
                           onError={(e) => {
                             e.target.style.display = 'none';
                             e.target.nextSibling.style.display = 'flex';
                           }}
                         />
-                        <div className="absolute inset-0 flex items-center justify-center text-sm text-[#7AA79C] hidden">
-                          No se pudo cargar la imagen
-                        </div>
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          onClick={editingProduct ? () => confirmDeleteImage(editingProduct._id) : handleRemoveImage}
-                          className="absolute top-2 right-2 h-8 w-8 p-0 bg-red-500 hover:bg-red-600"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
+                      ) : null}
+                      <div className={`h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center text-xs text-[#29696B] ${product.hasImage ? 'hidden' : ''}`}>
+                        {product.esCombo ? <PackagePlus size={24} /> : "Sin imagen"}
                       </div>
-                    ) : (
-                      <div className="flex items-center justify-center w-full">
-                        <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#91BEAD]/30 border-dashed rounded-md cursor-pointer bg-[#DFEFE6]/20 hover:bg-[#DFEFE6]/40 transition-colors">
-                          <div className="flex flex-col items-center justify-center pt-3 pb-4">
-                            <ImageIcon className="w-8 h-8 text-[#7AA79C] mb-1" />
-                            <p className="text-xs text-[#7AA79C]">
-                              Haz clic para subir una imagen
-                            </p>
-                            <p className="text-xs text-[#7AA79C]">
-                              Máximo 5MB
-                            </p>
-                          </div>
-                          <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={handleImageChange}
-                          />
-                        </label>
-                      </div>
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    {product.descripcion && (
+                      <p className="text-sm text-[#7AA79C] line-clamp-2 mb-2">
+                        {product.descripcion}
+                      </p>
                     )}
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="flex items-center">
+                        <DollarSign className="w-4 h-4 text-[#91BEAD] mr-1" />
+                        <span className="font-medium text-[#29696B]">${product.precio.toFixed(2)}</span>
+                      </div>
+                      <div className="flex items-center">
+                        <PackageOpen className="w-4 h-4 text-[#91BEAD] mr-1" />
+                        <span className={`font-medium ${product.stock <= 0
+                          ? 'text-red-600'
+                          : product.stock <= LOW_STOCK_THRESHOLD
+                            ? 'text-yellow-600 flex items-center gap-1'
+                            : 'text-[#29696B]'
+                          }`}>
+                          {product.stock <= LOW_STOCK_THRESHOLD && product.stock > 0 && (
+                            <AlertTriangle className="w-3 h-3 text-yellow-500 animate-pulse" />
+                          )}
+                          {product.stock <= 0 ? 'Sin stock' : `${product.stock} unid.`}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-2 text-xs text-[#7AA79C]">
+                      <span className="block">Subcategoría: <span className="capitalize">{product.subCategoria}</span></span>
+                      <span className="block">Vendidos: {product.vendidos || 0}</span>
+                    </div>
                   </div>
                 </div>
-              )}
-            </div>
 
-            <DialogFooter className="sticky bottom-0 bg-white pt-2 pb-4 z-10 gap-2 mt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setShowModal(false);
-                  resetForm();
-                }}
-                className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                className={`${isCombo ? 'bg-[#00888A] hover:bg-[#00888A]/90' : 'bg-[#29696B] hover:bg-[#29696B]/90'} text-white`}
-                disabled={imageLoading || (isCombo && selectedComboItems.length === 0)}
-              >
-                {imageLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Procesando imagen...
-                  </>
-                ) : (
-                  editingProduct ? 'Guardar Cambios' : (isCombo ? 'Crear Combo' : 'Crear Producto')
+                {/* Mostrar elementos del combo si es un combo */}
+                {product.esCombo && product.itemsCombo && product.itemsCombo.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-[#91BEAD]/10">
+                    <p className="text-xs font-medium text-[#29696B] mb-1">Productos en el combo:</p>
+                    <div className="text-xs text-[#7AA79C] max-h-24 overflow-y-auto pr-1">
+                      {product.itemsCombo.map((item, index) => {
+                        const productoNombre = item.productoId && typeof item.productoId === 'object'
+                          ? item.productoId.nombre
+                          : 'Producto';
+
+                        return (
+                          <div key={index} className="flex justify-between py-1 border-b border-[#91BEAD]/10 last:border-0">
+                            <span>{productoNombre}</span>
+                            <span>x{item.cantidad}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+              </CardContent>
+              <CardFooter className="p-2 flex justify-end gap-2 bg-[#DFEFE6]/20 border-t border-[#91BEAD]/10">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleEdit(product)}
+                  className="text-[#29696B] hover:bg-[#DFEFE6]"
+                >
+                  <Edit className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => confirmDelete(product._id)}
+                  className="text-red-600 hover:text-red-800 hover:bg-red-50"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </CardFooter>
+            </Card>
+          ))}
 
-      {/* Modal de selección de productos para el combo - Mejorado para responsividad */}
-      <Dialog open={showComboSelectionModal} onOpenChange={setShowComboSelectionModal}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-auto">
-          <DialogHeader>
-            <DialogTitle className="text-[#29696B]">Seleccionar productos para el combo</DialogTitle>
-            <DialogDescription>
-              Agregue los productos que formarán parte del combo.
-            </DialogDescription>
-          </DialogHeader>
+          {/* Mensaje que muestra la página actual y el total */}
+          {!loading && filteredProducts.length > itemsPerPage && (
+            <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm">
+              <span className="text-[#29696B] font-medium">
+                Página {currentPage} de {totalPages}
+              </span>
+            </div>
+          )}
 
-          <div className="space-y-4">
-            {/* Búsqueda de productos */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
-              <Input
-                type="text"
-                placeholder="Buscar productos..."
-                value={comboSearchTerm}
-                onChange={(e) => setComboSearchTerm(e.target.value)}
-                className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
+          {/* Paginación duplicada al final de la lista para mayor visibilidad */}
+          {!loading && filteredProducts.length > 0 && (
+            <div className="py-4 border-t border-[#91BEAD]/20">
+              <Pagination
+                totalItems={totalCount} // Usar totalCount en lugar de filteredProducts.length
+                itemsPerPage={itemsPerPage}
+                currentPage={currentPage}
+                onPageChange={handlePageChange}
               />
             </div>
+          )}
+        </div>
 
-            {/* Lista de productos disponibles */}
-            <div className="border rounded-md border-[#91BEAD]/30">
-              {/* Vista para dispositivos móviles */}
-              <div className="md:hidden">
-                <div className="bg-[#DFEFE6]/30 p-3 text-[#29696B] font-medium text-sm">
-                  Productos disponibles
-                </div>
-                <div className="divide-y divide-[#91BEAD]/20 max-h-60 overflow-y-auto">
-                  {comboProducts.length === 0 ? (
-                    <div className="p-4 text-center text-[#7AA79C]">
-                      No hay productos disponibles
-                    </div>
-                  ) : (
-                    comboProducts.slice(0, 50).map((product) => (
-                      <div key={product._id} className="p-3 flex justify-between items-center">
-                        <div>
-                          <div className="font-medium text-sm text-[#29696B] truncate w-36">{product.nombre}</div>
-                          <div className="text-xs text-[#7AA79C] flex items-center gap-1">
-                            <span>${product.precio.toFixed(2)}</span>
-                            <span>•</span>
-                            <span className={`inline-flex px-1 py-0.5 text-xs rounded-full ${product.stock <= 0
-                                ? 'bg-red-100 text-red-800'
-                                : product.stock <= LOW_STOCK_THRESHOLD
-                                  ? 'bg-yellow-100 text-yellow-800'
-                                  : 'bg-[#DFEFE6] text-[#29696B]'
-                              }`}>
-                              Stock: {product.stock}
-                            </span>
-                          </div>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleAddComboItem(product)}
-                          className="h-8 text-[#29696B] border-[#91BEAD]"
-                        >
-                          <Plus className="w-3 h-3 mr-1" />
-                          Agregar
-                        </Button>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
+        {/* Modal de Producto */}
+        <Dialog open={showModal} onOpenChange={setShowModal}>
+          <DialogContent className="sm:max-w-md max-h-[90vh] overflow-auto bg-white border border-[#91BEAD]/20">
+            <DialogHeader className="sticky top-0 bg-white pt-4 pb-2 z-10">
+              <DialogTitle className="text-[#29696B] flex items-center">
+                {editingProduct ? 'Editar Producto' : (isCombo ? 'Nuevo Combo' : 'Nuevo Producto')}
+                {isCombo && (
+                  <Badge className="ml-2 bg-[#00888A]/10 border-[#00888A] text-[#00888A]">
+                    Combo
+                  </Badge>
+                )}
+              </DialogTitle>
+              <DialogDescription>
+                {isCombo ? 'Los combos son agrupaciones de productos individuales' : 'Complete la información del producto'}
+              </DialogDescription>
+            </DialogHeader>
 
-              {/* Vista para tablets y desktop */}
-              <div className="hidden md:block">
-                <Table>
-                  <TableHeader className="bg-[#DFEFE6]/30">
-                    <TableRow>
-                      <TableHead className="w-[50%]">Producto</TableHead>
-                      <TableHead>Precio</TableHead>
-                      <TableHead>Stock</TableHead>
-                      <TableHead className="text-right">Acciones</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {comboProducts.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={4} className="text-center py-8 text-[#7AA79C]">
-                          No hay productos disponibles para agregar al combo
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      comboProducts.slice(0, 50).map((product) => (
-                        <TableRow key={product._id}>
-                          <TableCell className="font-medium truncate">{product.nombre}</TableCell>
-                          <TableCell>${product.precio.toFixed(2)}</TableCell>
-                          <TableCell>
-                            <span className={`inline-flex px-2 py-0.5 text-xs rounded-full ${product.stock <= 0
-                                ? 'bg-red-100 text-red-800'
-                                : product.stock <= LOW_STOCK_THRESHOLD
-                                  ? 'bg-yellow-100 text-yellow-800'
-                                  : 'bg-[#DFEFE6] text-[#29696B]'
-                              }`}>
-                              {product.stock}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleAddComboItem(product)}
-                              className="h-8 text-[#29696B] hover:bg-[#DFEFE6]/50"
-                            >
-                              <Plus className="w-4 h-4 mr-1" />
-                              Agregar
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
+            <form onSubmit={handleSubmit} className="space-y-4 py-2">
+              <div className="grid gap-3">
+                {/* Checkbox para marcar como combo */}
+                {!editingProduct && (
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="is-combo"
+                      checked={isCombo}
+                      onCheckedChange={(checked) => {
+                        setIsCombo(checked);
+                        if (!checked) {
+                          setSelectedComboItems([]);
+                        }
+                      }}
+                    />
+                    <label
+                      htmlFor="is-combo"
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-[#29696B]"
+                    >
+                      Este producto es un combo
+                    </label>
+                  </div>
+                )}
 
-            {/* Productos seleccionados - Responsive para móvil y desktop */}
-            <div>
-              <h4 className="text-sm font-medium text-[#29696B] mb-2">Productos seleccionados</h4>
-              {tempSelectedItems.length === 0 ? (
-                <div className="text-center py-4 text-sm text-[#7AA79C] border rounded-md border-[#91BEAD]/30">
-                  No hay productos seleccionados
+                <div>
+                  <Label htmlFor="nombre" className="text-sm text-[#29696B]">Nombre</Label>
+                  <Input
+                    id="nombre"
+                    value={formData.nombre}
+                    onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                    required
+                    className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
+                  />
                 </div>
-              ) : (
-                <div className="border rounded-md border-[#91BEAD]/30">
-                  {/* Vista móvil para productos seleccionados */}
-                  <div className="md:hidden divide-y divide-[#91BEAD]/20">
-                    {tempSelectedItems.map((item, index) => (
-                      <div key={index} className="p-3">
-                        <div className="flex justify-between items-center mb-2">
-                          <div className="font-medium text-sm text-[#29696B] truncate max-w-[180px]">{item.nombre}</div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleUpdateComboItemQuantity(item.productoId, 0)}
-                            className="h-7 w-7 p-0 text-red-500 hover:bg-red-50"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <div className="text-xs text-[#7AA79C]">
-                            <span>${item.precio.toFixed(2)} x {item.cantidad}</span>
-                            <span className="ml-2 text-[#29696B] font-medium">= ${(item.precio * item.cantidad).toFixed(2)}</span>
-                          </div>
-                          <div className="flex items-center border rounded border-[#91BEAD]">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleUpdateComboItemQuantity(item.productoId, item.cantidad - 1)}
-                              className="h-7 w-7 p-0 text-[#29696B]"
-                            >
-                              <Minus className="w-3 h-3" />
-                            </Button>
-                            <span className="w-8 text-center text-sm">{item.cantidad}</span>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleUpdateComboItemQuantity(item.productoId, item.cantidad + 1)}
-                              className="h-7 w-7 p-0 text-[#29696B]"
-                            >
-                              <Plus className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    <div className="p-3 bg-[#DFEFE6]/20 font-medium flex justify-between text-[#29696B]">
-                      <span>Total:</span>
-                      <span>${calculateComboTotal(tempSelectedItems).toFixed(2)}</span>
-                    </div>
+
+                <div>
+                  <Label htmlFor="descripcion" className="text-sm text-[#29696B]">Descripción</Label>
+                  <Textarea
+                    id="descripcion"
+                    value={formData.descripcion}
+                    onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
+                    rows={2}
+                    className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="categoria" className="text-sm text-[#29696B]">Categoría</Label>
+                    <Select
+                      value={formData.categoria}
+                      onValueChange={handleCategoryChange}
+                    >
+                      <SelectTrigger id="categoria" className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
+                        <SelectValue placeholder="Seleccionar categoría" />
+                      </SelectTrigger>
+                      <SelectContent className="border-[#91BEAD]">
+                        <SelectItem value="limpieza">Limpieza</SelectItem>
+                        <SelectItem value="mantenimiento">Mantenimiento</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
-                  {/* Vista desktop para productos seleccionados */}
-                  <div className="hidden md:block">
-                    <Table>
-                      <TableHeader className="bg-[#DFEFE6]/30">
+                  <div>
+                    <Label htmlFor="subCategoria" className="text-sm text-[#29696B]">Subcategoría</Label>
+                    <Select
+                      value={formData.subCategoria}
+                      onValueChange={(value) => setFormData({ ...formData, subCategoria: value })}
+                    >
+                      <SelectTrigger id="subCategoria" className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
+                        <SelectValue placeholder="Seleccionar subcategoría" />
+                      </SelectTrigger>
+                      <SelectContent className="border-[#91BEAD]">
+                        {subCategorias[formData.categoria]?.map((sub) => (
+                          <SelectItem key={sub.value} value={sub.value}>
+                            {sub.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="precio" className="text-sm text-[#29696B]">Precio</Label>
+                    <Input
+                      id="precio"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={formData.precio}
+                      onChange={(e) => setFormData({ ...formData, precio: e.target.value })}
+                      required
+                      className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
+                      maxLength={10}
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="stock" className="text-sm text-[#29696B]">Stock</Label>
+                    <ProductStockInput
+                      id="stock"
+                      value={formData.stock}
+                      onChange={(value) => setFormData({ ...formData, stock: value })}
+                      required
+                      maxStock={999999999}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="proovedorInfo" className="text-sm text-[#29696B]">Información del Proveedor</Label>
+                  <Input
+                    id="proovedorInfo"
+                    value={formData.proovedorInfo}
+                    onChange={(e) => setFormData({ ...formData, proovedorInfo: e.target.value })}
+                    className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
+                  />
+                </div>
+
+                {/* Sección de selección de productos para el combo */}
+                {isCombo && (
+                  <div className="mt-4 border rounded-md p-3 border-[#91BEAD]/30 bg-[#DFEFE6]/10">
+                    <div className="flex items-center justify-between mb-2">
+                      <Label className="text-sm font-medium text-[#29696B]">Productos en el combo</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={openComboSelectionModal}
+                        className="text-xs h-8 border-[#00888A] text-[#00888A] hover:bg-[#00888A]/10"
+                      >
+                        <ShoppingBag className="w-3 h-3 mr-1" />
+                        Seleccionar productos
+                      </Button>
+                    </div>
+
+                    {selectedComboItems.length === 0 ? (
+                      <div className="text-center py-4 text-sm text-[#7AA79C]">
+                        <ShoppingBag className="w-8 h-8 mx-auto mb-2 text-[#7AA79C]/50" />
+                        <p>No hay productos seleccionados</p>
+                        <p className="text-xs">Haga clic en "Seleccionar productos" para agregar elementos al combo</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="text-xs text-[#7AA79C] grid grid-cols-5 py-1 font-medium">
+                          <div className="col-span-2 pl-2">Producto</div>
+                          <div className="text-center">Precio</div>
+                          <div className="text-center">Cant.</div>
+                          <div className="text-right pr-2">Subtotal</div>
+                        </div>
+                        <div className="max-h-40 overflow-y-auto pr-1">
+                          {selectedComboItems.map((item, index) => (
+                            <div key={index} className="text-sm text-[#29696B] grid grid-cols-5 py-2 border-b border-[#91BEAD]/10 last:border-0 items-center">
+                              <div className="col-span-2 truncate pl-2">{item.nombre}</div>
+                              <div className="text-center">${item.precio.toFixed(2)}</div>
+                              <div className="text-center">{item.cantidad}</div>
+                              <div className="text-right font-medium pr-2">${(item.precio * item.cantidad).toFixed(2)}</div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="pt-2 flex justify-between text-sm font-medium text-[#29696B]">
+                          <span>Precio total de los productos:</span>
+                          <span>${calculateComboTotal(selectedComboItems).toFixed(2)}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Campo de imagen */}
+                {!isCombo && (
+                  <div>
+                    <Label className="text-sm text-[#29696B] block mb-2">Imagen del Producto</Label>
+
+                    <div className="mt-1 flex flex-col space-y-2">
+                      {formData.imagenPreview ? (
+                        <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
+                          <img
+                            src={formData.imagenPreview}
+                            alt="Vista previa"
+                            className="w-full h-full object-contain"
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              e.target.nextSibling.style.display = 'flex';
+                            }}
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center text-sm text-[#7AA79C] hidden">
+                            No se pudo cargar la imagen
+                          </div>
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            onClick={editingProduct ? () => confirmDeleteImage(editingProduct._id) : handleRemoveImage}
+                            className="absolute top-2 right-2 h-8 w-8 p-0 bg-red-500 hover:bg-red-600"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center w-full">
+                          <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#91BEAD]/30 border-dashed rounded-md cursor-pointer bg-[#DFEFE6]/20 hover:bg-[#DFEFE6]/40 transition-colors">
+                            <div className="flex flex-col items-center justify-center pt-3 pb-4">
+                              <ImageIcon className="w-8 h-8 text-[#7AA79C] mb-1" />
+                              <p className="text-xs text-[#7AA79C]">
+                                Haz clic para subir una imagen
+                              </p>
+                              <p className="text-xs text-[#7AA79C]">
+                                Máximo 5MB
+                              </p>
+                            </div>
+                            <input
+                              ref={fileInputRef}
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={handleImageChange}
+                            />
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter className="sticky bottom-0 bg-white pt-2 pb-4 z-10 gap-2 mt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowModal(false);
+                    resetForm();
+                  }}
+                  className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  className={`${isCombo ? 'bg-[#00888A] hover:bg-[#00888A]/90' : 'bg-[#29696B] hover:bg-[#29696B]/90'} text-white`}
+                  disabled={imageLoading || (isCombo && selectedComboItems.length === 0)}
+                >
+                  {imageLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Procesando imagen...
+                    </>
+                  ) : (
+                    editingProduct ? 'Guardar Cambios' : (isCombo ? 'Crear Combo' : 'Crear Producto')
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de selección de productos para el combo - Mejorado para responsividad */}
+        <Dialog open={showComboSelectionModal} onOpenChange={setShowComboSelectionModal}>
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-auto">
+            <DialogHeader>
+              <DialogTitle className="text-[#29696B]">Seleccionar productos para el combo</DialogTitle>
+              <DialogDescription>
+                Agregue los productos que formarán parte del combo.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              {/* Búsqueda de productos */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
+                <Input
+                  type="text"
+                  placeholder="Buscar productos..."
+                  value={comboSearchTerm}
+                  onChange={(e) => setComboSearchTerm(e.target.value)}
+                  className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
+                />
+              </div>
+
+              {/* Lista de productos disponibles */}
+              <div className="border rounded-md border-[#91BEAD]/30">
+                {/* Vista para dispositivos móviles */}
+                <div className="md:hidden">
+                  <div className="bg-[#DFEFE6]/30 p-3 text-[#29696B] font-medium text-sm">
+                    Productos disponibles
+                  </div>
+                  <div className="divide-y divide-[#91BEAD]/20 max-h-60 overflow-y-auto">
+                    {comboProducts.length === 0 ? (
+                      <div className="p-4 text-center text-[#7AA79C]">
+                        No hay productos disponibles
+                      </div>
+                    ) : (
+                      comboProducts.slice(0, 50).map((product) => (
+                        <div key={product._id} className="p-3 flex justify-between items-center">
+                          <div>
+                            <div className="font-medium text-sm text-[#29696B] truncate w-36">{product.nombre}</div>
+                            <div className="text-xs text-[#7AA79C] flex items-center gap-1">
+                              <span>${product.precio.toFixed(2)}</span>
+                              <span>•</span>
+                              <span className={`inline-flex px-1 py-0.5 text-xs rounded-full ${product.stock <= 0
+                                ? 'bg-red-100 text-red-800'
+                                : product.stock <= LOW_STOCK_THRESHOLD
+                                  ? 'bg-yellow-100 text-yellow-800'
+                                  : 'bg-[#DFEFE6] text-[#29696B]'
+                                }`}>
+                                Stock: {product.stock}
+                              </span>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleAddComboItem(product)}
+                            className="h-8 text-[#29696B] border-[#91BEAD]"
+                          >
+                            <Plus className="w-3 h-3 mr-1" />
+                            Agregar
+                          </Button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Vista para tablets y desktop */}
+                <div className="hidden md:block">
+                  <Table>
+                    <TableHeader className="bg-[#DFEFE6]/30">
+                      <TableRow>
+                        <TableHead className="w-[50%]">Producto</TableHead>
+                        <TableHead>Precio</TableHead>
+                        <TableHead>Stock</TableHead>
+                        <TableHead className="text-right">Acciones</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {comboProducts.length === 0 ? (
                         <TableRow>
-                          <TableHead>Producto</TableHead>
-                          <TableHead>Precio</TableHead>
-                          <TableHead>Cantidad</TableHead>
-                          <TableHead>Subtotal</TableHead>
-                          <TableHead className="text-right">Acciones</TableHead>
+                          <TableCell colSpan={4} className="text-center py-8 text-[#7AA79C]">
+                            No hay productos disponibles para agregar al combo
+                          </TableCell>
                         </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {tempSelectedItems.map((item, index) => (
-                          <TableRow key={index}>
-                            <TableCell className="font-medium truncate">{item.nombre}</TableCell>
-                            <TableCell>${item.precio.toFixed(2)}</TableCell>
+                      ) : (
+                        comboProducts.slice(0, 50).map((product) => (
+                          <TableRow key={product._id}>
+                            <TableCell className="font-medium truncate">{product.nombre}</TableCell>
+                            <TableCell>${product.precio.toFixed(2)}</TableCell>
                             <TableCell>
-                              <div className="flex items-center space-x-1">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleUpdateComboItemQuantity(item.productoId, item.cantidad - 1)}
-                                  className="h-6 w-6 p-0 text-[#29696B]"
-                                >
-                                  <Minus className="w-3 h-3" />
-                                </Button>
-                                <span className="w-8 text-center">{item.cantidad}</span>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleUpdateComboItemQuantity(item.productoId, item.cantidad + 1)}
-                                  className="h-6 w-6 p-0 text-[#29696B]"
-                                >
-                                  <Plus className="w-3 h-3" />
-                                </Button>
-                              </div>
+                              <span className={`inline-flex px-2 py-0.5 text-xs rounded-full ${product.stock <= 0
+                                ? 'bg-red-100 text-red-800'
+                                : product.stock <= LOW_STOCK_THRESHOLD
+                                  ? 'bg-yellow-100 text-yellow-800'
+                                  : 'bg-[#DFEFE6] text-[#29696B]'
+                                }`}>
+                                {product.stock}
+                              </span>
                             </TableCell>
-                            <TableCell>${(item.precio * item.cantidad).toFixed(2)}</TableCell>
                             <TableCell className="text-right">
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleUpdateComboItemQuantity(item.productoId, 0)}
-                                className="h-8 text-red-500 hover:bg-red-50 hover:text-red-700"
+                                onClick={() => handleAddComboItem(product)}
+                                className="h-8 text-[#29696B] hover:bg-[#DFEFE6]/50"
                               >
-                                <Trash2 className="w-4 h-4" />
+                                <Plus className="w-4 h-4 mr-1" />
+                                Agregar
                               </Button>
                             </TableCell>
                           </TableRow>
-                        ))}
-                        <TableRow className="font-bold">
-                          <TableCell colSpan={3} className="text-right">Total:</TableCell>
-                          <TableCell>${calculateComboTotal(tempSelectedItems).toFixed(2)}</TableCell>
-                          <TableCell></TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </Table>
-                  </div>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
                 </div>
-              )}
+              </div>
+
+              {/* Productos seleccionados - Responsive para móvil y desktop */}
+              <div>
+                <h4 className="text-sm font-medium text-[#29696B] mb-2">Productos seleccionados</h4>
+                {tempSelectedItems.length === 0 ? (
+                  <div className="text-center py-4 text-sm text-[#7AA79C] border rounded-md border-[#91BEAD]/30">
+                    No hay productos seleccionados
+                  </div>
+                ) : (
+                  <div className="border rounded-md border-[#91BEAD]/30">
+                    {/* Vista móvil para productos seleccionados */}
+                    <div className="md:hidden divide-y divide-[#91BEAD]/20">
+                      {tempSelectedItems.map((item, index) => (
+                        <div key={index} className="p-3">
+                          <div className="flex justify-between items-center mb-2">
+                            <div className="font-medium text-sm text-[#29696B] truncate max-w-[180px]">{item.nombre}</div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleUpdateComboItemQuantity(item.productoId, 0)}
+                              className="h-7 w-7 p-0 text-red-500 hover:bg-red-50"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <div className="text-xs text-[#7AA79C]">
+                              <span>${item.precio.toFixed(2)} x {item.cantidad}</span>
+                              <span className="ml-2 text-[#29696B] font-medium">= ${(item.precio * item.cantidad).toFixed(2)}</span>
+                            </div>
+                            <div className="flex items-center border rounded border-[#91BEAD]">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleUpdateComboItemQuantity(item.productoId, item.cantidad - 1)}
+                                className="h-7 w-7 p-0 text-[#29696B]"
+                              >
+                                <Minus className="w-3 h-3" />
+                              </Button>
+                              <span className="w-8 text-center text-sm">{item.cantidad}</span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleUpdateComboItemQuantity(item.productoId, item.cantidad + 1)}
+                                className="h-7 w-7 p-0 text-[#29696B]"
+                              >
+                                <Plus className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      <div className="p-3 bg-[#DFEFE6]/20 font-medium flex justify-between text-[#29696B]">
+                        <span>Total:</span>
+                        <span>${calculateComboTotal(tempSelectedItems).toFixed(2)}</span>
+                      </div>
+                    </div>
+
+                    {/* Vista desktop para productos seleccionados */}
+                    <div className="hidden md:block">
+                      <Table>
+                        <TableHeader className="bg-[#DFEFE6]/30">
+                          <TableRow>
+                            <TableHead>Producto</TableHead>
+                            <TableHead>Precio</TableHead>
+                            <TableHead>Cantidad</TableHead>
+                            <TableHead>Subtotal</TableHead>
+                            <TableHead className="text-right">Acciones</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {tempSelectedItems.map((item, index) => (
+                            <TableRow key={index}>
+                              <TableCell className="font-medium truncate">{item.nombre}</TableCell>
+                              <TableCell>${item.precio.toFixed(2)}</TableCell>
+                              <TableCell>
+                                <div className="flex items-center space-x-1">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleUpdateComboItemQuantity(item.productoId, item.cantidad - 1)}
+                                    className="h-6 w-6 p-0 text-[#29696B]"
+                                  >
+                                    <Minus className="w-3 h-3" />
+                                  </Button>
+                                  <span className="w-8 text-center">{item.cantidad}</span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleUpdateComboItemQuantity(item.productoId, item.cantidad + 1)}
+                                    className="h-6 w-6 p-0 text-[#29696B]"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                              <TableCell>${(item.precio * item.cantidad).toFixed(2)}</TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleUpdateComboItemQuantity(item.productoId, 0)}
+                                  className="h-8 text-red-500 hover:bg-red-50 hover:text-red-700"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          <TableRow className="font-bold">
+                            <TableCell colSpan={3} className="text-right">Total:</TableCell>
+                            <TableCell>${calculateComboTotal(tempSelectedItems).toFixed(2)}</TableCell>
+                            <TableCell></TableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
 
-          <DialogFooter className="gap-2 mt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setShowComboSelectionModal(false)}
-              className="border-[#91BEAD] text-[#29696B]"
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="button"
-              onClick={confirmComboSelection}
-              className="bg-[#00888A] hover:bg-[#00888A]/90 text-white"
-              disabled={tempSelectedItems.length === 0}
-            >
-              Confirmar selección
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <DialogFooter className="gap-2 mt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowComboSelectionModal(false)}
+                className="border-[#91BEAD] text-[#29696B]"
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                onClick={confirmComboSelection}
+                className="bg-[#00888A] hover:bg-[#00888A]/90 text-white"
+                disabled={tempSelectedItems.length === 0}
+              >
+                Confirmar selección
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
-      {/* Diálogo de confirmación de eliminación */}
-      <ConfirmationDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
-        title="Eliminar producto"
-        description="¿Está seguro de que desea eliminar este producto? Esta acción no se puede deshacer."
-        confirmText="Eliminar"
-        cancelText="Cancelar"
-        onConfirm={() => productToDelete && handleDelete(productToDelete)}
-        variant="destructive"
-      />
+        {/* Diálogo de confirmación de eliminación */}
+        <ConfirmationDialog
+          open={deleteDialogOpen}
+          onOpenChange={setDeleteDialogOpen}
+          title="Eliminar producto"
+          description="¿Está seguro de que desea eliminar este producto? Esta acción no se puede deshacer."
+          confirmText="Eliminar"
+          cancelText="Cancelar"
+          onConfirm={() => productToDelete && handleDelete(productToDelete)}
+          variant="destructive"
+        />
 
-      {/* Diálogo de confirmación de eliminación de imagen */}
-      <ConfirmationDialog
-        open={deleteImageDialogOpen}
-        onOpenChange={setDeleteImageDialogOpen}
-        title="Eliminar imagen"
-        description="¿Está seguro de que desea eliminar la imagen de este producto?"
-        confirmText="Eliminar"
-        cancelText="Cancelar"
-        onConfirm={() => productToDelete && handleDeleteProductImage(productToDelete)}
-        variant="destructive"
-      />
-    </div>
-  );
+        {/* Diálogo de confirmación de eliminación de imagen */}
+        <ConfirmationDialog
+          open={deleteImageDialogOpen}
+          onOpenChange={setDeleteImageDialogOpen}
+          title="Eliminar imagen"
+          description="¿Está seguro de que desea eliminar la imagen de este producto?"
+          confirmText="Eliminar"
+          cancelText="Cancelar"
+          onConfirm={() => productToDelete && handleDeleteProductImage(productToDelete)}
+          variant="destructive"
+        />
+      </div>
+      );
 };
 
-export default InventorySection;
+      export default InventorySection;
