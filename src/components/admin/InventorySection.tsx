@@ -74,18 +74,18 @@ const ProductStockInput = ({
 }) => {
   const handleChange = (e) => {
     const inputValue = e.target.value;
-    
+
     if (inputValue === '') {
       onChange('');
       return;
     }
-    
+
     const numValue = parseInt(inputValue, 10);
-    
+
     if (isNaN(numValue)) {
       return;
     }
-    
+
     if (numValue > maxStock) {
       onChange(maxStock.toString());
     } else if (numValue < 0) {
@@ -137,24 +137,24 @@ const InventorySection = () => {
   const [showComboSelectionModal, setShowComboSelectionModal] = useState(false);
   const [tempSelectedItems, setTempSelectedItems] = useState([]);
   const initialFetchDone = useRef(false);
-  
+
   // Estado para la paginación
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  
+
   // Referencias para el scroll en móvil
   const mobileListRef = useRef(null);
-  
+
   // IMPORTANTE: Tamaños fijos para cada tipo de dispositivo
   const ITEMS_PER_PAGE_MOBILE = 5;
   const ITEMS_PER_PAGE_DESKTOP = 10;
-  
+
   // Estado para controlar el ancho de la ventana
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
-  
+
   // Calculamos dinámicamente itemsPerPage basado en el ancho de la ventana
   const itemsPerPage = windowWidth < 768 ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP;
-  
+
   const [formData, setFormData] = useState({
     nombre: '',
     descripcion: '',
@@ -190,32 +190,50 @@ const InventorySection = () => {
   };
 
   // Función mejorada para cargar productos
-  const fetchProducts = async (forceRefresh = false) => {
+  const fetchProducts = async (forceRefresh = false, page = currentPage, limit = itemsPerPage) => {
     try {
       // Solo evitamos la carga si ya está cargando y no es forzada
       if (loading && !forceRefresh) {
         console.log('Ya se está cargando productos, evitando otra carga');
         return;
       }
-      
-      console.log('Cargando productos desde el servidor...');
+
+      console.log(`Cargando productos desde el servidor para página ${page}, límite ${limit}...`);
       setLoading(true);
       setRefreshing(forceRefresh);
       setError('');
-      
+
       const token = getAuthToken();
       if (!token) {
         console.error('No se encontró token de autenticación');
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('https://lyme-back.vercel.app/api/producto', {
+      // Añadir parámetros de paginación a la URL
+      const url = `https://lyme-back.vercel.app/api/producto?page=${page}&limit=${limit}`;
+
+      // Si hay filtros activos, añadirlos a la URL
+      const queryParams = new URLSearchParams();
+      queryParams.append('page', page.toString());
+      queryParams.append('limit', limit.toString());
+
+      if (searchTerm) {
+        queryParams.append('search', searchTerm);
+      }
+
+      if (selectedCategory !== 'all') {
+        queryParams.append('category', selectedCategory);
+      }
+
+      const urlWithParams = `https://lyme-back.vercel.app/api/producto?${queryParams.toString()}`;
+
+      const response = await fetch(urlWithParams, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
         }
       });
-      
+
       if (!response.ok) {
         if (response.status === 401) {
           if (typeof window !== 'undefined') {
@@ -227,7 +245,7 @@ const InventorySection = () => {
         }
         throw new Error('Error al cargar productos');
       }
-      
+
       // Obtenemos el JSON de la respuesta
       let responseData;
       try {
@@ -236,11 +254,11 @@ const InventorySection = () => {
         console.error("Error al parsear JSON:", jsonError);
         throw new Error('Error al procesar datos de productos');
       }
-      
+
       // Manejar correctamente el formato de respuesta paginada o array simple
       let extractedProducts = [];
       let totalItems = 0;
-      
+
       if (responseData && typeof responseData === 'object') {
         if (Array.isArray(responseData)) {
           // Si es un array directamente
@@ -258,24 +276,24 @@ const InventorySection = () => {
           totalItems = 0;
         }
       }
-      
+
       // Establecer productos y total
       setProducts(extractedProducts);
       setTotalCount(totalItems);
-      
+
       // Marcar carga inicial como completada
       initialFetchDone.current = true;
-      
+
       // Si hay pocos productos, mostrar una alerta
       if (extractedProducts.length === 0) {
         addNotification('No se encontraron productos', 'info');
       }
-      
+
     } catch (err) {
       const errorMsg = 'Error al cargar productos: ' + err.message;
       console.error(errorMsg);
       setError(errorMsg);
-      
+
       if (typeof addNotification === 'function') {
         addNotification(errorMsg, 'error');
       }
@@ -299,11 +317,11 @@ const InventorySection = () => {
           'Cache-Control': 'no-cache'
         }
       });
-      
+
       if (!response.ok) {
         throw new Error(`Error al obtener producto (${response.status})`);
       }
-      
+
       const productData = await response.json();
       return productData;
     } catch (error) {
@@ -315,13 +333,13 @@ const InventorySection = () => {
   // Actualizar un producto específico en el estado
   const updateProductInState = (updatedProduct) => {
     if (!updatedProduct || !updatedProduct._id) return;
-    
+
     setProducts(prevProducts => {
       // Verificar que prevProducts sea un array
       if (!Array.isArray(prevProducts)) return [updatedProduct];
-      
-      return prevProducts.map(product => 
-        product._id === updatedProduct._id ? {...product, ...updatedProduct} : product
+
+      return prevProducts.map(product =>
+        product._id === updatedProduct._id ? { ...product, ...updatedProduct } : product
       );
     });
   };
@@ -329,21 +347,21 @@ const InventorySection = () => {
   // Verificar productos con stock bajo y enviar notificación (con manejo de errores robusto)
   useEffect(() => {
     if (loading || !Array.isArray(products)) return;
-    
+
     try {
-      const lowStockProducts = products.filter(product => 
-        product && 
-        typeof product === 'object' && 
-        typeof product.stock === 'number' && 
-        product.stock > 0 && 
+      const lowStockProducts = products.filter(product =>
+        product &&
+        typeof product === 'object' &&
+        typeof product.stock === 'number' &&
+        product.stock > 0 &&
         product.stock <= LOW_STOCK_THRESHOLD
       );
-      
+
       if (lowStockProducts.length > 0) {
         const productNames = lowStockProducts.slice(0, 3).map(p => p.nombre || 'Producto sin nombre').join(', ');
         const extraCount = lowStockProducts.length > 3 ? ` y ${lowStockProducts.length - 3} más` : '';
         const message = `Alerta: ${lowStockProducts.length} producto${lowStockProducts.length > 1 ? 's' : ''} con stock bajo: ${productNames}${extraCount}`;
-        
+
         if (addNotification) {
           addNotification(message, 'warning');
         }
@@ -356,17 +374,17 @@ const InventorySection = () => {
   // Cargar productos al montar el componente y suscribirse al observable para actualizaciones
   useEffect(() => {
     console.log('InventorySection: Componente montado, iniciando carga de productos...');
-    
+
     // Cargar productos inmediatamente al montar el componente
     // Usamos forceRefresh=true para asegurar que se ejecute independientemente del estado
     fetchProducts(true);
-    
+
     // Suscribirse a actualizaciones
     const unsubscribe = inventoryObservable.subscribe(() => {
       console.log('InventorySection: Actualización de inventario notificada por observable');
       fetchProducts(true);
     });
-    
+
     // Limpiar suscripción al desmontar
     return () => {
       unsubscribe();
@@ -378,13 +396,13 @@ const InventorySection = () => {
     const handleResize = () => {
       const newWidth = window.innerWidth;
       setWindowWidth(newWidth);
-      
+
       // Si cambiamos entre móvil y escritorio, volvemos a la primera página
       if ((newWidth < 768 && windowWidth >= 768) || (newWidth >= 768 && windowWidth < 768)) {
         setCurrentPage(1);
       }
     };
-    
+
     if (typeof window !== 'undefined') {
       window.addEventListener('resize', handleResize);
       return () => window.removeEventListener('resize', handleResize);
@@ -393,7 +411,9 @@ const InventorySection = () => {
 
   // Resetear la página actual cuando cambian los filtros
   useEffect(() => {
+    // Cuando cambian los filtros, volver a la primera página y recargar
     setCurrentPage(1);
+    fetchProducts(true, 1, itemsPerPage);
   }, [searchTerm, selectedCategory]);
 
   // Función segura para obtener productos filtrados
@@ -402,25 +422,25 @@ const InventorySection = () => {
     if (!products || !Array.isArray(products)) {
       return [];
     }
-    
+
     return products.filter(product => {
       // Verificación de seguridad para producto
       if (!product || typeof product !== 'object') return false;
-      
+
       // Buscar coincidencias en nombre, descripción y proveedor (con verificación segura)
-      const matchesSearch = 
+      const matchesSearch =
         searchTerm === '' || (
           (product.nombre && product.nombre.toLowerCase().includes(searchTerm.toLowerCase())) ||
           (product.descripcion && product.descripcion.toLowerCase().includes(searchTerm.toLowerCase())) ||
           (product.proovedorInfo && product.proovedorInfo.toLowerCase().includes(searchTerm.toLowerCase()))
         );
-        
+
       // Verificar categoría
-      const matchesCategory = 
-        selectedCategory === 'all' || 
+      const matchesCategory =
+        selectedCategory === 'all' ||
         (product.categoria && product.categoria === selectedCategory) ||
         (product.subCategoria && product.subCategoria === selectedCategory);
-        
+
       return matchesSearch && matchesCategory;
     });
   };
@@ -430,13 +450,13 @@ const InventorySection = () => {
     // No mostrar productos que ya son combos
     return products.filter(product => {
       if (!product || product.esCombo) return false;
-      
+
       // Buscar por término de búsqueda (si existe)
-      const matchesSearch = 
+      const matchesSearch =
         comboSearchTerm === '' || (
           (product.nombre && product.nombre.toLowerCase().includes(comboSearchTerm.toLowerCase()))
         );
-        
+
       return matchesSearch;
     });
   };
@@ -445,7 +465,7 @@ const InventorySection = () => {
   const handleImageChange = (e) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      
+
       // Validar tamaño del archivo (5MB máximo)
       if (file.size > 5 * 1024 * 1024) {
         console.log('La imagen no debe superar los 5MB');
@@ -465,7 +485,7 @@ const InventorySection = () => {
         }
         return;
       }
-      
+
       // Crear URL para vista previa
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -475,7 +495,7 @@ const InventorySection = () => {
           imagenPreview: reader.result
         });
       };
-      
+
       reader.readAsDataURL(file);
     }
   };
@@ -496,36 +516,36 @@ const InventorySection = () => {
   const handleDeleteProductImage = async (productId) => {
     try {
       setImageLoading(true);
-      
+
       const token = getAuthToken();
       if (!token) {
         throw new Error('No hay token de autenticación');
       }
-      
+
       const response = await fetch(`https://lyme-back.vercel.app/api/producto/${productId}/imagen`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
-      
+
       if (!response.ok) {
         throw new Error(`Error al eliminar imagen (${response.status})`);
       }
-      
+
       // Actualizar la vista del formulario para permitir subir una nueva imagen
       setFormData(prev => ({
         ...prev,
         imagen: null,
         imagenPreview: null
       }));
-      
+
       // Actualizar el producto específico en el estado
       const updatedProduct = await fetchProductById(productId);
       if (updatedProduct) {
         updateProductInState(updatedProduct);
       }
-      
+
       addNotification('Imagen eliminada correctamente', 'success');
       setDeleteImageDialogOpen(false);
     } catch (error) {
@@ -539,19 +559,19 @@ const InventorySection = () => {
   // Manejar subida de imagen después de crear/editar producto
   const handleImageUpload = async (productId) => {
     if (!formData.imagen) return true;
-    
+
     try {
       setImageLoading(true);
-      
+
       const token = getAuthToken();
       if (!token) {
         throw new Error('No hay token de autenticación');
       }
-      
+
       // Crear FormData para enviar la imagen
       const formDataObj = new FormData();
       formDataObj.append('imagen', formData.imagen);
-      
+
       const response = await fetch(`https://lyme-back.vercel.app/api/producto/${productId}/imagen`, {
         method: 'POST',
         headers: {
@@ -559,17 +579,17 @@ const InventorySection = () => {
         },
         body: formDataObj
       });
-      
+
       if (!response.ok) {
         throw new Error(`Error al subir imagen (${response.status})`);
       }
-      
+
       // Actualizar el producto específico en el estado
       const updatedProduct = await fetchProductById(productId);
       if (updatedProduct) {
         updateProductInState(updatedProduct);
       }
-      
+
       return true;
     } catch (error) {
       console.error('Error al subir imagen:', error);
@@ -584,12 +604,12 @@ const InventorySection = () => {
   const handleAddComboItem = (product) => {
     // Verificar si ya existe
     const existingItem = tempSelectedItems.find(item => item.productoId === product._id);
-    
+
     if (existingItem) {
       // Si ya existe, solo actualizar la cantidad
-      setTempSelectedItems(prevItems => 
-        prevItems.map(item => 
-          item.productoId === product._id 
+      setTempSelectedItems(prevItems =>
+        prevItems.map(item =>
+          item.productoId === product._id
             ? { ...item, cantidad: item.cantidad + 1 }
             : item
         )
@@ -597,7 +617,7 @@ const InventorySection = () => {
     } else {
       // Si no existe, agregarlo
       setTempSelectedItems(prevItems => [
-        ...prevItems, 
+        ...prevItems,
         { productoId: product._id, nombre: product.nombre, cantidad: 1, precio: product.precio }
       ]);
     }
@@ -607,14 +627,14 @@ const InventorySection = () => {
   const handleUpdateComboItemQuantity = (productId, newQuantity) => {
     if (newQuantity <= 0) {
       // Si la cantidad es 0 o menos, eliminar el ítem
-      setTempSelectedItems(prevItems => 
+      setTempSelectedItems(prevItems =>
         prevItems.filter(item => item.productoId !== productId)
       );
     } else {
       // Actualizar la cantidad
-      setTempSelectedItems(prevItems => 
-        prevItems.map(item => 
-          item.productoId === productId 
+      setTempSelectedItems(prevItems =>
+        prevItems.map(item =>
+          item.productoId === productId
             ? { ...item, cantidad: newQuantity }
             : item
         )
@@ -624,7 +644,7 @@ const InventorySection = () => {
 
   // Eliminar un ítem del combo
   const handleRemoveComboItem = (productId) => {
-    setSelectedComboItems(prevItems => 
+    setSelectedComboItems(prevItems =>
       prevItems.filter(item => item.productoId !== productId)
     );
   };
@@ -643,7 +663,7 @@ const InventorySection = () => {
   const confirmComboSelection = () => {
     setSelectedComboItems(tempSelectedItems);
     setShowComboSelectionModal(false);
-    
+
     // Actualizar el precio sugerido del combo (suma de precios individuales)
     const comboTotal = calculateComboTotal(tempSelectedItems);
     setFormData(prev => ({
@@ -664,7 +684,7 @@ const InventorySection = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    
+
     try {
       const token = getAuthToken();
       if (!token) {
@@ -674,9 +694,9 @@ const InventorySection = () => {
       const url = editingProduct
         ? `https://lyme-back.vercel.app/api/producto/${editingProduct._id}`
         : 'https://lyme-back.vercel.app/api/producto';
-      
+
       const method = editingProduct ? 'PUT' : 'POST';
-      
+
       // Datos básicos del producto
       const payload = {
         nombre: formData.nombre,
@@ -693,7 +713,7 @@ const InventorySection = () => {
           cantidad: item.cantidad
         })) : []
       };
-      
+
       const response = await fetch(url, {
         method,
         headers: {
@@ -707,7 +727,7 @@ const InventorySection = () => {
         const error = await response.json();
         throw new Error(error.error || 'Error al procesar la solicitud');
       }
-      
+
       // Parsear la respuesta JSON
       let savedProduct;
       try {
@@ -716,7 +736,7 @@ const InventorySection = () => {
         console.error("Error al parsear JSON:", jsonError);
         throw new Error('Error al procesar datos del producto guardado');
       }
-      
+
       // Manejar la subida de imagen si hay una imagen nueva
       if (formData.imagen) {
         const imageUploaded = await handleImageUpload(savedProduct._id);
@@ -724,10 +744,10 @@ const InventorySection = () => {
           console.log('Hubo un problema al subir la imagen, pero el producto se guardó correctamente');
         }
       }
-      
+
       setShowModal(false);
       resetForm();
-      
+
       // Actualizar el producto específico en el estado o agregar si es nuevo
       if (editingProduct) {
         // Obtener la versión actualizada del producto
@@ -743,21 +763,21 @@ const InventorySection = () => {
           return [savedProduct, ...prevProducts];
         });
       }
-      
+
       // Notificar a otros componentes que deben actualizarse
       inventoryObservable.notify();
-      
+
       const successMsg = `Producto ${editingProduct ? 'actualizado' : 'creado'} correctamente`;
       setSuccessMessage(successMsg);
-      
+
       addNotification(successMsg, 'success');
-      
+
       // Limpiar mensaje después de unos segundos
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err) {
       const errorMsg = 'Error al guardar producto: ' + err.message;
       setError(errorMsg);
-      
+
       addNotification(errorMsg, 'error');
     }
   };
@@ -781,36 +801,36 @@ const InventorySection = () => {
       if (!token) {
         throw new Error('No hay token de autenticación');
       }
-      
+
       const response = await fetch(`https://lyme-back.vercel.app/api/producto/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
-      
+
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || 'Error al eliminar producto');
       }
-      
+
       // Eliminar el producto del estado local
       setProducts(prevProducts => {
         if (!Array.isArray(prevProducts)) return [];
         return prevProducts.filter(product => product._id !== id);
       });
-      
+
       const successMsg = 'Producto eliminado correctamente';
       setSuccessMessage(successMsg);
-      
+
       addNotification(successMsg, 'success');
-      
+
       // Limpiar mensaje después de unos segundos
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err) {
       const errorMsg = 'Error al eliminar producto: ' + err.message;
       setError(errorMsg);
-      
+
       addNotification(errorMsg, 'error');
     } finally {
       // Cerrar diálogo de confirmación
@@ -823,11 +843,11 @@ const InventorySection = () => {
   const handleEdit = async (product) => {
     try {
       setEditingProduct(product);
-      
+
       // Detectar si es un combo
       const isProductCombo = product.esCombo || false;
       setIsCombo(isProductCombo);
-      
+
       // Si es combo, cargar los ítems del combo
       if (isProductCombo && Array.isArray(product.itemsCombo)) {
         const comboItems = product.itemsCombo.map(item => {
@@ -839,12 +859,12 @@ const InventorySection = () => {
               cantidad: item.cantidad,
               precio: item.productoId.precio
             };
-          } 
+          }
           // Si no está poblado, intentar recuperar la información
           else {
             const productId = typeof item.productoId === 'string' ? item.productoId : item.productoId?.toString();
             const matchedProduct = products.find(p => p._id === productId);
-            
+
             return {
               productoId: productId,
               nombre: matchedProduct ? matchedProduct.nombre : 'Producto no disponible',
@@ -853,12 +873,12 @@ const InventorySection = () => {
             };
           }
         });
-        
+
         setSelectedComboItems(comboItems);
       } else {
         setSelectedComboItems([]);
       }
-      
+
       // Intentar cargar vista previa de la imagen si el producto tiene una
       let imagePreview = null;
       if (product.hasImage) {
@@ -871,7 +891,7 @@ const InventorySection = () => {
           imagePreview = null;
         }
       }
-      
+
       setFormData({
         nombre: product.nombre || '',
         descripcion: product.descripcion || '',
@@ -883,7 +903,7 @@ const InventorySection = () => {
         imagen: null,
         imagenPreview: imagePreview
       });
-      
+
       setShowModal(true);
     } catch (error) {
       console.error("Error al preparar edición:", error);
@@ -920,14 +940,14 @@ const InventorySection = () => {
         addNotification(`Error: Categoría '${value}' no válida`, 'error');
         return;
       }
-      
+
       const defaultSubcategoria = subCategorias[value][0].value;
-      
+
       setFormData(prevState => ({
         ...prevState,
         categoria: value
       }));
-      
+
       setTimeout(() => {
         setFormData(prevState => ({
           ...prevState,
@@ -971,30 +991,35 @@ const InventorySection = () => {
 
   // Obtener productos filtrados de manera segura
   const filteredProducts = getFilteredProducts();
-  
+
   // Calcular paginación
   const indexOfLastProduct = currentPage * itemsPerPage;
   const indexOfFirstProduct = indexOfLastProduct - itemsPerPage;
   const currentProducts = filteredProducts.slice(indexOfFirstProduct, indexOfLastProduct);
-  
+
   // Obtener productos disponibles para combos
   const comboProducts = getFilteredComboProducts();
-  
+
   // Calcular el total de páginas
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
 
   // Función para cambiar de página
   const handlePageChange = (pageNumber) => {
+    // Actualizar el estado de la página actual
     setCurrentPage(pageNumber);
-    
+
+    // Volver a cargar los productos con la nueva página
+    fetchProducts(true, pageNumber, itemsPerPage);
+
     // Al cambiar de página, hacemos scroll hacia arriba
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    
+
     // Hacer scroll al inicio de la lista en móvil
     if (windowWidth < 768 && mobileListRef.current) {
       mobileListRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   };
+
 
   // Función para recargar manualmente los productos
   const handleManualRefresh = () => {
@@ -1002,7 +1027,7 @@ const InventorySection = () => {
   };
 
   // Mostrar información detallada sobre la paginación
-  const showingFromTo = filteredProducts.length > 0 
+  const showingFromTo = filteredProducts.length > 0
     ? `${indexOfFirstProduct + 1}-${Math.min(indexOfLastProduct, filteredProducts.length)} de ${filteredProducts.length}`
     : '0 de 0';
 
@@ -1015,7 +1040,7 @@ const InventorySection = () => {
           <AlertDescription className="ml-2">{error}</AlertDescription>
         </Alert>
       )}
-      
+
       {successMessage && (
         <Alert className="bg-[#DFEFE6] border border-[#91BEAD] text-[#29696B] rounded-lg">
           <CheckCircle className="h-4 w-4 text-[#29696B]" />
@@ -1036,28 +1061,28 @@ const InventorySection = () => {
               className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
             />
           </div>
-          
-          <Tabs 
-            defaultValue="all" 
+
+          <Tabs
+            defaultValue="all"
             value={selectedCategory}
             onValueChange={setSelectedCategory}
             className="w-full"
           >
             <TabsList className="w-full mb-2 flex flex-wrap h-auto bg-[#DFEFE6]/50">
-              <TabsTrigger 
-                value="all" 
+              <TabsTrigger
+                value="all"
                 className="flex-1 data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
               >
                 Todos
               </TabsTrigger>
-              <TabsTrigger 
-                value="limpieza" 
+              <TabsTrigger
+                value="limpieza"
                 className="flex-1 data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
               >
                 Limpieza
               </TabsTrigger>
-              <TabsTrigger 
-                value="mantenimiento" 
+              <TabsTrigger
+                value="mantenimiento"
                 className="flex-1 data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
               >
                 Mantenimiento
@@ -1067,7 +1092,7 @@ const InventorySection = () => {
         </div>
 
         <div className="w-full md:w-auto flex flex-col sm:flex-row gap-2">
-          <Button 
+          <Button
             onClick={handleManualRefresh}
             variant="outline"
             className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
@@ -1076,8 +1101,8 @@ const InventorySection = () => {
             <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
             Actualizar
           </Button>
-          
-          <Button 
+
+          <Button
             onClick={() => {
               resetForm();
               setShowModal(true);
@@ -1087,8 +1112,8 @@ const InventorySection = () => {
             <Plus className="w-4 h-4 mr-2" />
             Nuevo Producto
           </Button>
-          
-          <Button 
+
+          <Button
             onClick={() => {
               resetForm();
               setIsCombo(true);
@@ -1129,8 +1154,8 @@ const InventorySection = () => {
             <Search className="w-6 h-6 text-[#29696B]" />
           </div>
           <p className="text-[#7AA79C]">
-            {searchTerm || selectedCategory !== 'all' 
-              ? 'No se encontraron productos que coincidan con la búsqueda' 
+            {searchTerm || selectedCategory !== 'all'
+              ? 'No se encontraron productos que coincidan con la búsqueda'
               : 'No hay productos disponibles'}
           </p>
         </div>
@@ -1177,15 +1202,14 @@ const InventorySection = () => {
               </thead>
               <tbody className="bg-white divide-y divide-[#91BEAD]/20">
                 {currentProducts.map((product) => (
-                  <tr 
-                    key={product._id} 
-                    className={`hover:bg-[#DFEFE6]/20 transition-colors ${
-                      product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD 
-                        ? 'bg-yellow-50 hover:bg-yellow-100' 
-                        : product.stock <= 0 
+                  <tr
+                    key={product._id}
+                    className={`hover:bg-[#DFEFE6]/20 transition-colors ${product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD
+                        ? 'bg-yellow-50 hover:bg-yellow-100'
+                        : product.stock <= 0
                           ? 'bg-red-50 hover:bg-red-100'
                           : ''
-                    }`}
+                      }`}
                   >
                     <td className="px-6 py-4">
                       <div className="flex items-center">
@@ -1193,8 +1217,8 @@ const InventorySection = () => {
                           {/* Usamos la imagen directamente en lugar de ProductImage */}
                           <div className="h-10 w-10 rounded-full bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30 overflow-hidden">
                             {product.hasImage ? (
-                              <img 
-                                src={`https://lyme-back.vercel.app/api/producto/${product._id}/imagen?width=40&height=40&quality=75&${Date.now()}`} 
+                              <img
+                                src={`https://lyme-back.vercel.app/api/producto/${product._id}/imagen?width=40&height=40&quality=75&${Date.now()}`}
                                 alt={product.nombre}
                                 className="h-10 w-10 object-cover"
                                 loading="lazy"
@@ -1269,7 +1293,7 @@ const InventorySection = () => {
             </table>
           </div>
         )}
-        
+
         {/* Paginación para la tabla */}
         {filteredProducts.length > itemsPerPage && (
           <div className="py-4 border-t border-[#91BEAD]/20">
@@ -1287,29 +1311,28 @@ const InventorySection = () => {
       {/* Vista de Tarjetas para dispositivos móviles */}
       <div ref={mobileListRef} id="mobile-products-list" className="md:hidden grid grid-cols-1 gap-4">
         {/* Paginación visible en la parte superior para móvil */}
-        {!loading && filteredProducts.length > itemsPerPage && (
-          <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20">
+        {!loading && filteredProducts.length > 0 && (
+          <div className="py-4 border-t border-[#91BEAD]/20">
             <Pagination
-              totalItems={filteredProducts.length}
+              totalItems={totalCount} // Usar totalCount en lugar de filteredProducts.length
               itemsPerPage={itemsPerPage}
               currentPage={currentPage}
               onPageChange={handlePageChange}
             />
           </div>
         )}
-        
+
         {!loading && currentProducts.map(product => (
-          <Card 
-            key={product._id} 
-            className={`overflow-hidden shadow-sm border ${
-              product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD 
-                ? 'border-yellow-300 bg-yellow-50' 
-                : product.stock <= 0 
+          <Card
+            key={product._id}
+            className={`overflow-hidden shadow-sm border ${product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD
+                ? 'border-yellow-300 bg-yellow-50'
+                : product.stock <= 0
                   ? 'border-red-300 bg-red-50'
                   : product.esCombo
                     ? 'border-[#00888A]/50 bg-[#00888A]/5'
                     : 'border-[#91BEAD]/20 bg-white'
-            }`}
+              }`}
           >
             <CardHeader className="p-4 pb-2">
               <div className="flex justify-between items-center">
@@ -1332,8 +1355,8 @@ const InventorySection = () => {
                   {/* Usar enfoque más simplificado para imágenes en móvil */}
                   <div className="h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30 overflow-hidden">
                     {product.hasImage ? (
-                      <img 
-                        src={`https://lyme-back.vercel.app/api/producto/${product._id}/imagen?width=64&height=64&quality=60&${Date.now()}`} 
+                      <img
+                        src={`https://lyme-back.vercel.app/api/producto/${product._id}/imagen?width=64&height=64&quality=60&${Date.now()}`}
                         alt={product.nombre}
                         className="h-16 w-16 object-cover"
                         loading="lazy"
@@ -1361,13 +1384,12 @@ const InventorySection = () => {
                     </div>
                     <div className="flex items-center">
                       <PackageOpen className="w-4 h-4 text-[#91BEAD] mr-1" />
-                      <span className={`font-medium ${
-                        product.stock <= 0 
-                          ? 'text-red-600' 
+                      <span className={`font-medium ${product.stock <= 0
+                          ? 'text-red-600'
                           : product.stock <= LOW_STOCK_THRESHOLD
                             ? 'text-yellow-600 flex items-center gap-1'
                             : 'text-[#29696B]'
-                      }`}>
+                        }`}>
                         {product.stock <= LOW_STOCK_THRESHOLD && product.stock > 0 && (
                           <AlertTriangle className="w-3 h-3 text-yellow-500 animate-pulse" />
                         )}
@@ -1381,17 +1403,17 @@ const InventorySection = () => {
                   </div>
                 </div>
               </div>
-              
+
               {/* Mostrar elementos del combo si es un combo */}
               {product.esCombo && product.itemsCombo && product.itemsCombo.length > 0 && (
                 <div className="mt-2 pt-2 border-t border-[#91BEAD]/10">
                   <p className="text-xs font-medium text-[#29696B] mb-1">Productos en el combo:</p>
                   <div className="text-xs text-[#7AA79C] max-h-24 overflow-y-auto pr-1">
                     {product.itemsCombo.map((item, index) => {
-                      const productoNombre = item.productoId && typeof item.productoId === 'object' 
-                        ? item.productoId.nombre 
+                      const productoNombre = item.productoId && typeof item.productoId === 'object'
+                        ? item.productoId.nombre
                         : 'Producto';
-                      
+
                       return (
                         <div key={index} className="flex justify-between py-1 border-b border-[#91BEAD]/10 last:border-0">
                           <span>{productoNombre}</span>
@@ -1423,7 +1445,7 @@ const InventorySection = () => {
             </CardFooter>
           </Card>
         ))}
-        
+
         {/* Mensaje que muestra la página actual y el total */}
         {!loading && filteredProducts.length > itemsPerPage && (
           <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm">
@@ -1432,12 +1454,12 @@ const InventorySection = () => {
             </span>
           </div>
         )}
-        
+
         {/* Paginación duplicada al final de la lista para mayor visibilidad */}
-        {!loading && filteredProducts.length > itemsPerPage && (
-          <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20 mt-2">
+        {!loading && filteredProducts.length > 0 && (
+          <div className="py-4 border-t border-[#91BEAD]/20">
             <Pagination
-              totalItems={filteredProducts.length}
+              totalItems={totalCount} // Usar totalCount en lugar de filteredProducts.length
               itemsPerPage={itemsPerPage}
               currentPage={currentPage}
               onPageChange={handlePageChange}
@@ -1468,8 +1490,8 @@ const InventorySection = () => {
               {/* Checkbox para marcar como combo */}
               {!editingProduct && (
                 <div className="flex items-center space-x-2">
-                  <Checkbox 
-                    id="is-combo" 
+                  <Checkbox
+                    id="is-combo"
                     checked={isCombo}
                     onCheckedChange={(checked) => {
                       setIsCombo(checked);
@@ -1589,9 +1611,9 @@ const InventorySection = () => {
                 <div className="mt-4 border rounded-md p-3 border-[#91BEAD]/30 bg-[#DFEFE6]/10">
                   <div className="flex items-center justify-between mb-2">
                     <Label className="text-sm font-medium text-[#29696B]">Productos en el combo</Label>
-                    <Button 
+                    <Button
                       type="button"
-                      variant="outline" 
+                      variant="outline"
                       size="sm"
                       onClick={openComboSelectionModal}
                       className="text-xs h-8 border-[#00888A] text-[#00888A] hover:bg-[#00888A]/10"
@@ -1600,7 +1622,7 @@ const InventorySection = () => {
                       Seleccionar productos
                     </Button>
                   </div>
-                  
+
                   {selectedComboItems.length === 0 ? (
                     <div className="text-center py-4 text-sm text-[#7AA79C]">
                       <ShoppingBag className="w-8 h-8 mx-auto mb-2 text-[#7AA79C]/50" />
@@ -1638,14 +1660,14 @@ const InventorySection = () => {
               {!isCombo && (
                 <div>
                   <Label className="text-sm text-[#29696B] block mb-2">Imagen del Producto</Label>
-                  
+
                   <div className="mt-1 flex flex-col space-y-2">
                     {formData.imagenPreview ? (
                       <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
-                        <img 
-                          src={formData.imagenPreview} 
-                          alt="Vista previa" 
-                          className="w-full h-full object-contain" 
+                        <img
+                          src={formData.imagenPreview}
+                          alt="Vista previa"
+                          className="w-full h-full object-contain"
                           onError={(e) => {
                             e.target.style.display = 'none';
                             e.target.nextSibling.style.display = 'flex';
@@ -1676,11 +1698,11 @@ const InventorySection = () => {
                               Máximo 5MB
                             </p>
                           </div>
-                          <input 
+                          <input
                             ref={fileInputRef}
-                            type="file" 
-                            accept="image/*" 
-                            className="hidden" 
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
                             onChange={handleImageChange}
                           />
                         </label>
@@ -1703,7 +1725,7 @@ const InventorySection = () => {
               >
                 Cancelar
               </Button>
-              <Button 
+              <Button
                 type="submit"
                 className={`${isCombo ? 'bg-[#00888A] hover:bg-[#00888A]/90' : 'bg-[#29696B] hover:bg-[#29696B]/90'} text-white`}
                 disabled={imageLoading || (isCombo && selectedComboItems.length === 0)}
@@ -1731,7 +1753,7 @@ const InventorySection = () => {
               Agregue los productos que formarán parte del combo.
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-4">
             {/* Búsqueda de productos */}
             <div className="relative">
@@ -1744,7 +1766,7 @@ const InventorySection = () => {
                 className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
               />
             </div>
-            
+
             {/* Lista de productos disponibles */}
             <div className="border rounded-md border-[#91BEAD]/30">
               {/* Vista para dispositivos móviles */}
@@ -1765,13 +1787,12 @@ const InventorySection = () => {
                           <div className="text-xs text-[#7AA79C] flex items-center gap-1">
                             <span>${product.precio.toFixed(2)}</span>
                             <span>•</span>
-                            <span className={`inline-flex px-1 py-0.5 text-xs rounded-full ${
-                              product.stock <= 0 
+                            <span className={`inline-flex px-1 py-0.5 text-xs rounded-full ${product.stock <= 0
                                 ? 'bg-red-100 text-red-800'
                                 : product.stock <= LOW_STOCK_THRESHOLD
                                   ? 'bg-yellow-100 text-yellow-800'
                                   : 'bg-[#DFEFE6] text-[#29696B]'
-                            }`}>
+                              }`}>
                               Stock: {product.stock}
                             </span>
                           </div>
@@ -1791,7 +1812,7 @@ const InventorySection = () => {
                   )}
                 </div>
               </div>
-              
+
               {/* Vista para tablets y desktop */}
               <div className="hidden md:block">
                 <Table>
@@ -1816,13 +1837,12 @@ const InventorySection = () => {
                           <TableCell className="font-medium truncate">{product.nombre}</TableCell>
                           <TableCell>${product.precio.toFixed(2)}</TableCell>
                           <TableCell>
-                            <span className={`inline-flex px-2 py-0.5 text-xs rounded-full ${
-                              product.stock <= 0 
+                            <span className={`inline-flex px-2 py-0.5 text-xs rounded-full ${product.stock <= 0
                                 ? 'bg-red-100 text-red-800'
                                 : product.stock <= LOW_STOCK_THRESHOLD
                                   ? 'bg-yellow-100 text-yellow-800'
                                   : 'bg-[#DFEFE6] text-[#29696B]'
-                            }`}>
+                              }`}>
                               {product.stock}
                             </span>
                           </TableCell>
@@ -1845,7 +1865,7 @@ const InventorySection = () => {
                 </Table>
               </div>
             </div>
-            
+
             {/* Productos seleccionados - Responsive para móvil y desktop */}
             <div>
               <h4 className="text-sm font-medium text-[#29696B] mb-2">Productos seleccionados</h4>
@@ -1905,7 +1925,7 @@ const InventorySection = () => {
                       <span>${calculateComboTotal(tempSelectedItems).toFixed(2)}</span>
                     </div>
                   </div>
-                  
+
                   {/* Vista desktop para productos seleccionados */}
                   <div className="hidden md:block">
                     <Table>
@@ -1972,7 +1992,7 @@ const InventorySection = () => {
               )}
             </div>
           </div>
-          
+
           <DialogFooter className="gap-2 mt-4">
             <Button
               type="button"
@@ -1982,7 +2002,7 @@ const InventorySection = () => {
             >
               Cancelar
             </Button>
-            <Button 
+            <Button
               type="button"
               onClick={confirmComboSelection}
               className="bg-[#00888A] hover:bg-[#00888A]/90 text-white"
@@ -2001,7 +2021,7 @@ const InventorySection = () => {
         title="Eliminar producto"
         description="¿Está seguro de que desea eliminar este producto? Esta acción no se puede deshacer."
         confirmText="Eliminar"
-        cancelText="Cancelar" 
+        cancelText="Cancelar"
         onConfirm={() => productToDelete && handleDelete(productToDelete)}
         variant="destructive"
       />
@@ -2013,7 +2033,7 @@ const InventorySection = () => {
         title="Eliminar imagen"
         description="¿Está seguro de que desea eliminar la imagen de este producto?"
         confirmText="Eliminar"
-        cancelText="Cancelar" 
+        cancelText="Cancelar"
         onConfirm={() => productToDelete && handleDeleteProductImage(productToDelete)}
         variant="destructive"
       />
