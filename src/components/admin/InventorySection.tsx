@@ -1026,10 +1026,18 @@ const InventorySection = () => {
     fetchProducts(true);
   };
 
-  // Mostrar información detallada sobre la paginación
-  const showingFromTo = filteredProducts.length > 0
-    ? `${indexOfFirstProduct + 1}-${Math.min(indexOfLastProduct, filteredProducts.length)} de ${filteredProducts.length}`
-    : '0 de 0';
+
+  // Calcular valores para fines de visualización
+const indexOfLastProduct = currentPage * itemsPerPage;
+const indexOfFirstProduct = (currentPage - 1) * itemsPerPage + 1;
+  
+// Usar productos directamente de la respuesta de la API en lugar de filtrar localmente
+const currentProducts = products;
+
+// Mostrar información detallada sobre la paginación
+const showingFromTo = totalCount > 0 
+  ? `${indexOfFirstProduct}-${Math.min(indexOfLastProduct, totalCount)} de ${totalCount}`
+  : '0 de 0';
 
   return (
     <div className="p-4 md:p-6 space-y-6 bg-[#DFEFE6]/30">
