@@ -1,6 +1,39 @@
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+
+// Hook para detectar medias queries (integrado en el mismo archivo)
+const useMediaQuery = (query) => {
+  const [matches, setMatches] = useState(
+    typeof window !== 'undefined' ? window.matchMedia(query).matches : false
+  );
+  
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const mediaQuery = window.matchMedia(query);
+    setMatches(mediaQuery.matches);
+    
+    const handler = (event) => setMatches(event.matches);
+    
+    // Agregar listener con compatibilidad para navegadores antiguos
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener('change', handler);
+    } else {
+      mediaQuery.addListener(handler);
+    }
+    
+    return () => {
+      if (mediaQuery.removeEventListener) {
+        mediaQuery.removeEventListener('change', handler);
+      } else {
+        mediaQuery.removeListener(handler);
+      }
+    };
+  }, [query]);
+  
+  return matches;
+};
 
 /**
  * Componente de paginación mejorado
@@ -12,14 +45,20 @@ const Pagination = ({
   currentPage,
   onPageChange,
   className = '',
+  onItemsPerPageChange = null, // Nueva prop para permitir cambiar items por página
 }) => {
+  // Usar el hook para detectar dispositivos móviles (más confiable que innerWidth)
+  const isMobile = useMediaQuery('(max-width: 768px)');
+  
   // No mostrar paginación si hay una sola página o menos
   if (!totalItems || !itemsPerPage || totalItems <= itemsPerPage) {
     return null;
   }
 
-  // Calcular el número total de páginas
-  const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+  // Calcular el número total de páginas con memoización
+  const totalPages = useMemo(() => {
+    return Math.max(1, Math.ceil(totalItems / itemsPerPage));
+  }, [totalItems, itemsPerPage]);
 
   // No mostrar paginación si hay una sola página
   if (totalPages <= 1) {
@@ -29,15 +68,16 @@ const Pagination = ({
   // Inicializar página actual válida
   const page = Math.min(Math.max(1, currentPage), totalPages);
 
-  // Calcular el rango de elementos mostrados
-  const firstItemOnPage = (page - 1) * itemsPerPage + 1;
-  const lastItemOnPage = Math.min(page * itemsPerPage, totalItems);
+  // Calcular el rango de elementos mostrados con memoización
+  const { firstItemOnPage, lastItemOnPage } = useMemo(() => {
+    return {
+      firstItemOnPage: (page - 1) * itemsPerPage + 1,
+      lastItemOnPage: Math.min(page * itemsPerPage, totalItems)
+    };
+  }, [page, itemsPerPage, totalItems]);
 
-  // Determinar si estamos en móvil o desktop
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-
-  // Generar array de páginas cercanas a la actual (para navegación más clara)
-  const getPageNumbers = () => {
+  // Generar array de páginas cercanas a la actual
+  const pageNumbers = useMemo(() => {
     const delta = isMobile ? 1 : 2; // En móvil mostramos menos páginas
     const range = [];
 
@@ -66,7 +106,7 @@ const Pagination = ({
     }
 
     return range;
-  };
+  }, [page, totalPages, isMobile]);
 
   // Versión simple para móviles
   const MobilePagination = () => (
@@ -85,7 +125,7 @@ const Pagination = ({
             size="sm"
             onClick={() => onPageChange(1)}
             disabled={page === 1}
-            className="h-8 w-8 p-0 border-[#91BEAD]"
+            className="h-8 w-8 p-0 border-[#29696B]/70 text-[#29696B] hover:bg-[#DFEFE6] hover:text-[#29696B]"
             aria-label="Primera página"
           >
             <ChevronsLeft className="h-4 w-4" />
@@ -96,7 +136,7 @@ const Pagination = ({
             size="sm"
             onClick={() => onPageChange(page - 1)}
             disabled={page === 1}
-            className="h-8 w-8 p-0 border-[#91BEAD]"
+            className="h-8 w-8 p-0 border-[#29696B]/70 text-[#29696B] hover:bg-[#DFEFE6] hover:text-[#29696B]"
             aria-label="Página anterior"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -104,7 +144,7 @@ const Pagination = ({
         </div>
 
         {/* Indicador de página actual */}
-        <div className="flex items-center bg-[#DFEFE6]/30 px-3 py-1 rounded-lg">
+        <div className="flex items-center bg-[#DFEFE6] px-3 py-1 rounded-lg">
           <span className="text-sm font-medium text-[#29696B]">
             {page} / {totalPages}
           </span>
@@ -117,7 +157,7 @@ const Pagination = ({
             size="sm"
             onClick={() => onPageChange(page + 1)}
             disabled={page === totalPages}
-            className="h-8 w-8 p-0 border-[#91BEAD]"
+            className="h-8 w-8 p-0 border-[#29696B]/70 text-[#29696B] hover:bg-[#DFEFE6] hover:text-[#29696B]"
             aria-label="Página siguiente"
           >
             <ChevronRight className="h-4 w-4" />
@@ -128,7 +168,7 @@ const Pagination = ({
             size="sm"
             onClick={() => onPageChange(totalPages)}
             disabled={page === totalPages}
-            className="h-8 w-8 p-0 border-[#91BEAD]"
+            className="h-8 w-8 p-0 border-[#29696B]/70 text-[#29696B] hover:bg-[#DFEFE6] hover:text-[#29696B]"
             aria-label="Última página"
           >
             <ChevronsRight className="h-4 w-4" />
@@ -154,7 +194,7 @@ const Pagination = ({
           size="sm"
           onClick={() => onPageChange(1)}
           disabled={page === 1}
-          className="h-8 w-8 p-0 border-[#91BEAD] rounded-r-none"
+          className="h-8 w-8 p-0 border-[#29696B]/70 rounded-r-none text-[#29696B] hover:bg-[#DFEFE6] hover:text-[#29696B]"
           aria-label="Primera página"
         >
           <ChevronsLeft className="h-4 w-4" />
@@ -166,50 +206,50 @@ const Pagination = ({
           size="sm"
           onClick={() => onPageChange(page - 1)}
           disabled={page === 1}
-          className="h-8 w-8 p-0 border-[#91BEAD] rounded-none border-l-0"
+          className="h-8 w-8 p-0 border-[#29696B]/70 rounded-none border-l-0 text-[#29696B] hover:bg-[#DFEFE6] hover:text-[#29696B]"
           aria-label="Página anterior"
         >
           <ChevronLeft className="h-4 w-4" />
         </Button>
 
         {/* Botones de página */}
-        {getPageNumbers().map((pageNum, idx) => (
+        {pageNumbers.map((pageNum, idx) => (
           <React.Fragment key={idx}>
             {pageNum === '...' ? (
               <Button
                 variant="outline"
                 size="sm"
                 disabled
-                className="h-8 w-8 p-0 border-[#91BEAD] rounded-none border-l-0"
+                className="h-8 w-8 p-0 border-[#29696B]/70 rounded-none border-l-0 text-[#29696B]"
               >
                 ...
               </Button>
             ) : (
               <Button
-              variant={pageNum === page ? "default" : "outline"}
-              size="sm"
-              onClick={() => pageNum !== page && onPageChange(pageNum)}
-              className={`h-8 w-8 p-0 rounded-none border-l-0 ${
-                pageNum === page
-                  ? "bg-[#29696B] text-white hover:bg-[#29696B]/90"
-                  : "border-[#91BEAD] text-[#29696B]/30 hover:text-[#29696B]" 
-              }`}
-              aria-label={`Página ${pageNum}`}
-              aria-current={pageNum === page ? "page" : undefined}
-            >
-              {pageNum}
-            </Button>
+                variant={pageNum === page ? "default" : "outline"}
+                size="sm"
+                onClick={() => pageNum !== page && onPageChange(pageNum)}
+                className={`h-8 w-8 p-0 rounded-none border-l-0 ${
+                  pageNum === page
+                    ? "bg-[#29696B] text-white hover:bg-[#29696B]/90"
+                    : "border-[#29696B]/70 text-[#29696B] hover:bg-[#DFEFE6]"
+                }`}
+                aria-label={`Página ${pageNum}`}
+                aria-current={pageNum === page ? "page" : undefined}
+              >
+                {pageNum}
+              </Button>
             )}
           </React.Fragment>
         ))}
 
-        {/* Página siguiente  */}
+        {/* Página siguiente */}
         <Button
           variant="outline"
           size="sm"
           onClick={() => onPageChange(page + 1)}
           disabled={page === totalPages}
-          className="h-8 w-8 p-0 border-[#91BEAD] rounded-none border-l-0"
+          className="h-8 w-8 p-0 border-[#29696B]/70 rounded-none border-l-0 text-[#29696B] hover:bg-[#DFEFE6] hover:text-[#29696B]"
           aria-label="Página siguiente"
         >
           <ChevronRight className="h-4 w-4" />
@@ -221,12 +261,31 @@ const Pagination = ({
           size="sm"
           onClick={() => onPageChange(totalPages)}
           disabled={page === totalPages}
-          className="h-8 w-8 p-0 border-[#91BEAD] rounded-l-none border-l-0"
+          className="h-8 w-8 p-0 border-[#29696B]/70 rounded-l-none border-l-0 text-[#29696B] hover:bg-[#DFEFE6] hover:text-[#29696B]"
           aria-label="Última página"
         >
           <ChevronsRight className="h-4 w-4" />
         </Button>
       </div>
+
+      {/* Selector de items por página (nueva funcionalidad) */}
+      {onItemsPerPageChange && (
+        <div className="flex items-center mt-3 text-sm text-[#29696B]">
+          <span className="mr-2">Items por página:</span>
+          <select
+            value={itemsPerPage}
+            onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
+            className="border border-[#29696B]/70 rounded px-2 py-1 text-[#29696B] bg-white"
+            aria-label="Items por página"
+          >
+            {[10, 20, 50, 100].map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
     </div>
   );
 
@@ -237,4 +296,4 @@ const Pagination = ({
   );
 };
 
-export default Pagination;
+export default React.memo(Pagination);

@@ -370,6 +370,44 @@ const InventorySection = () => {
     }
   };
 
+  // Cargar todos los productos sin paginación para los combos
+  const fetchAllProducts = async (): Promise<ProductType[]> => {
+    try {
+      const token = getAuthToken();
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
+
+      // Para obtener todos los productos, usamos un límite alto
+      const response = await fetch(`https://lyme-back.vercel.app/api/producto?limit=1000`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al cargar todos los productos');
+      }
+
+      const responseData = await response.json();
+      let allProducts: ProductType[] = [];
+
+      if (responseData && typeof responseData === 'object') {
+        if (Array.isArray(responseData)) {
+          allProducts = responseData;
+        } else if (Array.isArray(responseData.items)) {
+          allProducts = responseData.items;
+        }
+      }
+
+      return allProducts;
+    } catch (error) {
+      console.error('Error al cargar todos los productos:', error);
+      return [];
+    }
+  };
+
   // Actualizar un producto específico en el estado
   const updateProductInState = (updatedProduct: ProductType) => {
     if (!updatedProduct || !updatedProduct._id) return;
@@ -485,10 +523,27 @@ const InventorySection = () => {
     });
   };
 
+  // Estado para almacenar todos los productos disponibles para combos
+  const [allAvailableProducts, setAllAvailableProducts] = useState<ProductType[]>([]);
+
+  // Cargar todos los productos al abrir el modal de combos
+  useEffect(() => {
+    if (showComboSelectionModal) {
+      const loadAllProducts = async () => {
+        const allProducts = await fetchAllProducts();
+        setAllAvailableProducts(allProducts);
+      };
+      
+      loadAllProducts();
+    }
+  }, [showComboSelectionModal]);
+
   // Función para filtrar productos para combos
   const getFilteredComboProducts = () => {
     // No mostrar productos que ya son combos
-    return products.filter(product => {
+    const productsToFilter = showComboSelectionModal ? allAvailableProducts : products;
+    
+    return productsToFilter.filter(product => {
       if (!product || product.esCombo) return false;
 
       // Buscar por término de búsqueda (si existe)
@@ -977,7 +1032,7 @@ const InventorySection = () => {
   // Manejar cambio de categoría
   const handleCategoryChange = (value: string) => {
     try {
-      if (value === '') {
+      if (value === 'not-selected') {
         // Si se selecciona "Seleccionar categoría", limpiar también la subcategoría
         setFormData(prevState => ({
           ...prevState,
@@ -1585,14 +1640,14 @@ const InventorySection = () => {
                 <div>
                   <Label htmlFor="categoria" className="text-sm text-[#29696B]">Categoría</Label>
                   <Select
-                    value={formData.categoria}
+                    value={formData.categoria || 'not-selected'}
                     onValueChange={handleCategoryChange}
                   >
                     <SelectTrigger id="categoria" className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
                       <SelectValue placeholder="Seleccionar categoría" />
                     </SelectTrigger>
                     <SelectContent className="border-[#91BEAD]">
-                      <SelectItem value="">Seleccionar categoría</SelectItem>
+                      <SelectItem value="not-selected">Seleccionar categoría</SelectItem>
                       <SelectItem value="limpieza">Limpieza</SelectItem>
                       <SelectItem value="mantenimiento">Mantenimiento</SelectItem>
                     </SelectContent>
@@ -1602,14 +1657,18 @@ const InventorySection = () => {
                 <div>
                   <Label htmlFor="subCategoria" className="text-sm text-[#29696B]">Subcategoría</Label>
                   <Select
-                    value={formData.subCategoria}
-                    onValueChange={(value) => setFormData({ ...formData, subCategoria: value })}
+                    value={formData.subCategoria || 'not-selected'}
+                    onValueChange={(value) => {
+                      if (value !== 'not-selected') {
+                        setFormData({ ...formData, subCategoria: value });
+                      }
+                    }}
                   >
                     <SelectTrigger id="subCategoria" className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
                       <SelectValue placeholder="Seleccionar subcategoría" />
                     </SelectTrigger>
                     <SelectContent className="border-[#91BEAD]">
-                      <SelectItem value="">Seleccionar subcategoría</SelectItem>
+                      <SelectItem value="not-selected">Seleccionar subcategoría</SelectItem>
                       {formData.categoria && subCategorias[formData.categoria]?.map((sub) => (
                         <SelectItem key={sub.value} value={sub.value}>
                           {sub.label}
@@ -1835,7 +1894,7 @@ const InventorySection = () => {
                       No hay productos disponibles
                     </div>
                   ) : (
-                    comboProducts.slice(0, 50).map((product) => (
+                    comboProducts.map((product) => (
                       <div key={product._id} className="p-3 flex justify-between items-center">
                         <div>
                           <div className="font-medium text-sm text-[#29696B] truncate w-36">{product.nombre}</div>
@@ -1879,7 +1938,7 @@ const InventorySection = () => {
                       <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
-                  <TableBody>
+                  <TableBody className="max-h-80 overflow-y-auto">
                     {comboProducts.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={4} className="text-center py-8 text-[#7AA79C]">
@@ -1887,7 +1946,7 @@ const InventorySection = () => {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      comboProducts.slice(0, 50).map((product) => (
+                      comboProducts.map((product) => (
                         <TableRow key={product._id}>
                           <TableCell className="font-medium truncate">{product.nombre}</TableCell>
                           <TableCell>${product.precio.toFixed(2)}</TableCell>
