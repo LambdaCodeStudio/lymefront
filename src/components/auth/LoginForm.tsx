@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, ArrowRight, User, AlertTriangle, Loader, WifiOff, RefreshCw } from 'lucide-react';
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Lock, ArrowRight, User, AlertTriangle, Loader } from 'lucide-react';
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from '@/hooks/useAuth';
 import LoadingScreen from '@/components/ui/loading-screen';
 
@@ -92,8 +92,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({ redirectPath }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
-  const [autoRetry, setAutoRetry] = useState(false);
-  const [manualRetryAttempts, setManualRetryAttempts] = useState(0);
   
   // Usar hook de autenticación
   const { login, loading, error } = useAuth();
@@ -110,40 +108,20 @@ export const LoginForm: React.FC<LoginFormProps> = ({ redirectPath }) => {
     }
   }, []);
   
-  // Efecto para manejar el error 429 y 503
+  // Efecto para manejar el error 429
   useEffect(() => {
-    if (!error) {
-      // Reset del estado cuando no hay error
-      setIsRetrying(false);
-      setRetryCount(0);
-      return;
-    }
-    
-    if (error.includes('Demasiados intentos') || error.includes('temporalmente no disponible')) {
+    if (error && error.includes('Demasiados intentos')) {
       setIsRetrying(true);
       
-      // Parámetros de retry según el error
-      let countdown = 5; // segundos para reintentar por defecto
-      
-      // Si es un error de servicio no disponible, esperar más tiempo
-      if (error.includes('temporalmente no disponible')) {
-        countdown = 10; // esperar 10 segundos para errores 503
-      }
-      
+      // Crear un contador regresivo para informar al usuario
+      const countdown = 5; // segundos para reintentar
       setRetryCount(countdown);
       
-      // Crear contador regresivo
       const timer = setInterval(() => {
         setRetryCount(prev => {
           if (prev <= 1) {
             clearInterval(timer);
-            
-            // Si está en modo auto-retry, intentar nuevo login al finalizar la cuenta
-            if (autoRetry && formData.usuario && formData.password) {
-              handleSubmit(null, true);
-            } else {
-              setIsRetrying(false);
-            }
+            setIsRetrying(false);
             return 0;
           }
           return prev - 1;
@@ -152,7 +130,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ redirectPath }) => {
       
       return () => clearInterval(timer);
     }
-  }, [error, autoRetry, formData]);
+  }, [error]);
 
   // Función para manejar el guardado de credenciales
   const handleRememberMe = (checked: boolean) => {
@@ -178,18 +156,13 @@ export const LoginForm: React.FC<LoginFormProps> = ({ redirectPath }) => {
   };
 
   // Manejar envío del formulario
-  const handleSubmit = async (e: React.FormEvent | null, isAutoRetry = false) => {
-    if (e) e.preventDefault();
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     
-    // No intentar login si estamos en periodo de espera, a menos que sea auto-retry
-    if (isRetrying && !isAutoRetry) return;
+    // No intentar login si estamos en periodo de espera
+    if (isRetrying) return;
 
     try {
-      // Si es un reintento manual después de un error de servicio
-      if (!isAutoRetry && error?.includes('temporalmente no disponible')) {
-        setManualRetryAttempts(prev => prev + 1);
-      }
-      
       // Usar el hook de login
       const response = await login(formData.usuario, formData.password);
 
@@ -209,32 +182,10 @@ export const LoginForm: React.FC<LoginFormProps> = ({ redirectPath }) => {
     } catch (err) {
       // El error ya es manejado por el hook
       console.error('Error en login:', err);
-      
-      // Si tuvimos más de 2 intentos manuales con error de servicio, sugerir auto-retry
-      if (manualRetryAttempts >= 2 && error?.includes('temporalmente no disponible') && !autoRetry) {
-        setAutoRetry(true);
-      }
     }
   };
 
-  // Manejar el botón de reintentar
-  const handleRetry = () => {
-    setIsRetrying(false);
-    setRetryCount(0);
-    handleSubmit(null);
-  };
-
-  // Manejar el botón de reintentar automáticamente
-  const toggleAutoRetry = () => {
-    setAutoRetry(prev => !prev);
-    
-    // Si estamos activando auto-retry y ya pasó el tiempo de espera, intentar inmediatamente
-    if (!autoRetry && !isRetrying) {
-      handleSubmit(null, true);
-    }
-  };
-
-  // Render de alerta de error con información específica para diferentes tipos de errores
+  // Render de alerta de error con información específica para error 429
   const renderError = () => {
     if (!error) return null;
     
@@ -252,51 +203,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({ redirectPath }) => {
               'Demasiados intentos. Por favor, espere un momento antes de volver a intentarlo.'
             )}
           </AlertDescription>
-        </Alert>
-      );
-    }
-    
-    if (error.includes('temporalmente no disponible')) {
-      return (
-        <Alert className="bg-amber-50 border border-amber-200 text-amber-800">
-          <div className="flex items-start">
-            <WifiOff className="h-5 w-5 mr-2 mt-0.5 text-amber-600" />
-            <div>
-              <AlertTitle className="text-amber-800 font-medium mb-1">Servicio no disponible</AlertTitle>
-              <AlertDescription className="text-amber-700">
-                El servidor está temporalmente no disponible. 
-                {isRetrying ? (
-                  <span className="flex items-center mt-1">
-                    <Loader className="animate-spin mr-2 h-4 w-4" />
-                    Reintentando en {retryCount} {retryCount === 1 ? 'segundo' : 'segundos'}...
-                  </span>
-                ) : (
-                  <div className="mt-2 flex flex-col space-y-2">
-                    <button
-                      onClick={handleRetry}
-                      className="flex items-center justify-center bg-amber-100 hover:bg-amber-200 text-amber-800 py-1 px-3 rounded text-sm"
-                    >
-                      <RefreshCw className="h-3 w-3 mr-1" /> Reintentar ahora
-                    </button>
-                    
-                    <button
-                      onClick={toggleAutoRetry}
-                      className={`flex items-center justify-center text-sm py-1 px-3 rounded ${
-                        autoRetry 
-                          ? 'bg-green-100 hover:bg-green-200 text-green-800' 
-                          : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-                      }`}
-                    >
-                      <span className="flex-1 text-left">Reintentar automáticamente</span>
-                      <span className={`ml-2 w-8 h-4 rounded-full flex items-center ${autoRetry ? 'bg-green-500' : 'bg-gray-300'}`}>
-                        <span className={`w-3 h-3 bg-white rounded-full transition-all ${autoRetry ? 'ml-4' : 'ml-1'}`}></span>
-                      </span>
-                    </button>
-                  </div>
-                )}
-              </AlertDescription>
-            </div>
-          </div>
         </Alert>
       );
     }

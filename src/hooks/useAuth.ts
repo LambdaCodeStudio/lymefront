@@ -10,74 +10,34 @@ interface AuthState {
   error: string | null;
 }
 
-interface RetryOptions {
-  maxRetries?: number;
-  initialBackoffMs?: number;
-  maxBackoffMs?: number;
-  retryableStatuses?: number[];
-}
-
-// Utilidad mejorada para manejar reintentos con backoff exponencial y soporte para múltiples códigos de error
+// Utilidad para manejar reintentos con backoff exponencial
 const withRetry = async <T>(
   fn: () => Promise<T>,
-  options: RetryOptions = {}
+  retries = 3,
+  backoffMs = 1000
 ): Promise<T> => {
-  const {
-    maxRetries = 3,
-    initialBackoffMs = 1000,
-    maxBackoffMs = 10000,
-    retryableStatuses = [429, 503, 502, 500]
-  } = options;
-  
-  let retries = 0;
-  let backoffMs = initialBackoffMs;
-  
-  // Función recursiva para intentar con backoff
-  const attempt = async (): Promise<T> => {
-    try {
-      return await fn();
-    } catch (error: any) {
-      // Determinar si el error es retryable basado en su código de estado
-      const isRetryable = error.response && 
-        retryableStatuses.includes(error.response.status);
-      
-      // Incrementar contador de intentos
-      retries++;
-      
-      // Si no hay más reintentos o no es un error retryable, lanzar el error original
-      if (retries > maxRetries || !isRetryable) {
-        throw error;
-      }
-      
-      // Log para depuración
-      console.log(`Error ${error.response?.status || 'de red'} detectado, reintentando en ${backoffMs}ms. Reintentos restantes: ${maxRetries - retries}`);
-      
-      // Si es un error 503 (servicio no disponible), añadir un mensaje específico
-      if (error.response?.status === 503) {
-        console.log('Servicio temporalmente no disponible. Esperando para reintentar...');
-      }
-      
-      // Esperar según el tiempo de backoff actual
-      await new Promise(resolve => setTimeout(resolve, backoffMs));
-      
-      // Calcular próximo backoff con jitter para evitar thundering herd
-      backoffMs = Math.min(
-        backoffMs * 2 * (0.9 + Math.random() * 0.2), // Backoff exponencial con 10% de jitter
-        maxBackoffMs
-      );
-      
-      // Reintentar
-      return attempt();
+  try {
+    return await fn();
+  } catch (error: any) {
+    // Si no hay más reintentos o no es un error 429, lanzar el error original
+    if (retries <= 0 || !error.response || error.response.status !== 429) {
+      throw error;
     }
-  };
-  
-  return attempt();
+    
+    console.log(`Error 429 detectado, reintentando en ${backoffMs}ms. Reintentos restantes: ${retries}`);
+    
+    // Esperar según el tiempo de backoff
+    await new Promise(resolve => setTimeout(resolve, backoffMs));
+    
+    // Reintentar con backoff exponencial (duplicar el tiempo de espera)
+    return withRetry(fn, retries - 1, backoffMs * 2);
+  }
 };
 
-// Función mejorada para formatear el mensaje de error según el código de respuesta
+// Función para formatear el mensaje de error según el código de respuesta
 const formatErrorMessage = (error: any): string => {
   if (!error.response) {
-    return error.message || 'Error de conexión. Verifique su internet.';
+    return error.message || 'Error de conexión';
   }
   
   switch (error.response.status) {
@@ -91,10 +51,6 @@ const formatErrorMessage = (error: any): string => {
       return 'Demasiados intentos. Por favor, espere un momento antes de volver a intentarlo.';
     case 500:
       return 'Error en el servidor. Por favor, intente de nuevo más tarde.';
-    case 502:
-    case 503:
-    case 504:
-      return 'Servicio temporalmente no disponible. Por favor, intente de nuevo más tarde.';
     default:
       return error.response.data?.msg || error.message || 'Error desconocido';
   }
@@ -132,14 +88,11 @@ export const useAuth = () => {
         return false;
       }
 
-      // Usar withRetry con opciones mejoradas
+      // Usar withRetry para manejar posibles errores 429
       const user = await withRetry(
         () => userService.getCurrentUser(),
-        {
-          maxRetries: 2,
-          initialBackoffMs: 1000,
-          retryableStatuses: [429, 503, 502]
-        }
+        2, // Menos reintentos para esta operación
+        1000
       );
       
       setAuth({
@@ -168,20 +121,16 @@ export const useAuth = () => {
     checkAuth();
   }, [checkAuth]);
 
-  // Función de login actualizada para manejar la respuesta de la API con reintentos mejorados
+  // Función de login actualizada para manejar la respuesta de la API con reintentos
   const login = async (email: string, password: string): Promise<LoginResponse> => {
     try {
       setAuth(prev => ({ ...prev, loading: true, error: null }));
       
-      // Usar withRetry con opciones específicas para login
+      // Usar withRetry para manejar errores 429 en el login
       const response = await withRetry(
         () => userService.login(email, password),
-        {
-          maxRetries: 5, // Más reintentos para login
-          initialBackoffMs: 1000,
-          maxBackoffMs: 15000, // Hasta 15 segundos de espera máxima
-          retryableStatuses: [429, 503, 502, 500] // Incluir errores de servidor
-        }
+        3, // Máximo 3 reintentos
+        1000 // Empezar con 1 segundo de espera
       );
       
       // Verificar si tenemos token
@@ -214,10 +163,8 @@ export const useAuth = () => {
         try {
           const fullUserData = await withRetry(
             () => userService.getCurrentUser(),
-            {
-              maxRetries: 2,
-              initialBackoffMs: 1000
-            }
+            2,
+            1000
           );
           userData = fullUserData;
         } catch (userError) {
@@ -243,18 +190,10 @@ export const useAuth = () => {
     } catch (error: any) {
       // Actualizar estado con el error formateado
       console.error('Error detallado del login:', error);
-      
-      let errorMessage = formatErrorMessage(error);
-      
-      // Mensaje específico para errores de servicio no disponible
-      if (error.response?.status === 503) {
-        errorMessage = 'El servidor está temporalmente no disponible. Por favor, intente más tarde o contacte a soporte si el problema persiste.';
-      }
-      
       setAuth(prev => ({ 
         ...prev, 
         loading: false,
-        error: errorMessage
+        error: formatErrorMessage(error)
       }));
       
       throw error;
@@ -273,21 +212,18 @@ export const useAuth = () => {
     window.location.href = '/login';
   };
 
-  // Función para registrar nuevo usuario (con reintentos mejorados)
+  // Función para registrar nuevo usuario (con reintentos)
   const register = async (email: string, password: string, role: UserRole = 'basic'): Promise<User> => {
     try {
       setAuth(prev => ({ ...prev, loading: true, error: null }));
       
       const userData: CreateUserDTO = { email, password, role };
       
-      // Usar withRetry mejorado
+      // Usar withRetry para manejar posibles errores 429
       const user = await withRetry(
         () => userService.register(userData),
-        {
-          maxRetries: 3,
-          initialBackoffMs: 1000,
-          retryableStatuses: [429, 503, 502]
-        }
+        3,
+        1000
       );
 
       // No autenticamos automáticamente tras el registro
