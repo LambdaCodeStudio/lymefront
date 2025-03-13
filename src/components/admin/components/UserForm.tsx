@@ -23,7 +23,7 @@ import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/comp
 import { UserCircle } from 'lucide-react';
 import type { RoleOption } from '../shared/UserRolesConfig';
 import type { AdminUser, CreateUserData } from '../services/userService';
-import { userService } from '../services/userService';
+import userService  from '../../../services/userService';
 
 // Constante con roles para usar en el componente
 const ROLES = {
