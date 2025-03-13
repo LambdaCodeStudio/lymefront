@@ -104,8 +104,18 @@ const UserForm: React.FC<UserFormProps> = ({
         setSupervisorsLoading(true);
         setSupervisorsError('');
         try {
-          const response = await userService.getSupervisors();
-          setAvailableSupervisors(response.data);
+          // Usar directamente la respuesta, no response.data
+          const supervisors = await userService.getSupervisors();
+          
+          console.log('Supervisores cargados:', supervisors);
+          
+          // Usar el array directamente
+          setAvailableSupervisors(supervisors);
+  
+          // Verificar si hay supervisores
+          if (supervisors.length === 0) {
+            setSupervisorsError('No hay supervisores disponibles');
+          }
         } catch (err) {
           console.error('Error al cargar supervisores:', err);
           setSupervisorsError('No se pudieron cargar los supervisores');
@@ -114,7 +124,7 @@ const UserForm: React.FC<UserFormProps> = ({
         }
       }
     };
-
+  
     loadSupervisors();
   }, [formData.role, editingUser]);
   
