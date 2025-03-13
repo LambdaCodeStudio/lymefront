@@ -250,6 +250,13 @@ export const register = async (userData: CreateUserData): Promise<AdminUser> => 
   });
 };
 
+/**
+ * Obtener lista de supervisores
+ */
+export const getSupervisors = async (): Promise<AdminUser[]> => {
+  return await fetchApi('/supervisors');
+};
+
 // Servicio de usuarios para exportar como objeto completo
 const userService = {
   login,     
@@ -263,7 +270,8 @@ const userService = {
   getCurrentUser,
   reactivateTemporaryUser,
   getAuthToken,
-  register    
+  register,
+  getSupervisors
 };
 
 export default userService;

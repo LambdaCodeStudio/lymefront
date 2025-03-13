@@ -1,8 +1,3 @@
-/**
- * Componente de formulario para crear y editar usuarios
- * Actualizado para la nueva estructura de roles y agregar soporte para operarios temporales
- * Optimización para mejorar visualización en dispositivos móviles
- */
 import React, { useState, useEffect } from 'react';
 import { AlertCircle, Info } from 'lucide-react';
 import {
@@ -25,16 +20,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { UserCircle } from 'lucide-react';
 import type { RoleOption } from '../shared/UserRolesConfig';
 import type { AdminUser, CreateUserData } from '../services/userService';
+import { userService } from '../services/userService';
 
 // Constante con roles para usar en el componente
 const ROLES = {
   ADMIN: 'admin',
   SUPERVISOR_DE_SUPERVISORES: 'supervisor_de_supervisores',
   SUPERVISOR: 'supervisor',
-  OPERARIO: 'operario',
-  TEMPORARIO: 'temporario'
+  OPERARIO: 'operario'
 };
 
 // Nombres cortos de roles para el formulario
@@ -75,6 +71,14 @@ const UserForm: React.FC<UserFormProps> = ({
 }) => {
   // Estado para controlar la opción de usuario temporal
   const [isTemporary, setIsTemporary] = useState(false);
+  
+  // Estado para almacenar lista de supervisores
+  const [availableSupervisors, setAvailableSupervisors] = useState<AdminUser[]>([]);
+  
+  // Estado para manejar la carga de supervisores
+  const [supervisorsLoading, setSupervisorsLoading] = useState(false);
+  const [supervisorsError, setSupervisorsError] = useState('');
+  
   // Estado para controlar ancho de pantalla
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== 'undefined' ? window.innerWidth : 1024
@@ -92,12 +96,33 @@ const UserForm: React.FC<UserFormProps> = ({
     }
   }, []);
   
+  // Cargar supervisores cuando se selecciona rol de operario
+  useEffect(() => {
+    const loadSupervisors = async () => {
+      // Solo cargar supervisores para nuevos operarios
+      if (!editingUser && formData.role === ROLES.OPERARIO) {
+        setSupervisorsLoading(true);
+        setSupervisorsError('');
+        try {
+          const response = await userService.getSupervisors();
+          setAvailableSupervisors(response.data);
+        } catch (err) {
+          console.error('Error al cargar supervisores:', err);
+          setSupervisorsError('No se pudieron cargar los supervisores');
+        } finally {
+          setSupervisorsLoading(false);
+        }
+      }
+    };
+
+    loadSupervisors();
+  }, [formData.role, editingUser]);
+  
   // Efecto para actualizar isTemporary cuando cambie el usuario editado
   useEffect(() => {
     if (editingUser) {
       // Detectar si es un operario temporal
-      const isTemp = editingUser.role === ROLES.TEMPORARIO || 
-                    (editingUser.role === ROLES.OPERARIO && editingUser.expiresAt);
+      const isTemp = editingUser.role === ROLES.OPERARIO && editingUser.expiresAt;
       setIsTemporary(isTemp);
     } else {
       // Para nuevo usuario, inicializar en false
@@ -115,6 +140,14 @@ const UserForm: React.FC<UserFormProps> = ({
         ...formData,
         secciones: 'ambos'
       });
+    }
+    
+    // Para operarios nuevos, requerir supervisor
+    if (!editingUser && formData.role === ROLES.OPERARIO) {
+      if (!formData.supervisorId) {
+        setSupervisorsError('Debe seleccionar un supervisor para el operario');
+        return;
+      }
     }
     
     // Preparar datos con la configuración temporal correcta
@@ -196,8 +229,9 @@ const UserForm: React.FC<UserFormProps> = ({
                       setFormData({
                         ...formData,
                         role: value,
-                        // Resetear tiempo de expiración si se cambia a temporario
-                        expirationMinutes: value === ROLES.TEMPORARIO ? 30 : undefined
+                        // Resetear supervisor y tiempo de expiración si cambia el rol
+                        supervisorId: undefined,
+                        expirationMinutes: value === ROLES.OPERARIO && isTemporary ? 30 : undefined
                       });
                       
                       // Resetear isTemporary si no es operario
@@ -225,6 +259,56 @@ const UserForm: React.FC<UserFormProps> = ({
                 )}
               </div>
             </div>
+
+            {/* Selector de supervisor para operarios */}
+            {formData.role === ROLES.OPERARIO && (
+              <div>
+                <Label htmlFor="supervisorId">
+                  Supervisor <span className="text-red-500">*</span>
+                </Label>
+                {supervisorsLoading ? (
+                  <div className="flex items-center space-x-2 text-gray-500">
+                    <UserCircle className="w-5 h-5 animate-pulse" />
+                    <span>Cargando supervisores...</span>
+                  </div>
+                ) : (
+                  <Select
+                    value={formData.supervisorId}
+                    onValueChange={(value) => {
+                      setFormData({
+                        ...formData,
+                        supervisorId: value
+                      });
+                      // Limpiar cualquier error de supervisores
+                      setSupervisorsError('');
+                    }}
+                    required
+                  >
+                    <SelectTrigger id="supervisorId">
+                      <SelectValue placeholder="Seleccionar supervisor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableSupervisors.map((supervisor) => (
+                        <SelectItem key={supervisor._id} value={supervisor._id}>
+                          {supervisor.usuario} 
+                          {supervisor.nombre && supervisor.apellido 
+                            ? ` - ${supervisor.nombre} ${supervisor.apellido}` 
+                            : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                {supervisorsError && (
+                  <p className="text-red-500 text-xs mt-1">{supervisorsError}</p>
+                )}
+                {availableSupervisors.length === 0 && !supervisorsLoading && (
+                  <p className="text-yellow-600 text-xs mt-1">
+                    No hay supervisores disponibles
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Mostrar checkbox de temporal sólo para operarios */}
             {formData.role === ROLES.OPERARIO && (
@@ -270,8 +354,8 @@ const UserForm: React.FC<UserFormProps> = ({
               </div>
             )}
 
-            {/* Mostrar configuración de tiempo si es temporario o operario temporal */}
-            {(formData.role === ROLES.TEMPORARIO || (formData.role === ROLES.OPERARIO && isTemporary)) && (
+            {/* Mostrar configuración de tiempo si es temporal */}
+            {(formData.role === ROLES.OPERARIO && isTemporary) && (
               <div>
                 <Label htmlFor="expirationMinutes">
                   Tiempo de expiración (minutos) <span className="text-red-500">*</span>
