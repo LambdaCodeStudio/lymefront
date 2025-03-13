@@ -228,7 +228,10 @@ const InventorySection = () => {
       { value: 'plomeria', label: 'Plomería' }
     ]
   };
-
+  
+  // Usar productos directamente de la respuesta de la API en lugar de filtrar localmente
+  const currentProducts = products;
+  
   // Función mejorada para cargar productos
   const fetchProducts = async (forceRefresh = false, page = currentPage, limit = itemsPerPage) => {
     try {
@@ -1067,8 +1070,6 @@ const InventorySection = () => {
   const indexOfLastProduct = currentPage * itemsPerPage;
   const indexOfFirstProduct = (currentPage - 1) * itemsPerPage + 1;
 
-  // Usar productos directamente de la respuesta de la API en lugar de filtrar localmente
-  const currentProducts = products;
 
   // Mostrar información detallada sobre la paginación
   const showingFromTo = totalCount > 0
