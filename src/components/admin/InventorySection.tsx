@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -53,17 +53,15 @@ import {
   ShoppingBag,
   Minus,
   Filter,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight
+  HelpCircle
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import Pagination from "@/components/ui/pagination";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { useNotification } from '@/context/NotificationContext';
 import { inventoryObservable, getAuthToken } from '@/utils/inventoryUtils';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 // Definir umbral de stock bajo
 const LOW_STOCK_THRESHOLD = 10;
@@ -103,233 +101,25 @@ interface FormDataType {
   imagenPreview: string | ArrayBuffer | null;
 }
 
-// Componente personalizado de paginación inspirado en AdminUserManagement
-const EnhancedPagination = ({ 
-  totalItems, 
-  itemsPerPage, 
-  currentPage, 
-  onPageChange, 
-  className = '' 
-}) => {
-  // Si no hay suficientes elementos para paginar, no mostramos nada
-  if (!totalItems || totalItems <= itemsPerPage) {
-    return null;
-  }
-
-  const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
-  
-  // Si solo hay una página, no mostramos la paginación
-  if (totalPages <= 1) {
-    return null;
-  }
-
-  const page = Math.min(Math.max(1, currentPage), totalPages);
-  
-  // Cálculo de elementos mostrados
-  const firstItemOnPage = (page - 1) * itemsPerPage + 1;
-  const lastItemOnPage = Math.min(page * itemsPerPage, totalItems);
-
-  // Determinar si estamos en móvil
-  const isMobile = typeof window !== 'undefined' ? window.innerWidth < 768 : false;
-
-  // Generar números de página a mostrar
-  const getPageNumbers = () => {
-    const delta = isMobile ? 1 : 2;
-    const range = [];
-
-    for (
-      let i = Math.max(1, page - delta);
-      i <= Math.min(totalPages, page + delta);
-      i++
-    ) {
-      range.push(i);
-    }
-
-    if (range[0] > 1) {
-      if (range[0] > 2) {
-        range.unshift('...');
-      }
-      range.unshift(1);
-    }
-
-    if (range[range.length - 1] < totalPages) {
-      if (range[range.length - 1] < totalPages - 1) {
-        range.push('...');
-      }
-      range.push(totalPages);
-    }
-
-    return range;
-  };
-
-  const pageNumbers = getPageNumbers();
-
-  // Vista móvil
-  if (isMobile) {
-    return (
-      <div className={`flex flex-col items-center space-y-2 ${className}`}>
-        <div className="text-sm text-[#29696B] font-medium">
-          {firstItemOnPage}-{lastItemOnPage} de {totalItems}
-        </div>
-
-        <div className="flex items-center justify-between w-full">
-          <div className="flex items-center space-x-1">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onPageChange(1)}
-              disabled={page === 1}
-              className="h-8 w-8 p-0 border-[#29696B] text-[#29696B] hover:bg-[#DFEFE6] hover:text-[#29696B]"
-              aria-label="Primera página"
-            >
-              <ChevronsLeft className="h-4 w-4" />
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onPageChange(page - 1)}
-              disabled={page === 1}
-              className="h-8 w-8 p-0 border-[#29696B] text-[#29696B] hover:bg-[#DFEFE6] hover:text-[#29696B]"
-              aria-label="Página anterior"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-          </div>
-
-          <div className="flex items-center bg-[#DFEFE6] px-3 py-1 rounded-lg">
-            <span className="text-sm font-medium text-[#29696B]">
-              {page} / {totalPages}
-            </span>
-          </div>
-
-          <div className="flex items-center space-x-1">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onPageChange(page + 1)}
-              disabled={page === totalPages}
-              className="h-8 w-8 p-0 border-[#29696B] text-[#29696B] hover:bg-[#DFEFE6] hover:text-[#29696B]"
-              aria-label="Página siguiente"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onPageChange(totalPages)}
-              disabled={page === totalPages}
-              className="h-8 w-8 p-0 border-[#29696B] text-[#29696B] hover:bg-[#DFEFE6] hover:text-[#29696B]"
-              aria-label="Última página"
-            >
-              <ChevronsRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Vista desktop
-  return (
-    <div className={`flex flex-col items-center space-y-2 ${className}`}>
-      <div className="text-sm text-[#29696B] w-full text-center">
-        Mostrando {firstItemOnPage}-{lastItemOnPage} de {totalItems} resultados
-      </div>
-
-      <div className="flex items-center justify-center">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onPageChange(1)}
-          disabled={page === 1}
-          className="h-8 w-8 p-0 rounded-r-none border-[#29696B] text-[#29696B] hover:bg-[#DFEFE6] hover:text-[#29696B]"
-          aria-label="Primera página"
-        >
-          <ChevronsLeft className="h-4 w-4" />
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onPageChange(page - 1)}
-          disabled={page === 1}
-          className="h-8 w-8 p-0 rounded-none border-l-0 border-[#29696B] text-[#29696B] hover:bg-[#DFEFE6] hover:text-[#29696B]"
-          aria-label="Página anterior"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-
-        {pageNumbers.map((pageNum, idx) => (
-          <React.Fragment key={idx}>
-            {pageNum === '...' ? (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled
-                className="h-8 w-8 p-0 rounded-none border-l-0 border-[#29696B] text-[#29696B]"
-              >
-                ...
-              </Button>
-            ) : (
-              <Button
-                variant={pageNum === page ? "default" : "outline"}
-                size="sm"
-                onClick={() => pageNum !== page && onPageChange(pageNum)}
-                className={`h-8 w-8 p-0 rounded-none border-l-0 ${
-                  pageNum === page
-                    ? "bg-[#29696B] text-white hover:bg-[#29696B]/90"
-                    : "border-[#29696B] text-[#29696B] hover:bg-[#DFEFE6]"
-                }`}
-                aria-label={`Página ${pageNum}`}
-                aria-current={pageNum === page ? "page" : undefined}
-              >
-                {pageNum}
-              </Button>
-            )}
-          </React.Fragment>
-        ))}
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onPageChange(page + 1)}
-          disabled={page === totalPages}
-          className="h-8 w-8 p-0 rounded-none border-l-0 border-[#29696B] text-[#29696B] hover:bg-[#DFEFE6] hover:text-[#29696B]"
-          aria-label="Página siguiente"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onPageChange(totalPages)}
-          disabled={page === totalPages}
-          className="h-8 w-8 p-0 rounded-l-none border-l-0 border-[#29696B] text-[#29696B] hover:bg-[#DFEFE6] hover:text-[#29696B]"
-          aria-label="Última página"
-        >
-          <ChevronsRight className="h-4 w-4" />
-        </Button>
-      </div>
-    </div>
-  );
-};
-
 // Componente para input de stock con límite máximo
 const ProductStockInput = ({
   value,
   onChange,
   id = "stock",
   required = true,
-  maxStock = 999999999
+  maxStock = 999999999,
+  isAddingStock = false,
+  onAddingStockChange = () => {},
+  currentStock = 0
 }: {
   value: string;
   onChange: (value: string) => void;
   id?: string;
   required?: boolean;
   maxStock?: number;
+  isAddingStock?: boolean;
+  onAddingStockChange?: (isAdding: boolean) => void;
+  currentStock?: number;
 }) => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const inputValue = e.target.value;
@@ -356,6 +146,22 @@ const ProductStockInput = ({
 
   return (
     <div className="relative">
+      <div className="mb-2">
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            id={`${id}-checkbox`}
+            checked={isAddingStock}
+            onCheckedChange={(checked) => onAddingStockChange(!!checked)}
+          />
+          <label
+            htmlFor={`${id}-checkbox`}
+            className="text-xs text-[#29696B] cursor-pointer"
+          >
+            Añadir al stock existente
+          </label>
+        </div>
+      </div>
+
       <Input
         id={id}
         type="number"
@@ -366,6 +172,15 @@ const ProductStockInput = ({
         required={required}
         className="mt-1"
       />
+      
+      {isAddingStock && (
+        <div className="mt-1 text-xs text-[#29696B]">
+          <span className="font-medium">Stock actual:</span> {currentStock} unidades
+          <span className="mx-1">→</span>
+          <span className="font-medium">Stock final:</span> {currentStock + parseInt(value || '0')} unidades
+        </div>
+      )}
+      
       <p className="mt-1 text-xs text-[#7AA79C]">
         Máximo: {maxStock.toLocaleString()}
       </p>
@@ -388,8 +203,6 @@ const InventorySection = () => {
   const [editingProduct, setEditingProduct] = useState<ProductType | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  // Nuevo estado para filtrar por stock bajo
-  const [showLowStockOnly, setShowLowStockOnly] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isCombo, setIsCombo] = useState(false);
   const [comboSearchTerm, setComboSearchTerm] = useState('');
@@ -397,10 +210,16 @@ const InventorySection = () => {
   const [showComboSelectionModal, setShowComboSelectionModal] = useState(false);
   const [tempSelectedItems, setTempSelectedItems] = useState<ComboItemType[]>([]);
   const initialFetchDone = useRef(false);
+  const [isAddingStock, setIsAddingStock] = useState(false);
 
   // Estado para la paginación
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+
+  // Estado para productos con stock bajo
+  const [lowStockCount, setLowStockCount] = useState(0);
+  const [showLowStockOnly, setShowLowStockOnly] = useState(false);
+  const [isLowStockLoading, setIsLowStockLoading] = useState(false);
 
   // Referencias para el scroll en móvil
   const mobileListRef = useRef<HTMLDivElement>(null);
@@ -453,16 +272,6 @@ const InventorySection = () => {
   // Usar productos directamente de la respuesta de la API en lugar de filtrar localmente
   const currentProducts = products;
 
-  // Verificar si hay productos con stock bajo
-  const hasLowStockProducts = useMemo(() => {
-    if (!Array.isArray(products)) return false;
-    return products.some(product => 
-      product && 
-      typeof product === 'object' && 
-      ((product.stock <= LOW_STOCK_THRESHOLD && product.stock > 0) || product.stock <= 0)
-    );
-  }, [products]);
-
   // Función mejorada para cargar productos
   const fetchProducts = async (forceRefresh = false, page = currentPage, limit = itemsPerPage) => {
     try {
@@ -496,8 +305,10 @@ const InventorySection = () => {
         queryParams.append('category', selectedCategory);
       }
 
-      // Si estamos filtrando por stock bajo, lo manejamos en el cliente
-      // ya que la API puede no tener este filtro específico
+      // Añadir filtro para stock bajo si está activado
+      if (showLowStockOnly) {
+        queryParams.append('lowStock', 'true');
+      }
 
       const urlWithParams = `https://lyme-back.vercel.app/api/producto?${queryParams.toString()}`;
 
@@ -574,6 +385,77 @@ const InventorySection = () => {
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  // Nueva función para contar productos con stock bajo en toda la base de datos
+  const countLowStockProducts = async () => {
+    try {
+      setIsLowStockLoading(true);
+      
+      const token = getAuthToken();
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
+
+      // Consulta específica para contar productos con stock bajo
+      const response = await fetch(`https://lyme-back.vercel.app/api/producto/stats/lowstock?threshold=${LOW_STOCK_THRESHOLD}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al obtener estadísticas de stock bajo');
+      }
+
+      const data = await response.json();
+      
+      // Si el backend no provee un endpoint específico, podemos simular una consulta
+      // con límite alto para obtener todos los productos y contar localmente
+      if (!data || typeof data.count !== 'number') {
+        // Consulta alternativa para obtener todos los productos
+        const allProductsResponse = await fetch(`https://lyme-back.vercel.app/api/producto?limit=1000`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Cache-Control': 'no-cache'
+          }
+        });
+        
+        if (!allProductsResponse.ok) {
+          throw new Error('Error al obtener estadísticas de stock bajo');
+        }
+        
+        const allProductsData = await allProductsResponse.json();
+        
+        // Extraer los productos del formato de respuesta
+        let allProducts: ProductType[] = [];
+        if (Array.isArray(allProductsData)) {
+          allProducts = allProductsData;
+        } else if (allProductsData && Array.isArray(allProductsData.items)) {
+          allProducts = allProductsData.items;
+        }
+        
+        // Contar manualmente los productos con stock bajo
+        const lowStockProductsCount = allProducts.filter(
+          product => product.stock <= LOW_STOCK_THRESHOLD
+        ).length;
+        
+        setLowStockCount(lowStockProductsCount);
+      } else {
+        // Usar el valor proporcionado por el backend
+        setLowStockCount(data.count);
+      }
+    } catch (error) {
+      console.error("Error al contar productos con stock bajo:", error);
+      // En caso de error, intentamos una aproximación basada en los productos cargados actualmente
+      const lowStockProductsCount = products.filter(
+        product => product.stock <= LOW_STOCK_THRESHOLD
+      ).length;
+      setLowStockCount(lowStockProductsCount);
+    } finally {
+      setIsLowStockLoading(false);
     }
   };
 
@@ -656,18 +538,23 @@ const InventorySection = () => {
     });
   };
 
-  // Cargar productos al montar el componente y suscribirse al observable para actualizaciones
+  // Cargar productos al montar el componente, suscribirse al observable y contar productos con stock bajo
   useEffect(() => {
     console.log('InventorySection: Componente montado, iniciando carga de productos...');
 
     // Cargar productos inmediatamente al montar el componente
     // Usamos forceRefresh=true para asegurar que se ejecute independientemente del estado
     fetchProducts(true);
+    
+    // Contar productos con stock bajo en toda la base de datos
+    countLowStockProducts();
 
     // Suscribirse a actualizaciones
     const unsubscribe = inventoryObservable.subscribe(() => {
       console.log('InventorySection: Actualización de inventario notificada por observable');
       fetchProducts(true);
+      // También actualizamos el contador de stock bajo
+      countLowStockProducts();
     });
 
     // Limpiar suscripción al desmontar
@@ -696,16 +583,10 @@ const InventorySection = () => {
 
   // Resetear la página actual cuando cambian los filtros
   useEffect(() => {
-    // Cuando cambian los filtros de búsqueda y categoría, volver a la primera página y recargar
+    // Cuando cambian los filtros, volver a la primera página y recargar
     setCurrentPage(1);
     fetchProducts(true, 1, itemsPerPage);
-  }, [searchTerm, selectedCategory]);
-  
-  // Efecto adicional para manejar el filtro de stock bajo (solo en el cliente)
-  useEffect(() => {
-    // Para el filtro de stock bajo no necesitamos recargar de la API, solo actualizar la vista
-    setCurrentPage(1);
-  }, [showLowStockOnly]);
+  }, [searchTerm, selectedCategory, showLowStockOnly]);
 
   // Función segura para obtener productos filtrados
   const getFilteredProducts = () => {
@@ -732,9 +613,10 @@ const InventorySection = () => {
         (product.categoria && product.categoria === selectedCategory) ||
         (product.subCategoria && product.subCategoria === selectedCategory);
 
-      // Verificar stock bajo si el filtro está activo
-      const matchesLowStock = !showLowStockOnly || 
-        ((product.stock <= LOW_STOCK_THRESHOLD && product.stock > 0) || product.stock <= 0);
+      // Verificar stock bajo si el filtro está activado
+      const matchesLowStock = !showLowStockOnly || (
+        product.stock <= LOW_STOCK_THRESHOLD
+      );
 
       return matchesSearch && matchesCategory && matchesLowStock;
     });
@@ -1002,6 +884,14 @@ const InventorySection = () => {
 
       const method = editingProduct ? 'PUT' : 'POST';
 
+      // Procesar el stock basado en si es adición o reemplazo
+      let finalStock = parseInt(formData.stock || '0');
+      
+      // Si estamos editando y agregando stock, sumamos al stock existente
+      if (editingProduct && isAddingStock) {
+        finalStock = editingProduct.stock + finalStock;
+      }
+
       // Datos básicos del producto
       const payload = {
         nombre: formData.nombre,
@@ -1009,7 +899,7 @@ const InventorySection = () => {
         categoria: formData.categoria,
         subCategoria: formData.subCategoria,
         precio: Number(formData.precio),
-        stock: Number(formData.stock),
+        stock: finalStock,
         proovedorInfo: formData.proovedorInfo,
         // Si es combo, incluir los ítems del combo
         esCombo: isCombo,
@@ -1080,6 +970,9 @@ const InventorySection = () => {
 
       // Notificar a otros componentes que deben actualizarse
       inventoryObservable.notify();
+      
+      // Actualizar contador de stock bajo
+      countLowStockProducts();
 
       const successMsg = `Producto ${editingProduct ? 'actualizado' : 'creado'} correctamente`;
       setSuccessMessage(successMsg);
@@ -1133,6 +1026,9 @@ const InventorySection = () => {
         if (!Array.isArray(prevProducts)) return [];
         return prevProducts.filter(product => product._id !== id);
       });
+      
+      // Actualizar contador de stock bajo
+      countLowStockProducts();
 
       const successMsg = 'Producto eliminado correctamente';
       setSuccessMessage(successMsg);
@@ -1161,6 +1057,9 @@ const InventorySection = () => {
       // Detectar si es un combo
       const isProductCombo = product.esCombo || false;
       setIsCombo(isProductCombo);
+      
+      // Resetear el modo de adición de stock al editar
+      setIsAddingStock(false);
 
       // Si es combo, cargar los ítems del combo
       if (isProductCombo && Array.isArray(product.itemsCombo)) {
@@ -1212,7 +1111,7 @@ const InventorySection = () => {
         categoria: product.categoria || '',
         subCategoria: product.subCategoria || '',
         precio: product.precio ? product.precio.toString() : '',
-        stock: product.stock ? product.stock.toString() : '',
+        stock: '0', // Iniciamos en 0 para el modo de adición
         proovedorInfo: product.proovedorInfo || '',
         imagen: null,
         imagenPreview: imagePreview
@@ -1241,6 +1140,7 @@ const InventorySection = () => {
     setEditingProduct(null);
     setIsCombo(false);
     setSelectedComboItems([]);
+    setIsAddingStock(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -1315,16 +1215,6 @@ const InventorySection = () => {
 
   // Obtener productos disponibles para combos
   const comboProducts = getFilteredComboProducts();
-  
-  // Obtener productos con stock bajo (para el contador del botón)
-  const lowStockProducts = useMemo(() => {
-    if (!Array.isArray(products)) return [];
-    return products.filter(product => 
-      product && 
-      typeof product === 'object' && 
-      ((product.stock <= LOW_STOCK_THRESHOLD && product.stock > 0) || product.stock <= 0)
-    );
-  }, [products]);
 
   // Calcular el total de páginas
   const totalPages = Math.ceil(totalCount / itemsPerPage);
@@ -1349,6 +1239,13 @@ const InventorySection = () => {
   // Función para recargar manualmente los productos
   const handleManualRefresh = () => {
     fetchProducts(true);
+    countLowStockProducts();
+  };
+
+  // Función para alternar mostrar solo productos con stock bajo
+  const toggleLowStockFilter = () => {
+    setShowLowStockOnly(!showLowStockOnly);
+    setCurrentPage(1); // Volver a la primera página al cambiar el filtro
   };
 
   // Calcular valores para fines de visualización
@@ -1379,8 +1276,8 @@ const InventorySection = () => {
 
       {/* Barra de herramientas */}
       <div className="flex flex-col md:flex-row justify-between items-start gap-4 bg-white rounded-xl shadow-sm p-4 border border-[#91BEAD]/20">
-        <div className="w-full md:w-auto flex flex-col md:flex-row gap-4">
-          <div className="relative flex-1 md:w-64">
+        <div className="w-full md:w-64">
+          <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
             <Input
               type="text"
@@ -1391,73 +1288,73 @@ const InventorySection = () => {
             />
           </div>
 
-          <div className="flex-1 md:flex-none">
-            <Tabs
-              defaultValue="all"
-              value={selectedCategory}
-              onValueChange={setSelectedCategory}
-              className="w-full"
-            >
-              <TabsList className="w-full mb-2 flex flex-wrap h-auto bg-[#DFEFE6]/50">
-                <TabsTrigger
-                  value="all"
-                  className="flex-1 data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
-                >
-                  Todos
-                </TabsTrigger>
-                <TabsTrigger
-                  value="limpieza"
-                  className="flex-1 data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
-                >
-                  Limpieza
-                </TabsTrigger>
-                <TabsTrigger
-                  value="mantenimiento"
-                  className="flex-1 data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
-                >
-                  Mantenimiento
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
+          <Tabs
+            defaultValue="all"
+            value={selectedCategory}
+            onValueChange={setSelectedCategory}
+            className="w-full"
+          >
+            <TabsList className="w-full mb-2 flex flex-wrap h-auto bg-[#DFEFE6]/50">
+              <TabsTrigger
+                value="all"
+                className="flex-1 data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
+              >
+                Todos
+              </TabsTrigger>
+              <TabsTrigger
+                value="limpieza"
+                className="flex-1 data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
+              >
+                Limpieza
+              </TabsTrigger>
+              <TabsTrigger
+                value="mantenimiento"
+                className="flex-1 data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
+              >
+                Mantenimiento
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
 
-          {/* Botón para filtrar por stock bajo con indicador visual */}
+        <div className="w-full md:w-auto flex flex-wrap gap-2">
+          {/* Botón para filtrar por stock bajo */}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
-                  onClick={() => setShowLowStockOnly(!showLowStockOnly)}
+                  onClick={toggleLowStockFilter}
                   variant={showLowStockOnly ? "default" : "outline"}
-                  className={`relative flex-1 md:flex-none ${showLowStockOnly 
-                    ? 'bg-yellow-500 hover:bg-yellow-600 text-white border-yellow-500' 
-                    : 'border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30'}`}
+                  className={`
+                    relative 
+                    ${showLowStockOnly 
+                      ? 'bg-yellow-500 hover:bg-yellow-600 border-yellow-500 text-white' 
+                      : 'border-yellow-500 text-yellow-700 hover:bg-yellow-50'
+                    }
+                  `}
+                  disabled={isLowStockLoading}
                 >
-                  {hasLowStockProducts && !showLowStockOnly && (
-                    <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-yellow-500"></span>
+                  <Filter className="w-4 h-4 mr-2" />
+                  <span className="hidden sm:inline">Stock bajo</span>
+                  {!isLowStockLoading && lowStockCount > 0 && !showLowStockOnly && (
+                    <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                      {lowStockCount > 99 ? '99+' : lowStockCount}
                     </span>
                   )}
-                  <AlertTriangle className="w-4 h-4 mr-2" />
-                  <span className="hidden md:inline">Stock Bajo</span>
-                  <span className="md:hidden">Stock</span>
-                  {hasLowStockProducts && (
-                    <span className="ml-1 bg-white/20 text-xs px-1.5 py-0.5 rounded-full">
-                      {lowStockProducts.length}
-                    </span>
+                  {isLowStockLoading && (
+                    <Loader2 className="w-4 h-4 ml-1 animate-spin" />
                   )}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                {showLowStockOnly ? 
-                  'Mostrando productos con stock bajo o sin stock' : 
-                  `${lowStockProducts.length} productos con stock bajo o sin stock`}
+                <p>Mostrar productos con stock bajo (<= {LOW_STOCK_THRESHOLD})</p>
+                {lowStockCount > 0 && (
+                  <p className="font-bold text-yellow-600">{lowStockCount} productos con stock bajo</p>
+                )}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-        </div>
 
-        <div className="w-full md:w-auto flex flex-col sm:flex-row gap-2">
           <Button
             onClick={handleManualRefresh}
             variant="outline"
@@ -1465,7 +1362,7 @@ const InventorySection = () => {
             disabled={loading || refreshing}
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-            Actualizar
+            <span className="hidden sm:inline">Actualizar</span>
           </Button>
 
           <Button
@@ -1473,10 +1370,11 @@ const InventorySection = () => {
               resetForm();
               setShowModal(true);
             }}
-            className="w-full md:w-auto bg-[#29696B] hover:bg-[#29696B]/90 text-white"
+            className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
           >
             <Plus className="w-4 h-4 mr-2" />
-            Nuevo Producto
+            <span className="hidden sm:inline">Nuevo Producto</span>
+            <span className="sm:hidden">Producto</span>
           </Button>
 
           <Button
@@ -1485,13 +1383,32 @@ const InventorySection = () => {
               setIsCombo(true);
               setShowModal(true);
             }}
-            className="w-full md:w-auto bg-[#00888A] hover:bg-[#00888A]/90 text-white"
+            className="bg-[#00888A] hover:bg-[#00888A]/90 text-white"
           >
             <PackagePlus className="w-4 h-4 mr-2" />
-            Nuevo Combo
+            <span className="hidden sm:inline">Nuevo Combo</span>
+            <span className="sm:hidden">Combo</span>
           </Button>
         </div>
       </div>
+
+      {/* Indicador de filtro de stock bajo activo */}
+      {showLowStockOnly && (
+        <Alert className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg">
+          <Filter className="h-4 w-4 text-yellow-600 mr-2" />
+          <AlertDescription className="flex-1">
+            Mostrando solo productos con stock bajo (≤ {LOW_STOCK_THRESHOLD} unidades)
+          </AlertDescription>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={toggleLowStockFilter}
+            className="ml-2 h-7 text-xs border-yellow-300 text-yellow-700 hover:bg-yellow-100"
+          >
+            Mostrar todos
+          </Button>
+        </Alert>
+      )}
 
       {/* Indicador de carga */}
       {loading && (
@@ -1504,26 +1421,16 @@ const InventorySection = () => {
       )}
 
       {/* Mensaje cuando no hay productos */}
-      {!loading && filteredProducts.length === 0 && (
+      {!loading && totalCount === 0 && (
         <div className="bg-white rounded-xl shadow-sm p-8 text-center border border-[#91BEAD]/20">
           <div className="inline-flex items-center justify-center w-12 h-12 bg-[#DFEFE6] rounded-full mb-4">
             <Search className="w-6 h-6 text-[#29696B]" />
           </div>
           <p className="text-[#7AA79C]">
             {searchTerm || selectedCategory !== 'all' || showLowStockOnly
-              ? 'No se encontraron productos que coincidan con los filtros aplicados'
+              ? 'No se encontraron productos que coincidan con la búsqueda'
               : 'No hay productos disponibles'}
           </p>
-          {showLowStockOnly && (
-            <Button
-              onClick={() => setShowLowStockOnly(false)}
-              variant="outline"
-              className="mt-4 border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
-            >
-              <Filter className="w-4 h-4 mr-2" />
-              Quitar filtro de stock bajo
-            </Button>
-          )}
         </div>
       )}
 
@@ -1531,8 +1438,7 @@ const InventorySection = () => {
       {!loading && filteredProducts.length > 0 && (
         <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm text-[#29696B] flex flex-col sm:flex-row sm:justify-between items-center">
           <span>
-            Total: {filteredProducts.length} {filteredProducts.length === 1 ? 'producto' : 'productos'}
-            {showLowStockOnly && ` con stock bajo o sin stock`}
+            Total: {totalCount} {totalCount === 1 ? 'producto' : 'productos'}
           </span>
           <span className="text-[#29696B] font-medium">
             Mostrando: {showingFromTo}
@@ -1568,7 +1474,7 @@ const InventorySection = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-[#91BEAD]/20">
-                {filteredProducts.map((product) => (
+                {products.map((product) => (
                   <tr
                     key={product._id}
                     className={`hover:bg-[#DFEFE6]/20 transition-colors ${product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD
@@ -1666,7 +1572,7 @@ const InventorySection = () => {
 
         {!loading && totalCount > itemsPerPage && (
           <div className="py-4 border-t border-[#91BEAD]/20">
-            <EnhancedPagination
+            <Pagination
               totalItems={totalCount}
               itemsPerPage={itemsPerPage}
               currentPage={currentPage}
@@ -1680,9 +1586,9 @@ const InventorySection = () => {
       {/* Vista de Tarjetas para dispositivos móviles */}
       <div ref={mobileListRef} id="mobile-products-list" className="md:hidden grid grid-cols-1 gap-4">
         {/* Paginación visible en la parte superior para móvil */}
-        {!loading && filteredProducts.length > itemsPerPage && (
-          <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20">
-            <EnhancedPagination
+        {!loading && totalCount > itemsPerPage && (
+          <div className="py-4 border-t border-[#91BEAD]/20">
+            <Pagination
               totalItems={totalCount}
               itemsPerPage={itemsPerPage}
               currentPage={currentPage}
@@ -1691,7 +1597,7 @@ const InventorySection = () => {
           </div>
         )}
 
-        {!loading && filteredProducts.map(product => (
+        {!loading && currentProducts.map(product => (
           <Card
             key={product._id}
             className={`overflow-hidden shadow-sm border ${product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD
@@ -1819,7 +1725,7 @@ const InventorySection = () => {
         ))}
 
         {/* Mensaje que muestra la página actual y el total */}
-        {!loading && filteredProducts.length > itemsPerPage && (
+        {!loading && totalCount > itemsPerPage && (
           <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm">
             <span className="text-[#29696B] font-medium">
               Página {currentPage} de {totalPages}
@@ -1828,9 +1734,9 @@ const InventorySection = () => {
         )}
 
         {/* Paginación duplicada al final de la lista para mayor visibilidad */}
-        {!loading && filteredProducts.length > itemsPerPage && (
-          <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20">
-            <EnhancedPagination
+        {!loading && totalCount > itemsPerPage && (
+          <div className="py-4 border-t border-[#91BEAD]/20">
+            <Pagination
               totalItems={totalCount}
               itemsPerPage={itemsPerPage}
               currentPage={currentPage}
@@ -1968,13 +1874,20 @@ const InventorySection = () => {
                 </div>
 
                 <div>
-                  <Label htmlFor="stock" className="text-sm text-[#29696B]">Stock</Label>
+                  <Label htmlFor="stock" className="text-sm text-[#29696B]">
+                    {editingProduct 
+                      ? (isAddingStock ? "Agregar al stock" : "Stock") 
+                      : "Stock"}
+                  </Label>
                   <ProductStockInput
                     id="stock"
                     value={formData.stock}
                     onChange={(value) => setFormData({ ...formData, stock: value })}
                     required
                     maxStock={999999999}
+                    isAddingStock={isAddingStock}
+                    onAddingStockChange={setIsAddingStock}
+                    currentStock={editingProduct ? editingProduct.stock : 0}
                   />
                 </div>
               </div>
@@ -2031,7 +1944,7 @@ const InventorySection = () => {
                         ))}
                       </div>
                       <div className="pt-2 flex justify-between text-sm font-medium text-[#29696B]">
-                      <span>Precio total de los productos:</span>
+                        <span>Precio total de los productos:</span>
                         <span>${calculateComboTotal(selectedComboItems).toFixed(2)}</span>
                       </div>
                     </div>
@@ -2130,9 +2043,9 @@ const InventorySection = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de selección de productos para el combo - Mejorado para responsividad y sin scroll horizontal */}
+      {/* Modal de selección de productos para el combo - Mejorado para responsividad */}
       <Dialog open={showComboSelectionModal} onOpenChange={setShowComboSelectionModal}>
-        <DialogContent className="sm:max-w-xl max-w-[95vw] max-h-[90vh] overflow-auto">
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-auto">
           <DialogHeader>
             <DialogTitle className="text-[#29696B]">Seleccionar productos para el combo</DialogTitle>
             <DialogDescription>
@@ -2140,294 +2053,211 @@ const InventorySection = () => {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            {/* Búsqueda de productos */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
-              <Input
-                type="text"
-                placeholder="Buscar productos..."
-                value={comboSearchTerm}
-                onChange={(e) => setComboSearchTerm(e.target.value)}
-                className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
-              />
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Panel izquierdo: Lista de productos disponibles */}
+            <div className="space-y-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
+                <Input
+                  type="text"
+                  placeholder="Buscar productos..."
+                  value={comboSearchTerm}
+                  onChange={(e) => setComboSearchTerm(e.target.value)}
+                  className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
+                />
+              </div>
 
-            {/* Lista de productos disponibles */}
-            <div className="border rounded-md border-[#91BEAD]/30">
-              {/* Vista para dispositivos móviles */}
-              <div className="md:hidden">
+              <div className="border rounded-md border-[#91BEAD]/30">
                 <div className="bg-[#DFEFE6]/30 p-3 text-[#29696B] font-medium text-sm">
                   Productos disponibles
                 </div>
-                <div className="divide-y divide-[#91BEAD]/20 max-h-60 overflow-y-auto">
-                  {comboProducts.length === 0 ? (
-                    <div className="p-4 text-center text-[#7AA79C]">
-                      No hay productos disponibles
-                    </div>
-                  ) : (
-                    comboProducts.map((product) => (
-                      <div key={product._id} className="p-3 flex justify-between items-center">
-                        <div>
-                          <div className="font-medium text-sm text-[#29696B] truncate w-36">{product.nombre}</div>
-                          <div className="text-xs text-[#7AA79C] flex items-center gap-1">
-                            <span>${product.precio.toFixed(2)}</span>
-                            <span>•</span>
-                            <span className={`inline-flex px-1 py-0.5 text-xs rounded-full ${product.stock <= 0
-                              ? 'bg-red-100 text-red-800'
-                              : product.stock <= LOW_STOCK_THRESHOLD
-                                ? 'bg-yellow-100 text-yellow-800'
-                                : 'bg-[#DFEFE6] text-[#29696B]'
-                              }`}>
-                              Stock: {product.stock}
-                            </span>
-                          </div>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleAddComboItem(product)}
-                          className="h-8 text-[#29696B] border-[#91BEAD]"
-                        >
-                          <Plus className="w-3 h-3 mr-1" />
-                          Agregar
-                        </Button>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {/* Vista para tablets y desktop */}
-              <div className="hidden md:block">
-                <Table>
-                  <TableHeader className="bg-[#DFEFE6]/30">
-                    <TableRow>
-                      <TableHead className="w-[50%]">Producto</TableHead>
-                      <TableHead>Precio</TableHead>
-                      <TableHead>Stock</TableHead>
-                      <TableHead className="text-right">Acciones</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                <div className="max-h-[300px] overflow-y-auto">
+                  <div className="divide-y divide-[#91BEAD]/20">
                     {comboProducts.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={4} className="text-center py-8 text-[#7AA79C]">
-                          No hay productos disponibles para agregar al combo
-                        </TableCell>
-                      </TableRow>
+                      <div className="p-4 text-center text-[#7AA79C]">
+                        No hay productos disponibles
+                      </div>
                     ) : (
-                      <div className="max-h-[300px] overflow-y-auto">
-                        {comboProducts.map((product) => (
-                          <TableRow key={product._id}>
-                            <TableCell className="font-medium truncate">{product.nombre}</TableCell>
-                            <TableCell>${product.precio.toFixed(2)}</TableCell>
-                            <TableCell>
-                              <span className={`inline-flex px-2 py-0.5 text-xs rounded-full ${product.stock <= 0
+                      comboProducts.map((product) => (
+                        <div key={product._id} className="p-3 flex justify-between items-center hover:bg-[#DFEFE6]/20">
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-sm text-[#29696B] truncate">{product.nombre}</div>
+                            <div className="text-xs text-[#7AA79C] flex items-center gap-1 mt-1">
+                              <span>${product.precio.toFixed(2)}</span>
+                              <span>•</span>
+                              <span className={`inline-flex px-1 py-0.5 text-xs rounded-full ${product.stock <= 0
                                 ? 'bg-red-100 text-red-800'
                                 : product.stock <= LOW_STOCK_THRESHOLD
                                   ? 'bg-yellow-100 text-yellow-800'
                                   : 'bg-[#DFEFE6] text-[#29696B]'
                                 }`}>
-                                {product.stock}
+                                Stock: {product.stock}
                               </span>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleAddComboItem(product)}
-                                className="h-8 text-[#29696B] hover:bg-[#DFEFE6]/50"
-                              >
-                                <Plus className="w-4 h-4 mr-1" />
-                                Agregar
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </div>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleAddComboItem(product)}
+                            className="h-8 text-[#29696B] border-[#91BEAD] whitespace-nowrap ml-2"
+                          >
+                            <Plus className="w-3 h-3 mr-1" />
+                            Agregar
+                          </Button>
+                        </div>
+                      ))
                     )}
-                  </TableBody>
-                </Table>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Productos seleccionados - Responsive para móvil y desktop */}
-            <div>
-              <h4 className="text-sm font-medium text-[#29696B] mb-2">Productos seleccionados</h4>
-              {tempSelectedItems.length === 0 ? (
-                <div className="text-center py-4 text-sm text-[#7AA79C] border rounded-md border-[#91BEAD]/30">
-                  No hay productos seleccionados
-                </div>
-              ) : (
-                <div className="border rounded-md border-[#91BEAD]/30">
-                  {/* Vista móvil para productos seleccionados */}
-                  <div className="md:hidden divide-y divide-[#91BEAD]/20">
-                    {tempSelectedItems.map((item, index) => (
-                      <div key={index} className="p-3">
-                        <div className="flex justify-between items-center mb-2">
-                          <div className="font-medium text-sm text-[#29696B] truncate max-w-[180px]">{item.nombre}</div>
+            {/* Panel derecho: Productos seleccionados */}
+            <div className="space-y-4">
+              <div>
+                <h4 className="font-medium text-[#29696B] mb-2">Productos seleccionados</h4>
+                {tempSelectedItems.length === 0 ? (
+              <div className="text-center py-6 text-sm text-[#7AA79C] border rounded-md border-[#91BEAD]/30">
+              No hay productos seleccionados
+            </div>
+          ) : (
+            <div className="border rounded-md border-[#91BEAD]/30">
+              <div className="bg-[#DFEFE6]/30 p-3 text-[#29696B] font-medium text-sm">
+                Lista de productos para el combo
+              </div>
+              <div className="max-h-[300px] overflow-y-auto">
+                <div className="divide-y divide-[#91BEAD]/20">
+                  {tempSelectedItems.map((item, index) => (
+                    <div key={index} className="p-3">
+                      <div className="flex justify-between items-center mb-2">
+                        <div className="font-medium text-sm text-[#29696B] truncate max-w-[200px]">{item.nombre}</div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleUpdateComboItemQuantity(String(item.productoId), 0)}
+                          className="h-7 w-7 p-0 text-red-500 hover:bg-red-50"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <div className="text-xs text-[#7AA79C]">
+                          <span>${(item.precio || 0).toFixed(2)} x {item.cantidad}</span>
+                          <span className="ml-2 text-[#29696B] font-medium">= ${((item.precio || 0) * item.cantidad).toFixed(2)}</span>
+                        </div>
+                        <div className="flex items-center border rounded border-[#91BEAD]">
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleUpdateComboItemQuantity(String(item.productoId), 0)}
-                            className="h-7 w-7 p-0 text-red-500 hover:bg-red-50"
+                            onClick={() => handleUpdateComboItemQuantity(String(item.productoId), item.cantidad - 1)}
+                            className="h-7 w-7 p-0 text-[#29696B]"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Minus className="w-3 h-3" />
+                          </Button>
+                          <span className="w-8 text-center text-sm">{item.cantidad}</span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleUpdateComboItemQuantity(String(item.productoId), item.cantidad + 1)}
+                            className="h-7 w-7 p-0 text-[#29696B]"
+                          >
+                            <Plus className="w-3 h-3" />
                           </Button>
                         </div>
-                        <div className="flex justify-between items-center">
-                          <div className="text-xs text-[#7AA79C]">
-                            <span>${(item.precio || 0).toFixed(2)} x {item.cantidad}</span>
-                            <span className="ml-2 text-[#29696B] font-medium">= ${((item.precio || 0) * item.cantidad).toFixed(2)}</span>
-                          </div>
-                          <div className="flex items-center border rounded border-[#91BEAD]">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleUpdateComboItemQuantity(String(item.productoId), item.cantidad - 1)}
-                              className="h-7 w-7 p-0 text-[#29696B]"
-                            >
-                              <Minus className="w-3 h-3" />
-                            </Button>
-                            <span className="w-8 text-center text-sm">{item.cantidad}</span>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleUpdateComboItemQuantity(String(item.productoId), item.cantidad + 1)}
-                              className="h-7 w-7 p-0 text-[#29696B]"
-                            >
-                              <Plus className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        </div>
                       </div>
-                    ))}
-                    <div className="p-3 bg-[#DFEFE6]/20 font-medium flex justify-between text-[#29696B]">
-                      <span>Total:</span>
-                      <span>${calculateComboTotal(tempSelectedItems).toFixed(2)}</span>
                     </div>
-                  </div>
-
-                  {/* Vista desktop para productos seleccionados */}
-                  <div className="hidden md:block">
-                    <div className="max-h-[200px] overflow-y-auto">
-                      <Table>
-                        <TableHeader className="bg-[#DFEFE6]/30">
-                          <TableRow>
-                            <TableHead>Producto</TableHead>
-                            <TableHead>Precio</TableHead>
-                            <TableHead>Cantidad</TableHead>
-                            <TableHead>Subtotal</TableHead>
-                            <TableHead className="text-right">Acciones</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {tempSelectedItems.map((item, index) => (
-                            <TableRow key={index}>
-                              <TableCell className="font-medium truncate">{item.nombre}</TableCell>
-                              <TableCell>${(item.precio || 0).toFixed(2)}</TableCell>
-                              <TableCell>
-                                <div className="flex items-center space-x-1">
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleUpdateComboItemQuantity(String(item.productoId), item.cantidad - 1)}
-                                    className="h-6 w-6 p-0 text-[#29696B]"
-                                  >
-                                    <Minus className="w-3 h-3" />
-                                  </Button>
-                                  <span className="w-8 text-center">{item.cantidad}</span>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleUpdateComboItemQuantity(String(item.productoId), item.cantidad + 1)}
-                                    className="h-6 w-6 p-0 text-[#29696B]"
-                                  >
-                                    <Plus className="w-3 h-3" />
-                                  </Button>
-                                </div>
-                              </TableCell>
-                              <TableCell>${((item.precio || 0) * item.cantidad).toFixed(2)}</TableCell>
-                              <TableCell className="text-right">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleUpdateComboItemQuantity(String(item.productoId), 0)}
-                                  className="h-8 text-red-500 hover:bg-red-50 hover:text-red-700"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                    <div className="p-3 bg-[#DFEFE6]/20 font-medium flex justify-between text-[#29696B]">
-                      <span>Total:</span>
-                      <span>${calculateComboTotal(tempSelectedItems).toFixed(2)}</span>
-                    </div>
-                  </div>
+                  ))}
                 </div>
-              )}
+              </div>
+              <div className="p-3 border-t border-[#91BEAD]/20 bg-[#DFEFE6]/20">
+                <div className="flex justify-between items-center font-medium text-[#29696B]">
+                  <span>Total:</span>
+                  <span>${calculateComboTotal(tempSelectedItems).toFixed(2)}</span>
+                </div>
+              </div>
             </div>
-          </div>
-
-          <DialogFooter className="gap-2 mt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setShowComboSelectionModal(false)}
-              className="border-[#91BEAD] text-[#29696B]"
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="button"
-              onClick={confirmComboSelection}
-              className="bg-[#00888A] hover:bg-[#00888A]/90 text-white"
-              disabled={tempSelectedItems.length === 0}
-            >
-              Confirmar selección
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Diálogo de confirmación de eliminación */}
-      <ConfirmationDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
-        title="Eliminar producto"
-        description="¿Está seguro de que desea eliminar este producto? Esta acción no se puede deshacer."
-        confirmText="Eliminar"
-        cancelText="Cancelar"
-        onConfirm={() => productToDelete && handleDelete(productToDelete)}
-        variant="destructive"
-      />
-
-      {/* Diálogo de confirmación de eliminación de imagen */}
-      <ConfirmationDialog
-        open={deleteImageDialogOpen}
-        onOpenChange={setDeleteImageDialogOpen}
-        title="Eliminar imagen"
-        description="¿Está seguro de que desea eliminar la imagen de este producto?"
-        confirmText="Eliminar"
-        cancelText="Cancelar"
-        onConfirm={() => productToDelete && handleDeleteProductImage(productToDelete)}
-        variant="destructive"
-      />
+          )}
+        </div>
+      </div>
     </div>
-  );
+
+    <DialogFooter className="gap-2 mt-4">
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => setShowComboSelectionModal(false)}
+        className="border-[#91BEAD] text-[#29696B]"
+      >
+        Cancelar
+      </Button>
+      <Button
+        type="button"
+        onClick={confirmComboSelection}
+        className="bg-[#00888A] hover:bg-[#00888A]/90 text-white"
+        disabled={tempSelectedItems.length === 0}
+      >
+        Confirmar selección
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+
+{/* Diálogo de confirmación de eliminación */}
+<ConfirmationDialog
+  open={deleteDialogOpen}
+  onOpenChange={setDeleteDialogOpen}
+  title="Eliminar producto"
+  description="¿Está seguro de que desea eliminar este producto? Esta acción no se puede deshacer."
+  confirmText="Eliminar"
+  cancelText="Cancelar"
+  onConfirm={() => productToDelete && handleDelete(productToDelete)}
+  variant="destructive"
+/>
+
+{/* Diálogo de confirmación de eliminación de imagen */}
+<ConfirmationDialog
+  open={deleteImageDialogOpen}
+  onOpenChange={setDeleteImageDialogOpen}
+  title="Eliminar imagen"
+  description="¿Está seguro de que desea eliminar la imagen de este producto?"
+  confirmText="Eliminar"
+  cancelText="Cancelar"
+  onConfirm={() => productToDelete && handleDeleteProductImage(productToDelete)}
+  variant="destructive"
+/>
+
+{/* Botón flotante para mostrar productos con stock bajo - visible sólo en móviles cuando hay productos con stock bajo */}
+{!loading && lowStockCount > 0 && !showLowStockOnly && windowWidth < 768 && (
+  <div className="fixed bottom-6 right-6 z-10">
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button 
+            onClick={toggleLowStockFilter}
+            className="rounded-full h-14 w-14 shadow-lg bg-yellow-500 hover:bg-yellow-600 text-white"
+          >
+            <div className="relative">
+              <HelpCircle className="h-6 w-6" />
+              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                {lowStockCount > 99 ? '99+' : lowStockCount}
+              </span>
+            </div>
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="left">
+          <p>Hay {lowStockCount} productos con stock bajo</p>
+          <p className="text-xs">Toca para ver solo estos productos</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  </div>
+)}
+</div>
+);
 };
 
 export default InventorySection;
