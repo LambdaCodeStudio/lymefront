@@ -461,6 +461,7 @@ const InventorySection = () => {
       
       // En caso de error, intentamos una estimación basada en los productos cargados
       try {
+        const token = getAuthToken();
         // Consultar el endpoint normal con filtro de stock bajo
         const altResponse = await fetch(
           `https://lyme-back.vercel.app/api/producto?lowStock=true&threshold=${LOW_STOCK_THRESHOLD}&limit=1`, 
