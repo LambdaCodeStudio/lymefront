@@ -57,7 +57,7 @@ import {
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import Pagination from "@/components/ui/pagination";
+import EnhancedPagination from "./components/Pagination";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { useNotification } from '@/context/NotificationContext';
 import { inventoryObservable, getAuthToken } from '@/utils/inventoryUtils';
@@ -233,6 +233,40 @@ const InventorySection = () => {
 
   // Calculamos dinámicamente itemsPerPage basado en el ancho de la ventana
   const itemsPerPage = windowWidth < 768 ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP;
+  
+  // Hook para paginación con lógica adaptada de AdminUserManagement
+  const useMediaQuery = (query: string) => {
+    const [matches, setMatches] = useState(
+      typeof window !== 'undefined' ? window.matchMedia(query).matches : false
+    );
+    
+    useEffect(() => {
+      if (typeof window === 'undefined') return;
+      
+      const mediaQuery = window.matchMedia(query);
+      setMatches(mediaQuery.matches);
+      
+      const handler = (event: MediaQueryListEvent) => setMatches(event.matches);
+      
+      if (mediaQuery.addEventListener) {
+        mediaQuery.addEventListener('change', handler);
+      } else {
+        // @ts-ignore - Para compatibilidad con navegadores antiguos
+        mediaQuery.addListener(handler);
+      }
+      
+      return () => {
+        if (mediaQuery.removeEventListener) {
+          mediaQuery.removeEventListener('change', handler);
+        } else {
+          // @ts-ignore - Para compatibilidad con navegadores antiguos
+          mediaQuery.removeListener(handler);
+        }
+      };
+    }, [query]);
+    
+    return matches;
+  };
 
   const [formData, setFormData] = useState<FormDataType>({
     nombre: '',
@@ -1219,7 +1253,7 @@ const InventorySection = () => {
   // Calcular el total de páginas
   const totalPages = Math.ceil(totalCount / itemsPerPage);
 
-  // Función para cambiar de página
+  // Función para cambiar de página - adaptada del patrón usado en AdminUserManagement
   const handlePageChange = (pageNumber: number) => {
     // Actualizar el estado de la página actual
     setCurrentPage(pageNumber);
@@ -1235,6 +1269,13 @@ const InventorySection = () => {
       mobileListRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   };
+  
+  // Comprobar si la página actual es mayor que el total de páginas
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   // Función para recargar manualmente los productos
   const handleManualRefresh = () => {
@@ -1571,12 +1612,13 @@ const InventorySection = () => {
         )}
 
         {!loading && totalCount > itemsPerPage && (
-          <div className="py-4 px-6 border-t border-[#91BEAD]/20">
-            <Pagination
+          <div className="py-4 border-t border-[#91BEAD]/20">
+            <EnhancedPagination
               totalItems={totalCount}
               itemsPerPage={itemsPerPage}
               currentPage={currentPage}
               onPageChange={handlePageChange}
+              className="px-6"
             />
           </div>
         )}
@@ -1587,7 +1629,7 @@ const InventorySection = () => {
         {/* Paginación visible en la parte superior para móvil */}
         {!loading && totalCount > itemsPerPage && (
           <div className="py-4 border-t border-[#91BEAD]/20">
-            <Pagination
+            <EnhancedPagination
               totalItems={totalCount}
               itemsPerPage={itemsPerPage}
               currentPage={currentPage}
@@ -1735,7 +1777,7 @@ const InventorySection = () => {
         {/* Paginación duplicada al final de la lista para mayor visibilidad */}
         {!loading && totalCount > itemsPerPage && (
           <div className="py-4 border-t border-[#91BEAD]/20">
-            <Pagination
+            <EnhancedPagination
               totalItems={totalCount}
               itemsPerPage={itemsPerPage}
               currentPage={currentPage}
@@ -2117,145 +2159,145 @@ const InventorySection = () => {
               <div>
                 <h4 className="font-medium text-[#29696B] mb-2">Productos seleccionados</h4>
                 {tempSelectedItems.length === 0 ? (
-              <div className="text-center py-6 text-sm text-[#7AA79C] border rounded-md border-[#91BEAD]/30">
-              No hay productos seleccionados
-            </div>
-          ) : (
-            <div className="border rounded-md border-[#91BEAD]/30">
-              <div className="bg-[#DFEFE6]/30 p-3 text-[#29696B] font-medium text-sm">
-                Lista de productos para el combo
-              </div>
-              <div className="max-h-[300px] overflow-y-auto">
-                <div className="divide-y divide-[#91BEAD]/20">
-                  {tempSelectedItems.map((item, index) => (
-                    <div key={index} className="p-3">
-                      <div className="flex justify-between items-center mb-2">
-                        <div className="font-medium text-sm text-[#29696B] truncate max-w-[200px]">{item.nombre}</div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleUpdateComboItemQuantity(String(item.productoId), 0)}
-                          className="h-7 w-7 p-0 text-red-500 hover:bg-red-50"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <div className="text-xs text-[#7AA79C]">
-                          <span>${(item.precio || 0).toFixed(2)} x {item.cantidad}</span>
-                          <span className="ml-2 text-[#29696B] font-medium">= ${((item.precio || 0) * item.cantidad).toFixed(2)}</span>
+                  <div className="text-center py-6 text-sm text-[#7AA79C] border rounded-md border-[#91BEAD]/30">
+                  No hay productos seleccionados
+                </div>
+              ) : (
+                <div className="border rounded-md border-[#91BEAD]/30">
+                  <div className="bg-[#DFEFE6]/30 p-3 text-[#29696B] font-medium text-sm">
+                    Lista de productos para el combo
+                  </div>
+                  <div className="max-h-[300px] overflow-y-auto">
+                    <div className="divide-y divide-[#91BEAD]/20">
+                      {tempSelectedItems.map((item, index) => (
+                        <div key={index} className="p-3">
+                          <div className="flex justify-between items-center mb-2">
+                            <div className="font-medium text-sm text-[#29696B] truncate max-w-[200px]">{item.nombre}</div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleUpdateComboItemQuantity(String(item.productoId), 0)}
+                              className="h-7 w-7 p-0 text-red-500 hover:bg-red-50"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <div className="text-xs text-[#7AA79C]">
+                              <span>${(item.precio || 0).toFixed(2)} x {item.cantidad}</span>
+                              <span className="ml-2 text-[#29696B] font-medium">= ${((item.precio || 0) * item.cantidad).toFixed(2)}</span>
+                            </div>
+                            <div className="flex items-center border rounded border-[#91BEAD]">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleUpdateComboItemQuantity(String(item.productoId), item.cantidad - 1)}
+                                className="h-7 w-7 p-0 text-[#29696B]"
+                              >
+                                <Minus className="w-3 h-3" />
+                              </Button>
+                              <span className="w-8 text-center text-sm">{item.cantidad}</span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleUpdateComboItemQuantity(String(item.productoId), item.cantidad + 1)}
+                                className="h-7 w-7 p-0 text-[#29696B]"
+                              >
+                                <Plus className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex items-center border rounded border-[#91BEAD]">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleUpdateComboItemQuantity(String(item.productoId), item.cantidad - 1)}
-                            className="h-7 w-7 p-0 text-[#29696B]"
-                          >
-                            <Minus className="w-3 h-3" />
-                          </Button>
-                          <span className="w-8 text-center text-sm">{item.cantidad}</span>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleUpdateComboItemQuantity(String(item.productoId), item.cantidad + 1)}
-                            className="h-7 w-7 p-0 text-[#29696B]"
-                          >
-                            <Plus className="w-3 h-3" />
-                          </Button>
-                        </div>
-                      </div>
+                      ))}
                     </div>
-                  ))}
+                  </div>
+                  <div className="p-3 border-t border-[#91BEAD]/20 bg-[#DFEFE6]/20">
+                    <div className="flex justify-between items-center font-medium text-[#29696B]">
+                      <span>Total:</span>
+                      <span>${calculateComboTotal(tempSelectedItems).toFixed(2)}</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="p-3 border-t border-[#91BEAD]/20 bg-[#DFEFE6]/20">
-                <div className="flex justify-between items-center font-medium text-[#29696B]">
-                  <span>Total:</span>
-                  <span>${calculateComboTotal(tempSelectedItems).toFixed(2)}</span>
-                </div>
-              </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
-      </div>
-    </div>
 
-    <DialogFooter className="gap-2 mt-4">
-      <Button
-        type="button"
-        variant="outline"
-        onClick={() => setShowComboSelectionModal(false)}
-        className="border-[#91BEAD] text-[#29696B]"
-      >
-        Cancelar
-      </Button>
-      <Button
-        type="button"
-        onClick={confirmComboSelection}
-        className="bg-[#00888A] hover:bg-[#00888A]/90 text-white"
-        disabled={tempSelectedItems.length === 0}
-      >
-        Confirmar selección
-      </Button>
-    </DialogFooter>
-  </DialogContent>
-</Dialog>
-
-{/* Diálogo de confirmación de eliminación */}
-<ConfirmationDialog
-  open={deleteDialogOpen}
-  onOpenChange={setDeleteDialogOpen}
-  title="Eliminar producto"
-  description="¿Está seguro de que desea eliminar este producto? Esta acción no se puede deshacer."
-  confirmText="Eliminar"
-  cancelText="Cancelar"
-  onConfirm={() => productToDelete && handleDelete(productToDelete)}
-  variant="destructive"
-/>
-
-{/* Diálogo de confirmación de eliminación de imagen */}
-<ConfirmationDialog
-  open={deleteImageDialogOpen}
-  onOpenChange={setDeleteImageDialogOpen}
-  title="Eliminar imagen"
-  description="¿Está seguro de que desea eliminar la imagen de este producto?"
-  confirmText="Eliminar"
-  cancelText="Cancelar"
-  onConfirm={() => productToDelete && handleDeleteProductImage(productToDelete)}
-  variant="destructive"
-/>
-
-{/* Botón flotante para mostrar productos con stock bajo - visible sólo en móviles cuando hay productos con stock bajo */}
-{!loading && lowStockCount > 0 && !showLowStockOnly && windowWidth < 768 && (
-  <div className="fixed bottom-6 right-6 z-10">
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button 
-            onClick={toggleLowStockFilter}
-            className="rounded-full h-14 w-14 shadow-lg bg-yellow-500 hover:bg-yellow-600 text-white"
+        <DialogFooter className="gap-2 mt-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setShowComboSelectionModal(false)}
+            className="border-[#91BEAD] text-[#29696B]"
           >
-            <div className="relative">
-              <HelpCircle className="h-6 w-6" />
-              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                {lowStockCount > 99 ? '99+' : lowStockCount}
-              </span>
-            </div>
+            Cancelar
           </Button>
-        </TooltipTrigger>
-        <TooltipContent side="left">
-          <p>Hay {lowStockCount} productos con stock bajo</p>
-          <p className="text-xs">Toca para ver solo estos productos</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+          <Button
+            type="button"
+            onClick={confirmComboSelection}
+            className="bg-[#00888A] hover:bg-[#00888A]/90 text-white"
+            disabled={tempSelectedItems.length === 0}
+          >
+            Confirmar selección
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Diálogo de confirmación de eliminación */}
+    <ConfirmationDialog
+      open={deleteDialogOpen}
+      onOpenChange={setDeleteDialogOpen}
+      title="Eliminar producto"
+      description="¿Está seguro de que desea eliminar este producto? Esta acción no se puede deshacer."
+      confirmText="Eliminar"
+      cancelText="Cancelar"
+      onConfirm={() => productToDelete && handleDelete(productToDelete)}
+      variant="destructive"
+    />
+
+    {/* Diálogo de confirmación de eliminación de imagen */}
+    <ConfirmationDialog
+      open={deleteImageDialogOpen}
+      onOpenChange={setDeleteImageDialogOpen}
+      title="Eliminar imagen"
+      description="¿Está seguro de que desea eliminar la imagen de este producto?"
+      confirmText="Eliminar"
+      cancelText="Cancelar"
+      onConfirm={() => productToDelete && handleDeleteProductImage(productToDelete)}
+      variant="destructive"
+    />
+    
+    {/* Botón flotante para mostrar productos con stock bajo - visible sólo en móviles cuando hay productos con stock bajo */}
+    {!loading && lowStockCount > 0 && !showLowStockOnly && windowWidth < 768 && (
+      <div className="fixed bottom-6 right-6 z-10">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button 
+                onClick={toggleLowStockFilter}
+                className="rounded-full h-14 w-14 shadow-lg bg-yellow-500 hover:bg-yellow-600 text-white"
+              >
+                <div className="relative">
+                  <HelpCircle className="h-6 w-6" />
+                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                    {lowStockCount > 99 ? '99+' : lowStockCount}
+                  </span>
+                </div>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left">
+              <p>Hay {lowStockCount} productos con stock bajo</p>
+              <p className="text-xs">Toca para ver solo estos productos</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+    )}
   </div>
-)}
-</div>
 );
 };
 
