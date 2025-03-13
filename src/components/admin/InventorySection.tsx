@@ -331,17 +331,21 @@ const InventorySection = () => {
       queryParams.append('page', page.toString());
       queryParams.append('limit', limit.toString());
 
-      if (searchTerm) {
-        queryParams.append('search', searchTerm);
-      }
-
-      if (selectedCategory !== 'all') {
-        queryParams.append('category', selectedCategory);
-      }
-
-      // Añadir filtro para stock bajo si está activado
+      // Si estamos filtrando por stock bajo, es prioritario
       if (showLowStockOnly) {
         queryParams.append('lowStock', 'true');
+        queryParams.append('threshold', LOW_STOCK_THRESHOLD.toString());
+        // No aplicamos otros filtros si estamos viendo stock bajo
+        console.log("Filtrando productos con stock bajo...");
+      } else {
+        // Aplicamos los filtros normales
+        if (searchTerm) {
+          queryParams.append('search', searchTerm);
+        }
+
+        if (selectedCategory !== 'all') {
+          queryParams.append('category', selectedCategory);
+        }
       }
 
       const urlWithParams = `https://lyme-back.vercel.app/api/producto?${queryParams.toString()}`;
@@ -441,55 +445,82 @@ const InventorySection = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Error al obtener estadísticas de stock bajo');
+        // Si el endpoint específico no existe, hacemos una consulta alternativa
+        console.log("Endpoint específico no encontrado, usando método alternativo...");
+        return await countLowStockAlternative();
       }
 
       const data = await response.json();
       
-      // Si el backend no provee un endpoint específico, podemos simular una consulta
-      // con límite alto para obtener todos los productos y contar localmente
+      // Si el backend no proporciona el conteo en el formato esperado
       if (!data || typeof data.count !== 'number') {
-        // Consulta alternativa para obtener todos los productos
-        const allProductsResponse = await fetch(`https://lyme-back.vercel.app/api/producto?limit=1000`, {
+        return await countLowStockAlternative();
+      }
+      
+      // Usar el valor proporcionado por el backend
+      console.log(`Se encontraron ${data.count} productos con stock bajo (desde API)`);
+      setLowStockCount(data.count);
+      
+    } catch (error) {
+      console.error("Error al contar productos con stock bajo:", error);
+      // En caso de error, usar método alternativo
+      await countLowStockAlternative();
+    } finally {
+      setIsLowStockLoading(false);
+    }
+  };
+  
+  // Método alternativo para contar productos con stock bajo
+  const countLowStockAlternative = async () => {
+    try {
+      console.log("Usando método alternativo para contar productos con stock bajo...");
+      
+      const token = getAuthToken();
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
+      
+      // Consulta alternativa para obtener productos con stock bajo
+      const altResponse = await fetch(
+        `https://lyme-back.vercel.app/api/producto?lowStock=true&threshold=${LOW_STOCK_THRESHOLD}&limit=1`, 
+        {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Cache-Control': 'no-cache'
           }
-        });
-        
-        if (!allProductsResponse.ok) {
-          throw new Error('Error al obtener estadísticas de stock bajo');
         }
-        
-        const allProductsData = await allProductsResponse.json();
-        
-        // Extraer los productos del formato de respuesta
-        let allProducts: ProductType[] = [];
-        if (Array.isArray(allProductsData)) {
-          allProducts = allProductsData;
-        } else if (allProductsData && Array.isArray(allProductsData.items)) {
-          allProducts = allProductsData.items;
-        }
-        
-        // Contar manualmente los productos con stock bajo
-        const lowStockProductsCount = allProducts.filter(
-          product => product.stock <= LOW_STOCK_THRESHOLD
-        ).length;
-        
-        setLowStockCount(lowStockProductsCount);
-      } else {
-        // Usar el valor proporcionado por el backend
-        setLowStockCount(data.count);
+      );
+      
+      if (!altResponse.ok) {
+        throw new Error('Error al obtener productos con stock bajo');
       }
+      
+      const altData = await altResponse.json();
+      
+      // Extraer el total de productos con stock bajo
+      let count = 0;
+      if (altData && typeof altData === 'object') {
+        if (altData.totalItems) {
+          count = altData.totalItems;
+        } else if (altData.total) {
+          count = altData.total;
+        } else if (altData.length) {
+          count = altData.length;
+        }
+      }
+      
+      console.log(`Se encontraron ${count} productos con stock bajo (método alternativo)`);
+      setLowStockCount(count);
+      return count;
     } catch (error) {
-      console.error("Error al contar productos con stock bajo:", error);
-      // En caso de error, intentamos una aproximación basada en los productos cargados actualmente
+      console.error("Error en método alternativo:", error);
+      // En último caso, estimamos basados en productos cargados
       const lowStockProductsCount = products.filter(
         product => product.stock <= LOW_STOCK_THRESHOLD
       ).length;
+      console.log(`Estimando: al menos ${lowStockProductsCount} productos con stock bajo`);
       setLowStockCount(lowStockProductsCount);
-    } finally {
-      setIsLowStockLoading(false);
+      return lowStockProductsCount;
     }
   };
 
@@ -615,11 +646,14 @@ const InventorySection = () => {
     }
   }, [windowWidth]);
 
-  // Resetear la página actual cuando cambian los filtros
+  // Manejar actualizaciones de filtros
   useEffect(() => {
-    // Cuando cambian los filtros, volver a la primera página y recargar
-    setCurrentPage(1);
-    fetchProducts(true, 1, itemsPerPage);
+    if (initialFetchDone.current) {
+      // Cuando cambian los filtros, volver a la primera página y recargar
+      console.log("Filtros cambiados, recargando productos...");
+      setCurrentPage(1);
+      fetchProducts(true, 1, itemsPerPage);
+    }
   }, [searchTerm, selectedCategory, showLowStockOnly]);
 
   // Función segura para obtener productos filtrados
@@ -1285,8 +1319,15 @@ const InventorySection = () => {
 
   // Función para alternar mostrar solo productos con stock bajo
   const toggleLowStockFilter = () => {
-    setShowLowStockOnly(!showLowStockOnly);
-    setCurrentPage(1); // Volver a la primera página al cambiar el filtro
+    // Invertir el estado actual del filtro
+    const newState = !showLowStockOnly;
+    setShowLowStockOnly(newState);
+    
+    // Volver a la primera página al cambiar el filtro
+    setCurrentPage(1);
+    
+    // Recargar productos con el filtro aplicado
+    fetchProducts(true, 1, itemsPerPage);
   };
 
   // Calcular valores para fines de visualización
@@ -1360,41 +1401,29 @@ const InventorySection = () => {
 
         <div className="w-full md:w-auto flex flex-wrap gap-2">
           {/* Botón para filtrar por stock bajo */}
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  onClick={toggleLowStockFilter}
-                  variant={showLowStockOnly ? "default" : "outline"}
-                  className={`
-                    relative 
-                    ${showLowStockOnly 
-                      ? 'bg-yellow-500 hover:bg-yellow-600 border-yellow-500 text-white' 
-                      : 'border-yellow-500 text-yellow-700 hover:bg-yellow-50'
-                    }
-                  `}
-                  disabled={isLowStockLoading}
-                >
-                  <Filter className="w-4 h-4 mr-2" />
-                  <span className="hidden sm:inline">Stock bajo</span>
-                  {!isLowStockLoading && lowStockCount > 0 && !showLowStockOnly && (
-                    <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                      {lowStockCount > 99 ? '99+' : lowStockCount}
-                    </span>
-                  )}
-                  {isLowStockLoading && (
-                    <Loader2 className="w-4 h-4 ml-1 animate-spin" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Mostrar productos con stock bajo (&le; {LOW_STOCK_THRESHOLD})</p>
-                {lowStockCount > 0 && (
-                  <p className="font-bold text-yellow-600">{lowStockCount} productos con stock bajo</p>
-                )}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <Button
+            onClick={toggleLowStockFilter}
+            variant={showLowStockOnly ? "default" : "outline"}
+            className={`
+              relative 
+              ${showLowStockOnly 
+                ? 'bg-yellow-500 hover:bg-yellow-600 border-yellow-500 text-white' 
+                : 'border-yellow-500 text-yellow-700 hover:bg-yellow-50'
+              }
+            `}
+            disabled={isLowStockLoading}
+          >
+            <HelpCircle className="w-4 h-4 mr-2" />
+            <span className="hidden sm:inline">Stock bajo</span>
+            {!isLowStockLoading && lowStockCount > 0 && !showLowStockOnly && (
+              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                {lowStockCount > 99 ? '99+' : lowStockCount}
+              </span>
+            )}
+            {isLowStockLoading && (
+              <Loader2 className="w-4 h-4 ml-1 animate-spin" />
+            )}
+          </Button>
 
           <Button
             onClick={handleManualRefresh}
@@ -1436,9 +1465,14 @@ const InventorySection = () => {
       {/* Indicador de filtro de stock bajo activo */}
       {showLowStockOnly && (
         <Alert className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg">
-          <Filter className="h-4 w-4 text-yellow-600 mr-2" />
+          <HelpCircle className="h-4 w-4 text-yellow-600 mr-2" />
           <AlertDescription className="flex-1">
             Mostrando solo productos con stock bajo (≤ {LOW_STOCK_THRESHOLD} unidades)
+            {totalCount > 0 && (
+              <span className="ml-2 font-medium">
+                Se encontraron {totalCount} productos con stock bajo.
+              </span>
+            )}
           </AlertDescription>
           <Button 
             variant="outline" 
