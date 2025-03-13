@@ -1033,7 +1033,7 @@ const InventorySection = () => {
   const handleCategoryChange = (value: string) => {
     try {
       if (value === 'not-selected') {
-        // Si se selecciona "Seleccionar categoría", limpiar también la subcategoría
+        // Si se selecciona "Seleccionar categoría", limpiar categoría y subcategoría
         setFormData(prevState => ({
           ...prevState,
           categoria: '',
@@ -1056,7 +1056,7 @@ const InventorySection = () => {
       setFormData(prevState => ({
         ...prevState,
         categoria: value,
-        subCategoria: defaultSubcategoria  // Asignar la primera subcategoría por defecto
+        subCategoria: defaultSubcategoria
       }));
     } catch (error) {
       console.error("Error al cambiar categoría:", error);
@@ -1644,7 +1644,9 @@ const InventorySection = () => {
                   <Label htmlFor="categoria" className="text-sm text-[#29696B]">Categoría</Label>
                   <Select
                     value={formData.categoria || 'not-selected'}
-                    onValueChange={handleCategoryChange}
+                    onValueChange={(value) => {
+                      handleCategoryChange(value);
+                    }}
                   >
                     <SelectTrigger id="categoria" className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
                       <SelectValue placeholder="Seleccionar categoría" />
@@ -1663,7 +1665,10 @@ const InventorySection = () => {
                     value={formData.subCategoria || (formData.categoria ? subCategorias[formData.categoria][0].value : 'not-selected')}
                     onValueChange={(value) => {
                       if (value !== 'not-selected') {
-                        setFormData({ ...formData, subCategoria: value });
+                        setFormData(prevState => ({
+                          ...prevState,
+                          subCategoria: value
+                        }));
                       }
                     }}
                   >

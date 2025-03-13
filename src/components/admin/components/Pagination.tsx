@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 
-// Hook para detectar medias queries (integrado en el mismo archivo)
+// Hook for media query detection
 const useMediaQuery = (query) => {
   const [matches, setMatches] = useState(
     typeof window !== 'undefined' ? window.matchMedia(query).matches : false
@@ -16,7 +16,6 @@ const useMediaQuery = (query) => {
     
     const handler = (event) => setMatches(event.matches);
     
-    // Agregar listener con compatibilidad para navegadores antiguos
     if (mediaQuery.addEventListener) {
       mediaQuery.addEventListener('change', handler);
     } else {
@@ -35,40 +34,30 @@ const useMediaQuery = (query) => {
   return matches;
 };
 
-/**
- * Componente de paginación mejorado
- * Incluye indicador de resultados y controles más visibles para dispositivos móviles
- */
 const Pagination = ({
   totalItems,
   itemsPerPage,
   currentPage,
   onPageChange,
   className = '',
-  onItemsPerPageChange = null, // Nueva prop para permitir cambiar items por página
+  onItemsPerPageChange = null,
 }) => {
-  // Usar el hook para detectar dispositivos móviles (más confiable que innerWidth)
   const isMobile = useMediaQuery('(max-width: 768px)');
   
-  // No mostrar paginación si hay una sola página o menos
   if (!totalItems || !itemsPerPage || totalItems <= itemsPerPage) {
     return null;
   }
 
-  // Calcular el número total de páginas con memoización
   const totalPages = useMemo(() => {
     return Math.max(1, Math.ceil(totalItems / itemsPerPage));
   }, [totalItems, itemsPerPage]);
 
-  // No mostrar paginación si hay una sola página
   if (totalPages <= 1) {
     return null;
   }
 
-  // Inicializar página actual válida
   const page = Math.min(Math.max(1, currentPage), totalPages);
 
-  // Calcular el rango de elementos mostrados con memoización
   const { firstItemOnPage, lastItemOnPage } = useMemo(() => {
     return {
       firstItemOnPage: (page - 1) * itemsPerPage + 1,
@@ -76,9 +65,8 @@ const Pagination = ({
     };
   }, [page, itemsPerPage, totalItems]);
 
-  // Generar array de páginas cercanas a la actual
   const pageNumbers = useMemo(() => {
-    const delta = isMobile ? 1 : 2; // En móvil mostramos menos páginas
+    const delta = isMobile ? 1 : 2;
     const range = [];
 
     for (
@@ -89,7 +77,6 @@ const Pagination = ({
       range.push(i);
     }
 
-    // Añadir primera página y puntos suspensivos si es necesario
     if (range[0] > 1) {
       if (range[0] > 2) {
         range.unshift('...');
@@ -97,7 +84,6 @@ const Pagination = ({
       range.unshift(1);
     }
 
-    // Añadir última página y puntos suspensivos si es necesario
     if (range[range.length - 1] < totalPages) {
       if (range[range.length - 1] < totalPages - 1) {
         range.push('...');
@@ -108,24 +94,20 @@ const Pagination = ({
     return range;
   }, [page, totalPages, isMobile]);
 
-  // Versión simple para móviles
   const MobilePagination = () => (
     <div className="flex flex-col items-center space-y-2">
-      {/* Información de paginación */}
-      <div className="text-sm text-[#29696B] font-medium">
+      <div className="text-sm text-blue-700 font-medium">
         {firstItemOnPage}-{lastItemOnPage} de {totalItems}
       </div>
 
-      {/* Controles de paginación */}
       <div className="flex items-center justify-between w-full">
-        {/* Botones anterior/primera */}
         <div className="flex items-center space-x-1">
           <Button
             variant="outline"
             size="sm"
             onClick={() => onPageChange(1)}
             disabled={page === 1}
-            className="h-8 w-8 p-0 border-[#29696B]/70 text-[#29696B] hover:bg-[#DFEFE6] hover:text-[#29696B]"
+            className="h-8 w-8 p-0 border-blue-700 text-blue-700 hover:bg-blue-50 hover:text-blue-800"
             aria-label="Primera página"
           >
             <ChevronsLeft className="h-4 w-4" />
@@ -136,28 +118,26 @@ const Pagination = ({
             size="sm"
             onClick={() => onPageChange(page - 1)}
             disabled={page === 1}
-            className="h-8 w-8 p-0 border-[#29696B]/70 text-[#29696B] hover:bg-[#DFEFE6] hover:text-[#29696B]"
+            className="h-8 w-8 p-0 border-blue-700 text-blue-700 hover:bg-blue-50 hover:text-blue-800"
             aria-label="Página anterior"
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
         </div>
 
-        {/* Indicador de página actual */}
-        <div className="flex items-center bg-[#DFEFE6] px-3 py-1 rounded-lg">
-          <span className="text-sm font-medium text-[#29696B]">
+        <div className="flex items-center bg-blue-100 px-3 py-1 rounded-lg">
+          <span className="text-sm font-medium text-blue-800">
             {page} / {totalPages}
           </span>
         </div>
 
-        {/* Botones siguiente/última */}
         <div className="flex items-center space-x-1">
           <Button
             variant="outline"
             size="sm"
             onClick={() => onPageChange(page + 1)}
             disabled={page === totalPages}
-            className="h-8 w-8 p-0 border-[#29696B]/70 text-[#29696B] hover:bg-[#DFEFE6] hover:text-[#29696B]"
+            className="h-8 w-8 p-0 border-blue-700 text-blue-700 hover:bg-blue-50 hover:text-blue-800"
             aria-label="Página siguiente"
           >
             <ChevronRight className="h-4 w-4" />
@@ -168,7 +148,7 @@ const Pagination = ({
             size="sm"
             onClick={() => onPageChange(totalPages)}
             disabled={page === totalPages}
-            className="h-8 w-8 p-0 border-[#29696B]/70 text-[#29696B] hover:bg-[#DFEFE6] hover:text-[#29696B]"
+            className="h-8 w-8 p-0 border-blue-700 text-blue-700 hover:bg-blue-50 hover:text-blue-800"
             aria-label="Última página"
           >
             <ChevronsRight className="h-4 w-4" />
@@ -178,41 +158,35 @@ const Pagination = ({
     </div>
   );
 
-  // Versión completa para desktop
   const DesktopPagination = () => (
     <div className="flex flex-col items-center space-y-2">
-      {/* Información de paginación */}
-      <div className="text-sm text-[#29696B] w-full text-center">
+      <div className="text-sm text-blue-700 w-full text-center">
         Mostrando {firstItemOnPage}-{lastItemOnPage} de {totalItems} resultados
       </div>
 
-      {/* Controles de paginación */}
       <div className="flex items-center justify-center">
-        {/* Primera página */}
         <Button
           variant="outline"
           size="sm"
           onClick={() => onPageChange(1)}
           disabled={page === 1}
-          className="h-8 w-8 p-0 border-[#29696B]/70 rounded-r-none text-[#29696B] hover:bg-[#DFEFE6] hover:text-[#29696B]"
+          className="h-8 w-8 p-0 rounded-r-none border-blue-700 text-blue-700 hover:bg-blue-50 hover:text-blue-800"
           aria-label="Primera página"
         >
           <ChevronsLeft className="h-4 w-4" />
         </Button>
 
-        {/* Página anterior */}
         <Button
           variant="outline"
           size="sm"
           onClick={() => onPageChange(page - 1)}
           disabled={page === 1}
-          className="h-8 w-8 p-0 border-[#29696B]/70 rounded-none border-l-0 text-[#29696B] hover:bg-[#DFEFE6] hover:text-[#29696B]"
+          className="h-8 w-8 p-0 rounded-none border-l-0 border-blue-700 text-blue-700 hover:bg-blue-50 hover:text-blue-800"
           aria-label="Página anterior"
         >
           <ChevronLeft className="h-4 w-4" />
         </Button>
 
-        {/* Botones de página */}
         {pageNumbers.map((pageNum, idx) => (
           <React.Fragment key={idx}>
             {pageNum === '...' ? (
@@ -220,7 +194,7 @@ const Pagination = ({
                 variant="outline"
                 size="sm"
                 disabled
-                className="h-8 w-8 p-0 border-[#29696B]/70 rounded-none border-l-0 text-[#29696B]"
+                className="h-8 w-8 p-0 rounded-none border-l-0 border-blue-700 text-blue-700"
               >
                 ...
               </Button>
@@ -231,8 +205,8 @@ const Pagination = ({
                 onClick={() => pageNum !== page && onPageChange(pageNum)}
                 className={`h-8 w-8 p-0 rounded-none border-l-0 ${
                   pageNum === page
-                    ? "bg-[#29696B] text-white hover:bg-[#29696B]/90"
-                    : "border-[#29696B]/70 text-[#29696B] hover:bg-[#DFEFE6]"
+                    ? "bg-blue-700 text-white hover:bg-blue-600"
+                    : "border-blue-700 text-blue-700 hover:bg-blue-50"
                 }`}
                 aria-label={`Página ${pageNum}`}
                 aria-current={pageNum === page ? "page" : undefined}
@@ -243,39 +217,36 @@ const Pagination = ({
           </React.Fragment>
         ))}
 
-        {/* Página siguiente */}
         <Button
           variant="outline"
           size="sm"
           onClick={() => onPageChange(page + 1)}
           disabled={page === totalPages}
-          className="h-8 w-8 p-0 border-[#29696B]/70 rounded-none border-l-0 text-[#29696B] hover:bg-[#DFEFE6] hover:text-[#29696B]"
+          className="h-8 w-8 p-0 rounded-none border-l-0 border-blue-700 text-blue-700 hover:bg-blue-50 hover:text-blue-800"
           aria-label="Página siguiente"
         >
           <ChevronRight className="h-4 w-4" />
         </Button>
 
-        {/* Última página */}
         <Button
           variant="outline"
           size="sm"
           onClick={() => onPageChange(totalPages)}
           disabled={page === totalPages}
-          className="h-8 w-8 p-0 border-[#29696B]/70 rounded-l-none border-l-0 text-[#29696B] hover:bg-[#DFEFE6] hover:text-[#29696B]"
+          className="h-8 w-8 p-0 rounded-l-none border-l-0 border-blue-700 text-blue-700 hover:bg-blue-50 hover:text-blue-800"
           aria-label="Última página"
         >
           <ChevronsRight className="h-4 w-4" />
         </Button>
       </div>
 
-      {/* Selector de items por página (nueva funcionalidad) */}
       {onItemsPerPageChange && (
-        <div className="flex items-center mt-3 text-sm text-[#29696B]">
+        <div className="flex items-center mt-3 text-sm text-blue-700">
           <span className="mr-2">Items por página:</span>
           <select
             value={itemsPerPage}
             onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
-            className="border border-[#29696B]/70 rounded px-2 py-1 text-[#29696B] bg-white"
+            className="border border-blue-700 rounded px-2 py-1 text-blue-700 bg-white"
             aria-label="Items por página"
           >
             {[10, 20, 50, 100].map((value) => (
