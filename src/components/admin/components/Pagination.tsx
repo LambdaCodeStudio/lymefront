@@ -203,7 +203,7 @@ const Pagination = ({
           </React.Fragment>
         ))}
 
-        {/* Página siguiente */}
+        {/* Página siguiente  */}
         <Button
           variant="outline"
           size="sm"
