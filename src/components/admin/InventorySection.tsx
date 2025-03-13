@@ -177,8 +177,8 @@ const InventorySection = () => {
       { value: 'indumentaria', label: 'Indumentaria' },
       { value: 'liquidos', label: 'Líquidos' },
       { value: 'papeles', label: 'Papeles' },
-      { value: 'sinClasificarLimpieza', label: 'Sin Clasificar' },
-      { value: 'calzado', label: 'Calzado'}
+      { value: 'calzado', label: 'Calzado'},
+      { value: 'sinClasificarLimpieza', label: 'Sin Clasificar' }
     ],
     mantenimiento: [
       { value: 'iluminaria', label: 'Iluminaria' },
@@ -186,7 +186,8 @@ const InventorySection = () => {
       { value: 'cerraduraCortina', label: 'Cerradura/Cortina' },
       { value: 'pintura', label: 'Pintura' },
       { value: 'superficiesConstruccion', label: 'Superficies/Construcción' },
-      { value: 'plomeria', label: 'Plomería' }
+      { value: 'plomeria', label: 'Plomería' },
+      { value: 'sinClasificarMantenimiento', label: 'Sin Clasificar' }
     ]
   };
 
