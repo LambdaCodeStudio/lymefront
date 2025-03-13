@@ -1347,7 +1347,7 @@ const InventorySection = () => {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Mostrar productos con stock bajo (<= {LOW_STOCK_THRESHOLD})</p>
+                <p>Mostrar productos con stock bajo (&le; {LOW_STOCK_THRESHOLD})</p>
                 {lowStockCount > 0 && (
                   <p className="font-bold text-yellow-600">{lowStockCount} productos con stock bajo</p>
                 )}
@@ -1571,13 +1571,12 @@ const InventorySection = () => {
         )}
 
         {!loading && totalCount > itemsPerPage && (
-          <div className="py-4 border-t border-[#91BEAD]/20">
+          <div className="py-4 px-6 border-t border-[#91BEAD]/20">
             <Pagination
               totalItems={totalCount}
               itemsPerPage={itemsPerPage}
               currentPage={currentPage}
               onPageChange={handlePageChange}
-              className="px-6"
             />
           </div>
         )}
