@@ -335,7 +335,6 @@ const InventorySection = () => {
       if (showLowStockOnly) {
         queryParams.append('lowStock', 'true');
         queryParams.append('threshold', LOW_STOCK_THRESHOLD.toString());
-        // No aplicamos otros filtros si estamos viendo stock bajo
         console.log("Filtrando productos con stock bajo...");
       } else {
         // Aplicamos los filtros normales
@@ -436,7 +435,7 @@ const InventorySection = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      // Consulta específica para contar productos con stock bajo
+      // Usar el endpoint específico para estadísticas de stock bajo
       const response = await fetch(`https://lyme-back.vercel.app/api/producto/stats/lowstock?threshold=${LOW_STOCK_THRESHOLD}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -445,82 +444,53 @@ const InventorySection = () => {
       });
 
       if (!response.ok) {
-        // Si el endpoint específico no existe, hacemos una consulta alternativa
-        console.log("Endpoint específico no encontrado, usando método alternativo...");
-        return await countLowStockAlternative();
+        throw new Error('Error al obtener estadísticas de stock bajo');
       }
 
       const data = await response.json();
       
-      // Si el backend no proporciona el conteo en el formato esperado
-      if (!data || typeof data.count !== 'number') {
-        return await countLowStockAlternative();
+      // El endpoint debe devolver un objeto con la propiedad 'count'
+      if (data && typeof data.count === 'number') {
+        console.log(`Se encontraron ${data.count} productos con stock bajo`);
+        setLowStockCount(data.count);
+      } else {
+        throw new Error('Formato de respuesta no válido');
       }
-      
-      // Usar el valor proporcionado por el backend
-      console.log(`Se encontraron ${data.count} productos con stock bajo (desde API)`);
-      setLowStockCount(data.count);
-      
     } catch (error) {
       console.error("Error al contar productos con stock bajo:", error);
-      // En caso de error, usar método alternativo
-      await countLowStockAlternative();
-    } finally {
-      setIsLowStockLoading(false);
-    }
-  };
-  
-  // Método alternativo para contar productos con stock bajo
-  const countLowStockAlternative = async () => {
-    try {
-      console.log("Usando método alternativo para contar productos con stock bajo...");
       
-      const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-      
-      // Consulta alternativa para obtener productos con stock bajo
-      const altResponse = await fetch(
-        `https://lyme-back.vercel.app/api/producto?lowStock=true&threshold=${LOW_STOCK_THRESHOLD}&limit=1`, 
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Cache-Control': 'no-cache'
+      // En caso de error, intentamos una estimación basada en los productos cargados
+      try {
+        // Consultar el endpoint normal con filtro de stock bajo
+        const altResponse = await fetch(
+          `https://lyme-back.vercel.app/api/producto?lowStock=true&threshold=${LOW_STOCK_THRESHOLD}&limit=1`, 
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Cache-Control': 'no-cache'
+            }
+          }
+        );
+        
+        if (altResponse.ok) {
+          const altData = await altResponse.json();
+          if (altData && altData.totalItems) {
+            console.log(`Obtenido conteo alternativo: ${altData.totalItems} productos con stock bajo`);
+            setLowStockCount(altData.totalItems);
           }
         }
-      );
-      
-      if (!altResponse.ok) {
-        throw new Error('Error al obtener productos con stock bajo');
+      } catch (altError) {
+        console.error("Error en método alternativo:", altError);
       }
       
-      const altData = await altResponse.json();
-      
-      // Extraer el total de productos con stock bajo
-      let count = 0;
-      if (altData && typeof altData === 'object') {
-        if (altData.totalItems) {
-          count = altData.totalItems;
-        } else if (altData.total) {
-          count = altData.total;
-        } else if (altData.length) {
-          count = altData.length;
-        }
-      }
-      
-      console.log(`Se encontraron ${count} productos con stock bajo (método alternativo)`);
-      setLowStockCount(count);
-      return count;
-    } catch (error) {
-      console.error("Error en método alternativo:", error);
-      // En último caso, estimamos basados en productos cargados
-      const lowStockProductsCount = products.filter(
-        product => product.stock <= LOW_STOCK_THRESHOLD
+      // Si todo lo demás falla, usamos una estimación local
+      const lowStockEstimate = products.filter(
+        product => product.stock <= LOW_STOCK_THRESHOLD && product.stock > 0
       ).length;
-      console.log(`Estimando: al menos ${lowStockProductsCount} productos con stock bajo`);
-      setLowStockCount(lowStockProductsCount);
-      return lowStockProductsCount;
+      console.log(`Estimando localmente: al menos ${lowStockEstimate} productos con stock bajo`);
+      setLowStockCount(lowStockEstimate);
+    } finally {
+      setIsLowStockLoading(false);
     }
   };
 
