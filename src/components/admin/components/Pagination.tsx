@@ -186,18 +186,19 @@ const Pagination = ({
               </Button>
             ) : (
               <Button
-                variant={pageNum === page ? "default" : "outline"}
-                size="sm"
-                onClick={() => pageNum !== page && onPageChange(pageNum)}
-                className={`h-8 w-8 p-0 rounded-none border-l-0 ${pageNum === page
-                    ? "bg-[#29696B] text-white hover:bg-[#29696B]/90"
-                    : "border-[#91BEAD] text-[#29696B]" 
-                  }`}
-                aria-label={`Página ${pageNum}`}
-                aria-current={pageNum === page ? "page" : undefined}
-              >
-                {pageNum}
-              </Button>
+              variant={pageNum === page ? "default" : "outline"}
+              size="sm"
+              onClick={() => pageNum !== page && onPageChange(pageNum)}
+              className={`h-8 w-8 p-0 rounded-none border-l-0 ${
+                pageNum === page
+                  ? "bg-[#29696B] text-white hover:bg-[#29696B]/90"
+                  : "border-[#91BEAD] text-[#29696B]/30 hover:text-[#29696B]" 
+              }`}
+              aria-label={`Página ${pageNum}`}
+              aria-current={pageNum === page ? "page" : undefined}
+            >
+              {pageNum}
+            </Button>
             )}
           </React.Fragment>
         ))}
