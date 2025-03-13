@@ -4,6 +4,7 @@
   "version": "0.0.1",
   "scripts": {
     "dev": "astro dev",
+    "prebuild": "node ./scripts/check-deps.js",
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro"
@@ -42,7 +43,11 @@
     "react-router-dom": "^7.2.0",
     "react-window": "^1.8.11",
     "tailwind-merge": "^3.0.1",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "zwitch": "^2.0.4",
+    "hast-util-raw": "^8.0.0",
+    "unified": "^11.0.0",
+    "unist-util-visit": "^5.0.0"
   },
   "devDependencies": {
     "@astrojs/tailwind": "^6.0.0",
