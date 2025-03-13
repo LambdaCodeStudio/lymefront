@@ -228,10 +228,10 @@ const InventorySection = () => {
       { value: 'plomeria', label: 'Plomería' }
     ]
   };
-  
+
   // Usar productos directamente de la respuesta de la API en lugar de filtrar localmente
   const currentProducts = products;
-  
+
   // Función mejorada para cargar productos
   const fetchProducts = async (forceRefresh = false, page = currentPage, limit = itemsPerPage) => {
     try {
@@ -425,7 +425,7 @@ const InventorySection = () => {
   // Verificar productos con stock bajo y enviar notificación (con manejo de errores robusto)
   useEffect(() => {
     if (loading || !Array.isArray(currentProducts)) return;
-  
+
     try {
       const lowStockProducts = currentProducts.filter(product =>
         product &&
@@ -434,12 +434,12 @@ const InventorySection = () => {
         product.stock > 0 &&
         product.stock <= LOW_STOCK_THRESHOLD
       );
-  
+
       if (lowStockProducts.length > 0) {
         const productNames = lowStockProducts.slice(0, 3).map(p => p.nombre || 'Producto sin nombre').join(', ');
         const extraCount = lowStockProducts.length > 3 ? ` y ${lowStockProducts.length - 3} más` : '';
         const message = `Alerta: ${lowStockProducts.length} producto${lowStockProducts.length > 1 ? 's' : ''} con stock bajo en esta página: ${productNames}${extraCount}`;
-  
+
         if (addNotification) {
           addNotification(message, 'warning');
         }
@@ -533,7 +533,7 @@ const InventorySection = () => {
         const allProducts = await fetchAllProducts();
         setAllAvailableProducts(allProducts);
       };
-      
+
       loadAllProducts();
     }
   }, [showComboSelectionModal]);
@@ -542,7 +542,7 @@ const InventorySection = () => {
   const getFilteredComboProducts = () => {
     // No mostrar productos que ya son combos
     const productsToFilter = showComboSelectionModal ? allAvailableProducts : products;
-    
+
     return productsToFilter.filter(product => {
       if (!product || product.esCombo) return false;
 
@@ -838,7 +838,7 @@ const InventorySection = () => {
 
       // Establecer explícitamente la página a 1 después de editar
       setCurrentPage(1);
-      
+
       // Actualizar el producto específico en el estado o agregar si es nuevo
       if (editingProduct) {
         // Obtener la versión actualizada del producto
@@ -846,7 +846,7 @@ const InventorySection = () => {
         if (updatedProduct) {
           updateProductInState(updatedProduct);
         }
-        
+
         // Recargar productos para la página 1
         fetchProducts(true, 1, itemsPerPage);
       } else {
@@ -856,7 +856,7 @@ const InventorySection = () => {
           if (!Array.isArray(prevProducts)) return [savedProduct];
           return [savedProduct, ...prevProducts];
         });
-        
+
         // Recargar productos para la página 1
         fetchProducts(true, 1, itemsPerPage);
       }
@@ -1041,15 +1041,18 @@ const InventorySection = () => {
         }));
         return;
       }
-  
+
+      // Verificar si la categoría existe en subCategorias
       if (!subCategorias[value]) {
         console.error(`Categoría no válida: ${value}`);
         addNotification(`Error: Categoría '${value}' no válida`, 'error');
         return;
       }
-  
+
+      // Obtener la primera subcategoría de la categoría seleccionada
       const defaultSubcategoria = subCategorias[value][0].value;
-  
+
+      // Actualizar el estado con la nueva categoría y subcategoría por defecto
       setFormData(prevState => ({
         ...prevState,
         categoria: value,
@@ -1657,7 +1660,7 @@ const InventorySection = () => {
                 <div>
                   <Label htmlFor="subCategoria" className="text-sm text-[#29696B]">Subcategoría</Label>
                   <Select
-                    value={formData.subCategoria || 'not-selected'}
+                    value={formData.subCategoria || (formData.categoria ? subCategorias[formData.categoria][0].value : 'not-selected')}
                     onValueChange={(value) => {
                       if (value !== 'not-selected') {
                         setFormData({ ...formData, subCategoria: value });
