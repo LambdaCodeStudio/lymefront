@@ -35,7 +35,7 @@ LymeFront es la interfaz de usuario para el sistema de gestión Lyme, una aplica
 
 3. Crear archivo `.env` en la raíz del proyecto con las siguientes variables:
    ```
-   PUBLIC_API_URL=https://lyme-back.vercel.app/api
+   PUBLIC_API_URL=http://localhost:4000/api
    PUBLIC_SITE_URL=http://localhost:3000
    ```
 

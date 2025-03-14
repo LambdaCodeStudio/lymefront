@@ -49,8 +49,8 @@ const OptimizedProductImage: React.FC<ProductImageProps> = ({
   
   // Crear la URL de la imagen con parámetro de versión para evitar cachés obsoletas
   const imageUrl = useBase64 
-    ? `https://lyme-back.vercel.app/api/producto/${productId}/imagen-base64`
-    : `https://lyme-back.vercel.app/api/producto/${productId}/imagen?quality=${quality}&width=${width}&height=${height}&v=${timestamp}`;
+    ? `http://localhost:4000/api/producto/${productId}/imagen-base64`
+    : `http://localhost:4000/api/producto/${productId}/imagen?quality=${quality}&width=${width}&height=${height}&v=${timestamp}`;
 
   useEffect(() => {
     // Si no hay ID de producto, no hacer nada

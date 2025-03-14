@@ -4,7 +4,7 @@
  */
 
 // URL base para el backend
-const API_URL = 'https://lyme-back.vercel.app/api/auth';
+const API_URL = 'http://localhost:4000/api/auth/';
 
 // Tipo para el creador de un usuario
 export interface UserCreator {

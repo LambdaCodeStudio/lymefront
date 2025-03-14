@@ -288,7 +288,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
       // Set timeout to avoid hanging requests
       const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-      const response = await fetch(`https://lyme-back.vercel.app/api/producto/${productId}/imagen-base64`, {
+      const response = await fetch(`http://localhost:4000/api/producto/${productId}/imagen-base64`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

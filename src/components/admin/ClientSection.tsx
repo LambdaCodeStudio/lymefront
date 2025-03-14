@@ -115,13 +115,19 @@ interface UpdateClientData {
   userId: string;
 }
 
+// Añade esta función a tu archivo de utilidades
+const getApiUrl = (endpoint: string): string => {
+  const baseUrl = 'http://localhost:4000/api';
+  return `${baseUrl}/${endpoint}`;
+};
+
 // Funciones para gestionar la caché
 const getFromCache = (key: string) => {
   if (typeof window === 'undefined') return null;
-  
+
   const cachedData = localStorage.getItem(key);
   if (!cachedData) return null;
-  
+
   try {
     const { data, timestamp } = JSON.parse(cachedData);
     // Verificar si la caché ha expirado
@@ -129,7 +135,7 @@ const getFromCache = (key: string) => {
       localStorage.removeItem(key);
       return null;
     }
-    
+
     return data;
   } catch (error) {
     console.error(`Error parsing cached ${key}:`, error);
@@ -140,12 +146,12 @@ const getFromCache = (key: string) => {
 
 const saveToCache = (key: string, data: any) => {
   if (typeof window === 'undefined') return;
-  
+
   const cacheData = {
     data,
     timestamp: Date.now()
   };
-  
+
   localStorage.setItem(key, JSON.stringify(cacheData));
 };
 
@@ -196,17 +202,17 @@ const ClientsSection: React.FC = () => {
 
   // Estado para controlar la paginación
   const [currentPage, setCurrentPage] = useState<number>(1);
-  
+
   // Referencia para el scroll en móvil
   const mobileListRef = useRef<HTMLDivElement>(null);
-  
+
   // Tamaños de página para diferentes dispositivos
   const ITEMS_PER_PAGE_MOBILE = 3;
   const ITEMS_PER_PAGE_DESKTOP = 7;
-  
+
   // Estado para controlar el ancho de la ventana
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
-  
+
   // Calcular dinámicamente el número de items por página basado en el ancho de la ventana
   const itemsPerPage = windowWidth < 768 ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP;
 
@@ -220,13 +226,13 @@ const ClientsSection: React.FC = () => {
     const handleResize = () => {
       const newWidth = window.innerWidth;
       setWindowWidth(newWidth);
-      
+
       // Si cambiamos entre móvil y escritorio, volver a la primera página
       if ((newWidth < 768 && windowWidth >= 768) || (newWidth >= 768 && windowWidth < 768)) {
         setCurrentPage(1);
       }
     };
-    
+
     if (typeof window !== 'undefined') {
       window.addEventListener('resize', handleResize);
       return () => window.removeEventListener('resize', handleResize);
@@ -245,7 +251,7 @@ const ClientsSection: React.FC = () => {
   const toggleAllServices = (services: string[]) => {
     // Verificar si todos los servicios están expandidos
     const allExpanded = services.every(service => expandedServices[service]);
-    
+
     if (allExpanded) {
       // Si todos están expandidos, contraer todos
       setExpandedServices({});
@@ -275,10 +281,10 @@ const ClientsSection: React.FC = () => {
   // Efecto para cargar datos iniciales
   useEffect(() => {
     console.log("ClientSection montado, selectedUserId:", selectedUserId);
-    
+
     // Siempre iniciar con "all" seleccionado
     setActiveUserId("all");
-    
+
     // Cargar datos
     fetchClients(false);
     fetchUsers(false);
@@ -294,13 +300,13 @@ const ClientsSection: React.FC = () => {
       if (selectedUserId || storedSelectedUserId || lastCreatedUserId) {
         const userId = selectedUserId || storedSelectedUserId || lastCreatedUserId;
         console.log("Se encontró un userId para usar en el formulario:", userId);
-        
+
         // Inicializar el formulario con este usuario si se abre para agregar un nuevo cliente
         setFormData(prev => ({
           ...prev,
           userId: userId
         }));
-        
+
         // Limpiar valores de localStorage
         if (storedSelectedUserId) localStorage.removeItem('selectedUserId');
         if (lastCreatedUserId) localStorage.removeItem('lastCreatedUserId');
@@ -317,7 +323,7 @@ const ClientsSection: React.FC = () => {
   useEffect(() => {
     if (selectedUserId) {
       console.log("selectedUserId cambió a:", selectedUserId);
-      
+
       // Ya no cambiamos activeUserId, solo actualizamos el formulario
       setFormData(prev => ({
         ...prev,
@@ -335,7 +341,7 @@ const ClientsSection: React.FC = () => {
       // También revisamos clientes sin asignar por si alguno quedó así tras eliminar un usuario
       fetchClientsWithoutUser(true);
     };
-  
+
     // Verificar localStorage para eventos
     const checkLocalStorage = () => {
       if (typeof window !== 'undefined') {
@@ -346,10 +352,10 @@ const ClientsSection: React.FC = () => {
         }
       }
     };
-  
+
     // Intervalo para verificar localStorage (como fallback)
     const interval = setInterval(checkLocalStorage, 2000);
-  
+
     // Evento personalizado cuando localStorage cambia
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === 'userUpdated' && e.newValue === 'true') {
@@ -358,15 +364,15 @@ const ClientsSection: React.FC = () => {
         localStorage.removeItem('userUpdated');
       }
     };
-  
+
     // Suscribirse a storage events (funciona entre tabs)
     if (typeof window !== 'undefined') {
       window.addEventListener('storage', handleStorageChange);
     }
-  
+
     // Verificar al montar si hay actualizaciones pendientes
     checkLocalStorage();
-  
+
     // Limpieza al desmontar
     return () => {
       if (typeof window !== 'undefined') {
@@ -404,8 +410,9 @@ const ClientsSection: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('https://lyme-back.vercel.app/api/cliente', {
-        headers: { 
+      const apiUrl = getApiUrl('cliente');
+      const response = await fetch(apiUrl, {
+        headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
         }
@@ -425,10 +432,10 @@ const ClientsSection: React.FC = () => {
 
       const data: Client[] = await response.json();
       console.log("Clientes cargados:", data.length);
-      
+
       // Guardar en caché
       saveToCache(CLIENTS_CACHE_KEY, data);
-      
+
       setClients(data);
       setError(null);
     } catch (err) {
@@ -453,11 +460,11 @@ const ClientsSection: React.FC = () => {
         const cachedUnassignedClients = getFromCache(UNASSIGNED_CLIENTS_CACHE_KEY);
         if (cachedUnassignedClients) {
           console.log("Usando clientes sin asignar desde caché");
-          
+
           // Agregar estos clientes al estado, marcándolos especialmente
           setClients(prevClients => {
             const clientsWithoutDuplicates = [...prevClients];
-            
+
             // Añadir solo los que no están ya en la lista
             cachedUnassignedClients.forEach((newClient: Client) => {
               if (!clientsWithoutDuplicates.some(c => c._id === newClient._id)) {
@@ -468,10 +475,10 @@ const ClientsSection: React.FC = () => {
                 });
               }
             });
-            
+
             return clientsWithoutDuplicates;
           });
-          
+
           return;
         }
       }
@@ -481,8 +488,8 @@ const ClientsSection: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('https://lyme-back.vercel.app/api/cliente/sin-asignar', {
-        headers: { 
+      const response = await fetch('http://localhost:4000/api/cliente/sin-asignar', {
+        headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
         }
@@ -494,14 +501,14 @@ const ClientsSection: React.FC = () => {
 
       const data: Client[] = await response.json();
       console.log("Clientes sin asignar:", data.length);
-      
+
       // Guardar en caché
       saveToCache(UNASSIGNED_CLIENTS_CACHE_KEY, data);
-      
+
       // Agregar estos clientes al estado, marcándolos especialmente
       setClients(prevClients => {
         const clientsWithoutDuplicates = [...prevClients];
-        
+
         // Añadir solo los que no están ya en la lista
         data.forEach(newClient => {
           if (!clientsWithoutDuplicates.some(c => c._id === newClient._id)) {
@@ -512,15 +519,15 @@ const ClientsSection: React.FC = () => {
             });
           }
         });
-        
+
         return clientsWithoutDuplicates;
       });
-      
+
       // Mostrar alerta si hay clientes sin asignar
       if (data.length > 0 && addNotification) {
         addNotification(`Se encontraron ${data.length} clientes sin usuario asignado. Puede reasignarlos editándolos.`, 'warning', 8000);
       }
-      
+
     } catch (err) {
       const errorMsg = 'Error al cargar clientes sin asignar: ' + (err instanceof Error ? err.message : String(err));
       console.error(errorMsg);
@@ -548,8 +555,8 @@ const ClientsSection: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('https://lyme-back.vercel.app/api/auth/users', {
-        headers: { 
+      const response = await fetch('http://localhost:4000/api/auth/users', {
+        headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
         }
@@ -560,31 +567,18 @@ const ClientsSection: React.FC = () => {
       }
 
       const data = await response.json();
-      
+
       // Filtrar usuarios válidos para asignar a clientes:
       // - Supervisores (antes 'basic')
-      // - Operarios (antes 'temporario')
       // - Solo usuarios activos
       const activeValidUsers = data.filter((user: any) => {
         // Verificar si es un rol válido (supervisor, operario) y está activo
         const isValidRole = (user.role === 'supervisor' || user.role === 'operario');
         const isActive = user.isActive === true;
-        
-        // Si es operario y tiene fecha de expiración, verificar que no haya expirado
-        if (isValidRole && isActive && user.role === 'operario' && user.expiresAt) {
-          const now = new Date();
-          const expirationDate = new Date(user.expiresAt);
-          if (now > expirationDate) {
-            return false; // Excluir operarios con expiresAt en el pasado
-          }
-        }
-        
+
         return isValidRole && isActive;
       });
-      
-      console.log("Usuarios válidos activos:", activeValidUsers.length);
-      console.log("- Supervisores:", activeValidUsers.filter(u => u.role === 'supervisor').length);
-      console.log("- Operarios:", activeValidUsers.filter(u => u.role === 'operario').length);
+
 
       // Guardar en caché
       saveToCache(USERS_CACHE_KEY, activeValidUsers);
@@ -616,7 +610,7 @@ const ClientsSection: React.FC = () => {
 
       console.log("Creando cliente con datos:", formData);
 
-      const response = await fetch('https://lyme-back.vercel.app/api/cliente', {
+      const response = await fetch('http://localhost:4000/api/cliente', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -632,7 +626,7 @@ const ClientsSection: React.FC = () => {
 
       // Invalidar caché después de crear cliente
       invalidateCache([CLIENTS_CACHE_KEY, UNASSIGNED_CLIENTS_CACHE_KEY]);
-      
+
       await fetchClients(true);
       setShowModal(false);
       resetForm();
@@ -681,7 +675,7 @@ const ClientsSection: React.FC = () => {
 
       console.log("Actualizando cliente:", currentClient._id, "con datos:", updateData);
 
-      const response = await fetch(`https://lyme-back.vercel.app/api/cliente/${currentClient._id}`, {
+      const response = await fetch(`http://localhost:4000/api/cliente/${currentClient._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -697,7 +691,7 @@ const ClientsSection: React.FC = () => {
 
       // Invalidar caché después de actualizar cliente
       invalidateCache([CLIENTS_CACHE_KEY, UNASSIGNED_CLIENTS_CACHE_KEY]);
-      
+
       await fetchClients(true);
       setShowModal(false);
       resetForm();
@@ -732,7 +726,7 @@ const ClientsSection: React.FC = () => {
       }
 
       console.log(`Eliminando cliente con ID: ${id}`);
-      const response = await fetch(`https://lyme-back.vercel.app/api/cliente/${id}`, {
+      const response = await fetch(`http://localhost:4000/api/cliente/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -764,7 +758,7 @@ const ClientsSection: React.FC = () => {
 
       // Invalidar caché después de eliminar cliente
       invalidateCache([CLIENTS_CACHE_KEY, UNASSIGNED_CLIENTS_CACHE_KEY]);
-      
+
       await fetchClients(true);
 
       const successMsg = 'Cliente eliminado correctamente';
@@ -854,7 +848,7 @@ const ClientsSection: React.FC = () => {
 
       // Actualizamos cada cliente que pertenece a este servicio
       const updatePromises = clientesDelServicio.map(client => {
-        return fetch(`https://lyme-back.vercel.app/api/cliente/${client._id}`, {
+        return fetch(`http://localhost:4000/api/cliente/${client._id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -889,7 +883,7 @@ const ClientsSection: React.FC = () => {
 
       // Invalidar caché después de actualizar servicio
       invalidateCache([CLIENTS_CACHE_KEY, UNASSIGNED_CLIENTS_CACHE_KEY]);
-      
+
       await fetchClients(true);
       setShowServiceModal(false);
 
@@ -934,7 +928,7 @@ const ClientsSection: React.FC = () => {
       for (const client of clientesDelServicio) {
         console.log(`Eliminando sección: ${client._id} - ${client.seccionDelServicio || 'Sin sección'}`);
         try {
-          const response = await fetch(`https://lyme-back.vercel.app/api/cliente/${client._id}`, {
+          const response = await fetch(`http://localhost:4000/api/cliente/${client._id}`, {
             method: 'DELETE',
             headers: {
               'Authorization': `Bearer ${token}`
@@ -989,7 +983,7 @@ const ClientsSection: React.FC = () => {
 
       // Invalidar caché después de eliminar servicio
       invalidateCache([CLIENTS_CACHE_KEY, UNASSIGNED_CLIENTS_CACHE_KEY]);
-      
+
       // Asegurarse de que la lista de clientes se actualiza
       await fetchClients(true);
       setShowDeleteServiceModal(false);
@@ -1061,7 +1055,7 @@ const ClientsSection: React.FC = () => {
   // Función para cambiar de página
   const handlePageChange = (pageNumber: number) => {
     setCurrentPage(pageNumber);
-    
+
     // Hacer scroll al inicio de la lista en móvil
     if (windowWidth < 768 && mobileListRef.current) {
       mobileListRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -1075,7 +1069,7 @@ const ClientsSection: React.FC = () => {
 
     // Crear el identificador con rol
     let identifier = '';
-    
+
     // Priorizar mostrar el email, ya que es lo que se usa principalmente para identificar usuarios
     if (user.email) identifier = user.email;
     else if (user.usuario) identifier = user.usuario;
@@ -1084,14 +1078,14 @@ const ClientsSection: React.FC = () => {
     else identifier = `ID: ${userId.substring(0, 8)}`;
 
     // Agregar etiqueta de rol para más claridad
-    const roleName = user.role === 'supervisor' ? 'Supervisor' : 
-                     user.role === 'operario' ? 'Operario' : 
-                     user.role || 'Usuario';
-    
+    const roleName = user.role === 'supervisor' ? 'Supervisor' :
+      user.role === 'operario' ? 'Operario' :
+        user.role || 'Usuario';
+
     // Agregar "(temp)" para operarios con fecha de expiración
     const isTempOperario = user.role === 'operario' && user.expiresAt;
     const tempLabel = isTempOperario ? ' (temp)' : '';
-    
+
     return `${identifier} - ${roleName}${tempLabel}`;
   };
 
@@ -1148,7 +1142,7 @@ const ClientsSection: React.FC = () => {
 
   // Convertir el objeto agrupado a un array para la paginación
   const groupedServicesArray = Object.entries(groupedClients);
-  
+
   // Calcular paginación para servicios
   const indexOfLastService = currentPage * itemsPerPage;
   const indexOfFirstService = indexOfLastService - itemsPerPage;
@@ -1156,9 +1150,9 @@ const ClientsSection: React.FC = () => {
 
   // Calcular el número total de páginas
   const totalPages = Math.ceil(groupedServicesArray.length / itemsPerPage);
-  
+
   // Información de paginación
-  const showingFromTo = groupedServicesArray.length > 0 
+  const showingFromTo = groupedServicesArray.length > 0
     ? `${indexOfFirstService + 1}-${Math.min(indexOfLastService, groupedServicesArray.length)} de ${groupedServicesArray.length}`
     : '0 de 0';
 
@@ -1221,7 +1215,7 @@ const ClientsSection: React.FC = () => {
           />
         </div>
 
-                  {/* Filtro por usuario */}
+        {/* Filtro por usuario */}
         <div>
           <Select
             value={activeUserId}
@@ -1232,7 +1226,7 @@ const ClientsSection: React.FC = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos los usuarios</SelectItem>
-              
+
               {/* Agrupar por supervisores */}
               {users.filter(user => user.role === 'supervisor').length > 0 && (
                 <>
@@ -1245,25 +1239,6 @@ const ClientsSection: React.FC = () => {
                     .map(user => (
                       <SelectItem key={user._id} value={user._id}>
                         {user.email || user.usuario || `${user.nombre || ''} ${user.apellido || ''}`.trim() || user._id}
-                      </SelectItem>
-                    ))
-                  }
-                </>
-              )}
-              
-              {/* Agrupar por operarios */}
-              {users.filter(user => user.role === 'operario').length > 0 && (
-                <>
-                  <SelectItem value="header-operarios" disabled className="font-semibold text-[#29696B] cursor-default bg-[#DFEFE6]/30">
-                    -- Operarios --
-                  </SelectItem>
-                  {users
-                    .filter(user => user.role === 'operario')
-                    .sort((a, b) => (a.email || a.usuario || '').localeCompare(b.email || b.usuario || ''))
-                    .map(user => (
-                      <SelectItem key={user._id} value={user._id}>
-                        {user.email || user.usuario || `${user.nombre || ''} ${user.apellido || ''}`.trim() || user._id}
-                        {user.expiresAt ? ' (temp)' : ''}
                       </SelectItem>
                     ))
                   }
@@ -1375,9 +1350,9 @@ const ClientsSection: React.FC = () => {
                 <div className="text-xs text-[#29696B]">
                   Usuario seleccionado: <strong>{getUserIdentifierById(activeUserId)}</strong>
                 </div>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={clearActiveUserId}
                   className="h-6 w-6 p-0"
                 >
@@ -1614,7 +1589,7 @@ const ClientsSection: React.FC = () => {
                 )}
               </div>
             ))}
-            
+
             {/* Paginación para la vista de escritorio */}
             {groupedServicesArray.length > itemsPerPage && (
               <div className="py-4">
@@ -1771,7 +1746,7 @@ const ClientsSection: React.FC = () => {
                 )}
               </div>
             ))}
-            
+
             {/* Información de paginación para móvil */}
             {groupedServicesArray.length > itemsPerPage && (
               <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm">
@@ -1780,7 +1755,7 @@ const ClientsSection: React.FC = () => {
                 </span>
               </div>
             )}
-            
+
             {/* Paginación duplicada al final de la lista para mayor visibilidad */}
             {groupedServicesArray.length > itemsPerPage && (
               <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20 mt-2">
@@ -1868,7 +1843,6 @@ const ClientsSection: React.FC = () => {
                 </p>
               )}
             </div>
-
             <div>
               <Label htmlFor="userId" className="text-sm text-[#29696B]">Usuario Asignado</Label>
               {activeUserId !== "all" ? (
@@ -1885,44 +1859,24 @@ const ClientsSection: React.FC = () => {
                     onValueChange={(value) => setFormData({ ...formData, userId: value })}
                   >
                     <SelectTrigger className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
-                      <SelectValue placeholder="Seleccionar usuario" />
+                      <SelectValue placeholder="Seleccionar supervisor" />
                     </SelectTrigger>
                     <SelectContent>
-                      {/* Agrupar por supervisores */}
-                      {users.filter(user => user.role === 'supervisor').length > 0 && (
-                        <>
-                          <SelectItem value="header-supervisors" disabled className="font-semibold text-[#29696B] cursor-default bg-[#DFEFE6]/30">
-                            -- Supervisores --
-                          </SelectItem>
-                          {users
-                            .filter(user => user.role === 'supervisor')
-                            .sort((a, b) => (a.email || a.usuario || '').localeCompare(b.email || b.usuario || ''))
-                            .map(user => (
-                              <SelectItem key={user._id} value={user._id}>
-                                {user.email || user.usuario || `${user.nombre || ''} ${user.apellido || ''}`.trim() || user._id}
-                              </SelectItem>
-                            ))
-                          }
-                        </>
-                      )}
-                      
-                      {/* Agrupar por operarios */}
-                      {users.filter(user => user.role === 'operario').length > 0 && (
-                        <>
-                          <SelectItem value="header-operarios" disabled className="font-semibold text-[#29696B] cursor-default bg-[#DFEFE6]/30">
-                            -- Operarios --
-                          </SelectItem>
-                          {users
-                            .filter(user => user.role === 'operario')
-                            .sort((a, b) => (a.email || a.usuario || '').localeCompare(b.email || b.usuario || ''))
-                            .map(user => (
-                              <SelectItem key={user._id} value={user._id}>
-                                {user.email || user.usuario || `${user.nombre || ''} ${user.apellido || ''}`.trim() || user._id}
-                                {user.expiresAt ? ' (temp)' : ''}
-                              </SelectItem>
-                            ))
-                          }
-                        </>
+                      {users
+                        .filter(user => user.role === 'supervisor')
+                        .length > 0 ? (
+                        users
+                          .filter(user => user.role === 'supervisor')
+                          .sort((a, b) => (a.email || a.usuario || '').localeCompare(b.email || b.usuario || ''))
+                          .map(user => (
+                            <SelectItem key={user._id} value={user._id}>
+                              {user.email || user.usuario || `${user.nombre || ''} ${user.apellido || ''}`.trim() || user._id}
+                            </SelectItem>
+                          ))
+                      ) : (
+                        <SelectItem value="no-supervisors" disabled>
+                          No hay supervisores disponibles
+                        </SelectItem>
                       )}
                     </SelectContent>
                   </Select>

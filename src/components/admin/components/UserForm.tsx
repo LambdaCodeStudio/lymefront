@@ -99,8 +99,8 @@ const UserForm: React.FC<UserFormProps> = ({
   // Cargar supervisores cuando se selecciona rol de operario
   useEffect(() => {
     const loadSupervisors = async () => {
-      // Solo cargar supervisores para nuevos operarios
-      if (!editingUser && formData.role === ROLES.OPERARIO) {
+      // Cargar supervisores para nuevos operarios Y cuando se edita/cambia a operario
+      if (formData.role === ROLES.OPERARIO) {
         setSupervisorsLoading(true);
         setSupervisorsError('');
         try {
@@ -109,11 +109,24 @@ const UserForm: React.FC<UserFormProps> = ({
           
           console.log('Supervisores cargados:', supervisors);
           
-          // Usar el array directamente
-          setAvailableSupervisors(supervisors);
-  
+          // Filtrar al usuario actual si es un supervisor siendo cambiado a operario
+          let filteredSupervisors = [...supervisors];
+          if (editingUser && editingUser._id) {
+            filteredSupervisors = supervisors.filter(sup => sup._id !== editingUser._id);
+          }
+          
+          setAvailableSupervisors(filteredSupervisors);
+
+          // Si estamos editando un operario, asegurarnos de que el supervisor actual esté seleccionado
+          if (editingUser && editingUser.supervisorId && !formData.supervisorId) {
+            setFormData(prev => ({
+              ...prev,
+              supervisorId: editingUser.supervisorId
+            }));
+          }
+          
           // Verificar si hay supervisores
-          if (supervisors.length === 0) {
+          if (filteredSupervisors.length === 0) {
             setSupervisorsError('No hay supervisores disponibles');
           }
         } catch (err) {
@@ -253,7 +266,7 @@ const UserForm: React.FC<UserFormProps> = ({
                     <SelectTrigger id="role">
                       <SelectValue placeholder="Seleccionar rol" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent position="popper" sideOffset={5} align="start">
                       {availableRoles.map((role) => (
                         <SelectItem key={role.value} value={role.value}>
                           {/* Usar nombres cortos en pantallas pequeñas */}
@@ -297,15 +310,19 @@ const UserForm: React.FC<UserFormProps> = ({
                     <SelectTrigger id="supervisorId">
                       <SelectValue placeholder="Seleccionar supervisor" />
                     </SelectTrigger>
-                    <SelectContent>
-                      {availableSupervisors.map((supervisor) => (
-                        <SelectItem key={supervisor._id} value={supervisor._id}>
-                          {supervisor.usuario} 
-                          {supervisor.nombre && supervisor.apellido 
-                            ? ` - ${supervisor.nombre} ${supervisor.apellido}` 
-                            : ''}
-                        </SelectItem>
-                      ))}
+                    <SelectContent position="popper" sideOffset={5} align="start">
+                      {availableSupervisors.length > 0 ? (
+                        availableSupervisors.map((supervisor) => (
+                          <SelectItem key={supervisor._id} value={supervisor._id}>
+                            {supervisor.usuario} 
+                            {supervisor.nombre && supervisor.apellido 
+                              ? ` - ${supervisor.nombre} ${supervisor.apellido}` 
+                              : ''}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="no-supervisors">No hay supervisores disponibles</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 )}
@@ -426,7 +443,7 @@ const UserForm: React.FC<UserFormProps> = ({
                 <SelectTrigger id="secciones">
                   <SelectValue placeholder="Seleccionar secciones" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent position="popper" sideOffset={5} align="start">
                   <SelectItem value="limpieza">Limpieza</SelectItem>
                   <SelectItem value="mantenimiento">Mantenimiento</SelectItem>
                   <SelectItem value="ambos">Ambos</SelectItem>

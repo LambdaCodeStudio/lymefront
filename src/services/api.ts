@@ -1,9 +1,10 @@
 // src/services/api.ts
+import { getApiUrl } from '@/utils/apiUtils';
 import axios, { type AxiosInstance, AxiosError, type AxiosRequestConfig, type AxiosResponse } from 'axios';
 
 // Configuración del API base
 const API_CONFIG = {
-  baseURL: import.meta.env.PUBLIC_API_URL || 'https://lyme-back.vercel.app/api',
+  baseURL: import.meta.env.PUBLIC_API_URL || 'http://localhost:4000/api',
   headers: {
     'Content-Type': 'application/json',
   },

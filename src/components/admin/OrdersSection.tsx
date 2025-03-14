@@ -79,6 +79,7 @@ import {
 import Pagination from "@/components/ui/pagination";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { refreshInventory, getAuthToken } from '@/utils/inventoryUtils';
+import { getApiUrl } from '@/utils/apiUtils';
 
 // ======== TIPOS Y INTERFACES ========
 
@@ -748,7 +749,7 @@ const OrdersSection = () => {
       const token = getAuthToken();
       if (!token) throw new Error("No hay token de autenticación");
       
-      const response = await fetch('https://lyme-back.vercel.app/api/auth/me', {
+      const response = await fetch('http://localhost:4000/api/auth/me', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -810,10 +811,10 @@ const OrdersSection = () => {
       if (!token) throw new Error("No hay token de autenticación");
       
       // Determinar URL según filtros de fecha
-      let url = 'https://lyme-back.vercel.app/api/pedido';
+      let url = 'http://localhost:4000/api/pedido';
       
       if (dateFilter.from && dateFilter.to) {
-        url = `https://lyme-back.vercel.app/api/pedido/fecha?fechaInicio=${encodeURIComponent(dateFilter.from)}&fechaFin=${encodeURIComponent(dateFilter.to)}`;
+        url = `http://localhost:4000/api/pedido/fecha?fechaInicio=${encodeURIComponent(dateFilter.from)}&fechaFin=${encodeURIComponent(dateFilter.to)}`;
       }
       
       const response = await fetch(url, {
@@ -881,7 +882,7 @@ const OrdersSection = () => {
       const token = getAuthToken();
       if (!token) throw new Error("No hay token de autenticación");
       
-      const response = await fetch('https://lyme-back.vercel.app/api/producto', {
+      const response = await fetch('http://localhost:4000/api/producto', {
         headers: { 
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache' 
@@ -940,7 +941,7 @@ const OrdersSection = () => {
       const token = getAuthToken();
       if (!token) throw new Error("No hay token de autenticación");
       
-      const response = await fetch('https://lyme-back.vercel.app/api/auth/users', {
+      const response = await fetch('http://localhost:4000/api/auth/users', {
         headers: { 
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache' 
@@ -994,7 +995,7 @@ const OrdersSection = () => {
       const token = getAuthToken();
       if (!token) throw new Error("No hay token de autenticación");
       
-      const response = await fetch(`https://lyme-back.vercel.app/api/cliente/user/${userId}`, {
+      const response = await fetch(`http://localhost:4000/api/cliente/user/${userId}`, {
         headers: { 
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache' 
@@ -1047,7 +1048,7 @@ const OrdersSection = () => {
       const token = getAuthToken();
       if (!token) throw new Error("No hay token de autenticación");
       
-      const response = await fetch(`https://lyme-back.vercel.app/api/producto/${productId}`, {
+      const response = await fetch(`http://localhost:4000/api/producto/${productId}`, {
         headers: { 
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache' 
@@ -1111,7 +1112,7 @@ const OrdersSection = () => {
         }))
       };
       
-      const response = await fetch('https://lyme-back.vercel.app/api/pedido', {
+      const response = await fetch('http://localhost:4000/api/pedido', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1175,7 +1176,7 @@ const OrdersSection = () => {
         }))
       };
       
-      const response = await fetch(`https://lyme-back.vercel.app/api/pedido/${currentOrderId}`, {
+      const response = await fetch(`http://localhost:4000/api/pedido/${currentOrderId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -1225,7 +1226,7 @@ const OrdersSection = () => {
       const token = getAuthToken();
       if (!token) throw new Error("No hay token de autenticación");
       
-      const response = await fetch(`https://lyme-back.vercel.app/api/pedido/${orderId}`, {
+      const response = await fetch(`http://localhost:4000/api/pedido/${orderId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -1711,7 +1712,7 @@ const OrdersSection = () => {
       addNotification("Generando PDF del remito...", "info");
       
       // Abrir en una nueva pestaña
-      window.open(`https://lyme-back.vercel.app/api/downloads/remito/${pedidoId}`, '_blank');
+      window.open(`http://localhost:4000/api/downloads/remito/${pedidoId}`, '_blank');
     } catch (error) {
       console.error("Error al generar remito:", error);
       addNotification("Error al generar el remito", "error");

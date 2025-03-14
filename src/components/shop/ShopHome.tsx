@@ -21,6 +21,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ProductCard } from './ProductCard';
 import { useCartContext } from '@/providers/CartProvider';
 import { ShopNavbar } from './ShopNavbar';
+import { getApiUrl } from '@/utils/apiUtils';
 
 // Importación segura de useNotification
 let useNotification;
@@ -115,7 +116,7 @@ export const ShopHome: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('https://lyme-back.vercel.app/api/auth/me', {
+      const response = await fetch('http://localhost:4000/api/auth/me', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -250,7 +251,7 @@ export const ShopHome: React.FC = () => {
         categoryFilter = `?category=${userSecciones}`;
       }
   
-      const response = await fetch(`https://lyme-back.vercel.app/api/producto${categoryFilter}`, {
+      const response = await fetch(`http://localhost:4000/api/producto${categoryFilter}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'

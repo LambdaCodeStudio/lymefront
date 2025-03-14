@@ -1,18 +1,31 @@
 import React from 'react';
 import { Search, Eye, EyeOff } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface UserFiltersProps {
   searchTerm: string;
   setSearchTerm: (value: string) => void;
   showInactiveUsers: boolean;
   setShowInactiveUsers: (value: boolean) => void;
+  selectedRole: string | null;
+  setSelectedRole: (value: string | null) => void;
+  availableRoles: { value: string; label: string }[];
 }
 
 const UserFilters: React.FC<UserFiltersProps> = ({
   searchTerm,
   setSearchTerm,
   showInactiveUsers,
-  setShowInactiveUsers
+  setShowInactiveUsers,
+  selectedRole,
+  setSelectedRole,
+  availableRoles
 }) => {
   return (
     <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
@@ -30,6 +43,28 @@ const UserFilters: React.FC<UserFiltersProps> = ({
                      focus:outline-none focus:ring-2 focus:ring-[#29696B]/20 focus:border-[#29696B]
                      placeholder-[#7AA79C] text-[#29696B]"
         />
+      </div>
+
+      {/* Filtro por rol */}
+      <div className="w-full sm:w-auto mb-3 sm:mb-0">
+        <Select
+          value={selectedRole || "all"}
+          onValueChange={(value) => setSelectedRole(value === "all" ? null : value)}
+        >
+          <SelectTrigger className="w-full bg-[#DFEFE6]/30 border border-[#91BEAD]/20 rounded-lg py-2 
+                            focus:outline-none focus:ring-2 focus:ring-[#29696B]/20 focus:border-[#29696B]
+                            placeholder-[#7AA79C] text-[#29696B]">
+            <SelectValue placeholder="Todos los roles" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los roles</SelectItem>
+            {availableRoles.map((role) => (
+              <SelectItem key={role.value} value={role.value}>
+                {role.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Toggle para mostrar usuarios inactivos */}

@@ -11,6 +11,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { getApiUrl } from '@/utils/apiUtils';
 
 // Importación segura de useNotification
 let useNotification;
@@ -54,7 +55,7 @@ const ApproveOrdersWrapper: React.FC = () => {
         }
         
         // Obtener información del usuario
-        const userResponse = await fetch('https://lyme-back.vercel.app/api/auth/me', {
+        const userResponse = await fetch('http://localhost:4000/api/auth/me', {
           headers: {
             'Authorization': `Bearer ${token}`
           }

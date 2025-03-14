@@ -63,6 +63,11 @@ import { useNotification } from '@/context/NotificationContext';
 import { inventoryObservable, getAuthToken } from '@/utils/inventoryUtils';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
+// InventorySection.tsx (omitiendo importaciones)
+
+// Definir URL base para la API
+const API_URL = "http://localhost:4000/api/";
+
 // Definir umbral de stock bajo
 const LOW_STOCK_THRESHOLD = 10;
 
@@ -101,93 +106,6 @@ interface FormDataType {
   imagenPreview: string | ArrayBuffer | null;
 }
 
-// Componente para input de stock con límite máximo
-const ProductStockInput = ({
-  value,
-  onChange,
-  id = "stock",
-  required = true,
-  maxStock = 999999999,
-  isAddingStock = false,
-  onAddingStockChange = () => {},
-  currentStock = 0
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  id?: string;
-  required?: boolean;
-  maxStock?: number;
-  isAddingStock?: boolean;
-  onAddingStockChange?: (isAdding: boolean) => void;
-  currentStock?: number;
-}) => {
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const inputValue = e.target.value;
-
-    if (inputValue === '') {
-      onChange('');
-      return;
-    }
-
-    const numValue = parseInt(inputValue, 10);
-
-    if (isNaN(numValue)) {
-      return;
-    }
-
-    if (numValue > maxStock) {
-      onChange(maxStock.toString());
-    } else if (numValue < 0) {
-      onChange('0');
-    } else {
-      onChange(numValue.toString());
-    }
-  };
-
-  return (
-    <div className="relative">
-      <div className="mb-2">
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id={`${id}-checkbox`}
-            checked={isAddingStock}
-            onCheckedChange={(checked) => onAddingStockChange(!!checked)}
-          />
-          <label
-            htmlFor={`${id}-checkbox`}
-            className="text-xs text-[#29696B] cursor-pointer"
-          >
-            Añadir al stock existente
-          </label>
-        </div>
-      </div>
-
-      <Input
-        id={id}
-        type="number"
-        min="0"
-        max={maxStock}
-        value={value}
-        onChange={handleChange}
-        required={required}
-        className="mt-1"
-      />
-      
-      {isAddingStock && (
-        <div className="mt-1 text-xs text-[#29696B]">
-          <span className="font-medium">Stock actual:</span> {currentStock} unidades
-          <span className="mx-1">→</span>
-          <span className="font-medium">Stock final:</span> {currentStock + parseInt(value || '0')} unidades
-        </div>
-      )}
-      
-      <p className="mt-1 text-xs text-[#7AA79C]">
-        Máximo: {maxStock.toLocaleString()}
-      </p>
-    </div>
-  );
-};
-
 const InventorySection = () => {
   const { addNotification } = useNotification();
   const [products, setProducts] = useState<ProductType[]>([]);
@@ -211,26 +129,31 @@ const InventorySection = () => {
   const [tempSelectedItems, setTempSelectedItems] = useState<ComboItemType[]>([]);
   const initialFetchDone = useRef(false);
   const [isAddingStock, setIsAddingStock] = useState(false);
-
+  
   // Estado para la paginación
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-
+  
   // Estado para productos con stock bajo
   const [lowStockCount, setLowStockCount] = useState(0);
   const [showLowStockOnly, setShowLowStockOnly] = useState(false);
   const [isLowStockLoading, setIsLowStockLoading] = useState(false);
-
+  
+  // Estado para productos sin stock
+  const [noStockCount, setNoStockCount] = useState(0);
+  const [showNoStockOnly, setShowNoStockOnly] = useState(false);
+  const [isNoStockLoading, setIsNoStockLoading] = useState(false);
+  
   // Referencias para el scroll en móvil
   const mobileListRef = useRef<HTMLDivElement>(null);
-
+  
   // IMPORTANTE: Tamaños fijos para cada tipo de dispositivo
   const ITEMS_PER_PAGE_MOBILE = 5;
   const ITEMS_PER_PAGE_DESKTOP = 10;
-
+  
   // Estado para controlar el ancho de la ventana
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
-
+  
   // Calculamos dinámicamente itemsPerPage basado en el ancho de la ventana
   const itemsPerPage = windowWidth < 768 ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP;
   
@@ -305,7 +228,100 @@ const InventorySection = () => {
 
   // Usar productos directamente de la respuesta de la API en lugar de filtrar localmente
   const currentProducts = products;
-
+  
+  // Componente para input de stock con límite máximo - CORREGIDO el problema del foco
+  const ProductStockInput = ({
+    value,
+    onChange,
+    id = "stock",
+    required = true,
+    maxStock = 999999999,
+    isAddingStock = false,
+    onAddingStockChange = () => {},
+    currentStock = 0
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+    id?: string;
+    required?: boolean;
+    maxStock?: number;
+    isAddingStock?: boolean;
+    onAddingStockChange?: (isAdding: boolean) => void;
+    currentStock?: number;
+  }) => {
+    // Función que maneja el cambio sin perder el foco
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const inputValue = e.target.value;
+      
+      // Permitir campo vacío
+      if (inputValue === '') {
+        onChange('');
+        return;
+      }
+      
+      // Validar que sea un número
+      const numValue = parseInt(inputValue, 10);
+      if (isNaN(numValue)) {
+        return;
+      }
+      
+      // Aplicar restricciones de valor mínimo y máximo
+      if (numValue > maxStock) {
+        onChange(maxStock.toString());
+      } else if (numValue < 0) {
+        onChange('0');
+      } else {
+        onChange(numValue.toString());
+      }
+    };
+  
+    return (
+      <div className="space-y-2">
+        {/* Checkbox para agregar stock - MEJORADO POSICIONAMIENTO */}
+        {editingProduct && (
+          <div className="mb-2 px-1">
+            <div className="flex items-center gap-2 bg-[#DFEFE6]/30 p-2 rounded-md border border-[#91BEAD]/30">
+              <Checkbox
+                id={`${id}-checkbox`}
+                checked={isAddingStock}
+                onCheckedChange={(checked) => onAddingStockChange(!!checked)}
+              />
+              <label
+                htmlFor={`${id}-checkbox`}
+                className="text-sm text-[#29696B] cursor-pointer font-medium"
+              >
+                Añadir al stock existente
+              </label>
+            </div>
+          </div>
+        )}
+  
+        <Input
+          id={id}
+          type="number"
+          min="0"
+          max={maxStock}
+          value={value}
+          onChange={handleChange}
+          required={required}
+          className="mt-1"
+        />
+        
+        {isAddingStock && (
+          <div className="mt-1 text-xs text-[#29696B] bg-[#DFEFE6]/20 p-2 rounded border border-[#91BEAD]/30">
+            <span className="font-medium">Stock actual:</span> {currentStock} unidades
+            <span className="mx-1">→</span>
+            <span className="font-medium">Stock final:</span> {currentStock + parseInt(value || '0')} unidades
+          </div>
+        )}
+        
+        <p className="text-xs text-[#7AA79C]">
+          Máximo: {maxStock.toLocaleString()}
+        </p>
+      </div>
+    );
+  };
+  
   // Función mejorada para cargar productos
   const fetchProducts = async (forceRefresh = false, page = currentPage, limit = itemsPerPage) => {
     try {
@@ -331,8 +347,11 @@ const InventorySection = () => {
       queryParams.append('page', page.toString());
       queryParams.append('limit', limit.toString());
 
-      // Si estamos filtrando por stock bajo, es prioritario
-      if (showLowStockOnly) {
+      // Prioridad de filtros: Sin Stock > Stock Bajo > Filtros normales
+      if (showNoStockOnly) {
+        queryParams.append('noStock', 'true');
+        console.log("Filtrando productos sin stock...");
+      } else if (showLowStockOnly) {
         queryParams.append('lowStock', 'true');
         queryParams.append('threshold', LOW_STOCK_THRESHOLD.toString());
         console.log("Filtrando productos con stock bajo...");
@@ -347,7 +366,7 @@ const InventorySection = () => {
         }
       }
 
-      const urlWithParams = `https://lyme-back.vercel.app/api/producto?${queryParams.toString()}`;
+      const urlWithParams = `${API_URL}producto?${queryParams.toString()}`;
 
       const response = await fetch(urlWithParams, {
         headers: {
@@ -425,7 +444,7 @@ const InventorySection = () => {
     }
   };
 
-  // Nueva función para contar productos con stock bajo en toda la base de datos
+  // Función para contar productos con stock bajo
   const countLowStockProducts = async () => {
     try {
       setIsLowStockLoading(true);
@@ -436,7 +455,7 @@ const InventorySection = () => {
       }
 
       // Usar el endpoint específico para estadísticas de stock bajo
-      const response = await fetch(`https://lyme-back.vercel.app/api/producto/stats/lowstock?threshold=${LOW_STOCK_THRESHOLD}`, {
+      const response = await fetch(`${API_URL}producto/stats/lowstock?threshold=${LOW_STOCK_THRESHOLD}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -461,23 +480,26 @@ const InventorySection = () => {
       
       // En caso de error, intentamos una estimación basada en los productos cargados
       try {
-        const token = getAuthToken();
+        const authToken = getAuthToken();
         // Consultar el endpoint normal con filtro de stock bajo
-        const altResponse = await fetch(
-          `https://lyme-back.vercel.app/api/producto?lowStock=true&threshold=${LOW_STOCK_THRESHOLD}&limit=1`, 
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Cache-Control': 'no-cache'
+        if (authToken) {
+          const altResponse = await fetch(
+            `${API_URL}producto?lowStock=true&threshold=${LOW_STOCK_THRESHOLD}&limit=1`, 
+            {
+              headers: {
+                'Authorization': `Bearer ${authToken}`,
+                'Cache-Control': 'no-cache'
+              }
             }
-          }
-        );
-        
-        if (altResponse.ok) {
-          const altData = await altResponse.json();
-          if (altData && altData.totalItems) {
-            console.log(`Obtenido conteo alternativo: ${altData.totalItems} productos con stock bajo`);
-            setLowStockCount(altData.totalItems);
+          );
+          
+          if (altResponse.ok) {
+            const altData = await altResponse.json();
+            if (altData && altData.totalItems) {
+              console.log(`Obtenido conteo alternativo: ${altData.totalItems} productos con stock bajo`);
+              setLowStockCount(altData.totalItems);
+              return;
+            }
           }
         }
       } catch (altError) {
@@ -495,6 +517,52 @@ const InventorySection = () => {
     }
   };
 
+  // Función para contar productos sin stock
+  const countNoStockProducts = async () => {
+    try {
+      setIsNoStockLoading(true);
+      
+      const token = getAuthToken();
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
+
+      // Usar el endpoint para obtener productos sin stock
+      const response = await fetch(`${API_URL}producto?noStock=true&limit=1`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al obtener estadísticas de productos sin stock');
+      }
+
+      const data = await response.json();
+      
+      // Verificar si hay datos paginados
+      if (data && typeof data.totalItems === 'number') {
+        console.log(`Se encontraron ${data.totalItems} productos sin stock`);
+        setNoStockCount(data.totalItems);
+      } else {
+        // Contar productos si es un array
+        const count = Array.isArray(data) ? data.length : 0;
+        console.log(`Se encontraron ${count} productos sin stock`);
+        setNoStockCount(count);
+      }
+    } catch (error) {
+      console.error("Error al contar productos sin stock:", error);
+      
+      // Estimación local como fallback
+      const noStockEstimate = products.filter(product => product.stock === 0).length;
+      console.log(`Estimando localmente: al menos ${noStockEstimate} productos sin stock`);
+      setNoStockCount(noStockEstimate);
+    } finally {
+      setIsNoStockLoading(false);
+    }
+  };
+
   // Obtener un producto por ID (para actualizar después de cambios)
   const fetchProductById = async (productId: string): Promise<ProductType | null> => {
     try {
@@ -503,7 +571,7 @@ const InventorySection = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch(`https://lyme-back.vercel.app/api/producto/${productId}`, {
+      const response = await fetch(`${API_URL}producto/${productId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -531,7 +599,7 @@ const InventorySection = () => {
       }
 
       // Para obtener todos los productos, usamos un límite alto
-      const response = await fetch(`https://lyme-back.vercel.app/api/producto?limit=1000`, {
+      const response = await fetch(`${API_URL}producto?limit=1000`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -574,23 +642,24 @@ const InventorySection = () => {
     });
   };
 
-  // Cargar productos al montar el componente, suscribirse al observable y contar productos con stock bajo
+  // Cargar productos al montar el componente, suscribirse al observable y contar productos
   useEffect(() => {
     console.log('InventorySection: Componente montado, iniciando carga de productos...');
 
     // Cargar productos inmediatamente al montar el componente
-    // Usamos forceRefresh=true para asegurar que se ejecute independientemente del estado
     fetchProducts(true);
     
-    // Contar productos con stock bajo en toda la base de datos
+    // Contar productos con stock bajo y sin stock
     countLowStockProducts();
+    countNoStockProducts();
 
     // Suscribirse a actualizaciones
     const unsubscribe = inventoryObservable.subscribe(() => {
       console.log('InventorySection: Actualización de inventario notificada por observable');
       fetchProducts(true);
-      // También actualizamos el contador de stock bajo
+      // También actualizamos los contadores
       countLowStockProducts();
+      countNoStockProducts();
     });
 
     // Limpiar suscripción al desmontar
@@ -599,7 +668,7 @@ const InventorySection = () => {
     };
   }, []); // Este efecto solo debe ejecutarse al montar el componente
 
-  // Efecto para detectar el tamaño de la ventana y ajustar la visualización en consecuencia
+  // Efecto para detectar el tamaño de la ventana y ajustar la visualización
   useEffect(() => {
     const handleResize = () => {
       const newWidth = window.innerWidth;
@@ -625,7 +694,7 @@ const InventorySection = () => {
       setCurrentPage(1);
       fetchProducts(true, 1, itemsPerPage);
     }
-  }, [searchTerm, selectedCategory, showLowStockOnly]);
+  }, [searchTerm, selectedCategory, showLowStockOnly, showNoStockOnly]);
 
   // Función segura para obtener productos filtrados
   const getFilteredProducts = () => {
@@ -654,10 +723,13 @@ const InventorySection = () => {
 
       // Verificar stock bajo si el filtro está activado
       const matchesLowStock = !showLowStockOnly || (
-        product.stock <= LOW_STOCK_THRESHOLD
+        product.stock <= LOW_STOCK_THRESHOLD && product.stock > 0
       );
+      
+      // Verificar sin stock si el filtro está activado
+      const matchesNoStock = !showNoStockOnly || product.stock === 0;
 
-      return matchesSearch && matchesCategory && matchesLowStock;
+      return matchesSearch && matchesCategory && matchesLowStock && matchesNoStock;
     });
   };
 
@@ -755,7 +827,7 @@ const InventorySection = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch(`https://lyme-back.vercel.app/api/producto/${productId}/imagen`, {
+      const response = await fetch(`${API_URL}producto/${productId}/imagen`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -805,7 +877,7 @@ const InventorySection = () => {
       const formDataObj = new FormData();
       formDataObj.append('imagen', formData.imagen);
 
-      const response = await fetch(`https://lyme-back.vercel.app/api/producto/${productId}/imagen`, {
+      const response = await fetch(`${API_URL}producto/${productId}/imagen`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -890,7 +962,7 @@ const InventorySection = () => {
     setSelectedComboItems(tempSelectedItems);
     setShowComboSelectionModal(false);
 
-    // Actualizar el precio sugerido del combo (suma de precios individuales)
+    // Actualizar el precio del combo automáticamente (suma de precios individuales)
     const comboTotal = calculateComboTotal(tempSelectedItems);
     setFormData(prev => ({
       ...prev,
@@ -917,9 +989,18 @@ const InventorySection = () => {
         throw new Error('No hay token de autenticación');
       }
 
+      // Validar que se haya seleccionado una categoría y subcategoría
+      if (!formData.categoria) {
+        throw new Error('Debe seleccionar una categoría');
+      }
+
+      if (!formData.subCategoria) {
+        throw new Error('Debe seleccionar una subcategoría');
+      }
+
       const url = editingProduct
-        ? `https://lyme-back.vercel.app/api/producto/${editingProduct._id}`
-        : 'https://lyme-back.vercel.app/api/producto';
+        ? `${API_URL}producto/${editingProduct._id}`
+        : `${API_URL}producto`;
 
       const method = editingProduct ? 'PUT' : 'POST';
 
@@ -1010,8 +1091,9 @@ const InventorySection = () => {
       // Notificar a otros componentes que deben actualizarse
       inventoryObservable.notify();
       
-      // Actualizar contador de stock bajo
+      // Actualizar contadores
       countLowStockProducts();
+      countNoStockProducts();
 
       const successMsg = `Producto ${editingProduct ? 'actualizado' : 'creado'} correctamente`;
       setSuccessMessage(successMsg);
@@ -1048,7 +1130,7 @@ const InventorySection = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch(`https://lyme-back.vercel.app/api/producto/${id}`, {
+      const response = await fetch(`${API_URL}producto/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -1066,8 +1148,9 @@ const InventorySection = () => {
         return prevProducts.filter(product => product._id !== id);
       });
       
-      // Actualizar contador de stock bajo
+      // Actualizar contadores
       countLowStockProducts();
+      countNoStockProducts();
 
       const successMsg = 'Producto eliminado correctamente';
       setSuccessMessage(successMsg);
@@ -1136,7 +1219,7 @@ const InventorySection = () => {
       if (product.hasImage) {
         try {
           // Usar la URL de la imagen (sin cargar base64)
-          imagePreview = `https://lyme-back.vercel.app/api/producto/${product._id}/imagen?cache=${Date.now()}`;
+          imagePreview = `${API_URL}producto/${product._id}/imagen?cache=${Date.now()}`;
         } catch (error) {
           console.error('Error al preparar imagen:', error);
           // No establecer imagen si hay error
@@ -1144,13 +1227,14 @@ const InventorySection = () => {
         }
       }
 
+      // CORREGIDO: Mostrar el stock actual del producto al editar
       setFormData({
         nombre: product.nombre || '',
         descripcion: product.descripcion || '',
         categoria: product.categoria || '',
         subCategoria: product.subCategoria || '',
         precio: product.precio ? product.precio.toString() : '',
-        stock: '0', // Iniciamos en 0 para el modo de adición
+        stock: product.stock ? product.stock.toString() : '0', // Mostrar stock actual
         proovedorInfo: product.proovedorInfo || '',
         imagen: null,
         imagenPreview: imagePreview
@@ -1205,14 +1289,11 @@ const InventorySection = () => {
         return;
       }
 
-      // Obtener la primera subcategoría de la categoría seleccionada
-      const defaultSubcategoria = subCategorias[value][0].value;
-
-      // Actualizar el estado con la nueva categoría y subcategoría por defecto
+      // Actualizar el estado con la nueva categoría y limpiar subcategoría
       setFormData(prevState => ({
         ...prevState,
         categoria: value,
-        subCategoria: defaultSubcategoria
+        subCategoria: ''
       }));
     } catch (error) {
       console.error("Error al cambiar categoría:", error);
@@ -1258,7 +1339,7 @@ const InventorySection = () => {
   // Calcular el total de páginas
   const totalPages = Math.ceil(totalCount / itemsPerPage);
 
-  // Función para cambiar de página - adaptada del patrón usado en AdminUserManagement
+  // Función para cambiar de página
   const handlePageChange = (pageNumber: number) => {
     // Actualizar el estado de la página actual
     setCurrentPage(pageNumber);
@@ -1286,13 +1367,37 @@ const InventorySection = () => {
   const handleManualRefresh = () => {
     fetchProducts(true);
     countLowStockProducts();
+    countNoStockProducts();
   };
 
   // Función para alternar mostrar solo productos con stock bajo
   const toggleLowStockFilter = () => {
-    // Invertir el estado actual del filtro
+    // Si el filtro de sin stock está activo, lo desactivamos primero
+    if (showNoStockOnly) {
+      setShowNoStockOnly(false);
+    }
+    
+    // Invertir el estado del filtro de stock bajo
     const newState = !showLowStockOnly;
     setShowLowStockOnly(newState);
+    
+    // Volver a la primera página al cambiar el filtro
+    setCurrentPage(1);
+    
+    // Recargar productos con el filtro aplicado
+    fetchProducts(true, 1, itemsPerPage);
+  };
+  
+  // Función para alternar mostrar solo productos sin stock
+  const toggleNoStockFilter = () => {
+    // Si el filtro de stock bajo está activo, lo desactivamos primero
+    if (showLowStockOnly) {
+      setShowLowStockOnly(false);
+    }
+    
+    // Invertir el estado del filtro de sin stock
+    const newState = !showNoStockOnly;
+    setShowNoStockOnly(newState);
     
     // Volver a la primera página al cambiar el filtro
     setCurrentPage(1);
@@ -1395,6 +1500,31 @@ const InventorySection = () => {
               <Loader2 className="w-4 h-4 ml-1 animate-spin" />
             )}
           </Button>
+          
+          {/* Botón para filtrar productos sin stock */}
+          <Button
+            onClick={toggleNoStockFilter}
+            variant={showNoStockOnly ? "default" : "outline"}
+            className={`
+              relative 
+              ${showNoStockOnly 
+                ? 'bg-red-500 hover:bg-red-600 border-red-500 text-white' 
+                : 'border-red-500 text-red-700 hover:bg-red-50'
+              }
+            `}
+            disabled={isNoStockLoading}
+          >
+            <AlertCircle className="w-4 h-4 mr-2" />
+            <span className="hidden sm:inline">Sin stock</span>
+            {!isNoStockLoading && noStockCount > 0 && !showNoStockOnly && (
+              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                {noStockCount > 99 ? '99+' : noStockCount}
+              </span>
+            )}
+            {isNoStockLoading && (
+              <Loader2 className="w-4 h-4 ml-1 animate-spin" />
+            )}
+          </Button>
 
           <Button
             onClick={handleManualRefresh}
@@ -1433,26 +1563,50 @@ const InventorySection = () => {
         </div>
       </div>
 
-      {/* Indicador de filtro de stock bajo activo */}
-      {showLowStockOnly && (
-        <Alert className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg">
-          <HelpCircle className="h-4 w-4 text-yellow-600 mr-2" />
-          <AlertDescription className="flex-1">
-            Mostrando solo productos con stock bajo (≤ {LOW_STOCK_THRESHOLD} unidades)
-            {totalCount > 0 && (
-              <span className="ml-2 font-medium">
-                Se encontraron {totalCount} productos con stock bajo.
-              </span>
-            )}
-          </AlertDescription>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={toggleLowStockFilter}
-            className="ml-2 h-7 text-xs border-yellow-300 text-yellow-700 hover:bg-yellow-100"
-          >
-            Mostrar todos
-          </Button>
+      {/* Indicador de filtro activo */}
+      {(showLowStockOnly || showNoStockOnly) && (
+        <Alert className={`${showLowStockOnly ? 'bg-yellow-50 border-yellow-200 text-yellow-800' : 'bg-red-50 border-red-200 text-red-800'} rounded-lg`}>
+          {showLowStockOnly ? (
+            <>
+              <HelpCircle className="h-4 w-4 text-yellow-600 mr-2" />
+              <AlertDescription className="flex-1">
+                Mostrando solo productos con stock bajo (≤ {LOW_STOCK_THRESHOLD} unidades)
+                {totalCount > 0 && (
+                  <span className="ml-2 font-medium">
+                    Se encontraron {totalCount} productos con stock bajo.
+                  </span>
+                )}
+              </AlertDescription>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={toggleLowStockFilter}
+                className="ml-2 h-7 text-xs border-yellow-300 text-yellow-700 hover:bg-yellow-100"
+              >
+                Mostrar todos
+              </Button>
+            </>
+          ) : (
+            <>
+              <AlertCircle className="h-4 w-4 text-red-600 mr-2" />
+              <AlertDescription className="flex-1">
+                Mostrando solo productos sin stock (0 unidades)
+                {totalCount > 0 && (
+                  <span className="ml-2 font-medium">
+                    Se encontraron {totalCount} productos sin stock.
+                  </span>
+                )}
+              </AlertDescription>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={toggleNoStockFilter}
+                className="ml-2 h-7 text-xs border-red-300 text-red-700 hover:bg-red-100"
+              >
+                Mostrar todos
+              </Button>
+            </>
+          )}
         </Alert>
       )}
 
@@ -1473,7 +1627,7 @@ const InventorySection = () => {
             <Search className="w-6 h-6 text-[#29696B]" />
           </div>
           <p className="text-[#7AA79C]">
-            {searchTerm || selectedCategory !== 'all' || showLowStockOnly
+            {searchTerm || selectedCategory !== 'all' || showLowStockOnly || showNoStockOnly
               ? 'No se encontraron productos que coincidan con la búsqueda'
               : 'No hay productos disponibles'}
           </p>
@@ -1537,7 +1691,7 @@ const InventorySection = () => {
                           <div className="h-10 w-10 rounded-full bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30 overflow-hidden">
                             {product.hasImage ? (
                               <img
-                                src={`https://lyme-back.vercel.app/api/producto/${product._id}/imagen?width=40&height=40&quality=75&${Date.now()}`}
+                                src={`${API_URL}producto/${product._id}/imagen?width=40&height=40&quality=75&${Date.now()}`}
                                 alt={product.nombre}
                                 className="h-10 w-10 object-cover"
                                 loading="lazy"
@@ -1677,7 +1831,7 @@ const InventorySection = () => {
                   <div className="h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30 overflow-hidden">
                     {product.hasImage ? (
                       <img
-                        src={`https://lyme-back.vercel.app/api/producto/${product._id}/imagen?width=64&height=64&quality=60&${Date.now()}`}
+                        src={`${API_URL}producto/${product._id}/imagen?width=64&height=64&quality=60&${Date.now()}`}
                         alt={product.nombre}
                         className="h-16 w-16 object-cover"
                         loading="lazy"
@@ -1878,7 +2032,7 @@ const InventorySection = () => {
                 <div>
                   <Label htmlFor="subCategoria" className="text-sm text-[#29696B]">Subcategoría</Label>
                   <Select
-                    value={formData.subCategoria || (formData.categoria ? subCategorias[formData.categoria][0].value : 'not-selected')}
+                    value={formData.subCategoria || 'not-selected'}
                     onValueChange={(value) => {
                       if (value !== 'not-selected') {
                         setFormData(prevState => ({
@@ -1887,6 +2041,7 @@ const InventorySection = () => {
                         }));
                       }
                     }}
+                    disabled={!formData.categoria}
                   >
                     <SelectTrigger id="subCategoria" className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
                       <SelectValue placeholder="Seleccionar subcategoría" />
@@ -1916,7 +2071,14 @@ const InventorySection = () => {
                     required
                     className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
                     maxLength={10}
+                    readOnly={isCombo} /* Campo de precio de solo lectura para combos */
+                    disabled={isCombo} /* Deshabilitado visualmente para combos */
                   />
+                  {isCombo && (
+                    <p className="text-xs text-[#7AA79C] mt-1">
+                      Precio calculado automáticamente de los productos seleccionados
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -2066,14 +2228,13 @@ const InventorySection = () => {
                   setShowModal(false);
                   resetForm();
                 }}
-                className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
-              >
+                className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30">
                 Cancelar
               </Button>
               <Button
                 type="submit"
                 className={`${isCombo ? 'bg-[#00888A] hover:bg-[#00888A]/90' : 'bg-[#29696B] hover:bg-[#29696B]/90'} text-white`}
-                disabled={imageLoading || (isCombo && selectedComboItems.length === 0)}
+                disabled={imageLoading || (isCombo && selectedComboItems.length === 0) || !formData.categoria || !formData.subCategoria}
               >
                 {imageLoading ? (
                   <>
@@ -2146,7 +2307,7 @@ const InventorySection = () => {
                             variant="outline"
                             size="sm"
                             onClick={() => handleAddComboItem(product)}
-                            className="h-8 text-[#29696B] border-[#91BEAD] whitespace-nowrap ml-2"
+                            className="h-8 text-[#29696B] border-[#91BEAD] hover:bg-[#DFEFE6]/30 whitespace-nowrap ml-2"
                           >
                             <Plus className="w-3 h-3 mr-1" />
                             Agregar
@@ -2165,145 +2326,169 @@ const InventorySection = () => {
                 <h4 className="font-medium text-[#29696B] mb-2">Productos seleccionados</h4>
                 {tempSelectedItems.length === 0 ? (
                   <div className="text-center py-6 text-sm text-[#7AA79C] border rounded-md border-[#91BEAD]/30">
-                  No hay productos seleccionados
-                </div>
-              ) : (
-                <div className="border rounded-md border-[#91BEAD]/30">
-                  <div className="bg-[#DFEFE6]/30 p-3 text-[#29696B] font-medium text-sm">
-                    Lista de productos para el combo
+                    No hay productos seleccionados
                   </div>
-                  <div className="max-h-[300px] overflow-y-auto">
-                    <div className="divide-y divide-[#91BEAD]/20">
-                      {tempSelectedItems.map((item, index) => (
-                        <div key={index} className="p-3">
-                          <div className="flex justify-between items-center mb-2">
-                            <div className="font-medium text-sm text-[#29696B] truncate max-w-[200px]">{item.nombre}</div>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleUpdateComboItemQuantity(String(item.productoId), 0)}
-                              className="h-7 w-7 p-0 text-red-500 hover:bg-red-50"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <div className="text-xs text-[#7AA79C]">
-                              <span>${(item.precio || 0).toFixed(2)} x {item.cantidad}</span>
-                              <span className="ml-2 text-[#29696B] font-medium">= ${((item.precio || 0) * item.cantidad).toFixed(2)}</span>
-                            </div>
-                            <div className="flex items-center border rounded border-[#91BEAD]">
+                ) : (
+                  <div className="border rounded-md border-[#91BEAD]/30">
+                    <div className="bg-[#DFEFE6]/30 p-3 text-[#29696B] font-medium text-sm">
+                      Lista de productos para el combo
+                    </div>
+                    <div className="max-h-[300px] overflow-y-auto">
+                      <div className="divide-y divide-[#91BEAD]/20">
+                        {tempSelectedItems.map((item, index) => (
+                          <div key={index} className="p-3">
+                            <div className="flex justify-between items-center mb-2">
+                              <div className="font-medium text-sm text-[#29696B] truncate max-w-[200px]">{item.nombre}</div>
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleUpdateComboItemQuantity(String(item.productoId), item.cantidad - 1)}
-                                className="h-7 w-7 p-0 text-[#29696B]"
+                                onClick={() => handleUpdateComboItemQuantity(String(item.productoId), 0)}
+                                className="h-7 w-7 p-0 text-red-500 hover:bg-red-50"
                               >
-                                <Minus className="w-3 h-3" />
-                              </Button>
-                              <span className="w-8 text-center text-sm">{item.cantidad}</span>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleUpdateComboItemQuantity(String(item.productoId), item.cantidad + 1)}
-                                className="h-7 w-7 p-0 text-[#29696B]"
-                              >
-                                <Plus className="w-3 h-3" />
+                                <Trash2 className="w-4 h-4" />
                               </Button>
                             </div>
+                            <div className="flex justify-between items-center">
+                              <div className="text-xs text-[#7AA79C]">
+                                <span>${(item.precio || 0).toFixed(2)} x {item.cantidad}</span>
+                                <span className="ml-2 text-[#29696B] font-medium">= ${((item.precio || 0) * item.cantidad).toFixed(2)}</span>
+                              </div>
+                              <div className="flex items-center border rounded border-[#91BEAD]">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleUpdateComboItemQuantity(String(item.productoId), item.cantidad - 1)}
+                                  className="h-7 w-7 p-0 text-[#29696B] hover:bg-[#DFEFE6]/30"
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </Button>
+                                <span className="w-8 text-center text-sm">{item.cantidad}</span>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleUpdateComboItemQuantity(String(item.productoId), item.cantidad + 1)}
+                                  className="h-7 w-7 p-0 text-[#29696B] hover:bg-[#DFEFE6]/30"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
+                    </div>
+                    <div className="p-3 border-t border-[#91BEAD]/20 bg-[#DFEFE6]/20">
+                      <div className="flex justify-between items-center font-medium text-[#29696B]">
+                        <span>Total:</span>
+                        <span>${calculateComboTotal(tempSelectedItems).toFixed(2)}</span>
+                      </div>
                     </div>
                   </div>
-                  <div className="p-3 border-t border-[#91BEAD]/20 bg-[#DFEFE6]/20">
-                    <div className="flex justify-between items-center font-medium text-[#29696B]">
-                      <span>Total:</span>
-                      <span>${calculateComboTotal(tempSelectedItems).toFixed(2)}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
+
+          <DialogFooter className="gap-2 mt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowComboSelectionModal(false)}
+              className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={confirmComboSelection}
+              className="bg-[#00888A] hover:bg-[#00888A]/90 text-white"
+              disabled={tempSelectedItems.length === 0}
+            >
+              Confirmar selección
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo de confirmación de eliminación */}
+      <ConfirmationDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Eliminar producto"
+        description="¿Está seguro de que desea eliminar este producto? Esta acción no se puede deshacer."
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+        onConfirm={() => productToDelete && handleDelete(productToDelete)}
+        variant="destructive"
+      />
+
+      {/* Diálogo de confirmación de eliminación de imagen */}
+      <ConfirmationDialog
+        open={deleteImageDialogOpen}
+        onOpenChange={setDeleteImageDialogOpen}
+        title="Eliminar imagen"
+        description="¿Está seguro de que desea eliminar la imagen de este producto?"
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+        onConfirm={() => productToDelete && handleDeleteProductImage(productToDelete)}
+        variant="destructive"
+      />
+      
+      {/* Botones flotantes para filtros en móviles */}
+      {!loading && (lowStockCount > 0 || noStockCount > 0) && !showLowStockOnly && !showNoStockOnly && windowWidth < 768 && (
+        <div className="fixed bottom-6 right-6 z-10 flex flex-col gap-2">
+          <TooltipProvider>
+            {lowStockCount > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    onClick={toggleLowStockFilter}
+                    className="rounded-full h-14 w-14 shadow-lg bg-yellow-500 hover:bg-yellow-600 text-white"
+                  >
+                    <div className="relative">
+                      <HelpCircle className="h-6 w-6" />
+                      <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                        {lowStockCount > 99 ? '99+' : lowStockCount}
+                      </span>
+                    </div>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left">
+                  <p>Hay {lowStockCount} productos con stock bajo</p>
+                  <p className="text-xs">Toca para ver solo estos productos</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+            
+            {noStockCount > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    onClick={toggleNoStockFilter}
+                    className="rounded-full h-14 w-14 shadow-lg bg-red-500 hover:bg-red-600 text-white"
+                  >
+                    <div className="relative">
+                      <AlertCircle className="h-6 w-6" />
+                      <span className="absolute -top-2 -right-2 bg-white text-red-500 text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                        {noStockCount > 99 ? '99+' : noStockCount}
+                      </span>
+                    </div>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left">
+                  <p>Hay {noStockCount} productos sin stock</p>
+                  <p className="text-xs">Toca para ver solo estos productos</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </TooltipProvider>
         </div>
-
-        <DialogFooter className="gap-2 mt-4">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setShowComboSelectionModal(false)}
-            className="border-[#91BEAD] text-[#29696B]"
-          >
-            Cancelar
-          </Button>
-          <Button
-            type="button"
-            onClick={confirmComboSelection}
-            className="bg-[#00888A] hover:bg-[#00888A]/90 text-white"
-            disabled={tempSelectedItems.length === 0}
-          >
-            Confirmar selección
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-
-    {/* Diálogo de confirmación de eliminación */}
-    <ConfirmationDialog
-      open={deleteDialogOpen}
-      onOpenChange={setDeleteDialogOpen}
-      title="Eliminar producto"
-      description="¿Está seguro de que desea eliminar este producto? Esta acción no se puede deshacer."
-      confirmText="Eliminar"
-      cancelText="Cancelar"
-      onConfirm={() => productToDelete && handleDelete(productToDelete)}
-      variant="destructive"
-    />
-
-    {/* Diálogo de confirmación de eliminación de imagen */}
-    <ConfirmationDialog
-      open={deleteImageDialogOpen}
-      onOpenChange={setDeleteImageDialogOpen}
-      title="Eliminar imagen"
-      description="¿Está seguro de que desea eliminar la imagen de este producto?"
-      confirmText="Eliminar"
-      cancelText="Cancelar"
-      onConfirm={() => productToDelete && handleDeleteProductImage(productToDelete)}
-      variant="destructive"
-    />
-    
-    {/* Botón flotante para mostrar productos con stock bajo - visible sólo en móviles cuando hay productos con stock bajo */}
-    {!loading && lowStockCount > 0 && !showLowStockOnly && windowWidth < 768 && (
-      <div className="fixed bottom-6 right-6 z-10">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button 
-                onClick={toggleLowStockFilter}
-                className="rounded-full h-14 w-14 shadow-lg bg-yellow-500 hover:bg-yellow-600 text-white"
-              >
-                <div className="relative">
-                  <HelpCircle className="h-6 w-6" />
-                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                    {lowStockCount > 99 ? '99+' : lowStockCount}
-                  </span>
-                </div>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="left">
-              <p>Hay {lowStockCount} productos con stock bajo</p>
-              <p className="text-xs">Toca para ver solo estos productos</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
-    )}
-  </div>
-);
+      )}
+    </div>
+  );
 };
 
 export default InventorySection;

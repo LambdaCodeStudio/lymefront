@@ -34,30 +34,28 @@ export const getFullName = (user: AdminUser): string | null => {
 /**
  * Filtrar usuarios basado en término de búsqueda y estado activo
  */
-export const filterUsers = (users: AdminUser[], searchTerm: string, showInactiveUsers: boolean): AdminUser[] => {
-  if (!Array.isArray(users)) return [];
-  
-  return users.filter(user => {
-    // Filtrar por estado activo
-    if (!showInactiveUsers && !user.isActive) {
-      return false;
-    }
-    
-    // Si no hay término de búsqueda, mostrar todos
-    if (!searchTerm) {
-      return true;
-    }
-    
-    const term = searchTerm.toLowerCase();
-    
-    // Buscar en campos relevantes del usuario
-    return (
-      (user.usuario && user.usuario.toLowerCase().includes(term)) ||
-      (user.nombre && user.nombre.toLowerCase().includes(term)) ||
-      (user.apellido && user.apellido.toLowerCase().includes(term)) ||
-      (user.celular && user.celular.toLowerCase().includes(term)) ||
-      (user.role && user.role.toLowerCase().includes(term))
-    );
+export const filterUsers = (
+  users: AdminUser[],
+  searchTerm: string,
+  showInactiveUsers: boolean,
+  selectedRole: string | null
+) => {
+  return users.filter((user) => {
+    // Filtrar por término de búsqueda
+    const matchesSearch =
+      searchTerm === '' ||
+      user.usuario.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (user.nombre && user.nombre.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (user.apellido && user.apellido.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (user.celular && user.celular.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    // Filtrar por estado activo/inactivo
+    const matchesActiveState = showInactiveUsers || user.isActive;
+
+    // Filtrar por rol
+    const matchesRole = !selectedRole || user.role === selectedRole;
+
+    return matchesSearch && matchesActiveState && matchesRole;
   });
 };
 
@@ -65,8 +63,7 @@ export const filterUsers = (users: AdminUser[], searchTerm: string, showInactive
  * Verificar si un usuario es temporal (temporario o operario con expiración)
  */
 export const isTemporaryUser = (user: AdminUser): boolean => {
-  return user.role === ROLES.TEMPORARIO || 
-    (user.role === ROLES.OPERARIO && !!user.expiresAt);
+  return (user.role === ROLES.OPERARIO && !!user.expiresAt);
 };
 
 /**

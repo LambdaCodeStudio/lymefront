@@ -39,6 +39,9 @@ const canModifyUser = (currentUserRole: string, targetUserRole: string) => {
   return false;
 };
 
+// Función para verificar si un usuario puede ser desactivado o eliminado
+const canDeleteOrDeactivate = (userRole: string) => userRole !== ROLES.ADMIN;
+
 // Función para obtener el nombre del creador de un usuario
 const getCreatorName = (user: AdminUser): string => {
   if (!user.createdBy) return '-';
@@ -117,27 +120,29 @@ const UserTable: React.FC<UserTableProps> = ({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Badge 
-                        variant="outline" 
-                        className={`
-                          ${user.role === ROLES.ADMIN ? 'border-purple-500 text-purple-700 bg-purple-50' : ''}
-                          ${user.role === ROLES.SUPERVISOR_DE_SUPERVISORES ? 'border-blue-500 text-blue-700 bg-blue-50' : ''}
-                          ${user.role === ROLES.SUPERVISOR ? 'border-cyan-500 text-cyan-700 bg-cyan-50' : ''}
-                          ${user.role === ROLES.OPERARIO ? 'border-green-500 text-green-700 bg-green-50' : ''}
-                        `}
-                      >
-                        {user.role === ROLES.ADMIN && <ShieldAlert className="w-3 h-3 mr-1 flex-shrink-0" />}
-                        {user.role === ROLES.SUPERVISOR_DE_SUPERVISORES && <Shield className="w-3 h-3 mr-1 flex-shrink-0" />}
-                        {/* Usar un nombre más corto para Supervisor de Supervisores en tablet */}
-                        {user.role === ROLES.SUPERVISOR_DE_SUPERVISORES ? (
-                          <>
-                            <span className="hidden md:inline xl:hidden">Sup. de Sups.</span>
-                            <span className="inline md:hidden xl:inline">{rolesDisplayNames[user.role]}</span>
-                          </>
-                        ) : (
-                          <span>{rolesDisplayNames[user.role] || user.role}</span>
-                        )}
-                      </Badge>
+                      <div>
+                        <Badge 
+                          variant="outline" 
+                          className={`
+                            ${user.role === ROLES.ADMIN ? 'border-purple-500 text-purple-700 bg-purple-50' : ''}
+                            ${user.role === ROLES.SUPERVISOR_DE_SUPERVISORES ? 'border-blue-500 text-blue-700 bg-blue-50' : ''}
+                            ${user.role === ROLES.SUPERVISOR ? 'border-cyan-500 text-cyan-700 bg-cyan-50' : ''}
+                            ${user.role === ROLES.OPERARIO ? 'border-green-500 text-green-700 bg-green-50' : ''}
+                          `}
+                        >
+                          {user.role === ROLES.ADMIN && <ShieldAlert className="w-3 h-3 mr-1 flex-shrink-0" />}
+                          {user.role === ROLES.SUPERVISOR_DE_SUPERVISORES && <Shield className="w-3 h-3 mr-1 flex-shrink-0" />}
+                          {/* Usar un nombre más corto para Supervisor de Supervisores en tablet */}
+                          {user.role === ROLES.SUPERVISOR_DE_SUPERVISORES ? (
+                            <>
+                              <span className="hidden md:inline xl:hidden">Sup. de Sups.</span>
+                              <span className="inline md:hidden xl:inline">{rolesDisplayNames[user.role]}</span>
+                            </>
+                          ) : (
+                            <span>{rolesDisplayNames[user.role] || user.role}</span>
+                          )}
+                        </Badge>
+                      </div>
                     </TooltipTrigger>
                     {user.role === ROLES.SUPERVISOR_DE_SUPERVISORES && (
                       <TooltipContent>
@@ -190,9 +195,11 @@ const UserTable: React.FC<UserTableProps> = ({
                         variant="ghost"
                         size="sm"
                         onClick={() => onToggleStatus(user._id, !user.isActive)}
-                        className={user.isActive 
+                        disabled={!canDeleteOrDeactivate(user.role)}
+                        className={`${user.isActive 
                           ? 'text-red-600 hover:text-red-800 hover:bg-red-50' 
-                          : 'text-green-600 hover:text-green-800 hover:bg-green-50'}>
+                          : 'text-green-600 hover:text-green-800 hover:bg-green-50'}
+                          ${!canDeleteOrDeactivate(user.role) ? 'opacity-50 cursor-not-allowed' : ''}`}>
                         {user.isActive ? (
                           <XCircle className="w-4 h-4" />
                         ) : (
@@ -214,7 +221,9 @@ const UserTable: React.FC<UserTableProps> = ({
                         variant="ghost"
                         size="sm"
                         onClick={() => onDelete(user._id)}
-                        className="text-red-600 hover:text-red-800 hover:bg-red-50">
+                        disabled={!canDeleteOrDeactivate(user.role)}
+                        className={`text-red-600 hover:text-red-800 hover:bg-red-50
+                          ${!canDeleteOrDeactivate(user.role) ? 'opacity-50 cursor-not-allowed' : ''}`}>
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </>

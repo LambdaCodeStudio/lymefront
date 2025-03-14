@@ -23,7 +23,33 @@ import EnhancedPagination from './components/Pagination';
 
 // Importar hooks y utilidades
 import { useUserManagement } from './hooks/useUserManagement';
-import { filterUsers, getUserIdentifier, getFullName } from './utils/userUtils';
+import { getUserIdentifier, getFullName } from './utils/userUtils';
+
+// Función de filtrado actualizada para incluir el filtro por rol
+export const filterUsers = (
+  users,
+  searchTerm,
+  showInactiveUsers,
+  selectedRole
+) => {
+  return users.filter((user) => {
+    // Filtrar por término de búsqueda
+    const matchesSearch =
+      searchTerm === '' ||
+      user.usuario.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (user.nombre && user.nombre.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (user.apellido && user.apellido.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (user.celular && user.celular.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    // Filtrar por estado activo/inactivo
+    const matchesActiveState = showInactiveUsers || user.isActive;
+
+    // Filtrar por rol
+    const matchesRole = !selectedRole || user.role === selectedRole;
+
+    return matchesSearch && matchesActiveState && matchesRole;
+  });
+};
 
 /**
  * Componente interno que usa el hook useUserManagement
@@ -58,6 +84,9 @@ const UserManagementContent: React.FC = () => {
   // Estado para la paginación
   const [currentPage, setCurrentPage] = useState(1);
   
+  // Nuevo estado para el filtro de roles
+  const [selectedRole, setSelectedRole] = useState<string | null>(null);
+  
   // IMPORTANTE: Tamaño fijo para móviles - siempre 5 elementos por página
   const ITEMS_PER_PAGE_MOBILE = 5;
   const ITEMS_PER_PAGE_DESKTOP = 10;
@@ -89,12 +118,12 @@ const UserManagementContent: React.FC = () => {
   // Resetear la página actual cuando cambian los filtros
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, showInactiveUsers]);
+  }, [searchTerm, showInactiveUsers, selectedRole]);
 
   // Filtrar usuarios con useMemo para evitar recálculos innecesarios
   const filteredUsers = useMemo(() => {
-    return filterUsers(users, searchTerm, showInactiveUsers);
-  }, [users, searchTerm, showInactiveUsers]);
+    return filterUsers(users, searchTerm, showInactiveUsers, selectedRole);
+  }, [users, searchTerm, showInactiveUsers, selectedRole]);
 
   // Calcular los índices para el slice con useMemo
   const { indexOfFirstItem, indexOfLastItem, currentUsers, totalPages } = useMemo(() => {
@@ -153,6 +182,9 @@ const UserManagementContent: React.FC = () => {
           setSearchTerm={setSearchTerm}
           showInactiveUsers={showInactiveUsers}
           setShowInactiveUsers={setShowInactiveUsers}
+          selectedRole={selectedRole}
+          setSelectedRole={setSelectedRole}
+          availableRoles={availableRoles}
         />
         
         <Button 

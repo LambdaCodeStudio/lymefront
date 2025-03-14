@@ -58,6 +58,9 @@ const canModifyUser = (currentUserRole: string, targetUserRole: string) => {
   return false;
 };
 
+// Función para verificar si un usuario puede ser desactivado o eliminado
+const canDeleteOrDeactivate = (userRole: string) => userRole !== ROLES.ADMIN;
+
 // Función para obtener el nombre del creador de un usuario
 const getCreatorName = (user: AdminUser): string => {
   if (!user.createdBy) return '-';
@@ -133,28 +136,30 @@ const UserCard: React.FC<UserCardProps> = ({
         <div className="grid grid-cols-2 gap-2 text-sm">
           <div>
             <span className="text-gray-500">Rol:</span>{' '}
-            <Badge 
-              variant="outline" 
-              className={`ml-1 py-0 h-5 text-xs
-                ${user.role === ROLES.ADMIN ? 'border-purple-500 text-purple-700 bg-purple-50' : ''}
-                ${user.role === ROLES.SUPERVISOR_DE_SUPERVISORES ? 'border-blue-500 text-blue-700 bg-blue-50' : ''}
-                ${user.role === ROLES.SUPERVISOR ? 'border-cyan-500 text-cyan-700 bg-cyan-50' : ''}
-                ${user.role === ROLES.OPERARIO ? 'border-green-500 text-green-700 bg-green-50' : ''}
-                ${user.role === ROLES.TEMPORARIO ? 'border-yellow-500 text-yellow-700 bg-yellow-50' : ''}
-              `}
-            >
-              {/* Mostrar sólo el icono en pantallas muy pequeñas */}
-              {user.role === ROLES.ADMIN && <ShieldAlert className="w-3 h-3 mr-1 flex-shrink-0" />}
-              {user.role === ROLES.SUPERVISOR_DE_SUPERVISORES && <Shield className="w-3 h-3 mr-1 flex-shrink-0" />}
-              
-              {/* Nombre corto del rol para móviles */}
-              <span className="hidden xs:inline">
-                {rolesDisplayNames[user.role] || user.role}
-              </span>
-              <span className="inline xs:hidden">
-                {shortRoleNames[user.role] || user.role}
-              </span>
-            </Badge>
+            <div className="inline-block">
+              <Badge 
+                variant="outline" 
+                className={`ml-1 py-0 h-5 text-xs
+                  ${user.role === ROLES.ADMIN ? 'border-purple-500 text-purple-700 bg-purple-50' : ''}
+                  ${user.role === ROLES.SUPERVISOR_DE_SUPERVISORES ? 'border-blue-500 text-blue-700 bg-blue-50' : ''}
+                  ${user.role === ROLES.SUPERVISOR ? 'border-cyan-500 text-cyan-700 bg-cyan-50' : ''}
+                  ${user.role === ROLES.OPERARIO ? 'border-green-500 text-green-700 bg-green-50' : ''}
+                  ${user.role === ROLES.TEMPORARIO ? 'border-yellow-500 text-yellow-700 bg-yellow-50' : ''}
+                `}
+              >
+                {/* Mostrar sólo el icono en pantallas muy pequeñas */}
+                {user.role === ROLES.ADMIN && <ShieldAlert className="w-3 h-3 mr-1 flex-shrink-0" />}
+                {user.role === ROLES.SUPERVISOR_DE_SUPERVISORES && <Shield className="w-3 h-3 mr-1 flex-shrink-0" />}
+                
+                {/* Nombre corto del rol para móviles */}
+                <span className="hidden xs:inline">
+                  {rolesDisplayNames[user.role] || user.role}
+                </span>
+                <span className="inline xs:hidden">
+                  {shortRoleNames[user.role] || user.role}
+                </span>
+              </Badge>
+            </div>
           </div>
           <div className="truncate">
             <span className="text-gray-500">Secciones:</span>
@@ -189,7 +194,9 @@ const UserCard: React.FC<UserCardProps> = ({
               variant="ghost"
               size="sm"
               onClick={() => onToggleStatus(user._id, !user.isActive)}
-              className={`p-0 w-8 h-8 ${user.isActive ? 'text-red-600' : 'text-green-600'}`}
+              disabled={!canDeleteOrDeactivate(user.role)}
+              className={`p-0 w-8 h-8 ${user.isActive ? 'text-red-600' : 'text-green-600'}
+                ${!canDeleteOrDeactivate(user.role) ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               {user.isActive ? (
                 <XCircle className="w-4 h-4" />
@@ -211,7 +218,9 @@ const UserCard: React.FC<UserCardProps> = ({
               variant="ghost"
               size="sm"
               onClick={() => onDelete(user._id)}
-              className="p-0 w-8 h-8 text-red-600"
+              disabled={!canDeleteOrDeactivate(user.role)}
+              className={`p-0 w-8 h-8 text-red-600
+                ${!canDeleteOrDeactivate(user.role) ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <Trash2 className="w-4 h-4" />
             </Button>

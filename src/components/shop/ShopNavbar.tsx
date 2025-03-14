@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCartContext } from '@/providers/CartProvider';
+import { getApiUrl } from '@/utils/apiUtils';
 
 // Interfaz para el usuario
 interface UserData {
@@ -49,7 +50,7 @@ export const ShopNavbar: React.FC = () => {
         const token = localStorage.getItem('token');
         if (!token) return;
 
-        const response = await fetch('https://lyme-back.vercel.app/api/auth/me', {
+        const response = await fetch('http://localhost:4000/api/auth/me', {
           headers: {
             'Authorization': `Bearer ${token}`
           }
