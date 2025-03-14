@@ -44,8 +44,7 @@
     "react-window": "^1.8.11",
     "recharts": "^2.15.1",
     "tailwind-merge": "^3.0.1",
-    "tailwindcss-animate": "^1.0.7",
-    "zwitch": "^2.0.4"
+    "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
     "@astrojs/tailwind": "^6.0.0",

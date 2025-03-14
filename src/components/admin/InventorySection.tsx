@@ -277,7 +277,7 @@ const InventorySection = () => {
   
     return (
       <div className="space-y-2">
-        {/* Checkbox para agregar stock - MEJORADO POSICIONAMIENTO */}
+        {/* Checkbox para agregar stock */}
         {editingProduct && (
           <div className="mb-2 px-1">
             <div className="flex items-center gap-2 bg-[#DFEFE6]/30 p-2 rounded-md border border-[#91BEAD]/30">
