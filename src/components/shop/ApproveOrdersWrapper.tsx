@@ -55,7 +55,7 @@ const ApproveOrdersWrapper: React.FC = () => {
         }
         
         // Obtener información del usuario
-        const userResponse = await fetch('http://179.43.118.101:4000/api/auth/me', {
+        const userResponse = await fetch('http://179.43.118.101:3000/api/auth/me', {
           headers: {
             'Authorization': `Bearer ${token}`
           }

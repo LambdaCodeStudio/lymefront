@@ -117,7 +117,7 @@ interface UpdateClientData {
 
 // Añade esta función a tu archivo de utilidades
 const getApiUrl = (endpoint: string): string => {
-  const baseUrl = 'http://179.43.118.101:4000/api';
+  const baseUrl = 'http://179.43.118.101:3000/api';
   return `${baseUrl}/${endpoint}`;
 };
 
@@ -488,7 +488,7 @@ const ClientsSection: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('http://179.43.118.101:4000/api/cliente/sin-asignar', {
+      const response = await fetch('http://179.43.118.101:3000/api/cliente/sin-asignar', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -555,7 +555,7 @@ const ClientsSection: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('http://179.43.118.101:4000/api/auth/users', {
+      const response = await fetch('http://179.43.118.101:3000/api/auth/users', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -610,7 +610,7 @@ const ClientsSection: React.FC = () => {
 
       console.log("Creando cliente con datos:", formData);
 
-      const response = await fetch('http://179.43.118.101:4000/api/cliente', {
+      const response = await fetch('http://179.43.118.101:3000/api/cliente', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -675,7 +675,7 @@ const ClientsSection: React.FC = () => {
 
       console.log("Actualizando cliente:", currentClient._id, "con datos:", updateData);
 
-      const response = await fetch(`http://179.43.118.101:4000/api/cliente/${currentClient._id}`, {
+      const response = await fetch(`http://179.43.118.101:3000/api/cliente/${currentClient._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -726,7 +726,7 @@ const ClientsSection: React.FC = () => {
       }
 
       console.log(`Eliminando cliente con ID: ${id}`);
-      const response = await fetch(`http://179.43.118.101:4000/api/cliente/${id}`, {
+      const response = await fetch(`http://179.43.118.101:3000/api/cliente/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -848,7 +848,7 @@ const ClientsSection: React.FC = () => {
 
       // Actualizamos cada cliente que pertenece a este servicio
       const updatePromises = clientesDelServicio.map(client => {
-        return fetch(`http://179.43.118.101:4000/api/cliente/${client._id}`, {
+        return fetch(`http://179.43.118.101:3000/api/cliente/${client._id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -928,7 +928,7 @@ const ClientsSection: React.FC = () => {
       for (const client of clientesDelServicio) {
         console.log(`Eliminando sección: ${client._id} - ${client.seccionDelServicio || 'Sin sección'}`);
         try {
-          const response = await fetch(`http://179.43.118.101:4000/api/cliente/${client._id}`, {
+          const response = await fetch(`http://179.43.118.101:3000/api/cliente/${client._id}`, {
             method: 'DELETE',
             headers: {
               'Authorization': `Bearer ${token}`

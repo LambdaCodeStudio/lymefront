@@ -8,6 +8,10 @@ export default defineConfig({
     react(), 
     tailwind()
   ],
+  server: {
+    host: '0.0.0.0',
+    port: 4000
+  },
   vite: {
     ssr: {
       noExternal: ["@radix-ui/*", "class-variance-authority"]

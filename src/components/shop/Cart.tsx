@@ -210,7 +210,7 @@ export const Cart: React.FC = () => {
       if (storedRole) setUserRole(storedRole);
       if (storedSecciones) setUserSecciones(storedSecciones);
       
-      const response = await fetch('http://179.43.118.101:4000/api/auth/me', {
+      const response = await fetch('http://179.43.118.101:3000/api/auth/me', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -264,7 +264,7 @@ export const Cart: React.FC = () => {
         try {
           console.log('Obteniendo información del supervisor...');
           
-          const supervisorResponse = await fetch(`http://179.43.118.101:4000/api/auth/users/${createdById}`, {
+          const supervisorResponse = await fetch(`http://179.43.118.101:3000/api/auth/users/${createdById}`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           
@@ -332,7 +332,7 @@ export const Cart: React.FC = () => {
       }
       
       // Realizar la solicitud de clientes
-      const response = await fetch(`http://179.43.118.101:4000/api/cliente/user/${clientsUserId}`, {
+      const response = await fetch(`http://179.43.118.101:3000/api/cliente/user/${clientsUserId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -418,7 +418,7 @@ export const Cart: React.FC = () => {
       }
       
       // Realizar la solicitud con un timeout adecuado
-      const response = await fetch(`http://179.43.118.101:4000/api/downloads/remito/${createdOrderId}`, {
+      const response = await fetch(`http://179.43.118.101:3000/api/downloads/remito/${createdOrderId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },
@@ -561,7 +561,7 @@ export const Cart: React.FC = () => {
       console.log('Enviando pedido:', JSON.stringify(orderData));
       
       // Enviar pedido a la API
-      const response = await fetch('http://179.43.118.101:4000/api/pedido', {
+      const response = await fetch('http://179.43.118.101:3000/api/pedido', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -553,7 +553,7 @@ const OrderTotal = React.memo(({
 
 const OrdersSection = () => {
   const { addNotification } = useNotification();
-  const apiUrl = 'http://179.43.118.101:4000/api'
+  const apiUrl = 'http://179.43.118.101:3000/api'
 
   // ======== ESTADOS ========
 

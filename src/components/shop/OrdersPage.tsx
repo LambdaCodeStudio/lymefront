@@ -254,7 +254,7 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No se encontró token de autenticación');
       }
 
-      const response = await fetch('http://179.43.118.101:4000/api/auth/me', {
+      const response = await fetch('http://179.43.118.101:3000/api/auth/me', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -339,7 +339,7 @@ export const OrdersPage: React.FC = () => {
       }
       
       // Obtener todos los pedidos primero
-      const response = await fetch('http://179.43.118.101:4000/api/pedido', {
+      const response = await fetch('http://179.43.118.101:3000/api/pedido', {
         headers: { 
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -366,7 +366,7 @@ export const OrdersPage: React.FC = () => {
       if (!currentUserId) {
         try {
           // Intentar obtener el ID del usuario desde la API
-          const userResponse = await fetch('http://179.43.118.101:4000/api/auth/me', {
+          const userResponse = await fetch('http://179.43.118.101:3000/api/auth/me', {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           
@@ -505,7 +505,7 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No se encontró token de autenticación');
       }
 
-      const url = `http://179.43.118.101:4000/api/pedido/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
+      const url = `http://179.43.118.101:3000/api/pedido/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
       
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -622,7 +622,7 @@ export const OrdersPage: React.FC = () => {
       
       console.log(`Iniciando descarga de remito para pedido: ${orderId}`);
       
-      const response = await fetch(`http://179.43.118.101:4000/api/downloads/remito/${orderId}`, {
+      const response = await fetch(`http://179.43.118.101:3000/api/downloads/remito/${orderId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },
@@ -729,7 +729,7 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
       
-      const response = await fetch(`http://179.43.118.101:4000/api/pedido/${selectedOrderId}/approve`, {
+      const response = await fetch(`http://179.43.118.101:3000/api/pedido/${selectedOrderId}/approve`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -786,7 +786,7 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
       
-      const response = await fetch(`http://179.43.118.101:4000/api/pedido/${selectedOrderId}/reject`, {
+      const response = await fetch(`http://179.43.118.101:3000/api/pedido/${selectedOrderId}/reject`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
