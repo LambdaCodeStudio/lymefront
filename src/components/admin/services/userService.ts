@@ -55,7 +55,7 @@ export async function getAllUsers(): Promise<AdminUser[]> {
     throw new Error('No hay token de autenticación');
   }
 
-  const response = await fetch('http://localhost:4000/api/auth/users', {
+  const response = await fetch('http://179.43.118.101:4000/api/auth/users', {
     headers: { 'Authorization': `Bearer ${token}` }
   });
 
@@ -96,7 +96,7 @@ export async function createUser(userData: CreateUserData): Promise<AdminUser> {
     throw new Error('No hay token de autenticación');
   }
 
-  let endpoint = 'http://localhost:4000/api/auth/';
+  let endpoint = 'http://179.43.118.101:4000/api/auth/';
   const payload: any = {
     email: userData.email,
     usuario: userData.usuario,
@@ -147,7 +147,7 @@ export async function updateUser(userId: string, userData: Partial<CreateUserDat
     throw new Error('No hay token de autenticación');
   }
 
-  const endpoint = `http://localhost:4000/api/auth/users/${userId}`;
+  const endpoint = `http://179.43.118.101:4000/api/auth/users/${userId}`;
   const payload: any = {
     email: userData.email,
     usuario: userData.usuario,
@@ -198,7 +198,7 @@ export async function deleteUser(userId: string): Promise<any> {
     throw new Error('No hay token de autenticación');
   }
 
-  const response = await fetch(`http://localhost:4000/api/auth/users/${userId}`, {
+  const response = await fetch(`http://179.43.118.101:4000/api/auth/users/${userId}`, {
     method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`
@@ -226,7 +226,7 @@ export async function toggleUserStatus(userId: string, activate: boolean): Promi
   }
 
   const response = await fetch(
-    `http://localhost:4000/api/auth/users/${userId}/${activate ? 'activate' : 'deactivate'}`,
+    `http://179.43.118.101:4000/api/auth/users/${userId}/${activate ? 'activate' : 'deactivate'}`,
     {
       method: 'PUT',
       headers: {

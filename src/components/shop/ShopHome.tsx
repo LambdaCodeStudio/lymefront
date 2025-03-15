@@ -116,7 +116,7 @@ export const ShopHome: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('http://localhost:4000/api/auth/me', {
+      const response = await fetch('http://179.43.118.101:4000/api/auth/me', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -251,7 +251,7 @@ export const ShopHome: React.FC = () => {
         categoryFilter = `?category=${userSecciones}`;
       }
   
-      const response = await fetch(`http://localhost:4000/api/producto${categoryFilter}`, {
+      const response = await fetch(`http://179.43.118.101:4000/api/producto${categoryFilter}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'

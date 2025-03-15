@@ -234,7 +234,7 @@ export const ApproveOrdersContent: React.FC = () => {
       
       // Obtener los pedidos que deben ser aprobados por este supervisor
       // Primero obtenemos el ID del usuario actual
-      const userResponse = await fetch('http://localhost:4000/api/auth/me', {
+      const userResponse = await fetch('http://179.43.118.101:4000/api/auth/me', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -250,7 +250,7 @@ export const ApproveOrdersContent: React.FC = () => {
       }
       
       // Ahora obtenemos los pedidos pendientes para este supervisor
-      const response = await fetch(`http://localhost:4000/api/pedido/supervisor/${userId}`, {
+      const response = await fetch(`http://179.43.118.101:4000/api/pedido/supervisor/${userId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -318,8 +318,8 @@ export const ApproveOrdersContent: React.FC = () => {
       }
       
       const endpoint = action === 'approve' 
-        ? `http://localhost:4000/api/pedido/${pedidoId}/aprobar` 
-        : `http://localhost:4000/api/pedido/${pedidoId}/rechazar`;
+        ? `http://179.43.118.101:4000/api/pedido/${pedidoId}/aprobar` 
+        : `http://179.43.118.101:4000/api/pedido/${pedidoId}/rechazar`;
       
       const response = await fetch(endpoint, {
         method: 'POST',

@@ -112,7 +112,7 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         throw new Error('No se encontró token de autenticación');
       }
 
-      const response = await fetch(`http://localhost:4000/api/pedido/${id}`, {
+      const response = await fetch(`http://179.43.118.101:4000/api/pedido/${id}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -144,7 +144,7 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         throw new Error('No se encontró token de autenticación');
       }
       
-      const response = await fetch(`http://localhost:4000/api/downloads/remito/${orderId}`, {
+      const response = await fetch(`http://179.43.118.101:4000/api/downloads/remito/${orderId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },

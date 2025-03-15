@@ -4,7 +4,7 @@ import axios, { type AxiosInstance, AxiosError, type AxiosRequestConfig, type Ax
 
 // Configuración del API base
 const API_CONFIG = {
-  baseURL: import.meta.env.PUBLIC_API_URL || 'http://localhost:4000/api',
+  baseURL: import.meta.env.PUBLIC_API_URL || 'http://179.43.118.101:4000/api',
   headers: {
     'Content-Type': 'application/json',
   },

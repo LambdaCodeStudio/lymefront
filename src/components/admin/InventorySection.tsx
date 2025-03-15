@@ -66,7 +66,7 @@ import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/comp
 // InventorySection.tsx (omitiendo importaciones)
 
 // Definir URL base para la API
-const API_URL = "http://localhost:4000/api/";
+const API_URL = "http://179.43.118.101:4000/api/";
 
 // Definir umbral de stock bajo
 const LOW_STOCK_THRESHOLD = 10;
@@ -249,29 +249,33 @@ const InventorySection = () => {
     onAddingStockChange?: (isAdding: boolean) => void;
     currentStock?: number;
   }) => {
-    // Función que maneja el cambio sin perder el foco
+    // Función modificada para mantener el foco 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const inputValue = e.target.value;
       
-      // Permitir campo vacío
+      // Si el campo está vacío, permitirlo
       if (inputValue === '') {
         onChange('');
         return;
       }
       
-      // Validar que sea un número
+      // Validación específica para permitir solo números
+      if (!/^\d*$/.test(inputValue)) {
+        return;
+      }
+      
       const numValue = parseInt(inputValue, 10);
       if (isNaN(numValue)) {
         return;
       }
       
-      // Aplicar restricciones de valor mínimo y máximo
+      // Aplicar restricciones pero no modificar el valor a menos que sea necesario
       if (numValue > maxStock) {
         onChange(maxStock.toString());
       } else if (numValue < 0) {
         onChange('0');
       } else {
-        onChange(numValue.toString());
+        onChange(inputValue); // Usar directamente el valor de entrada
       }
     };
   
@@ -298,9 +302,9 @@ const InventorySection = () => {
   
         <Input
           id={id}
-          type="number"
-          min="0"
-          max={maxStock}
+          type="text" // Cambiado a text para mejor control
+          inputMode="numeric" // Para teclado numérico en móviles
+          pattern="[0-9]*" // Para validación HTML
           value={value}
           onChange={handleChange}
           required={required}
@@ -2161,65 +2165,62 @@ const InventorySection = () => {
               )}
 
               {/* Campo de imagen */}
-              {!isCombo && (
                 <div>
-                  <Label className="text-sm text-[#29696B] block mb-2">Imagen del Producto</Label>
-
-                  <div className="mt-1 flex flex-col space-y-2">
-                    {formData.imagenPreview ? (
-                      <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
-                        <img
-                          src={formData.imagenPreview as string}
-                          alt="Vista previa"
-                          className="w-full h-full object-contain"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = 'none';
-                            if (target.nextSibling) {
-                              (target.nextSibling as HTMLElement).style.display = 'flex';
-                            }
-                          }}
-                        />
-                        <div className="absolute inset-0 flex items-center justify-center text-sm text-[#7AA79C] hidden">
-                          No se pudo cargar la imagen
+                <Label className="text-sm text-[#29696B] block mb-2">Imagen del Producto</Label>
+              
+                <div className="mt-1 flex flex-col space-y-2">
+                  {formData.imagenPreview ? (
+                    <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
+                      <img
+                        src={formData.imagenPreview as string}
+                        alt="Vista previa"
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          if (target.nextSibling) {
+                            (target.nextSibling as HTMLElement).style.display = 'flex';
+                          }
+                        }}
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center text-sm text-[#7AA79C] hidden">
+                        No se pudo cargar la imagen
+                      </div>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={editingProduct ? () => confirmDeleteImage(editingProduct._id) : handleRemoveImage}
+                        className="absolute top-2 right-2 h-8 w-8 p-0 bg-red-500 hover:bg-red-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center w-full">
+                      <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#91BEAD]/30 border-dashed rounded-md cursor-pointer bg-[#DFEFE6]/20 hover:bg-[#DFEFE6]/40 transition-colors">
+                        <div className="flex flex-col items-center justify-center pt-3 pb-4">
+                          <ImageIcon className="w-8 h-8 text-[#7AA79C] mb-1" />
+                          <p className="text-xs text-[#7AA79C]">
+                            Haz clic para subir una imagen
+                          </p>
+                          <p className="text-xs text-[#7AA79C]">
+                            Máximo 5MB
+                          </p>
                         </div>
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          onClick={editingProduct ? () => confirmDeleteImage(editingProduct._id) : handleRemoveImage}
-                          className="absolute top-2 right-2 h-8 w-8 p-0 bg-red-500 hover:bg-red-600"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-center w-full">
-                        <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#91BEAD]/30 border-dashed rounded-md cursor-pointer bg-[#DFEFE6]/20 hover:bg-[#DFEFE6]/40 transition-colors">
-                          <div className="flex flex-col items-center justify-center pt-3 pb-4">
-                            <ImageIcon className="w-8 h-8 text-[#7AA79C] mb-1" />
-                            <p className="text-xs text-[#7AA79C]">
-                              Haz clic para subir una imagen
-                            </p>
-                            <p className="text-xs text-[#7AA79C]">
-                              Máximo 5MB
-                            </p>
-                          </div>
-                          <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={handleImageChange}
-                          />
-                        </label>
-                      </div>
-                    )}
-                  </div>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleImageChange}
+                        />
+                      </label>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
-
             <DialogFooter className="sticky bottom-0 bg-white pt-2 pb-4 z-10 gap-2 mt-4">
               <Button
                 type="button"
