@@ -288,7 +288,11 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
       // Set timeout to avoid hanging requests
       const timeoutId = setTimeout(() => controller.abort(), 30000);
 
+<<<<<<< HEAD
       const response = await fetch(`http://localhost:4000/api/producto/${productId}/imagen-base64`, {
+=======
+      const response = await fetch(`http://179.43.118.101:3000/api/producto/${productId}/imagen-base64`, {
+>>>>>>> server
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

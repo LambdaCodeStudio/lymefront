@@ -426,6 +426,7 @@ export const OrdersPage: React.FC = () => {
       if (!token) {
         throw new Error('No hay token de autenticación');
       }
+<<<<<<< HEAD
       
       const response = await fetch(`http://localhost:4000/api/pedido/${orderId}/aprobar`, {
         method: 'PUT',
@@ -437,6 +438,11 @@ export const OrdersPage: React.FC = () => {
           estado: OrderStatus.APPROVED,
           fechaAprobacion: new Date().toISOString()
         })
+=======
+
+      const response = await fetch('http://179.43.118.101:3000/api/auth/me', {
+        headers: { 'Authorization': `Bearer ${token}` }
+>>>>>>> server
       });
       
       if (!response.ok) {
@@ -465,6 +471,7 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
       
+<<<<<<< HEAD
       const response = await fetch(`http://localhost:4000/api/pedido/${orderId}/rechazar`, {
         method: 'PUT',
         headers: {
@@ -476,11 +483,62 @@ export const OrdersPage: React.FC = () => {
           motivoRechazo: motivo,
           fechaRechazo: new Date().toISOString()
         })
+=======
+      // Obtener todos los pedidos primero
+      const response = await fetch('http://179.43.118.101:3000/api/pedido', {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
+        }
+>>>>>>> server
       });
       
       if (!response.ok) {
+<<<<<<< HEAD
         const errorData = await response.json();
         throw new Error(errorData.mensaje || `Error al rechazar pedido (${response.status})`);
+=======
+        if (response.status === 401) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('userRole');
+          localStorage.removeItem('userId');
+          window.location.href = '/login';
+          return;
+        }
+        throw new Error(`Error al cargar pedidos (estado: ${response.status})`);
+      }
+  
+      const allOrders = await response.json();
+      lastFetchTimeRef.current = Date.now();
+      
+      // Obtener información del usuario actual
+      let currentUserId = userId;
+      
+      if (!currentUserId) {
+        try {
+          // Intentar obtener el ID del usuario desde la API
+          const userResponse = await fetch('http://179.43.118.101:3000/api/auth/me', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          
+          if (!userResponse.ok) {
+            throw new Error(`Error al obtener información del usuario (estado: ${userResponse.status})`);
+          }
+          
+          const userData = await userResponse.json();
+          currentUserId = userData._id || userData.id;
+          
+          if (!currentUserId) {
+            throw new Error('No se pudo obtener un ID de usuario válido');
+          }
+          
+          // Guardar en estado y localStorage para futuras consultas
+          setUserId(currentUserId);
+          localStorage.setItem('userId', currentUserId);
+        } catch (userError) {
+          console.error('Error al obtener información del usuario:', userError);
+        }
+>>>>>>> server
       }
       
       return orderId;
@@ -510,7 +568,11 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No se encontró token de autenticación');
       }
 
+<<<<<<< HEAD
       const url = `http://localhost:4000/api/pedido/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
+=======
+      const url = `http://179.43.118.101:3000/api/pedido/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
+>>>>>>> server
       
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -609,7 +671,13 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No se encontró token de autenticación');
       }
       
+<<<<<<< HEAD
       const response = await fetch(`http://localhost:4000/api/downloads/remito/${orderId}`, {
+=======
+      console.log(`Iniciando descarga de remito para pedido: ${orderId}`);
+      
+      const response = await fetch(`http://179.43.118.101:3000/api/downloads/remito/${orderId}`, {
+>>>>>>> server
         headers: {
           'Authorization': `Bearer ${token}`
         },
@@ -698,9 +766,59 @@ export const OrdersPage: React.FC = () => {
   };
 
   // Aprobar pedido
+<<<<<<< HEAD
   const handleApproveOrder = () => {
     if (selectedOrderId) {
       approveMutation.mutate(selectedOrderId);
+=======
+  const approveOrder = async () => {
+    if (!selectedOrderId) return;
+
+    try {
+      setIsProcessingApproval(true);
+      
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
+      
+      const response = await fetch(`http://179.43.118.101:3000/api/pedido/${selectedOrderId}/approve`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          estado: OrderStatus.APPROVED,
+          fechaAprobacion: new Date().toISOString()
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.mensaje || `Error al aprobar pedido (${response.status})`);
+      }
+      
+      // Actualizar la lista de pedidos
+      await fetchOrders(true);
+      
+      // Notificar al usuario
+      if (addNotification) {
+        addNotification('Pedido aprobado correctamente', 'success');
+      }
+      
+      // Cerrar el diálogo
+      setApprovalDialogOpen(false);
+      setSelectedOrderId(null);
+    } catch (error) {
+      console.error('Error al aprobar pedido:', error);
+      
+      if (addNotification) {
+        addNotification(`Error al aprobar pedido: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
+      }
+    } finally {
+      setIsProcessingApproval(false);
+>>>>>>> server
     }
   };
 
@@ -711,6 +829,74 @@ export const OrdersPage: React.FC = () => {
     } else if (!rejectionReason.trim()) {
       addNotification('Debe proporcionar un motivo para rechazar el pedido', 'warning');
     }
+<<<<<<< HEAD
+=======
+
+    try {
+      setIsProcessingApproval(true);
+      
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
+      
+      const response = await fetch(`http://179.43.118.101:3000/api/pedido/${selectedOrderId}/reject`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          estado: OrderStatus.REJECTED,
+          motivoRechazo: rejectionReason,
+          fechaRechazo: new Date().toISOString()
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.mensaje || `Error al rechazar pedido (${response.status})`);
+      }
+      
+      // Actualizar la lista de pedidos
+      await fetchOrders(true);
+      
+      // Notificar al usuario
+      if (addNotification) {
+        addNotification('Pedido rechazado correctamente', 'success');
+      }
+      
+      // Cerrar el diálogo
+      setRejectionDialogOpen(false);
+      setSelectedOrderId(null);
+      setRejectionReason('');
+    } catch (error) {
+      console.error('Error al rechazar pedido:', error);
+      
+      if (addNotification) {
+        addNotification(`Error al rechazar pedido: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
+      }
+    } finally {
+      setIsProcessingApproval(false);
+    }
+  };
+
+  // Obtener nombre del cliente por servicio y sección
+  const getClientName = (servicio: string, seccion?: string): string => {
+    const client = clients.find(
+      c => c.servicio === servicio && c.seccionDelServicio === (seccion || '')
+    );
+    
+    if (client) {
+      return seccion 
+        ? `${servicio} - ${seccion}`
+        : servicio;
+    }
+    
+    return seccion 
+      ? `${servicio} - ${seccion}` 
+      : servicio;
+>>>>>>> server
   };
 
   // Obtener email del usuario desde el pedido

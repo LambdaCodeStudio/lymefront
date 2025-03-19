@@ -54,7 +54,11 @@ export const ShopNavbar: React.FC = () => {
         const token = localStorage.getItem('token');
         if (!token) return;
 
+<<<<<<< HEAD
         const response = await fetch('http://localhost:4000/api/auth/me', {
+=======
+        const response = await fetch('http://179.43.118.101:3000/api/auth/me', {
+>>>>>>> server
           headers: {
             'Authorization': `Bearer ${token}`
           }

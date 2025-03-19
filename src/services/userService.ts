@@ -4,7 +4,11 @@
  */
 
 // URL base para el backend
+<<<<<<< HEAD
 const API_URL = 'http://localhost:4000/api/auth/';
+=======
+const API_URL = 'http://179.43.118.101:3000/api/auth/';
+>>>>>>> server
 
 // Tipo para el creador de un usuario
 export interface UserCreator {

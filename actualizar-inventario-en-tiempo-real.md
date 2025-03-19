@@ -41,7 +41,11 @@ export const refreshInventory = async () => {
       throw new Error('No hay token de autenticación');
     }
     
+<<<<<<< HEAD
     await fetch('http://179.43.118.101'/api/producto', {
+=======
+    await fetch('http://179.43.118.101:3000'/api/producto', {
+>>>>>>> server
       headers: {
         'Authorization': `Bearer ${token}`
       }

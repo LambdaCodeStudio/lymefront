@@ -189,7 +189,11 @@ export const ApproveOrderList: React.FC = () => {
       }
       
       // Obtener todos los pedidos
+<<<<<<< HEAD
       const response = await fetch('http://localhost:4000/api/pedido', {
+=======
+      const response = await fetch('http://179.43.118.101:3000/api/pedido', {
+>>>>>>> server
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -264,7 +268,11 @@ export const ApproveOrderList: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
       
+<<<<<<< HEAD
       const response = await fetch(`http://localhost:4000/api/pedido/${orderId}/aprobar`, {
+=======
+      const response = await fetch(`http://179.43.118.101:3000/api/pedido/${orderId}/aprobar`, {
+>>>>>>> server
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -326,7 +334,11 @@ export const ApproveOrderList: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
       
+<<<<<<< HEAD
       const response = await fetch(`http://localhost:4000/api/pedido/${orderId}/rechazar`, {
+=======
+      const response = await fetch(`http://179.43.118.101:3000/api/pedido/${orderId}/rechazar`, {
+>>>>>>> server
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -430,7 +442,11 @@ export const ApproveOrderList: React.FC = () => {
       
       console.log(`Iniciando descarga de remito para pedido: ${orderId}`);
       
+<<<<<<< HEAD
       const response = await fetch(`http://localhost:4000/api/downloads/remito/${orderId}`, {
+=======
+      const response = await fetch(`http://179.43.118.101:3000/api/downloads/remito/${orderId}`, {
+>>>>>>> server
         headers: {
           'Authorization': `Bearer ${token}`
         },

@@ -137,7 +137,11 @@ export const ShopHome: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
+<<<<<<< HEAD
       const response = await fetch('http://localhost:4000/api/auth/me', {
+=======
+      const response = await fetch('http://179.43.118.101:3000/api/auth/me', {
+>>>>>>> server
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -276,9 +280,111 @@ export const ShopHome: React.FC = () => {
     setCurrentPage(1); // Reiniciar a la primera página al cambiar filtros
   }, [allProducts, searchTerm, selectedCategory, showFavorites, favorites, sortOrder]);
 
+<<<<<<< HEAD
   // Función para ordenar productos
   const sortProducts = (items: Product[], order: string) => {
     const sorted = [...items];
+=======
+  // Función optimizada para obtener productos
+  const fetchProducts = useCallback(async (forceRefresh = false) => {
+    // Evitar múltiples solicitudes cercanas en el tiempo
+    const now = Date.now();
+    if (!forceRefresh && now - lastFetchTimeRef.current < 5000) {
+      console.log('Solicitud descartada: demasiado frecuente');
+      return;
+    }
+
+    // Verificar si tenemos datos en caché recientes
+    if (!forceRefresh && products.length > 0 && now - lastFetchTimeRef.current < CACHE_DURATION) {
+      console.log('Usando datos en caché');
+      return;
+    }
+
+    try {
+      setLoading(forceRefresh);
+      if (forceRefresh) {
+        setRefreshing(true);
+      }
+      
+      const token = getAuthToken();
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
+  
+      // Determinar filtros de categoría según los permisos del usuario
+      let categoryFilter = '';
+      if (userSecciones && userSecciones !== 'ambos') {
+        categoryFilter = `?category=${userSecciones}`;
+      }
+  
+      const response = await fetch(`http://179.43.118.101:3000/api/producto${categoryFilter}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
+        }
+      });
+  
+      if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('userRole');
+          localStorage.removeItem('userSecciones');
+          window.location.href = '/login';
+          return;
+        }
+        throw new Error(`Error al cargar productos (${response.status})`);
+      }
+  
+      const data = await response.json();
+      lastFetchTimeRef.current = Date.now();
+      
+      // Verificar formato de la respuesta
+      if (!Array.isArray(data)) {
+        // Si data.items existe, usar eso (formato paginado)
+        if (data && data.items && Array.isArray(data.items)) {
+          procesarProductos(data.items);
+        } else {
+          console.error('Formato de respuesta inesperado:', data);
+          throw new Error('Formato de respuesta inesperado: los datos no son un array');
+        }
+      } else {
+        // La respuesta ya es un array
+        procesarProductos(data);
+      }
+      
+      // Programar la próxima actualización
+      if (cacheTimeoutRef.current) {
+        clearTimeout(cacheTimeoutRef.current);
+      }
+      
+      cacheTimeoutRef.current = setTimeout(() => {
+        console.log('Actualizando datos por expiración de caché');
+        fetchProducts(true);
+      }, CACHE_DURATION);
+      
+      setError(null);
+    } catch (err) {
+      console.error('Error en fetchProducts:', err);
+      setError(`Error al cargar productos: ${err instanceof Error ? err.message : String(err)}`);
+      
+      // Reintento automático después de un error, solo si fue la carga inicial
+      if (products.length === 0) {
+        setTimeout(() => {
+          console.log('Reintentando carga de productos...');
+          fetchProducts(true);
+        }, 5000);
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [products.length, userSecciones]);
+
+  // Procesar productos según permisos
+  const procesarProductos = (data: Product[]) => {
+    // Filtrado por sección según permisos
+    let productosFiltrados = data;
+>>>>>>> server
     
     switch(order) {
       case 'price-asc':

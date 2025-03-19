@@ -66,7 +66,11 @@ import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/comp
 // InventorySection.tsx (omitiendo importaciones)
 
 // Definir URL base para la API
+<<<<<<< HEAD
 const API_URL = "http://localhost:4000/api/";
+=======
+const API_URL = "http://179.43.118.101:3000/api/";
+>>>>>>> server
 
 // Definir umbral de stock bajo
 const LOW_STOCK_THRESHOLD = 10;
