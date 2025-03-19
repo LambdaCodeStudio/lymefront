@@ -9,87 +9,167 @@ const { title = 'Tienda Lyme - Productos de Calidad' } = Astro.props;
 ---
 
 <MainLayout title={title}>
-  <!-- Updated background with nueva paleta de colores moderna -->
-  <div class="min-h-screen bg-gradient-to-br from-[#15497E] via-[#2A82C7] to-[#15497E] text-white !important">
+  <!-- Fondo actualizado con tonos de Lyme -->
+  <div class="min-h-screen bg-gradient-to-br from-[#0F172A] via-[#00701A]/90 to-[#0F172A] text-white shop-theme !important">
     <slot />
   </div>
 </MainLayout>
 
 <style is:global>
-  /* Force theme for all shop pages with modern color palette */
+  /* Variables de Lyme definidas en shop-global.css */
+  :root {
+    /* Colores primarios */
+    --lyme-primary-dark: #00701A;
+    --lyme-primary-medium: #7CB342;
+    --lyme-primary-light: #AED581;
+    --lyme-primary-lighter: #E8F5E9;
+    
+    /* Colores de interfaz */
+    --lyme-ui-background: #0F172A;
+    --lyme-ui-card: rgba(30, 41, 59, 0.7);
+    --lyme-ui-border: #2A82C7;
+    
+    /* Colores de texto */
+    --lyme-text-primary: #F8F9FA;
+    --lyme-text-secondary: #CED4DA;
+    --lyme-text-muted: #6C757D;
+    
+    /* Colores de estado */
+    --lyme-state-success: #2E7D32;
+    --lyme-state-warning: #FF6B35;
+    --lyme-state-danger: #D32F2F;
+    --lyme-state-info: #2A82C7;
+  }
+
+  /* Force theme for all shop pages with Lyme colors */
   body {
-    background-color: #15497E !important; /* Azul marino como fallback */
-    color: #F8F9FA !important;
+    background-color: var(--lyme-ui-background) !important;
+    color: var(--lyme-text-primary) !important;
   }
   
   /* Ensure all cards and UI elements have proper contrast */
   .card, .bg-white, .bg-gray-100, .bg-gray-200 {
-    background-color: rgba(42, 130, 199, 0.2) !important; /* #2A82C7 with opacity */
-    border-color: rgba(248, 249, 250, 0.2) !important; /* #F8F9FA with opacity */
+    background-color: var(--lyme-ui-card) !important;
+    border-color: var(--lyme-ui-border) !important;
+    backdrop-filter: blur(10px);
   }
   
   /* Update text colors for better readability with new palette */
-  .text-gray-700, .text-gray-800, .text-gray-900, .text-black {
-    color: #F8F9FA !important; /* Blanco/gris muy claro */
+  .text-gray-700, .text-gray-800, .text-gray-900 {
+    color: var(--lyme-text-primary) !important;
+  }
+  
+  .text-black {
+    color: var(--lyme-text-primary) !important;
   }
   
   .text-gray-500, .text-gray-600 {
-    color: #6C757D !important; /* Gris medio */
+    color: var(--lyme-text-secondary) !important;
   }
   
   /* Additional styles for consistent theming */
   .btn-primary, .bg-primary {
-    background-color: #2A82C7 !important; /* Azul medio */
-    border-color: #15497E !important; /* Azul marino */
+    background-color: var(--lyme-primary-dark) !important;
+    border-color: var(--lyme-primary-dark) !important;
   }
   
   .btn-secondary, .bg-secondary {
-    background-color: #FF6B35 !important; /* Naranja para CTA */
-    border-color: #FF6B35 !important;
+    background-color: var(--lyme-state-warning) !important;
+    border-color: var(--lyme-state-warning) !important;
   }
   
   .text-primary {
-    color: #F8F9FA !important; /* Blanco/gris muy claro */
+    color: var(--lyme-primary-dark) !important;
   }
   
   .text-secondary {
-    color: #FF6B35 !important; /* Naranja */
+    color: var(--lyme-state-warning) !important;
+  }
+  
+  /* Override específico para elementos del ShopHome */
+  .product-card {
+    background-color: rgba(30, 41, 59, 0.7) !important;
+    border-color: var(--lyme-ui-border) !important;
   }
   
   /* Ensure inputs and form elements match the theme */
   input, select, textarea {
-    background-color: rgba(248, 249, 250, 0.1) !important;
-    border-color: rgba(42, 130, 199, 0.4) !important;
-    color: #F8F9FA !important;
+    background-color: rgba(51, 65, 85, 0.5) !important;
+    border-color: var(--lyme-ui-border) !important;
+    color: var(--lyme-text-primary) !important;
   }
   
   input::placeholder, textarea::placeholder {
-    color: rgba(248, 249, 250, 0.6) !important;
+    color: var(--lyme-text-muted) !important;
   }
   
-  /* Button styling */
-  button, .button {
-    color: white !important;
+  /* Mantener el texto blanco en los botones oscuros */
+  .bg-[#00701A], .bg-[#7CB342], .from-[#00701A], .to-[#7CB342], 
+  .bg-gradient-to-br.from-\[\#00701A\] {
+    color: var(--lyme-text-primary) !important;
+  }
+  
+  /* Botones con fondo claro deben tener texto oscuro */
+  .bg-[#E8F5E9] {
+    color: var(--lyme-primary-dark) !important;
   }
   
   /* Dialog/Modal styling */
   .dialog, .modal {
-    background-color: #15497E !important;
-    border-color: #2A82C7 !important;
+    background-color: var(--lyme-ui-card) !important;
+    border-color: var(--lyme-ui-border) !important;
+    color: var(--lyme-text-primary) !important;
   }
   
   /* Table styling */
   table {
-    background-color: rgba(21, 73, 126, 0.7) !important;
-    color: #F8F9FA !important;
+    background-color: var(--lyme-ui-card) !important;
+    color: var(--lyme-text-primary) !important;
   }
   
   th, td {
-    border-color: #2A82C7 !important;
+    border-color: rgba(124, 179, 66, 0.3) !important;
   }
   
   /* Shadow effects for modern look */
   .shadow, .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl {
-    --tw-shadow-color: rgba(21, 73, 126, 0.15) !important;
+    --tw-shadow-color: rgba(0, 112, 26, 0.15) !important;
+  }
+  
+  /* Ajustes para asegurar compatibilidad con ShopHome */
+  .bg-gradient-to-r.from-\[\#00888A\].to-\[\#50C3AD\],
+  .bg-gradient-to-r.from-\[\#00701A\].to-\[\#7CB342\] {
+    background: linear-gradient(to right, var(--lyme-primary-dark), var(--lyme-primary-medium)) !important;
+  }
+  
+  /* Mantener textos en blanco dentro de elementos con fondos oscuros */
+  .bg-\[\#00701A\]\/20 .text-white,
+  .bg-gradient-to-br.from-\[\#00701A\] .text-white,
+  .bg-gradient-to-br.from-\[\#7CB342\] .text-white {
+    color: var(--lyme-text-primary) !important;
+  }
+  
+  /* Asegurar que los textos dentro de elementos con fondos claros son oscuros */
+  .bg-\[\#E8F5E9\] {
+    color: var(--lyme-primary-dark) !important;
+  }
+
+  /* Custom scrollbar para tema oscuro */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: rgba(30, 41, 59, 0.5);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--lyme-primary-medium);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--lyme-primary-dark);
   }
 </style>

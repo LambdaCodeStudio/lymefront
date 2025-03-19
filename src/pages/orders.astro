@@ -4,28 +4,132 @@ import { OrdersWrapper } from '../components/shop/OrdersWrapper';
 import { Footer } from '../components/common/Footer'
 ---
 
-<ShopLayout title="Tienda Lyme - Mis Ordenes">
+<ShopLayout title="Tienda Online - Mis Órdenes">
   <OrdersWrapper client:load />
   <Footer client:load />
 </ShopLayout>
 
 <style>
-  /* Additional orders-specific styling */
+  /* Additional orders-specific styling using turquoise theme colors */
   :global(.order-item) {
-    border-color: rgba(145, 190, 173, 0.3) !important;
+    border-color: rgba(27, 156, 150, 0.3) !important;
+    background-color: white !important;
+    box-shadow: 0 4px 12px rgba(27, 156, 150, 0.1) !important;
+    transition: transform 0.3s ease, box-shadow 0.3s ease !important;
+  }
+  
+  :global(.order-item:hover) {
+    transform: translateY(-3px) !important;
+    box-shadow: 0 8px 20px rgba(27, 156, 150, 0.2) !important;
   }
   
   :global(.receipt-button) {
-    background-color: #29696B !important;
+    background-color: #1B9C96 !important;
     color: white !important;
+    transition: all 0.3s ease !important;
   }
   
   :global(.receipt-button:hover) {
-    background-color: #7AA79C !important;
+    background-color: #139692 !important;
+    box-shadow: 0 0 12px rgba(27, 156, 150, 0.6) !important;
   }
   
   :global(.orders-table) {
-    background-color: rgba(41, 105, 107, 0.2) !important;
-    border: 1px solid rgba(145, 190, 173, 0.3) !important;
+    background-color: white !important;
+    border: 1px solid rgba(27, 156, 150, 0.3) !important;
+    box-shadow: 0 4px 15px rgba(27, 156, 150, 0.15) !important;
+  }
+
+  /* Support for badges */
+  :global(.badge-success) {
+    background-color: rgba(27, 156, 150, 0.2) !important;
+    color: #1B9C96 !important;
+    border-color: #1B9C96 !important;
+  }
+
+  :global(.badge-warning) {
+    background-color: rgba(242, 165, 22, 0.2) !important;
+    color: #F2A516 !important;
+    border-color: #F2A516 !important;
+  }
+
+  :global(.badge-danger) {
+    background-color: rgba(231, 76, 60, 0.2) !important;
+    color: #E74C3C !important;
+    border-color: #E74C3C !important;
+  }
+
+  /* Order status specific styles */
+  :global(.status-pending) {
+    border-left: 4px solid #F2A516 !important;
+  }
+
+  :global(.status-approved) {
+    border-left: 4px solid #1B9C96 !important;
+  }
+
+  :global(.status-rejected) {
+    border-left: 4px solid #E74C3C !important;
+  }
+  
+  /* Título con estilo moderno */
+  :global(.orders-title) {
+    color: #0D4E4B !important;
+    font-weight: 700 !important;
+    padding-bottom: 0.5rem !important;
+    border-bottom: 2px solid #1B9C96 !important;
+    margin-bottom: 1.5rem !important;
+    background: linear-gradient(90deg, #29696B, #1B9C96) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+  }
+  
+  /* Efecto para números de orden */
+  :global(.order-number) {
+    color: #1B9C96 !important;
+    font-weight: 700 !important;
+  }
+  
+  /* Botón principal de acción */
+  :global(.action-button) {
+    background: linear-gradient(90deg, #1B9C96, #139692) !important;
+    color: white !important;
+    border: none !important;
+    transition: all 0.3s ease !important;
+  }
+  
+  :global(.action-button:hover) {
+    box-shadow: 0 0 15px rgba(27, 156, 150, 0.6) !important;
+    transform: translateY(-2px) !important;
+  }
+  
+  /* Paginación de órdenes */
+  :global(.orders-pagination .page-item.active .page-link) {
+    background-color: #1B9C96 !important;
+    border-color: #1B9C96 !important;
+  }
+  
+  :global(.orders-pagination .page-link) {
+    color: #1B9C96 !important;
+    background-color: white !important;
+  }
+  
+  :global(.orders-pagination .page-link:hover) {
+    background-color: rgba(27, 156, 150, 0.1) !important;
+    box-shadow: 0 0 8px rgba(27, 156, 150, 0.3) !important;
+  }
+  
+  /* Botón de llamada a la acción destacado */
+  :global(.cta-button) {
+    background-color: #F2A516 !important;
+    color: #333 !important;
+    font-weight: bold !important;
+    border: none !important;
+    transition: all 0.3s ease !important;
+  }
+  
+  :global(.cta-button:hover) {
+    background-color: #E09600 !important;
+    box-shadow: 0 0 15px rgba(242, 165, 22, 0.5) !important;
   }
 </style>

@@ -4,19 +4,160 @@ import { ShopWrapper } from '../components/shop/ShopWrapper';
 import { Footer } from '../components/common/Footer'
 ---
 
-<ShopLayout title="Tienda Lyme - Productos de Calidad">
+<ShopLayout title="Tienda Online - Productos de Calidad">
   <ShopWrapper client:load />
   <Footer client:load />
 </ShopLayout>
 
 <style>
-  /* Additional page-specific styling if needed */
+  /* Estilos adaptados a colores turquesa */
   :global(.product-grid) {
-    background-color: rgba(223, 239, 230, 0.05);
-    border-radius: 0.5rem;
+    background-color: #F8FDFC;
+    border-radius: 0.75rem;
+    box-shadow: 0 8px 32px rgba(27, 156, 150, 0.15);
+    border: 1px solid rgba(27, 156, 150, 0.2);
   }
   
   :global(.hero-section) {
-    border-color: #91BEAD;
+    border-color: rgba(27, 156, 150, 0.3);
+    background: linear-gradient(135deg, #CFF2E4, #E8F8F3);
+    box-shadow: 0 8px 32px rgba(27, 156, 150, 0.2);
+  }
+  
+  /* Product card styling */
+  :global(.product-card) {
+    transition: transform 0.3s ease, box-shadow 0.3s ease !important;
+    border-color: rgba(27, 156, 150, 0.2) !important;
+    background-color: white !important;
+    border-radius: 8px;
+  }
+  
+  :global(.product-card:hover) {
+    transform: translateY(-5px) !important;
+    box-shadow: 0 10px 25px rgba(27, 156, 150, 0.25) !important;
+  }
+  
+  /* Category badges */
+  :global(.product-card .category-badge) {
+    background-color: #1B9C96 !important;
+    color: white !important;
+    border-radius: 4px;
+    padding: 3px 8px;
+  }
+  
+  :global(.product-card .category-badge.maintenance) {
+    background-color: #29696B !important;
+  }
+  
+  :global(.product-card .category-badge.cleaning) {
+    background-color: #84D6C8 !important;
+  }
+  
+  /* Asegurar que los textos en el footer sean legibles */
+  :global(footer) {
+    background-color: #0D4E4B;
+    border-top: 1px solid rgba(27, 156, 150, 0.3);
+    color: white;
+    margin-top: 2rem;
+  }
+  
+  :global(footer a) {
+    color: #84D6C8;
+    transition: color 0.3s ease;
+  }
+  
+  :global(footer a:hover) {
+    color: #CFF2E4;
+    text-decoration: underline;
+  }
+
+  /* Pagination styling */
+  :global(.pagination-container .page-item.active .page-link) {
+    background-color: #1B9C96 !important;
+    border-color: #1B9C96 !important;
+    color: white !important;
+  }
+  
+  :global(.pagination-container .page-link) {
+    color: #1B9C96 !important;
+    background-color: white !important;
+  }
+  
+  :global(.pagination-container .page-link:hover) {
+    background-color: rgba(27, 156, 150, 0.1) !important;
+    box-shadow: 0 0 8px rgba(27, 156, 150, 0.3) !important;
+  }
+
+  /* Ensure search and filter elements match the theme */
+  :global(.search-container input) {
+    background-color: white !important;
+    border-color: #1B9C96 !important;
+    color: #0D4E4B !important;
+    box-shadow: 0 2px 5px rgba(27, 156, 150, 0.1);
+  }
+
+  :global(.search-container input::placeholder) {
+    color: #4A7C79 !important;
+  }
+  
+  /* Botones principales */
+  :global(.btn-shop-primary) {
+    background: linear-gradient(90deg, #1B9C96, #139692) !important;
+    border: none !important;
+    color: white !important;
+    transition: all 0.3s ease !important;
+  }
+  
+  :global(.btn-shop-primary:hover) {
+    box-shadow: 0 0 15px rgba(27, 156, 150, 0.6) !important;
+    transform: translateY(-2px) !important;
+  }
+  
+  /* Destacados y ofertas */
+  :global(.featured-item) {
+    background: linear-gradient(90deg, #139692, #84D6C8) !important;
+    border-radius: 0.5rem !important;
+  }
+  
+  :global(.offer-item) {
+    background: linear-gradient(90deg, #F2A516, #1B9C96) !important;
+    border-radius: 0.5rem !important;
+    color: white !important;
+  }
+  
+  /* Estilos adicionales para filtros */
+  :global(.filter-dropdown) {
+    background-color: white !important;
+    border-color: rgba(27, 156, 150, 0.3) !important;
+  }
+  
+  :global(.filter-dropdown:focus) {
+    box-shadow: 0 0 0 3px rgba(27, 156, 150, 0.3) !important;
+    border-color: #1B9C96 !important;
+  }
+  
+  /* Estilos para carrito de compras */
+  :global(.cart-icon) {
+    color: #1B9C96 !important;
+    transition: color 0.3s ease !important;
+  }
+  
+  :global(.cart-icon:hover) {
+    color: #139692 !important;
+  }
+  
+  :global(.cart-badge) {
+    background-color: #F2A516 !important;
+    color: #333 !important;
+  }
+  
+  /* Precio de productos */
+  :global(.product-price) {
+    color: #29696B !important;
+    font-weight: bold !important;
+  }
+  
+  :global(.product-price-discount) {
+    color: #E74C3C !important;
   }
 </style>

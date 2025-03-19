@@ -170,10 +170,6 @@ export const useUserManagement = () => {
 
   // Manejar eliminación de usuario
   const handleDelete = async (userId: string) => {
-    if (!window.confirm('¿Está seguro de que desea eliminar este usuario?')) {
-      return;
-    }
-    
     setLoading(true);
     
     try {

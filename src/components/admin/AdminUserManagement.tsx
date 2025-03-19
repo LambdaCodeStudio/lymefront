@@ -13,6 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { NotificationProvider } from '@/context/NotificationContext';
 import { NotificationsContainer } from '@/components/ui/Notifications';
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 
 // Importar componentes modularizados
 import UserTable from './components/UserTable';
@@ -86,6 +87,10 @@ const UserManagementContent: React.FC = () => {
   
   // Nuevo estado para el filtro de roles
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
+  
+  // Estados para el diálogo de confirmación de eliminación
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<string | null>(null);
   
   // IMPORTANTE: Tamaño fijo para móviles - siempre 5 elementos por página
   const ITEMS_PER_PAGE_MOBILE = 5;
@@ -162,6 +167,21 @@ const UserManagementContent: React.FC = () => {
     ? `${indexOfFirstItem + 1}-${Math.min(indexOfLastItem, filteredUsers.length)} de ${filteredUsers.length}`
     : '0 de 0';
 
+  // Función para mostrar el diálogo de confirmación de eliminación
+  const confirmDelete = (userId: string) => {
+    setUserToDelete(userId);
+    setDeleteDialogOpen(true);
+  };
+
+  // Ejecutar la eliminación cuando se confirma
+  const executeDelete = () => {
+    if (userToDelete) {
+      handleDelete(userToDelete);
+      setUserToDelete(null);
+    }
+    setDeleteDialogOpen(false);
+  };
+
   return (
     <div className="p-4 md:p-6 space-y-6">
       {/* Contenedor de notificaciones */}
@@ -234,15 +254,16 @@ const UserManagementContent: React.FC = () => {
       <div className="hidden md:block bg-white rounded-xl shadow-sm overflow-hidden border border-[#91BEAD]/20">
         {!loading && currentUsers.length > 0 && (
           <>
-            <UserTable 
-              users={currentUsers}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              onToggleStatus={handleToggleStatus}
-              getUserIdentifier={getUserIdentifier}
-              getFullName={getFullName}
-              currentUserRole={currentUserRole}
-            />
+                          {/* Ahora llama a confirmDelete en lugar de handleDelete directamente */}
+              <UserTable 
+                users={currentUsers}
+                onEdit={handleEdit}
+                onDelete={confirmDelete}
+                onToggleStatus={handleToggleStatus}
+                getUserIdentifier={getUserIdentifier}
+                getFullName={getFullName}
+                currentUserRole={currentUserRole}
+              />
             
             {/* Paginación debajo de la tabla */}
             <div className="py-4 border-t border-[#91BEAD]/20">
@@ -279,7 +300,7 @@ const UserManagementContent: React.FC = () => {
               key={user._id}
               user={user}
               onEdit={handleEdit}
-              onDelete={handleDelete}
+              onDelete={confirmDelete}
               onToggleStatus={handleToggleStatus}
               getUserIdentifier={getUserIdentifier}
               getFullName={getFullName}
@@ -325,6 +346,18 @@ const UserManagementContent: React.FC = () => {
         loading={loading}
         error={error}
         currentUserRole={currentUserRole}
+      />
+
+      {/* Diálogo de confirmación de eliminación */}
+      <ConfirmationDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Eliminar usuario"
+        description="¿Está seguro de que desea eliminar este usuario? Esta acción no se puede deshacer."
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+        onConfirm={executeDelete}
+        variant="destructive"
       />
     </div>
   );

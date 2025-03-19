@@ -71,7 +71,9 @@ const CLIENTS_CACHE_KEY = 'lyme_clients_cache';
 const USERS_CACHE_KEY = 'lyme_users_cache';
 const UNASSIGNED_CLIENTS_CACHE_KEY = 'lyme_unassigned_clients_cache';
 
-// Tipos extendidos para los usuarios con la estructura que viene del backend
+/**
+ * Tipos extendidos para los usuarios con la estructura que viene del backend
+ */
 interface UserExtended {
   _id: string;
   email?: string;
@@ -85,7 +87,9 @@ interface UserExtended {
   expiresAt?: string; // Para usuarios temporales
 }
 
-// Interfaz extendida para manejar tanto ID como objeto poblado
+/**
+ * Interfaz extendida para manejar tanto ID como objeto poblado
+ */
 interface Client {
   _id: string;
   servicio: string;
@@ -115,13 +119,19 @@ interface UpdateClientData {
   userId: string;
 }
 
-// Añade esta función a tu archivo de utilidades
+/**
+ * Obtiene la URL de la API para un endpoint específico
+ */
 const getApiUrl = (endpoint: string): string => {
-  const baseUrl = 'http://179.43.118.101:4000/api';
+  const baseUrl = 'http://localhost:4000/api';
   return `${baseUrl}/${endpoint}`;
 };
 
-// Funciones para gestionar la caché
+/**
+ * Funciones para gestionar la caché
+ */
+
+// Obtiene datos de la caché local
 const getFromCache = (key: string) => {
   if (typeof window === 'undefined') return null;
 
@@ -144,6 +154,7 @@ const getFromCache = (key: string) => {
   }
 };
 
+// Guarda datos en la caché local
 const saveToCache = (key: string, data: any) => {
   if (typeof window === 'undefined') return;
 
@@ -155,11 +166,16 @@ const saveToCache = (key: string, data: any) => {
   localStorage.setItem(key, JSON.stringify(cacheData));
 };
 
+// Invalida claves de caché específicas
 const invalidateCache = (keys: string[]) => {
   if (typeof window === 'undefined') return;
   keys.forEach(key => localStorage.removeItem(key));
 };
 
+/**
+ * Componente principal para la gestión de clientes
+ * Muestra una lista de servicios y sus secciones, permitiendo crear, editar y eliminar clientes
+ */
 const ClientsSection: React.FC = () => {
   // Acceder al contexto del dashboard
   const { selectedUserId } = useDashboard();
@@ -167,31 +183,37 @@ const ClientsSection: React.FC = () => {
   // Usar el hook de notificaciones
   const { addNotification } = useNotification();
 
-  // Estados
+  // Estados para datos principales
   const [clients, setClients] = useState<Client[]>([]);
   const [users, setUsers] = useState<UserExtended[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Estados para modales
   const [showModal, setShowModal] = useState(false);
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [showDeleteServiceModal, setShowDeleteServiceModal] = useState(false);
+  const [showDeleteClientModal, setShowDeleteClientModal] = useState(false);
+  
+  // Estados para la edición actual
   const [currentClient, setCurrentClient] = useState<Client | null>(null);
   const [currentService, setCurrentService] = useState<string>('');
+  const [clientToDelete, setClientToDelete] = useState<string | null>(null);
+  
+  // Estados para mensajes de feedback
   const [successMessage, setSuccessMessage] = useState<string>('');
-  const [activeUserId, setActiveUserId] = useState<string>("all"); // Para filtrar por usuario
+  
+  // Estados para filtrado y UI
+  const [activeUserId, setActiveUserId] = useState<string>("all");
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [serviceFormData, setServiceFormData] = useState<{ nuevoNombre: string }>({ nuevoNombre: '' });
   const [deletingOperation, setDeletingOperation] = useState(false);
   const [showAddingSectionMode, setShowAddingSectionMode] = useState(false);
   const [isDataRefreshing, setIsDataRefreshing] = useState(false);
 
-  // Estado para el modal de confirmación de eliminación de clientes individuales
-  const [showDeleteClientModal, setShowDeleteClientModal] = useState(false);
-  const [clientToDelete, setClientToDelete] = useState<string | null>(null);
-
-  // Nuevo estado para controlar servicios expandidos/contraídos
-  const [expandedServices, setExpandedServices] = useState<Record<string, boolean>>({});
+  // Estado para controlar qué servicio está expandido (solo uno a la vez)
+  const [expandedServiceId, setExpandedServiceId] = useState<string | null>(null);
 
   // Estado para el formulario
   const [formData, setFormData] = useState<CreateClientData>({
@@ -200,21 +222,15 @@ const ClientsSection: React.FC = () => {
     userId: ''
   });
 
-  // Estado para controlar la paginación
+  // Estados para la paginación
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [itemsPerPage, setItemsPerPage] = useState<number>(10);
 
   // Referencia para el scroll en móvil
   const mobileListRef = useRef<HTMLDivElement>(null);
 
-  // Tamaños de página para diferentes dispositivos
-  const ITEMS_PER_PAGE_MOBILE = 3;
-  const ITEMS_PER_PAGE_DESKTOP = 7;
-
   // Estado para controlar el ancho de la ventana
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
-
-  // Calcular dinámicamente el número de items por página basado en el ancho de la ventana
-  const itemsPerPage = windowWidth < 768 ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP;
 
   // Verificar disponibilidad del contexto de notificaciones
   useEffect(() => {
@@ -224,53 +240,49 @@ const ClientsSection: React.FC = () => {
   // Efecto para detectar el tamaño de la ventana
   useEffect(() => {
     const handleResize = () => {
-      const newWidth = window.innerWidth;
-      setWindowWidth(newWidth);
-
-      // Si cambiamos entre móvil y escritorio, volver a la primera página
-      if ((newWidth < 768 && windowWidth >= 768) || (newWidth >= 768 && windowWidth < 768)) {
-        setCurrentPage(1);
-      }
+      setWindowWidth(window.innerWidth);
     };
 
     if (typeof window !== 'undefined') {
       window.addEventListener('resize', handleResize);
+      
+      // Ajustar itemsPerPage según el tamaño inicial de la pantalla
+      setItemsPerPage(window.innerWidth < 768 ? 3 : 7);
+      
       return () => window.removeEventListener('resize', handleResize);
     }
-  }, [windowWidth]);
+  }, []);
 
-  // Función para alternar la expansión de un servicio
+  /**
+   * Función para alternar la expansión de un servicio (solo uno a la vez)
+   */
   const toggleServiceExpansion = (servicio: string) => {
-    setExpandedServices(prev => ({
-      ...prev,
-      [servicio]: !prev[servicio]
-    }));
-  };
-
-  // Función mejorada para expandir/contraer todos los servicios
-  const toggleAllServices = (services: string[]) => {
-    // Verificar si todos los servicios están expandidos
-    const allExpanded = services.every(service => expandedServices[service]);
-
-    if (allExpanded) {
-      // Si todos están expandidos, contraer todos
-      setExpandedServices({});
+    if (expandedServiceId === servicio) {
+      // Si el servicio ya está expandido, lo contraemos
+      setExpandedServiceId(null);
     } else {
-      // Si al menos uno está contraído, expandir todos
-      const expanded: Record<string, boolean> = {};
-      services.forEach(service => {
-        expanded[service] = true;
-      });
-      setExpandedServices(expanded);
+      // Si es un servicio diferente, lo expandimos y contraemos cualquier otro
+      setExpandedServiceId(servicio);
     }
   };
 
-  // Función para contraer todos los servicios (mantenemos esta para compatibilidad)
+  /**
+   * Contrae todos los servicios
+   */
   const collapseAllServices = () => {
-    setExpandedServices({});
+    setExpandedServiceId(null);
   };
 
-  // Obtener token de forma segura (solo en el cliente)
+  /**
+   * Expande un servicio específico (cerrando cualquier otro)
+   */
+  const expandService = (servicio: string) => {
+    setExpandedServiceId(servicio);
+  };
+
+  /**
+   * Obtener token de forma segura (solo en el cliente)
+   */
   const getAuthToken = () => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('token');
@@ -382,7 +394,10 @@ const ClientsSection: React.FC = () => {
     };
   }, []);
 
-  // Cargar clientes con soporte de caché
+  /**
+   * Carga todos los clientes con soporte de caché
+   * @param forceRefresh Indica si se debe ignorar la caché y obtener datos frescos
+   */
   const fetchClients = async (forceRefresh: boolean = false) => {
     try {
       // Si no es una actualización forzada, intentar obtener datos de la caché
@@ -452,7 +467,9 @@ const ClientsSection: React.FC = () => {
     }
   };
 
-  // Cargar clientes sin asignar con soporte de caché
+  /**
+   * Carga clientes sin asignar con soporte de caché
+   */
   const fetchClientsWithoutUser = async (forceRefresh: boolean = false) => {
     try {
       // Si no es una actualización forzada, intentar obtener datos de la caché
@@ -488,7 +505,7 @@ const ClientsSection: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('http://179.43.118.101:4000/api/cliente/sin-asignar', {
+      const response = await fetch('http://localhost:4000/api/cliente/sin-asignar', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -537,7 +554,9 @@ const ClientsSection: React.FC = () => {
     }
   };
 
-  // Cargar usuarios con soporte de caché
+  /**
+   * Carga la lista de usuarios con soporte de caché
+   */
   const fetchUsers = async (forceRefresh: boolean = false) => {
     try {
       // Si no es una actualización forzada, intentar obtener datos de la caché
@@ -555,7 +574,7 @@ const ClientsSection: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('http://179.43.118.101:4000/api/auth/users', {
+      const response = await fetch('http://localhost:4000/api/auth/users', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -599,7 +618,9 @@ const ClientsSection: React.FC = () => {
     }
   };
 
-  // Crear cliente
+  /**
+   * Crea un nuevo cliente
+   */
   const handleCreateClient = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -610,7 +631,7 @@ const ClientsSection: React.FC = () => {
 
       console.log("Creando cliente con datos:", formData);
 
-      const response = await fetch('http://179.43.118.101:4000/api/cliente', {
+      const response = await fetch('http://localhost:4000/api/cliente', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -654,7 +675,9 @@ const ClientsSection: React.FC = () => {
     }
   };
 
-  // Actualizar cliente
+  /**
+   * Actualiza un cliente existente
+   */
   const handleUpdateClient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentClient?._id) return;
@@ -675,7 +698,7 @@ const ClientsSection: React.FC = () => {
 
       console.log("Actualizando cliente:", currentClient._id, "con datos:", updateData);
 
-      const response = await fetch(`http://179.43.118.101:4000/api/cliente/${currentClient._id}`, {
+      const response = await fetch(`http://localhost:4000/api/cliente/${currentClient._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -716,7 +739,9 @@ const ClientsSection: React.FC = () => {
     }
   };
 
-  // Eliminar cliente
+  /**
+   * Elimina un cliente específico
+   */
   const handleDeleteClient = async (id: string) => {
     try {
       setDeletingOperation(true);
@@ -726,7 +751,7 @@ const ClientsSection: React.FC = () => {
       }
 
       console.log(`Eliminando cliente con ID: ${id}`);
-      const response = await fetch(`http://179.43.118.101:4000/api/cliente/${id}`, {
+      const response = await fetch(`http://localhost:4000/api/cliente/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -784,7 +809,9 @@ const ClientsSection: React.FC = () => {
     }
   };
 
-  // Editar cliente
+  /**
+   * Prepara el formulario para editar un cliente
+   */
   const handleEditClient = (client: Client) => {
     setCurrentClient(client);
     setFormData({
@@ -795,7 +822,9 @@ const ClientsSection: React.FC = () => {
     setShowModal(true);
   };
 
-  // Agregar nueva sección a un cliente existente 
+  /**
+   * Prepara el formulario para agregar una nueva sección a un servicio existente
+   */
   const handleAddSection = (client: Client) => {
     console.log(`Agregando nueva sección al servicio: ${client.servicio}`);
 
@@ -820,20 +849,26 @@ const ClientsSection: React.FC = () => {
     setShowModal(true);
   };
 
-  // Editar servicio (Cliente Padre)
+  /**
+   * Prepara el modal para editar un servicio
+   */
   const handleEditService = (servicio: string) => {
     setCurrentService(servicio);
     setServiceFormData({ nuevoNombre: servicio });
     setShowServiceModal(true);
   };
 
-  // Mostrar confirmación para eliminar servicio
+  /**
+   * Prepara el modal para confirmar la eliminación de un servicio
+   */
   const handleShowDeleteService = (servicio: string) => {
     setCurrentService(servicio);
     setShowDeleteServiceModal(true);
   };
 
-  // Actualizar nombre de servicio (Cliente Padre)
+  /**
+   * Actualiza el nombre de un servicio (cliente padre)
+   */
   const handleUpdateService = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentService || !serviceFormData.nuevoNombre) return;
@@ -848,7 +883,7 @@ const ClientsSection: React.FC = () => {
 
       // Actualizamos cada cliente que pertenece a este servicio
       const updatePromises = clientesDelServicio.map(client => {
-        return fetch(`http://179.43.118.101:4000/api/cliente/${client._id}`, {
+        return fetch(`http://localhost:4000/api/cliente/${client._id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -871,14 +906,9 @@ const ClientsSection: React.FC = () => {
         throw new Error(`Ocurrieron ${errors.length} errores al actualizar el servicio`);
       }
 
-      // Actualizar el estado de expansión con el nuevo nombre
-      if (expandedServices[currentService]) {
-        setExpandedServices(prev => {
-          const newState = { ...prev };
-          delete newState[currentService];
-          newState[serviceFormData.nuevoNombre] = true;
-          return newState;
-        });
+      // Si estaba expandido el servicio que se cambió, expandir el nuevo
+      if (expandedServiceId === currentService) {
+        setExpandedServiceId(serviceFormData.nuevoNombre);
       }
 
       // Invalidar caché después de actualizar servicio
@@ -907,7 +937,9 @@ const ClientsSection: React.FC = () => {
     }
   };
 
-  // Eliminar servicio completo (Cliente Padre y todas sus secciones)
+  /**
+   * Elimina un servicio y todas sus secciones
+   */
   const handleDeleteService = async () => {
     if (!currentService) return;
 
@@ -928,7 +960,7 @@ const ClientsSection: React.FC = () => {
       for (const client of clientesDelServicio) {
         console.log(`Eliminando sección: ${client._id} - ${client.seccionDelServicio || 'Sin sección'}`);
         try {
-          const response = await fetch(`http://179.43.118.101:4000/api/cliente/${client._id}`, {
+          const response = await fetch(`http://localhost:4000/api/cliente/${client._id}`, {
             method: 'DELETE',
             headers: {
               'Authorization': `Bearer ${token}`
@@ -974,12 +1006,10 @@ const ClientsSection: React.FC = () => {
         throw new Error(`No se pudieron eliminar ${fallosEliminacion.length} de ${clientesDelServicio.length} secciones`);
       }
 
-      // Eliminar el servicio del estado de expansión
-      setExpandedServices(prev => {
-        const newState = { ...prev };
-        delete newState[currentService];
-        return newState;
-      });
+      // Si el servicio eliminado estaba expandido, colapsarlo
+      if (expandedServiceId === currentService) {
+        setExpandedServiceId(null);
+      }
 
       // Invalidar caché después de eliminar servicio
       invalidateCache([CLIENTS_CACHE_KEY, UNASSIGNED_CLIENTS_CACHE_KEY]);
@@ -1011,13 +1041,17 @@ const ClientsSection: React.FC = () => {
     }
   };
 
-  // Mostrar confirmación para eliminar cliente
+  /**
+   * Prepara el modal para confirmar la eliminación de un cliente
+   */
   const confirmDeleteClient = (id: string) => {
     setClientToDelete(id);
     setShowDeleteClientModal(true);
   };
 
-  // Ejecutar eliminación después de confirmación en el modal
+  /**
+   * Ejecuta la eliminación de un cliente después de confirmación
+   */
   const executeDeleteClient = () => {
     if (clientToDelete) {
       handleDeleteClient(clientToDelete);
@@ -1026,7 +1060,9 @@ const ClientsSection: React.FC = () => {
     }
   };
 
-  // Resetear formulario
+  /**
+   * Resetea el formulario a sus valores iniciales
+   */
   const resetForm = () => {
     // Si hay un usuario seleccionado, mantenerlo en el formulario
     setFormData({
@@ -1038,7 +1074,9 @@ const ClientsSection: React.FC = () => {
     setShowAddingSectionMode(false);
   };
 
-  // Limpiar selección de usuario activo
+  /**
+   * Limpia el filtro de usuario activo
+   */
   const clearActiveUserId = () => {
     setActiveUserId("all");
     // También limpiar localStorage por si acaso
@@ -1052,7 +1090,9 @@ const ClientsSection: React.FC = () => {
     }
   };
 
-  // Función para cambiar de página
+  /**
+   * Maneja el cambio de página en la paginación
+   */
   const handlePageChange = (pageNumber: number) => {
     setCurrentPage(pageNumber);
 
@@ -1062,7 +1102,17 @@ const ClientsSection: React.FC = () => {
     }
   };
 
-  // Obtener el identificador del usuario por su ID (email, usuario o nombre)
+  /**
+   * Maneja el cambio de elementos por página
+   */
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1); // Volver a la primera página cuando cambia el tamaño
+  };
+
+  /**
+   * Obtiene un identificador para un usuario a partir de su ID
+   */
   const getUserIdentifierById = (userId: string) => {
     const user = users.find(u => u._id === userId);
     if (!user) return 'Usuario no encontrado';
@@ -1089,7 +1139,9 @@ const ClientsSection: React.FC = () => {
     return `${identifier} - ${roleName}${tempLabel}`;
   };
 
-  // Función para obtener el correo del creador del cliente
+  /**
+   * Obtiene el correo del usuario asignado a un cliente
+   */
   const getCreatorEmail = (client: Client) => {
     // Utilizar el email recordado del localStorage como creador
     if (typeof window !== 'undefined') {
@@ -1115,14 +1167,14 @@ const ClientsSection: React.FC = () => {
     return 'Correo no disponible';
   };
 
-  // Filtrar clientes
+  // Filtrar clientes según término de búsqueda y usuario seleccionado
   const filteredClients = clients.filter(client => {
     // Filtro por texto de búsqueda
     const matchesSearch =
       client.servicio.toLowerCase().includes(searchTerm.toLowerCase()) ||
       client.seccionDelServicio.toLowerCase().includes(searchTerm.toLowerCase());
 
-    // Filtro por usuario seleccionado - CORREGIDO
+    // Filtro por usuario seleccionado
     const matchesUser = activeUserId === "all" ||
       (typeof client.userId === 'object' && client.userId !== null
         ? client.userId._id === activeUserId
@@ -1143,18 +1195,13 @@ const ClientsSection: React.FC = () => {
   // Convertir el objeto agrupado a un array para la paginación
   const groupedServicesArray = Object.entries(groupedClients);
 
-  // Calcular paginación para servicios
-  const indexOfLastService = currentPage * itemsPerPage;
-  const indexOfFirstService = indexOfLastService - itemsPerPage;
-  const currentServices = groupedServicesArray.slice(indexOfFirstService, indexOfLastService);
-
-  // Calcular el número total de páginas
-  const totalPages = Math.ceil(groupedServicesArray.length / itemsPerPage);
-
-  // Información de paginación
-  const showingFromTo = groupedServicesArray.length > 0
-    ? `${indexOfFirstService + 1}-${Math.min(indexOfLastService, groupedServicesArray.length)} de ${groupedServicesArray.length}`
-    : '0 de 0';
+  // Aplicar paginación
+  const totalItems = groupedServicesArray.length;
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = Math.min(startIndex + itemsPerPage, totalItems);
+  
+  // Obtener solo los servicios de la página actual
+  const currentServices = groupedServicesArray.slice(startIndex, endIndex);
 
   if (loading && clients.length === 0) {
     return (
@@ -1253,10 +1300,10 @@ const ClientsSection: React.FC = () => {
           {currentServices.length > 0 && (
             <Button
               variant="outline"
-              onClick={() => toggleAllServices(currentServices.map(([servicio]) => servicio))}
+              onClick={() => collapseAllServices()}
               className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50 hover:text-[#29696B]"
             >
-              {currentServices.every(([servicio]) => expandedServices[servicio]) ? (
+              {expandedServiceId ? (
                 <>
                   <ChevronUp className="w-4 h-4 mr-2" />
                   Contraer Todo
@@ -1264,7 +1311,7 @@ const ClientsSection: React.FC = () => {
               ) : (
                 <>
                   <ChevronDown className="w-4 h-4 mr-2" />
-                  Expandir Todo
+                  Expandir Sección
                 </>
               )}
             </Button>
@@ -1366,18 +1413,18 @@ const ClientsSection: React.FC = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => toggleAllServices(currentServices.map(([servicio]) => servicio))}
+                  onClick={() => collapseAllServices()}
                   className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50"
                 >
-                  {currentServices.every(([servicio]) => expandedServices[servicio]) ? (
+                  {expandedServiceId ? (
                     <>
                       <ChevronUp className="w-3 h-3 mr-1" />
-                      Contraer Todo
+                      Contraer Sección
                     </>
                   ) : (
                     <>
                       <ChevronDown className="w-3 h-3 mr-1" />
-                      Expandir Todo
+                      Expandir Sección
                     </>
                   )}
                 </Button>
@@ -1408,7 +1455,7 @@ const ClientsSection: React.FC = () => {
                 Total: {groupedServicesArray.length} {groupedServicesArray.length === 1 ? 'servicio' : 'servicios'}
               </span>
               <span className="text-[#29696B] font-medium">
-                Mostrando: {showingFromTo}
+                Mostrando: {startIndex + 1}-{Math.min(endIndex, totalItems)} de {totalItems}
               </span>
             </div>
           )}
@@ -1418,10 +1465,11 @@ const ClientsSection: React.FC = () => {
             {groupedServicesArray.length > itemsPerPage && (
               <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20 mb-4">
                 <Pagination
-                  totalItems={groupedServicesArray.length}
+                  totalItems={totalItems}
                   itemsPerPage={itemsPerPage}
                   currentPage={currentPage}
                   onPageChange={handlePageChange}
+                  onItemsPerPageChange={handleItemsPerPageChange}
                 />
               </div>
             )}
@@ -1441,7 +1489,7 @@ const ClientsSection: React.FC = () => {
                       className="ml-2 h-8 w-8 p-0 text-[#7AA79C] hover:bg-[#DFEFE6]/50 hover:text-[#29696B]"
                       onClick={() => toggleServiceExpansion(servicio)}
                     >
-                      {expandedServices[servicio] ? (
+                      {expandedServiceId === servicio ? (
                         <ChevronUp className="w-4 h-4" />
                       ) : (
                         <ChevronDown className="w-4 h-4" />
@@ -1488,7 +1536,7 @@ const ClientsSection: React.FC = () => {
                   </div>
                 </div>
 
-                {expandedServices[servicio] && (
+                {expandedServiceId === servicio && (
                   <div className="divide-y divide-[#91BEAD]/10">
                     {clientesDelServicio.map(client => (
                       <div key={client._id} className="p-4 hover:bg-[#DFEFE6]/10 flex justify-between items-center transition-colors">
@@ -1505,45 +1553,20 @@ const ClientsSection: React.FC = () => {
                                     </Badge>
                                   )}
                                   <div className="text-sm text-[#7AA79C]">
-                                    <div className="flex items-center">
-                                      <Users className="w-3 h-3 mr-1 inline" />
-                                      Usuario Asignado: <strong className="ml-1 text-[#29696B]">{
-                                        typeof client.userId === 'object' && client.userId.email
-                                          ? `${client.userId.email}${client.userId.role ? ` - ${client.userId.role === 'supervisor' ? 'Supervisor' : 'Operario'}` : ''}`
-                                          : typeof client.userId === 'string'
-                                            ? getUserIdentifierById(client.userId)
-                                            : 'No disponible'
-                                      }</strong>
-                                    </div>
                                     {/* Mostrar información del creador */}
                                     <div className="flex items-center mt-1">
                                       <Mail className="w-3 h-3 mr-1 inline" />
-                                      Creado por: <span className="text-[#29696B] ml-1">{getCreatorEmail(client)}</span>
+                                      Supervisor Asignado: <span className="text-[#29696B] ml-1">{getCreatorEmail(client)}</span>
                                     </div>
                                   </div>
                                 </div>
                               </>
                             ) : (
                               <div className="text-sm text-[#7AA79C]">
-                                <div className="flex items-center">
-                                  <Users className="w-3 h-3 mr-1 inline" />
-                                  Usuario Asignado: <strong className="ml-1 text-[#29696B]">{
-                                    typeof client.userId === 'object' && client.userId.email
-                                      ? `${client.userId.email}${client.userId.role ? ` - ${client.userId.role === 'supervisor' ? 'Supervisor' : 'Operario'}` : ''}`
-                                      : typeof client.userId === 'string'
-                                        ? getUserIdentifierById(client.userId)
-                                        : 'No disponible'
-                                  }</strong>
-                                  {client.requiereAsignacion && (
-                                    <Badge variant="outline" className="ml-2 text-xs bg-amber-50 text-amber-700 border-amber-300">
-                                      Requiere Asignación
-                                    </Badge>
-                                  )}
-                                </div>
                                 {/* Mostrar información del creador */}
                                 <div className="flex items-center mt-1">
                                   <Mail className="w-3 h-3 mr-1 inline" />
-                                  Creado por: <span className="text-[#29696B] ml-1">{getCreatorEmail(client)}</span>
+                                  Usuario Asignado: <span className="text-[#29696B] ml-1">{getCreatorEmail(client)}</span>
                                 </div>
                               </div>
                             )}
@@ -1575,11 +1598,11 @@ const ClientsSection: React.FC = () => {
                   </div>
                 )}
 
-                {!expandedServices[servicio] && clientesDelServicio.length > 0 && (
+                {expandedServiceId !== servicio && clientesDelServicio.length > 0 && (
                   <div className="p-4 text-center text-[#7AA79C] text-sm">
                     <Button
                       variant="ghost"
-                      onClick={() => toggleServiceExpansion(servicio)}
+                      onClick={() => expandService(servicio)}
                       className="text-[#7AA79C] hover:text-[#29696B] hover:bg-[#DFEFE6]/30"
                     >
                       <ChevronDown className="w-4 h-4 mr-2" />
@@ -1592,13 +1615,13 @@ const ClientsSection: React.FC = () => {
 
             {/* Paginación para la vista de escritorio */}
             {groupedServicesArray.length > itemsPerPage && (
-              <div className="py-4">
+              <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20">
                 <Pagination
-                  totalItems={groupedServicesArray.length}
+                  totalItems={totalItems}
                   itemsPerPage={itemsPerPage}
                   currentPage={currentPage}
                   onPageChange={handlePageChange}
-                  className="px-6"
+                  onItemsPerPageChange={handleItemsPerPageChange}
                 />
               </div>
             )}
@@ -1618,7 +1641,7 @@ const ClientsSection: React.FC = () => {
                       className="ml-1 h-6 w-6 p-0 text-[#7AA79C]"
                       onClick={() => toggleServiceExpansion(servicio)}
                     >
-                      {expandedServices[servicio] ? (
+                      {expandedServiceId === servicio ? (
                         <ChevronUp className="w-3 h-3" />
                       ) : (
                         <ChevronDown className="w-3 h-3" />
@@ -1665,7 +1688,7 @@ const ClientsSection: React.FC = () => {
                   </div>
                 </div>
 
-                {expandedServices[servicio] && (
+                {expandedServiceId === servicio && (
                   <div className="grid grid-cols-1 gap-3">
                     {clientesDelServicio.map(client => (
                       <Card key={client._id} className="overflow-hidden border border-[#91BEAD]/20 shadow-sm">
@@ -1731,12 +1754,12 @@ const ClientsSection: React.FC = () => {
                   </div>
                 )}
 
-                {!expandedServices[servicio] && clientesDelServicio.length > 0 && (
+                {expandedServiceId !== servicio && clientesDelServicio.length > 0 && (
                   <div className="px-1 text-center text-[#7AA79C] text-xs">
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => toggleServiceExpansion(servicio)}
+                      onClick={() => expandService(servicio)}
                       className="text-[#7AA79C] hover:text-[#29696B] hover:bg-[#DFEFE6]/30 text-xs p-2"
                     >
                       <ChevronDown className="w-3 h-3 mr-1" />
@@ -1747,23 +1770,15 @@ const ClientsSection: React.FC = () => {
               </div>
             ))}
 
-            {/* Información de paginación para móvil */}
+            {/* Paginación duplicada al final de la lista para móvil */}
             {groupedServicesArray.length > itemsPerPage && (
-              <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm">
-                <span className="text-[#29696B] font-medium">
-                  Página {currentPage} de {totalPages}
-                </span>
-              </div>
-            )}
-
-            {/* Paginación duplicada al final de la lista para mayor visibilidad */}
-            {groupedServicesArray.length > itemsPerPage && (
-              <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20 mt-2">
+              <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20 mt-4">
                 <Pagination
-                  totalItems={groupedServicesArray.length}
+                  totalItems={totalItems}
                   itemsPerPage={itemsPerPage}
                   currentPage={currentPage}
                   onPageChange={handlePageChange}
+                  onItemsPerPageChange={handleItemsPerPageChange}
                 />
               </div>
             )}

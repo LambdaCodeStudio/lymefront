@@ -1,5 +1,5 @@
-// OrdersSection.tsx - Componente optimizado
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { useNotification } from '@/context/NotificationContext';
 import {
   Plus,
@@ -24,7 +24,10 @@ import {
   Hash,
   Download,
   RefreshCw,
-  Info
+  Info,
+  CheckCircle,
+  XCircle,
+  Clock
 } from 'lucide-react';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -71,7 +74,7 @@ import {
 } from "@/components/ui/table";
 import Pagination from "@/components/ui/pagination";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
-import { refreshInventory, getAuthToken } from '@/utils/inventoryUtils';
+import { getAuthToken } from '@/utils/inventoryUtils';
 
 // ======== TIPOS E INTERFACES ========
 
@@ -122,6 +125,7 @@ interface Order {
   fecha: string;
   productos: OrderProduct[];
   detalle?: string;
+  estado?: 'pendiente' | 'aprobado' | 'rechazado';
 }
 
 interface OrderForm {
@@ -130,27 +134,275 @@ interface OrderForm {
   userId: string;
   productos: OrderProduct[];
   detalle?: string;
+  estado?: 'pendiente' | 'aprobado' | 'rechazado';
 }
 
-// ======== CONFIGURACIÓN ========
+interface FilterParams {
+  search?: string;
+  from?: string;
+  to?: string;
+  supervisor?: string;
+  servicio?: string;
+  estado?: string;
+}
 
-// Tiempo en MS para considerar que el cache necesita actualización
-const CACHE_EXPIRATION = {
-  ORDERS: 60 * 1000, // 1 minuto
-  PRODUCTS: 5 * 60 * 1000, // 5 minutos
-  USERS: 15 * 60 * 1000, // 15 minutos
-  CLIENTS: 15 * 60 * 1000, // 15 minutos
-  USER_DATA: 30 * 60 * 1000, // 30 minutos
+const apiUrl = "http://localhost:4000/api"
+
+// ======== FUNCIONES API ========
+
+// Función para obtener pedidos con filtros
+const fetchOrders = async (filters: FilterParams = {}) => {
+  const token = getAuthToken();
+  if (!token) throw new Error("No hay token de autenticación");
+
+
+  // Construir URL base
+  let url = `${apiUrl}/pedido`;
+
+  // Aplicar filtros de fecha si existen
+  if (filters.from && filters.to) {
+    url = `${apiUrl}/pedido/fecha?fechaInicio=${encodeURIComponent(filters.from)}&fechaFin=${encodeURIComponent(filters.to)}`;
+  }
+
+  // Aplicar filtro por supervisor si existe (esto requeriría endpoint adicional en el backend)
+  if (filters.supervisor && !filters.from && !filters.to) {
+    url = `${apiUrl}/pedido/user/${filters.supervisor}`;
+  }
+
+  // Aplicar filtro por servicio si existe
+  if (filters.servicio && !filters.from && !filters.to && !filters.supervisor) {
+    url = `${apiUrl}/pedido/servicio/${encodeURIComponent(filters.servicio)}`;
+  }
+
+  // Aplicar filtro por estado si existe (requiere endpoint adicional en el backend)
+  if (filters.estado && filters.estado !== 'todos' && !filters.from && !filters.to && !filters.supervisor && !filters.servicio) {
+    url = `${apiUrl}/pedido/estado/${filters.estado}`;
+  }
+
+  const response = await fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Cache-Control': 'no-cache'
+    }
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('userRole');
+      window.location.href = '/login';
+      return [];
+    }
+    throw new Error(`Error al obtener pedidos: ${response.status}`);
+  }
+
+  return await response.json();
 };
 
-// Claves para localStorage
-const STORAGE_KEYS = {
-  ORDERS: 'lyme_orders_cache',
-  PRODUCTS: 'lyme_products_cache',
-  USERS: 'lyme_users_cache',
-  CLIENTS: 'lyme_clients_cache',
-  CURRENT_USER: 'lyme_current_user',
-  LAST_FETCH: 'lyme_last_fetch_',
+// Función para obtener un pedido por ID
+const fetchOrderById = async (id: string) => {
+  const token = getAuthToken();
+  if (!token) throw new Error("No hay token de autenticación");
+
+  const response = await fetch(`${apiUrl}/pedido/${id}`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Cache-Control': 'no-cache'
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Error al obtener pedido: ${response.status}`);
+  }
+
+  return await response.json();
+};
+
+// Función para obtener usuarios (supervisores)
+const fetchSupervisors = async () => {
+  const token = getAuthToken();
+  if (!token) throw new Error("No hay token de autenticación");
+
+  const response = await fetch(`${apiUrl}/auth/supervisors`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Cache-Control': 'no-cache'
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Error al obtener supervisores: ${response.status}`);
+  }
+
+  return await response.json();
+};
+
+// Función para obtener productos
+const fetchProducts = async () => {
+  const token = getAuthToken();
+  if (!token) throw new Error("No hay token de autenticación");
+
+  const response = await fetch(`${apiUrl}/producto`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Cache-Control': 'no-cache'
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Error al obtener productos: ${response.status}`);
+  }
+
+  const responseData = await response.json();
+  return responseData.items || responseData;
+};
+
+// Función para obtener clientes por supervisor
+const fetchClientsBySupervisor = async (supervisorId: string) => {
+  const token = getAuthToken();
+  if (!token) throw new Error("No hay token de autenticación");
+
+  const response = await fetch(`${apiUrl}/cliente/user/${supervisorId}`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Cache-Control': 'no-cache'
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Error al obtener clientes: ${response.status}`);
+  }
+
+  return await response.json();
+};
+
+// Función para crear un pedido
+const createOrder = async (data: any) => {
+  const token = getAuthToken();
+  if (!token) throw new Error("No hay token de autenticación");
+
+  const response = await fetch(`${apiUrl}/pedido`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify(data)
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.mensaje || `Error al crear pedido: ${response.status}`);
+  }
+
+  return await response.json();
+};
+
+// Función para actualizar un pedido
+const updateOrder = async ({ id, data }: { id: string; data: any }) => {
+  const token = getAuthToken();
+  if (!token) throw new Error("No hay token de autenticación");
+
+  const response = await fetch(`${apiUrl}/pedido/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify(data)
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.mensaje || `Error al actualizar pedido: ${response.status}`);
+  }
+
+  return await response.json();
+};
+
+// Función para eliminar un pedido
+const deleteOrder = async (id: string) => {
+  const token = getAuthToken();
+  if (!token) throw new Error("No hay token de autenticación");
+
+  const response = await fetch(`${apiUrl}/pedido/${id}`, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.mensaje || `Error al eliminar pedido: ${response.status}`);
+  }
+
+  return await response.json();
+};
+
+// Función para obtener usuario actual
+const fetchCurrentUser = async () => {
+  const token = getAuthToken();
+  if (!token) throw new Error("No hay token de autenticación");
+
+  const response = await fetch(`${apiUrl}/auth/me`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Cache-Control': 'no-cache'
+    }
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('userRole');
+      window.location.href = '/login';
+      return null;
+    }
+    throw new Error(`Error al obtener datos del usuario: ${response.status}`);
+  }
+
+  return await response.json();
+};
+
+// Función para cambiar estado del pedido
+const updateOrderStatus = async ({ id, status }: { id: string; status: string }) => {
+  const token = getAuthToken();
+  if (!token) throw new Error("No hay token de autenticación");
+
+  // Obtener primero el pedido actual
+  const orderResponse = await fetch(`${apiUrl}/pedido/${id}`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Cache-Control': 'no-cache'
+    }
+  });
+
+  if (!orderResponse.ok) {
+    throw new Error(`Error al obtener pedido: ${orderResponse.status}`);
+  }
+
+  const order = await orderResponse.json();
+  
+  // Actualizar solo el campo estado
+  const updateResponse = await fetch(`${apiUrl}/pedido/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      ...order,
+      estado: status
+    })
+  });
+
+  if (!updateResponse.ok) {
+    const errorData = await updateResponse.json();
+    throw new Error(errorData.mensaje || `Error al actualizar estado: ${updateResponse.status}`);
+  }
+
+  return await updateResponse.json();
 };
 
 // ======== COMPONENTES AUXILIARES ========
@@ -178,16 +430,6 @@ const OrdersSkeleton = ({ count = 3 }) => (
     ))}
   </div>
 );
-
-//Limpiar cache
-const clearClientCache = () => {
-  // Limpiar cache de clientes al cambiar entre supervisores
-  Object.keys(localStorage).forEach(key => {
-    if (key.startsWith(STORAGE_KEYS.CLIENTS)) {
-      localStorage.removeItem(key);
-    }
-  });
-};
 
 // Componente para detalles de un producto en un pedido
 const ProductDetail = React.memo(({
@@ -549,570 +791,241 @@ const OrderTotal = React.memo(({
   return <span>${total.toFixed(2)}</span>;
 });
 
+// Componente para mostrar el estado del pedido
+const OrderStatusBadge = ({ status, onStatusChange, orderId }) => {
+  const { addNotification } = useNotification();
+  const queryClient = useQueryClient();
+  
+  // Mutación para actualizar estado
+  const statusMutation = useMutation(
+    updateOrderStatus,
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['orders']);
+        addNotification("Estado actualizado correctamente", "success");
+      },
+      onError: (error) => {
+        addNotification(`Error al actualizar estado: ${error.message}`, "error");
+      }
+    }
+  );
+
+  // Definir colores y etiquetas según el estado
+  const getStatusConfig = (status) => {
+    switch(status) {
+      case 'aprobado':
+        return {
+          color: 'bg-green-100 text-green-800 border-green-300',
+          icon: <CheckCircle className="w-3.5 h-3.5 mr-1" />,
+          label: 'Aprobado'
+        };
+      case 'rechazado':
+        return {
+          color: 'bg-red-100 text-red-800 border-red-300',
+          icon: <XCircle className="w-3.5 h-3.5 mr-1" />,
+          label: 'Rechazado'
+        };
+      default:
+        return {
+          color: 'bg-yellow-100 text-yellow-800 border-yellow-300',
+          icon: <Clock className="w-3.5 h-3.5 mr-1" />,
+          label: 'Pendiente'
+        };
+    }
+  };
+
+  const { color, icon, label } = getStatusConfig(status || 'pendiente');
+
+  return (
+    <div className="inline-block relative group">
+      <Badge
+        className={`${color} border px-2 py-1 text-xs font-medium flex items-center`}
+      >
+        {icon}
+        {label}
+      </Badge>
+    </div>
+  );
+};
+
 // ======== COMPONENTE PRINCIPAL ========
 
 const OrdersSection = () => {
+  const apiUrl = 'http://localhost:4000/api';
   const { addNotification } = useNotification();
-  const apiUrl = 'http://179.43.118.101:4000/api'
+  const queryClient = useQueryClient();
 
-  // ======== ESTADOS ========
-
-  // Estado de carga
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [loadingActionId, setLoadingActionId] = useState<string | null>(null);
-
-  // Datos principales
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [isAdminOrSuperSupervisor, setIsAdminOrSuperSupervisor] = useState(false);
-  const [supervisors, setSupervisors] = useState<User[]>([]);
-  const [selectedSupervisor, setSelectedSupervisor] = useState<string | null>(null);
-  const [supervisorSelectOpen, setSupervisorSelectOpen] = useState(false);
-  const [isFetchingSupervisors, setIsFetchingSupervisors] = useState(false);
-
-  // Mapas para acceso rápido (como índices)
-  const [productsMap, setProductsMap] = useState<Record<string, Product>>({});
-  const [usersMap, setUsersMap] = useState<Record<string, User>>({});
-  const [clientSections, setClientSections] = useState<Record<string, Client[]>>({});
-
-  // Estados de UI
+  // Estado para filtros
   const [searchTerm, setSearchTerm] = useState('');
   const [dateFilter, setDateFilter] = useState({ from: '', to: '' });
+  const [statusFilter, setStatusFilter] = useState('todos');
+  const [supervisorFilter, setSupervisorFilter] = useState('');
+  const [serviceFilter, setServiceFilter] = useState('');
+
+  // Estado UI 
   const [currentPage, setCurrentPage] = useState(1);
-  const [orderDetailsOpen, setOrderDetailsOpen] = useState<Record<string, boolean>>({});
+  const [orderDetailsOpen, setOrderDetailsOpen] = useState({});
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
-  // Estados de modales
+  // Estado modales
   const [createOrderModalOpen, setCreateOrderModalOpen] = useState(false);
   const [selectProductModalOpen, setSelectProductModalOpen] = useState(false);
   const [selectSectionModalOpen, setSelectSectionModalOpen] = useState(false);
   const [deleteConfirmModalOpen, setDeleteConfirmModalOpen] = useState(false);
-  const [orderToDelete, setOrderToDelete] = useState<string | null>(null);
+  const [orderToDelete, setOrderToDelete] = useState(null);
+  const [supervisorSelectOpen, setSupervisorSelectOpen] = useState(false);
 
-  // Estados de formulario para crear/editar pedidos
-  const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
-  const [orderForm, setOrderForm] = useState<OrderForm>({
+  // Estado de formulario
+  const [currentOrderId, setCurrentOrderId] = useState(null);
+  const [orderForm, setOrderForm] = useState({
     servicio: '',
     seccionDelServicio: '',
     userId: '',
     productos: [],
-    detalle: ''
+    detalle: '',
+    estado: 'pendiente'
   });
   const [selectedProduct, setSelectedProduct] = useState('');
   const [productQuantity, setProductQuantity] = useState(1);
-
-  // Estado de error/éxito
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState('');
+  const [selectedSupervisor, setSelectedSupervisor] = useState(null);
 
   // Referencias
-  const initialLoadComplete = useRef(false);
-  const mountedRef = useRef(true);
-  const lastFetchTimestamps = useRef<Record<string, number>>({});
-  const mobileListRef = useRef<HTMLDivElement>(null);
-  const productLoadQueue = useRef<Set<string>>(new Set());
+  const mobileListRef = useRef(null);
+  const productLoadQueue = useRef(new Set());
   const isProcessingQueue = useRef(false);
 
-  // Configuración de items por página según tamaño de pantalla
-  const itemsPerPage = useMemo(() => {
-    if (windowWidth < 640) return 4; // Móvil
-    if (windowWidth < 1024) return 8; // Tablet
-    return 12; // Desktop
-  }, [windowWidth]);
+  // ======== REACT QUERY HOOKS ========
 
-  // ======== CACHÉ Y PERSISTENCIA ========
-
-  // Verificar si el caché ha expirado
-  const isCacheExpired = useCallback((key: string, expirationTime: number) => {
-    const lastFetch = lastFetchTimestamps.current[key] || 0;
-    return Date.now() - lastFetch > expirationTime;
-  }, []);
-
-  // Guardar datos en localStorage con manejo de errores
-  const saveToLocalStorage = useCallback((key: string, data: any) => {
-    try {
-      localStorage.setItem(key, JSON.stringify({
-        data,
-        timestamp: Date.now()
-      }));
-      lastFetchTimestamps.current[key] = Date.now();
-      return true;
-    } catch (error) {
-      console.warn(`Error almacenando datos en localStorage (${key}):`, error);
-      return false;
+  // Cargar usuario actual
+  const { 
+    data: currentUser,
+    isLoading: isLoadingUser
+  } = useQuery('currentUser', fetchCurrentUser, {
+    refetchOnWindowFocus: false,
+    onSuccess: (data) => {
+      // Si es admin o supervisor de supervisores, cargar la lista de supervisores
+      if (data?.role === 'admin' || data?.role === 'supervisor_de_supervisores') {
+        queryClient.prefetchQuery('supervisors', fetchSupervisors);
+      }
+      
+      // Actualizar ID de usuario en formulario si no hay supervisor seleccionado
+      if (!selectedSupervisor) {
+        setOrderForm(prev => ({
+          ...prev,
+          userId: data?._id || ''
+        }));
+      }
     }
-  }, []);
+  });
 
-  // Cargar datos de localStorage con manejo de errores
-  const loadFromLocalStorage = useCallback((key: string) => {
-    try {
-      const stored = localStorage.getItem(key);
-      if (!stored) return null;
+  // Determinar si el usuario actual es admin o supervisor de supervisores
+  const isAdminOrSuperSupervisor = currentUser?.role === 'admin' || currentUser?.role === 'supervisor_de_supervisores';
 
-      const { data, timestamp } = JSON.parse(stored);
-      lastFetchTimestamps.current[key] = timestamp;
-      return data;
-    } catch (error) {
-      console.warn(`Error cargando datos de localStorage (${key}):`, error);
-      return null;
-    }
-  }, []);
-
-
-  const groupClientsByService = (clientsData: any): Record<string, Client[]> => {
-    // Verificar que clientsData sea un array
-    if (!Array.isArray(clientsData)) return {};
-
-    return clientsData.reduce((map: Record<string, Client[]>, client: Client) => {
-      if (client && client.servicio) {
-        if (!map[client.servicio]) {
-          map[client.servicio] = [];
-        }
-        map[client.servicio].push(client);
-      }
-      return map;
-    }, {});
-  };
-
-  // ======== CARGA DE DATOS ========
-
-  //Supervisores
-  const fetchSupervisors = async () => {
-    try {
-
-      if (supervisors.length > 0 && !forceRefresh) {
-        console.log("Usando supervisores en caché");
-        return supervisors;
-      }
-      
-      setIsFetchingSupervisors(true);
-      
-      const token = getAuthToken();
-      if (!token) throw new Error("No hay token de autenticación");
-      
-      console.log(`Obteniendo supervisores desde: ${apiUrl}/auth/supervisors`);
-      
-      const response = await fetch(`${apiUrl}/auth/supervisors`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Error al obtener supervisores: ${response.status}`);
-      }
-      
-      const supervisorsData = await response.json();
-      
-      if (!mountedRef.current) return;
-
-      if (Array.isArray(supervisorsData)) {
-        setSupervisors(supervisorsData);
-      } else {
-        console.warn("Formato incorrecto en respuesta de supervisores:", supervisorsData);
-        setSupervisors([]);
-      }
-    } catch (error) {
-      console.error("Error obteniendo supervisores:", error);
-      addNotification && addNotification("No se pudieron cargar los supervisores", "error");
-      setSupervisors([]);
-    } finally {
-      setIsFetchingSupervisors(false);
-    }
-  };
-
-  // Cargar información del usuario actual
-  const fetchUserData = async (forceRefresh = false) => {
-    // Verificar si ya tenemos datos en caché y no ha expirado
-    if (currentUser && !forceRefresh && !isCacheExpired(STORAGE_KEYS.CURRENT_USER, CACHE_EXPIRATION.USER_DATA)) {
-      return currentUser;
-    }
-
-    try {
-      const token = getAuthToken();
-      if (!token) throw new Error("No hay token de autenticación");
-
-      const response = await fetch(`${apiUrl}/auth/me`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!response.ok) {
-        // Si es error de autenticación, redirigir a login
-        if (response.status === 401) {
-          localStorage.removeItem('token');
-          localStorage.removeItem('userRole');
-          window.location.href = '/login';
-          return null;
-        }
-
-        throw new Error(`Error al obtener datos del usuario: ${response.status}`);
-      }
-
-      const userData = await response.json();
-
-      if (userData) {
-        // Verificar si es admin o supervisor de supervisores
-        const isAdmin = userData.role === 'admin';
-        const isSuperSupervisor = userData.role === 'supervisor_de_supervisores';
-        setIsAdminOrSuperSupervisor(isAdmin || isSuperSupervisor);
-
-        // Si es admin o supervisor de supervisores, cargar la lista de supervisores
-        if (isAdmin || isSuperSupervisor) {
-          fetchSupervisors();
-        }
-      }
-
-      if (!mountedRef.current) return null;
-
-      // Actualizar estado
-      setCurrentUser(userData);
-
-      // Actualizar caché
-      saveToLocalStorage(STORAGE_KEYS.CURRENT_USER, userData);
-
-      // Actualizar ID de usuario en formulario
-      setOrderForm(prev => ({
-        ...prev,
-        userId: userData._id || ''
-      }));
-
-      // Cargar clientes del usuario
-      if (userData._id) {
-        await fetchClients(userData._id);
-      }
-
-      return userData;
-    } catch (error) {
-      console.error("Error cargando datos del usuario:", error);
-      setError("Error al cargar la información del usuario");
-
-      if (addNotification) {
-        addNotification("No se pudo cargar la información del usuario", "error");
-      }
-
-      return null;
-    }
-  };
+  // Cargar supervisores
+  const { 
+    data: supervisors = [],
+    isLoading: isLoadingSupervisors
+  } = useQuery('supervisors', fetchSupervisors, {
+    enabled: isAdminOrSuperSupervisor,
+    refetchOnWindowFocus: false
+  });
 
   // Cargar pedidos
-  const fetchOrders = async (forceRefresh = false) => {
-    // Verificar si ya tenemos datos en caché y no ha expirado
-    if (orders.length > 0 && !forceRefresh && !isCacheExpired(STORAGE_KEYS.ORDERS, CACHE_EXPIRATION.ORDERS)) {
-      return orders;
-    }
-
-    try {
-      setIsRefreshing(true);
-
-      const token = getAuthToken();
-      if (!token) throw new Error("No hay token de autenticación");
-
-      // Determinar URL según filtros de fecha
-      let url = `${apiUrl}/pedido`;
-
-      if (dateFilter.from && dateFilter.to) {
-        url = `${apiUrl}/pedido/fecha?fechaInicio=${encodeURIComponent(dateFilter.from)}&fechaFin=${encodeURIComponent(dateFilter.to)}`;
-      }
-
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Cache-Control': 'no-cache'
-        }
-      });
-
-      if (!response.ok) {
-        // Si es error de autenticación, redirigir a login
-        if (response.status === 401) {
-          localStorage.removeItem('token');
-          localStorage.removeItem('userRole');
-          window.location.href = '/login';
-          return [];
-        }
-
-        throw new Error(`Error al obtener pedidos: ${response.status}`);
-      }
-
-      const ordersData = await response.json();
-
-      if (!mountedRef.current) return [];
-
-      // Verificar que los datos sean un array
-      const validOrdersData = Array.isArray(ordersData) ? ordersData : [];
-
-      // Actualizar estado
-      setOrders(validOrdersData);
-
-      // Actualizar caché
-      saveToLocalStorage(STORAGE_KEYS.ORDERS, validOrdersData);
-
-      // Volver a la primera página cuando se cargan nuevos datos
-      setCurrentPage(1);
-
-      // Cargar productos incluidos en los pedidos
-      if (validOrdersData.length > 0) {
-        prefetchProductsFromOrders(validOrdersData);
-      }
-
-      return validOrdersData;
-    } catch (error) {
-      console.error("Error cargando pedidos:", error);
-      setError("Error al cargar los pedidos");
-
-      if (addNotification) {
-        addNotification("No se pudieron cargar los pedidos", "error");
-      }
-
-      return [];
-    } finally {
-      if (mountedRef.current) {
-        setIsRefreshing(false);
+  const {
+    data: orders = [],
+    isLoading: isLoadingOrders,
+    isRefetching: isRefreshingOrders,
+    refetch: refetchOrders
+  } = useQuery(
+    ['orders', dateFilter, statusFilter, supervisorFilter, serviceFilter],
+    () => fetchOrders({
+      from: dateFilter.from,
+      to: dateFilter.to,
+      estado: statusFilter !== 'todos' ? statusFilter : undefined,
+      supervisor: supervisorFilter || undefined,
+      servicio: serviceFilter || undefined
+    }),
+    {
+      refetchOnWindowFocus: false,
+      onError: (error) => {
+        addNotification(`Error al cargar pedidos: ${error.message}`, "error");
       }
     }
-  };
+  );
 
   // Cargar productos
-  const fetchProducts = async (forceRefresh = false) => {
-    // Verificar si ya tenemos datos en caché y no ha expirado
-    if (products.length > 0 && !forceRefresh && !isCacheExpired(STORAGE_KEYS.PRODUCTS, CACHE_EXPIRATION.PRODUCTS)) {
-      return products;
+  const {
+    data: products = [],
+    isLoading: isLoadingProducts
+  } = useQuery('products', fetchProducts, {
+    refetchOnWindowFocus: false,
+    onError: (error) => {
+      addNotification(`Error al cargar productos: ${error.message}`, "warning");
     }
+  });
 
+  // Cargar clientes por supervisor
+  const {
+    data: clients = [],
+    isLoading: isLoadingClients
+  } = useQuery(
+    ['clients', selectedSupervisor || currentUser?._id],
+    () => fetchClientsBySupervisor(selectedSupervisor || currentUser?._id),
+    {
+      enabled: !!selectedSupervisor || !!currentUser?._id,
+      refetchOnWindowFocus: false,
+      onError: (error) => {
+        addNotification(`Error al cargar clientes: ${error.message}`, "warning");
+      }
+    }
+  );
+
+  // Mutaciones para CRUD
+  const createOrderMutation = useMutation(createOrder, {
+    onSuccess: () => {
+      queryClient.invalidateQueries(['orders']);
+      resetOrderForm();
+      setCreateOrderModalOpen(false);
+      addNotification("Pedido creado correctamente", "success");
+    },
+    onError: (error) => {
+      addNotification(`Error al crear pedido: ${error.message}`, "error");
+    }
+  });
+
+  const updateOrderMutation = useMutation(
+    ({ id, data }) => updateOrder({ id, data }),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['orders']);
+        resetOrderForm();
+        setCreateOrderModalOpen(false);
+        addNotification("Pedido actualizado correctamente", "success");
+      },
+      onError: (error) => {
+        addNotification(`Error al actualizar pedido: ${error.message}`, "error");
+      }
+    }
+  );
+
+  const deleteOrderMutation = useMutation(deleteOrder, {
+    onSuccess: () => {
+      queryClient.invalidateQueries(['orders']);
+      setOrderToDelete(null);
+      setDeleteConfirmModalOpen(false);
+      addNotification("Pedido eliminado correctamente", "success");
+    },
+    onError: (error) => {
+      addNotification(`Error al eliminar pedido: ${error.message}`, "error");
+    }
+  });
+
+  // ======== EFECTOS ========
+
+  // Efecto para cargar producto concreto
+  const fetchProductById = useCallback(async (productId) => {
     try {
-      const token = getAuthToken();
-      if (!token) throw new Error("No hay token de autenticación");
-
-      const response = await fetch(`${apiUrl}/producto`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Cache-Control': 'no-cache'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error al obtener productos: ${response.status}`);
-      }
-
-      const responseData = await response.json();
-
-      // Determinar formato de respuesta (array o paginado)
-      let productsData: Product[] = [];
-
-      if (Array.isArray(responseData)) {
-        productsData = responseData;
-      } else if (responseData && Array.isArray(responseData.items)) {
-        productsData = responseData.items;
-      } else {
-        console.warn("Formato de respuesta de productos no reconocido:", responseData);
-      }
-
-      if (!mountedRef.current) return products;
-
-      // Actualizar estado
-      setProducts(productsData);
-
-      // Crear mapa para acceso rápido
-      const newProductsMap: Record<string, Product> = {};
-      productsData.forEach(product => {
-        if (product && product._id) {
-          newProductsMap[product._id] = product;
-        }
-      });
-      setProductsMap(newProductsMap);
-
-      // Actualizar caché
-      saveToLocalStorage(STORAGE_KEYS.PRODUCTS, productsData);
-
-      return productsData;
-    } catch (error) {
-      console.error("Error cargando productos:", error);
-
-      if (addNotification) {
-        addNotification("No se pudieron cargar los productos", "warning");
-      }
-
-      return products;
-    }
-  };
-
-  // Cargar usuarios
-  const fetchUsers = async (forceRefresh = false) => {
-    // Verificar si ya tenemos datos en caché y no ha expirado
-    if (users.length > 0 && !forceRefresh && !isCacheExpired(STORAGE_KEYS.USERS, CACHE_EXPIRATION.USERS)) {
-      return users;
-    }
-
-    try {
-      const token = getAuthToken();
-      if (!token) throw new Error("No hay token de autenticación");
-
-      const response = await fetch(`${apiUrl}/auth/users`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Cache-Control': 'no-cache'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error al obtener usuarios: ${response.status}`);
-      }
-
-      const usersData = await response.json();
-
-      // Verificar que la respuesta sea un array
-      if (!Array.isArray(usersData)) {
-        console.warn("La respuesta de usuarios no es un array:", usersData);
-        return users;
-      }
-
-      if (!mountedRef.current) return users;
-
-      // Actualizar estado
-      setUsers(usersData);
-
-      // Crear mapa para acceso rápido
-      const newUsersMap: Record<string, User> = {};
-      usersData.forEach(user => {
-        if (user && user._id) {
-          newUsersMap[user._id] = user;
-        }
-      });
-      setUsersMap(newUsersMap);
-
-      // Actualizar caché
-      saveToLocalStorage(STORAGE_KEYS.USERS, usersData);
-
-      return usersData;
-    } catch (error) {
-      console.error("Error cargando usuarios:", error);
-
-      if (addNotification) {
-        addNotification("No se pudieron cargar los usuarios", "warning");
-      }
-
-      return users;
-    }
-  };
-
-  // Cargar clientes de un usuario
-  const fetchClients = async (userId: string, forceRefresh = false) => {
-    // Verificar si es el mismo usuario actual o un supervisor seleccionado
-    const isSupervisorSelected = isAdminOrSuperSupervisor && selectedSupervisor === userId;
-
-    // Clave de caché personalizada para este usuario
-    const clientCacheKey = `${STORAGE_KEYS.CLIENTS}_${userId}`;
-
-    // Verificar si tenemos datos en caché y no ha expirado
-    if (!isSupervisorSelected && clients.length > 0 && !forceRefresh && !isCacheExpired(clientCacheKey, CACHE_EXPIRATION.CLIENTS)) {
-      return clients;
-    }
-
-    try {
-      // Mostrar indicador de carga si es un supervisor
-      if (isSupervisorSelected) {
-        setIsLoading(true);
-      }
-
-      const token = getAuthToken();
-      if (!token) throw new Error("No hay token de autenticación");
-
-      // Log para depuración
-      console.log(`Obteniendo clientes para el usuario ${userId} desde: ${apiUrl}/cliente/user/${userId}`);
-
-      const response = await fetch(`${apiUrl}/cliente/user/${userId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Cache-Control': 'no-cache'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error al obtener clientes: ${response.status}`);
-      }
-
-      const clientsData = await response.json();
-
-      // Verificar que la respuesta sea un array
-      if (!Array.isArray(clientsData)) {
-        console.warn("La respuesta de clientes no es un array:", clientsData);
-        return isSupervisorSelected ? [] : clients;
-      }
-
-      if (!mountedRef.current) return isSupervisorSelected ? [] : clients;
-
-      // NUEVO: Extraer información del supervisor de los clientes si es posible
-      if (isSupervisorSelected && clientsData.length > 0 && clientsData[0].userId) {
-        // El campo userId podría ser un objeto con la información del usuario
-        const supervisorData = clientsData[0].userId;
-        if (typeof supervisorData === 'object' && supervisorData !== null) {
-          console.log("Datos del supervisor extraídos:", supervisorData);
-
-          // Actualizar la lista de supervisores con esta información
-          setSupervisors(prev =>
-            prev.map(s =>
-              s._id === userId
-                ? { ...s, ...supervisorData }
-                : s
-            )
-          );
-        }
-      }
-
-      // Actualizar estado
-      if (isSupervisorSelected) {
-        setClients(clientsData);
-
-        // Agrupar por servicio
-        const sections = {};
-        clientsData.forEach(client => {
-          if (client && client.servicio) {
-            if (!sections[client.servicio]) {
-              sections[client.servicio] = [];
-            }
-            sections[client.servicio].push(client);
-          }
-        });
-        setClientSections(sections);
-      } else {
-        setClients(clientsData);
-        setClientSections(groupClientsByService(clientsData));
-        saveToLocalStorage(clientCacheKey, clientsData);
-      }
-
-      return clientsData;
-    } catch (error) {
-      console.error(`Error cargando clientes para el usuario ${userId}:`, error);
-      if (addNotification) {
-        addNotification("No se pudieron cargar los clientes", "warning");
-      }
-      return isSupervisorSelected ? [] : clients;
-    } finally {
-      if (isSupervisorSelected && mountedRef.current) {
-        setIsLoading(false);
-      }
-    }
-  };
-
-  // Cargar un producto específico
-  const fetchProductById = async (productId: string): Promise<Product | null> => {
-    // Verificar si ya tenemos el producto en caché
-    if (productsMap[productId]) {
-      return productsMap[productId];
-    }
-
-    try {
-      // Verificar si el ID es válido
-      if (!productId) {
-        console.error("ID de producto no válido");
-        return null;
-      }
-
       const token = getAuthToken();
       if (!token) throw new Error("No hay token de autenticación");
 
@@ -1128,363 +1041,285 @@ const OrdersSection = () => {
       }
 
       const product = await response.json();
+      
+      // Actualizar el mapa de productos
+      queryClient.setQueryData('products', (oldData) => {
+        const newProducts = [...(oldData || [])];
+        const existingIndex = newProducts.findIndex(p => p._id === productId);
+        
+        if (existingIndex >= 0) {
+          newProducts[existingIndex] = product;
+        } else {
+          newProducts.push(product);
+        }
+        
+        return newProducts;
+      });
 
-      if (!mountedRef.current) return null;
-
-      if (product && product._id) {
-        // Actualizar mapa de productos
-        setProductsMap(prev => {
-          const updated = { ...prev };
-          updated[productId] = product;
-          return updated;
-        });
-
-        return product;
-      }
-
-      return null;
+      return product;
     } catch (error) {
       console.error(`Error cargando producto ${productId}:`, error);
       return null;
     }
-  };
+  }, [apiUrl, queryClient]);
 
-  // ======== FUNCIONES DE NEGOCIO ========
+  // Procesar cola de productos
+  const processProductQueue = useCallback(async () => {
+    if (isProcessingQueue.current || productLoadQueue.current.size === 0) {
+      return;
+    }
+
+    isProcessingQueue.current = true;
+
+    try {
+      const batchSize = 5;
+      const productIds = Array.from(productLoadQueue.current);
+      productLoadQueue.current.clear();
+
+      // Obtener productos actuales del queryClient
+      const currentProducts = queryClient.getQueryData('products') || [];
+      const productsMap = {};
+      currentProducts.forEach(p => {
+        if (p && p._id) {
+          productsMap[p._id] = p;
+        }
+      });
+
+      // Procesar en lotes
+      for (let i = 0; i < productIds.length; i += batchSize) {
+        const batch = productIds.slice(i, i + batchSize);
+        const filteredBatch = batch.filter(id => !productsMap[id]);
+
+        if (filteredBatch.length === 0) continue;
+
+        // Cargar productos en paralelo
+        const productsPromises = filteredBatch.map(id => fetchProductById(id));
+        await Promise.all(productsPromises);
+      }
+    } catch (error) {
+      console.error("Error procesando cola de productos:", error);
+    } finally {
+      isProcessingQueue.current = false;
+
+      // Si quedan productos en la cola, procesarlos
+      if (productLoadQueue.current.size > 0) {
+        setTimeout(processProductQueue, 100);
+      }
+    }
+  }, [fetchProductById, queryClient]);
+
+  // Precarga de productos
+  const prefetchProductsFromOrders = useCallback((ordersData) => {
+    if (!Array.isArray(ordersData) || ordersData.length === 0) return;
+
+    // Obtener productos actuales
+    const currentProducts = queryClient.getQueryData('products') || [];
+    const productsMap = {};
+    currentProducts.forEach(p => {
+      if (p && p._id) {
+        productsMap[p._id] = p;
+      }
+    });
+
+    // Limitar a los primeros 20 pedidos para no sobrecargar
+    const ordersToProcess = ordersData.slice(0, 20);
+
+    ordersToProcess.forEach(order => {
+      if (Array.isArray(order.productos)) {
+        order.productos.forEach(item => {
+          const productId = typeof item.productoId === 'object' && item.productoId
+            ? item.productoId._id
+            : (typeof item.productoId === 'string' ? item.productoId : '');
+
+          if (productId && !productsMap[productId]) {
+            productLoadQueue.current.add(productId);
+          }
+        });
+      }
+    });
+
+    if (productLoadQueue.current.size > 0) {
+      processProductQueue();
+    }
+  }, [queryClient, processProductQueue]);
+
+  // Efecto para detectar cambios de tamaño de ventana
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth);
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }
+  }, []);
+
+  // Efecto para cargar productos de pedidos cuando se montan
+  useEffect(() => {
+    if (orders && orders.length > 0) {
+      prefetchProductsFromOrders(orders);
+    }
+  }, [orders, prefetchProductsFromOrders]);
+
+  // ======== FUNCIONES DE MANEJO ========
+
+  // Obtener información de usuario
+  const getUserInfo = useCallback((userId) => {
+    // Si es un objeto con usuario y nombre
+    if (typeof userId === 'object' && userId) {
+      return {
+        usuario: userId.usuario || "Usuario no disponible",
+        name: userId.usuario || (userId.nombre
+          ? `${userId.nombre} ${userId.apellido || ''}`
+          : "Usuario no disponible")
+      };
+    }
+    
+    // Si es un string (ID), buscar en supervisores
+    if (typeof userId === 'string') {
+      // Buscar en supervisores
+      const supervisorMatch = supervisors.find(s => s._id === userId);
+      if (supervisorMatch) {
+        return {
+          usuario: supervisorMatch.usuario || "Supervisor",
+          name: supervisorMatch.usuario || (supervisorMatch.nombre
+            ? `${supervisorMatch.nombre} ${supervisorMatch.apellido || ''}`
+            : "Supervisor")
+        };
+      }
+      
+      // Si es el usuario actual
+      if (currentUser && currentUser._id === userId) {
+        return {
+          usuario: currentUser.usuario || "Usuario actual",
+          name: currentUser.usuario || (currentUser.nombre
+            ? `${currentUser.nombre} ${currentUser.apellido || ''}`
+            : "Usuario actual")
+        };
+      }
+    }
+    
+    // Si no se encuentra información
+    return { usuario: "Usuario no disponible", name: "Usuario no disponible" };
+  }, [supervisors, currentUser]);
 
   // Crear un nuevo pedido
   const handleCreateOrder = async () => {
     // Validaciones
     if (!orderForm.servicio) {
-      setError("Debe seleccionar un cliente");
-      addNotification && addNotification("Debe seleccionar un cliente", "warning");
+      addNotification("Debe seleccionar un cliente", "warning");
       return;
     }
 
     if (!orderForm.productos || orderForm.productos.length === 0) {
-      setError("Debe agregar al menos un producto");
-      addNotification && addNotification("Debe agregar al menos un producto", "warning");
+      addNotification("Debe agregar al menos un producto", "warning");
       return;
     }
 
     // Validar que haya un usuario asignado (supervisor seleccionado o usuario actual)
     if (!orderForm.userId) {
-      setError("No hay usuario asignado para el pedido");
-      addNotification && addNotification("Error: No hay usuario asignado", "error");
+      addNotification("Error: No hay usuario asignado", "error");
       return;
     }
 
-    let supervisorInfo = null;
-    if (isAdminOrSuperSupervisor && selectedSupervisor) {
-      supervisorInfo = supervisors.find(s => s._id === selectedSupervisor);
-      
-      // AÑADIR: Registrar el supervisor en el mapa de usuarios si no existe
-      if (supervisorInfo && !usersMap[selectedSupervisor]) {
-        setUsersMap(prev => ({
-          ...prev,
-          [selectedSupervisor]: supervisorInfo
-        }));
-      }
-    }
+    // Preparar datos del pedido
+    const orderData = {
+      userId: orderForm.userId,
+      servicio: orderForm.servicio,
+      seccionDelServicio: orderForm.seccionDelServicio || "",
+      detalle: orderForm.detalle || " ",
+      productos: orderForm.productos.map(p => ({
+        productoId: typeof p.productoId === 'object' && p.productoId ? p.productoId._id : p.productoId,
+        cantidad: p.cantidad
+      })),
+      estado: orderForm.estado || 'pendiente'
+    };
 
-    setLoadingActionId("create-order");
-    setError(null);
-
-    try {
-      const token = getAuthToken();
-      if (!token) throw new Error("No hay token de autenticación");
-
-      // Obtener información del supervisor si está seleccionado
-      let supervisorInfo = null;
-      if (isAdminOrSuperSupervisor && selectedSupervisor) {
-        supervisorInfo = supervisors.find(s => s._id === selectedSupervisor);
-      }
-
-      // Preparar datos del pedido
-      const orderData = {
-        // Si es admin y hay supervisor seleccionado, usar el userId del supervisor
-        userId: orderForm.userId,
-        servicio: orderForm.servicio,
-        seccionDelServicio: orderForm.seccionDelServicio || "",
-        detalle: orderForm.detalle || " ",
-        productos: orderForm.productos.map(p => ({
-          productoId: typeof p.productoId === 'object' && p.productoId ? p.productoId._id : p.productoId,
-          cantidad: p.cantidad
-        }))
-      };
-
-      // Log para depuración
-      console.log("Creando pedido con datos:", orderData);
-      if (supervisorInfo) {
-        console.log("Supervisor seleccionado:", {
-          id: supervisorInfo._id,
-          usuario: supervisorInfo.usuario,
-          nombre: supervisorInfo.nombre,
-          apellido: supervisorInfo.apellido
-        });
-      }
-
-      const response = await fetch(`${apiUrl}/pedido`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(orderData)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.mensaje || `Error al crear pedido: ${response.status}`);
-      }
-
-      // Recargar pedidos y productos
-      await Promise.all([
-        fetchOrders(true),
-        fetchProducts(true),
-        fetchUsers(true) // Añadir esta línea
-      ]);
-      
-      // Notificar cambio de inventario
-      try {
-        await refreshInventory();
-      } catch (error) {
-        console.error("Error al refrescar inventario:", error);
-      }
-
-      // Resetear formulario y cerrar modal
-      resetOrderForm();
-      setCreateOrderModalOpen(false);
-
-      // Si es admin, también limpiar el supervisor seleccionado
-      if (isAdminOrSuperSupervisor) {
-        setSelectedSupervisor(null);
-      }
-
-      // Mostrar mensaje de éxito
-      setSuccessMessage("Pedido creado correctamente");
-      addNotification && addNotification("Pedido creado correctamente", "success");
-
-      // Limpiar mensaje después de 3 segundos
-      setTimeout(() => setSuccessMessage(""), 3000);
-    } catch (error) {
-      console.error("Error creando pedido:", error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      setError(`Error al crear pedido: ${errorMessage}`);
-      addNotification && addNotification(`Error al crear pedido: ${errorMessage}`, "error");
-    } finally {
-      setLoadingActionId(null);
-    }
+    // Crear pedido con mutación
+    createOrderMutation.mutate(orderData);
   };
 
   // Actualizar un pedido existente
   const handleUpdateOrder = async () => {
     if (!currentOrderId) {
-      setError("No se ha seleccionado un pedido para actualizar");
+      addNotification("No se ha seleccionado un pedido para actualizar", "error");
       return;
     }
 
-    setLoadingActionId("update-order");
-    setError(null);
+    // Preparar datos de actualización
+    const updateData = {
+      userId: orderForm.userId, // Ahora incluimos el userId para poder cambiar supervisor
+      servicio: orderForm.servicio,
+      seccionDelServicio: orderForm.seccionDelServicio || "",
+      detalle: orderForm.detalle || " ",
+      productos: orderForm.productos.map(p => ({
+        productoId: typeof p.productoId === 'object' && p.productoId ? p.productoId._id : p.productoId,
+        cantidad: p.cantidad
+      })),
+      estado: orderForm.estado || 'pendiente'
+    };
 
-    try {
-      const token = getAuthToken();
-      if (!token) throw new Error("No hay token de autenticación");
-
-      // Preparar datos de actualización
-      const updateData = {
-        servicio: orderForm.servicio,
-        seccionDelServicio: orderForm.seccionDelServicio || "",
-        detalle: orderForm.detalle || " ",
-        productos: orderForm.productos.map(p => ({
-          productoId: typeof p.productoId === 'object' && p.productoId ? p.productoId._id : p.productoId,
-          cantidad: p.cantidad
-        }))
-      };
-
-      const response = await fetch(`${apiUrl}/pedido/${currentOrderId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(updateData)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.mensaje || `Error al actualizar pedido: ${response.status}`);
-      }
-
-      // Recargar pedidos y productos
-      await Promise.all([
-        fetchOrders(true),
-        fetchProducts(true)
-      ]);
-
-      // Notificar cambio de inventario
-      try {
-        await refreshInventory();
-      } catch (error) {
-        console.error("Error al refrescar inventario:", error);
-      }
-
-      // Resetear formulario y cerrar modal
-      resetOrderForm();
-      setCreateOrderModalOpen(false);
-
-      // Mostrar mensaje de éxito
-      setSuccessMessage("Pedido actualizado correctamente");
-      addNotification && addNotification("Pedido actualizado correctamente", "success");
-
-      // Limpiar mensaje después de 3 segundos
-      setTimeout(() => setSuccessMessage(""), 3000);
-    } catch (error) {
-      console.error("Error actualizando pedido:", error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      setError(`Error al actualizar pedido: ${errorMessage}`);
-      addNotification && addNotification(`Error al actualizar pedido: ${errorMessage}`, "error");
-    } finally {
-      setLoadingActionId(null);
-    }
-  };
-
-  // Eliminar un pedido
-  const handleDeleteOrder = async (orderId: string) => {
-    if (!orderId) {
-      setError("ID de pedido no válido");
-      return;
-    }
-
-    setLoadingActionId(`delete-${orderId}`);
-
-    try {
-      const token = getAuthToken();
-      if (!token) throw new Error("No hay token de autenticación");
-
-      const response = await fetch(`${apiUrl}/pedido/${orderId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.mensaje || `Error al eliminar pedido: ${response.status}`);
-      }
-
-      // Recargar pedidos y productos
-      await Promise.all([
-        fetchOrders(true),
-        fetchProducts(true)
-      ]);
-
-      // Notificar cambio de inventario
-      try {
-        await refreshInventory();
-      } catch (error) {
-        console.error("Error al refrescar inventario:", error);
-      }
-
-      // Mostrar mensaje de éxito
-      setSuccessMessage("Pedido eliminado correctamente");
-      addNotification && addNotification("Pedido eliminado correctamente", "success");
-
-      // Limpiar mensaje después de 3 segundos
-      setTimeout(() => setSuccessMessage(""), 3000);
-    } catch (error) {
-      console.error("Error eliminando pedido:", error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      setError(`Error al eliminar pedido: ${errorMessage}`);
-      addNotification && addNotification(`Error al eliminar pedido: ${errorMessage}`, "error");
-    } finally {
-      setLoadingActionId(null);
-      setOrderToDelete(null);
-      setDeleteConfirmModalOpen(false);
-    }
+    // Actualizar pedido con mutación
+    updateOrderMutation.mutate({ id: currentOrderId, data: updateData });
   };
 
   // Preparar eliminar pedido
-  const confirmDeleteOrder = (orderId: string) => {
+  const confirmDeleteOrder = (orderId) => {
     setOrderToDelete(orderId);
     setDeleteConfirmModalOpen(true);
   };
 
+  // Eliminar pedido (llamada en diálogo de confirmación)
+  const handleDeleteOrder = () => {
+    if (!orderToDelete) return;
+    deleteOrderMutation.mutate(orderToDelete);
+  };
+
   // Preparar editar pedido
- // handleEditOrder - versión completa y mejorada
-const handleEditOrder = async (order: Order) => {
-  setCurrentOrderId(order._id);
+  const handleEditOrder = async (order) => {
+    setCurrentOrderId(order._id);
 
-  try {
-    // Determinar userId de forma segura
-    const userId = typeof order.userId === 'object' && order.userId
-      ? order.userId._id
-      : (typeof order.userId === 'string' ? order.userId : '');
+    try {
+      // Determinar userId de forma segura
+      const userId = typeof order.userId === 'object' && order.userId
+        ? order.userId._id
+        : (typeof order.userId === 'string' ? order.userId : '');
 
-    // Si es un pedido de supervisor y no es el usuario actual
-    if (userId && userId !== currentUser?._id) {
-      // Comprobar si es un supervisor
-      const isSupervisor = supervisors.some(s => s._id === userId);
-      
-      // Si no tenemos los datos del supervisor, intentar obtenerlos
-      if (isSupervisor && !usersMap[userId]) {
-        // Buscar y registrar el supervisor
-        const supervisor = supervisors.find(s => s._id === userId);
-        if (supervisor) {
-          setUsersMap(prev => ({
-            ...prev,
-            [userId]: supervisor
-          }));
-        }
-      }
-
-      // Cargar clientes del supervisor para edición
-      if (isAdminOrSuperSupervisor) {
+      // Si es un pedido de supervisor y no es el usuario actual, cargar sus clientes
+      if (userId && userId !== currentUser?._id && isAdminOrSuperSupervisor) {
         console.log(`Cargando clientes del supervisor ${userId} para edición`);
-        await fetchClients(userId);
-        
-        // Registrar como supervisor seleccionado temporalmente
         setSelectedSupervisor(userId);
+        
+        // Forzar recarga de clientes
+        queryClient.invalidateQueries(['clients', userId]);
       }
-    }
 
-    // Preparar productos con nombres y precios
-    const productos = await Promise.all(
-      order.productos.map(async (p) => {
+      // Preparar productos con nombres y precios
+      const productos = order.productos.map(p => {
         const productId = typeof p.productoId === 'object' && p.productoId
           ? p.productoId._id
           : (typeof p.productoId === 'string' ? p.productoId : '');
 
-        if (!productId) {
-          return {
-            productoId: '',
-            cantidad: typeof p.cantidad === 'number' ? p.cantidad : 0,
-            nombre: "ID de producto no válido",
-            precio: 0
-          };
-        }
-
         let nombre = p.nombre;
         let precio = p.precio;
 
-        // Si falta nombre o precio, intentar obtenerlos
-        if (!nombre || typeof precio !== 'number') {
-          // Primero buscar en el mapa de productos
-          if (productsMap[productId]) {
-            nombre = nombre || productsMap[productId].nombre;
-            precio = typeof precio === 'number' ? precio : productsMap[productId].precio;
-          } else {
-            // Si no está en el mapa, cargar del servidor
-            try {
-              const product = await fetchProductById(productId);
-              if (product) {
-                nombre = nombre || product.nombre;
-                precio = typeof precio === 'number' ? precio : product.precio;
-              }
-            } catch (error) {
-              console.error(`Error cargando producto ${productId}:`, error);
-            }
-          }
+        // Si es un producto poblado, extraer datos
+        if (typeof p.productoId === 'object' && p.productoId) {
+          nombre = nombre || p.productoId.nombre;
+          precio = typeof precio === 'number' ? precio : p.productoId.precio;
+        }
+
+        // Producto desde el catálogo
+        const productsData = queryClient.getQueryData('products') || [];
+        const productsCatalog = {};
+        productsData.forEach(prod => {
+          if (prod && prod._id) productsCatalog[prod._id] = prod;
+        });
+
+        if (productId && productsCatalog[productId]) {
+          nombre = nombre || productsCatalog[productId].nombre;
+          precio = typeof precio === 'number' ? precio : productsCatalog[productId].precio;
         }
 
         return {
@@ -1493,54 +1328,54 @@ const handleEditOrder = async (order: Order) => {
           nombre: nombre || "Producto no encontrado",
           precio: typeof precio === 'number' ? precio : 0
         };
-      })
-    );
+      });
 
-    // Actualizar formulario
-    setOrderForm({
-      servicio: order.servicio || '',
-      seccionDelServicio: order.seccionDelServicio || '',
-      userId: userId,
-      productos: productos,
-      detalle: order.detalle || " "
-    });
+      // Actualizar formulario
+      setOrderForm({
+        servicio: order.servicio || '',
+        seccionDelServicio: order.seccionDelServicio || '',
+        userId: userId,
+        productos: productos,
+        detalle: order.detalle || " ",
+        estado: order.estado || 'pendiente'
+      });
 
-    // Abrir modal
-    setCreateOrderModalOpen(true);
-    
-    // Log de depuración
-    console.log("Orden cargada para edición:", {
-      orderId: order._id,
-      userId: userId,
-      userInfo: getUserInfo(userId),
-      isSupervisor: supervisors.some(s => s._id === userId),
-      clientesDisponibles: clients.length
-    });
-  } catch (error) {
-    console.error("Error preparando edición de pedido:", error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    setError(`Error al preparar la edición del pedido: ${errorMessage}`);
-    addNotification && addNotification(`Error al preparar la edición del pedido: ${errorMessage}`, "error");
-  }
-};
+      // Abrir modal
+      setCreateOrderModalOpen(true);
+    } catch (error) {
+      console.error("Error preparando edición de pedido:", error);
+      addNotification(`Error al preparar la edición del pedido: ${error.message}`, "error");
+    }
+  };
 
   // Seleccionar cliente
-  const handleClientChange = (clientId: string) => {
+  const handleClientChange = (clientId) => {
     if (!clientId || clientId === "none") return;
 
     const selectedClient = clients.find(c => c._id === clientId);
     if (!selectedClient) {
       console.error(`Cliente no encontrado: ${clientId}`);
-      addNotification && addNotification("Cliente seleccionado no encontrado", "warning");
+      addNotification("Cliente seleccionado no encontrado", "warning");
       return;
     }
+
+    // Agrupar clientes por servicio
+    const clientSections = {};
+    clients.forEach(client => {
+      if (client && client.servicio) {
+        if (!clientSections[client.servicio]) {
+          clientSections[client.servicio] = [];
+        }
+        clientSections[client.servicio].push(client);
+      }
+    });
 
     // Actualizar formulario con cliente seleccionado
     setOrderForm(prev => ({
       ...prev,
       servicio: selectedClient.servicio || '',
       seccionDelServicio: '',
-      userId: currentUser?._id || ''
+      userId: selectedSupervisor || currentUser?._id || ''
     }));
 
     // Verificar si hay varias secciones para este servicio
@@ -1559,7 +1394,7 @@ const handleEditOrder = async (order: Order) => {
   };
 
   // Seleccionar sección
-  const handleSectionSelect = (section: string) => {
+  const handleSectionSelect = (section) => {
     setOrderForm(prev => ({
       ...prev,
       seccionDelServicio: section
@@ -1570,22 +1405,26 @@ const handleEditOrder = async (order: Order) => {
   // Agregar producto al pedido
   const handleAddProduct = () => {
     if (!selectedProduct || selectedProduct === "none" || productQuantity <= 0) {
-      setError("Seleccione un producto y una cantidad válida");
-      addNotification && addNotification("Seleccione un producto y una cantidad válida", "warning");
+      addNotification("Seleccione un producto y una cantidad válida", "warning");
       return;
     }
 
+    // Buscar el producto en los datos
+    const productsData = queryClient.getQueryData('products') || [];
+    const productsMap = {};
+    productsData.forEach(p => {
+      if (p && p._id) productsMap[p._id] = p;
+    });
+
     const product = productsMap[selectedProduct];
     if (!product) {
-      setError("Producto no encontrado");
-      addNotification && addNotification("Producto no encontrado", "warning");
+      addNotification("Producto no encontrado", "warning");
       return;
     }
 
     // Verificar stock
     if (product.stock < productQuantity) {
-      setError(`Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`);
-      addNotification && addNotification(`Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`, "warning");
+      addNotification(`Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`, "warning");
       return;
     }
 
@@ -1601,8 +1440,7 @@ const handleEditOrder = async (order: Order) => {
 
       // Verificar stock para la cantidad total
       if (product.stock < newQuantity) {
-        setError(`Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`);
-        addNotification && addNotification(`Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`, "warning");
+        addNotification(`Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`, "warning");
         return;
       }
 
@@ -1617,7 +1455,7 @@ const handleEditOrder = async (order: Order) => {
         productos: updatedProducts
       }));
 
-      addNotification && addNotification(`Cantidad actualizada: ${product.nombre} (${newQuantity})`, "success");
+      addNotification(`Cantidad actualizada: ${product.nombre} (${newQuantity})`, "success");
     } else {
       // Agregar nuevo producto
       setOrderForm(prev => ({
@@ -1633,7 +1471,7 @@ const handleEditOrder = async (order: Order) => {
         ]
       }));
 
-      addNotification && addNotification(`Producto agregado: ${product.nombre} (${productQuantity})`, "success");
+      addNotification(`Producto agregado: ${product.nombre} (${productQuantity})`, "success");
     }
 
     // Resetear selección
@@ -1643,7 +1481,7 @@ const handleEditOrder = async (order: Order) => {
   };
 
   // Eliminar producto del pedido
-  const handleRemoveProduct = (index: number) => {
+  const handleRemoveProduct = (index) => {
     if (index < 0 || index >= orderForm.productos.length) {
       console.error(`Índice de producto inválido: ${index}`);
       return;
@@ -1653,6 +1491,13 @@ const handleEditOrder = async (order: Order) => {
     const productId = typeof productToRemove.productoId === 'object' && productToRemove.productoId
       ? productToRemove.productoId._id
       : (typeof productToRemove.productoId === 'string' ? productToRemove.productoId : '');
+
+    // Obtener el nombre del producto
+    const productsData = queryClient.getQueryData('products') || [];
+    const productsMap = {};
+    productsData.forEach(p => {
+      if (p && p._id) productsMap[p._id] = p;
+    });
 
     const productName = productToRemove.nombre ||
       (productId && productsMap[productId] ? productsMap[productId].nombre : "Producto desconocido");
@@ -1665,7 +1510,7 @@ const handleEditOrder = async (order: Order) => {
       productos: updatedProducts
     }));
 
-    addNotification && addNotification(`Producto eliminado: ${productName}`, "info");
+    addNotification(`Producto eliminado: ${productName}`, "info");
   };
 
   // Resetear formulario de pedido
@@ -1677,7 +1522,8 @@ const handleEditOrder = async (order: Order) => {
         seccionDelServicio: '',
         userId: selectedSupervisor,
         productos: [],
-        detalle: ' '
+        detalle: ' ',
+        estado: 'pendiente'
       });
     } else {
       // Reseteo normal
@@ -1686,7 +1532,8 @@ const handleEditOrder = async (order: Order) => {
         seccionDelServicio: '',
         userId: currentUser?._id || '',
         productos: [],
-        detalle: ' '
+        detalle: ' ',
+        estado: 'pendiente'
       });
     }
 
@@ -1695,32 +1542,28 @@ const handleEditOrder = async (order: Order) => {
     setProductQuantity(1);
   };
 
-  const clearClientCache = () => {
-    // Limpiar cache de clientes al cambiar entre supervisores
-    Object.keys(localStorage).forEach(key => {
-      if (key.startsWith(STORAGE_KEYS.CLIENTS)) {
-        localStorage.removeItem(key);
-      }
-    });
-  };
-
-  {/* Función clearSelectedSupervisor que debe ser agregada */ }
+  // Limpiar supervisor seleccionado
   const clearSelectedSupervisor = () => {
     if (isAdminOrSuperSupervisor) {
       setSelectedSupervisor(null);
-      // Volver a cargar los clientes del usuario actual si es necesario
+      
+      // Volver a cargar los clientes del usuario actual
       if (currentUser?._id) {
-        fetchClients(currentUser._id);
+        queryClient.invalidateQueries(['clients', currentUser._id]);
       }
-
-      // Limpiar caché de clientes para evitar problemas
-      clearClientCache();
     }
   };
 
   // Calcular total de un pedido
-  const calculateOrderTotal = useCallback((productos: OrderProduct[]): number => {
+  const calculateOrderTotal = useCallback((productos) => {
     if (!productos || !Array.isArray(productos)) return 0;
+
+    // Obtener productos del catálogo
+    const productsData = queryClient.getQueryData('products') || [];
+    const productsMap = {};
+    productsData.forEach(p => {
+      if (p && p._id) productsMap[p._id] = p;
+    });
 
     return productos.reduce((total, item) => {
       let precio = 0;
@@ -1744,17 +1587,16 @@ const handleEditOrder = async (order: Order) => {
 
       return total + (precio * cantidad);
     }, 0);
-  }, [productsMap]);
+  }, [queryClient]);
 
   // Filtrar pedidos por fecha
   const handleDateFilter = async () => {
     if (!dateFilter.from || !dateFilter.to) {
-      setError("Debe seleccionar fechas de inicio y fin");
-      addNotification && addNotification("Seleccione ambas fechas para filtrar", "warning");
+      addNotification("Seleccione ambas fechas para filtrar", "warning");
       return;
     }
 
-    await fetchOrders(true);
+    refetchOrders();
     setShowMobileFilters(false);
   };
 
@@ -1762,21 +1604,31 @@ const handleEditOrder = async (order: Order) => {
   const clearAllFilters = () => {
     setSearchTerm('');
     setDateFilter({ from: '', to: '' });
-    fetchOrders(true);
+    setStatusFilter('todos');
+    setSupervisorFilter('');
+    setServiceFilter('');
+    refetchOrders();
     setShowMobileFilters(false);
     setCurrentPage(1);
 
-    addNotification && addNotification("Filtros eliminados", "info");
+    addNotification("Filtros eliminados", "info");
   };
 
   // Alternar vista de detalles del pedido
-  const toggleOrderDetails = useCallback((orderId: string) => {
+  const toggleOrderDetails = useCallback((orderId) => {
     setOrderDetailsOpen(prev => ({
       ...prev,
       [orderId]: !prev[orderId]
     }));
 
-    // Cargar productos en el pedido
+    // Obtener productos actuales
+    const productsData = queryClient.getQueryData('products') || [];
+    const productsMap = {};
+    productsData.forEach(p => {
+      if (p && p._id) productsMap[p._id] = p;
+    });
+
+    // Cargar productos faltantes
     const order = orders.find(o => o._id === orderId);
     if (order && Array.isArray(order.productos)) {
       order.productos.forEach(item => {
@@ -1790,75 +1642,11 @@ const handleEditOrder = async (order: Order) => {
         }
       });
     }
-  }, [orders, productsMap]);
+  }, [orders, queryClient, processProductQueue]);
 
-  // Precarga de productos en los pedidos
-  const prefetchProductsFromOrders = useCallback((ordersData: Order[]) => {
-    if (!Array.isArray(ordersData) || ordersData.length === 0) return;
-
-    // Limitar a los primeros 20 pedidos para no sobrecargar
-    const ordersToProcess = ordersData.slice(0, 20);
-
-    ordersToProcess.forEach(order => {
-      if (Array.isArray(order.productos)) {
-        order.productos.forEach(item => {
-          const productId = typeof item.productoId === 'object' && item.productoId
-            ? item.productoId._id
-            : (typeof item.productoId === 'string' ? item.productoId : '');
-
-          if (productId && !productsMap[productId]) {
-            productLoadQueue.current.add(productId);
-          }
-        });
-      }
-    });
-
-    if (productLoadQueue.current.size > 0) {
-      processProductQueue();
-    }
-  }, [productsMap]);
-
-  // Procesar cola de productos a cargar
-  const processProductQueue = useCallback(async () => {
-    if (isProcessingQueue.current || productLoadQueue.current.size === 0) {
-      return;
-    }
-
-    isProcessingQueue.current = true;
-
-    try {
-      const batchSize = 5;
-      const productIds = Array.from(productLoadQueue.current);
-      productLoadQueue.current.clear();
-
-      // Procesar en lotes
-      for (let i = 0; i < productIds.length; i += batchSize) {
-        if (!mountedRef.current) break;
-
-        const batch = productIds.slice(i, i + batchSize);
-        const filteredBatch = batch.filter(id => !productsMap[id]);
-
-        if (filteredBatch.length === 0) continue;
-
-        // Cargar productos en paralelo
-        const productsPromises = filteredBatch.map(id => fetchProductById(id));
-        await Promise.all(productsPromises);
-      }
-    } catch (error) {
-      console.error("Error procesando cola de productos:", error);
-    } finally {
-      isProcessingQueue.current = false;
-
-      // Si quedan productos en la cola, procesarlos
-      if (mountedRef.current && productLoadQueue.current.size > 0) {
-        setTimeout(processProductQueue, 100);
-      }
-    }
-  }, [productsMap, fetchProductById]);
-
-  //Seleccionar un supervisor
-  const handleSupervisorSelect = async (supervisorId: string) => {
-    // Encontrar el supervisor en la lista 
+  // Seleccionar supervisor
+  const handleSupervisorSelect = async (supervisorId) => {
+    // Encontrar el supervisor en la lista
     const supervisor = supervisors.find(s => s._id === supervisorId);
   
     setSelectedSupervisor(supervisorId);
@@ -1870,115 +1658,36 @@ const handleEditOrder = async (order: Order) => {
       productos: []
     }));
   
-    // AÑADIR: Registrar el supervisor en el mapa de usuarios
-    if (supervisor) {
-      setUsersMap(prev => ({
-        ...prev,
-        [supervisorId]: supervisor
-      }));
-    }
-  
     // Cerrar modal de selección
     setSupervisorSelectOpen(false);
   
-    // Log para mostrar información detallada del supervisor
-    console.log("Supervisor seleccionado:", {
-      id: supervisorId,
-      usuario: supervisor?.usuario || "Sin usuario",
-      nombre: supervisor?.nombre || "Sin nombre",
-      apellido: supervisor?.apellido || "Sin apellido"
-    });
-  
     // Cargar clientes del supervisor seleccionado
     try {
-      setIsLoading(true);
-      await fetchClients(supervisorId);
+      await queryClient.invalidateQueries(['clients', supervisorId]);
   
       // Abrir el modal de creación después de cargar los clientes
       setCreateOrderModalOpen(true);
     } catch (error) {
       console.error("Error cargando clientes del supervisor:", error);
-      addNotification && addNotification("Error al cargar clientes del supervisor", "error");
-    } finally {
-      setIsLoading(false);
+      addNotification("Error al cargar clientes del supervisor", "error");
     }
   };
 
-  // Obtener información de usuario
-  const getUserInfo = useCallback((userId: string | User): { usuario: string; name: string } => {
-    // Si es un objeto con usuario y nombre
-    if (typeof userId === 'object' && userId) {
-      return {
-        usuario: userId.usuario || "Usuario no disponible",
-        name: userId.nombre
-          ? `${userId.nombre} ${userId.apellido || ''}`
-          : userId.usuario || "Usuario no disponible"
-      };
-    }
-    
-    // Si es un string (ID), buscar en múltiples fuentes
-    if (typeof userId === 'string') {
-      // 1. Buscar primero en la lista de supervisores (prioritario)
-      const supervisorMatch = supervisors.find(s => s._id === userId);
-      if (supervisorMatch) {
-        // Registrar supervisor en el mapa si no existe
-        if (!usersMap[userId]) {
-          // Usar setTimeout para evitar actualizar estado durante renderizado
-          setTimeout(() => {
-            setUsersMap(prev => ({
-              ...prev,
-              [userId]: supervisorMatch
-            }));
-          }, 0);
-        }
-        
-        return {
-          usuario: supervisorMatch.usuario || "Supervisor",
-          name: supervisorMatch.nombre
-            ? `${supervisorMatch.nombre} ${supervisorMatch.apellido || ''}`
-            : supervisorMatch.usuario || "Supervisor"
-        };
-      }
-    
-      // 2. Buscar en el mapa de usuarios
-      const userMatch = usersMap[userId];
-      if (userMatch) {
-        return {
-          usuario: userMatch.usuario || "Usuario no disponible",
-          name: userMatch.nombre
-            ? `${userMatch.nombre} ${userMatch.apellido || ''}`
-            : userMatch.usuario || "Usuario no disponible"
-        };
-      }
-    
-      // 3. Si es el usuario actual
-      if (currentUser && currentUser._id === userId) {
-        return {
-          usuario: currentUser.usuario || "Usuario actual",
-          name: currentUser.nombre
-            ? `${currentUser.nombre} ${currentUser.apellido || ''}`
-            : currentUser.usuario || "Usuario actual"
-        };
-      }
-      
-      // Si aún no encontramos, pero estamos seguros de que es un supervisor (basado en contexto)
-      if (isAdminOrSuperSupervisor && selectedSupervisor === userId) {
-        console.log("Supervisor seleccionado pero sin datos completos:", userId);
-        return {
-          usuario: "Supervisor",
-          name: "Supervisor seleccionado"
-        };
-      }
-    }
-    
-    // Si no se encuentra información
-    console.warn(`No se encontró información de usuario para: ${typeof userId === 'string' ? userId : 'objeto usuario'}`);
-    return { usuario: "Usuario no disponible", name: "Usuario no disponible" };
-  }, [usersMap, supervisors, currentUser, isAdminOrSuperSupervisor, selectedSupervisor]);
+  // Crear nuevo pedido
+  const handleNewOrderClick = () => {
+    resetOrderForm();
 
+    // Si es admin o supervisor de supervisores, mostrar primero el selector de supervisor
+    if (isAdminOrSuperSupervisor) {
+      setSupervisorSelectOpen(true);
+    } else {
+      // Para usuarios normales, abrir directamente el modal de creación
+      setCreateOrderModalOpen(true);
+    }
+  };
 
-  // Función para cambiar de página
-  const handlePageChange = (pageNumber: number) => {
+  // Cambiar página de la tabla
+  const handlePageChange = (pageNumber) => {
     setCurrentPage(pageNumber);
 
     // Scroll al inicio
@@ -1990,177 +1699,20 @@ const handleEditOrder = async (order: Order) => {
     }
   };
 
-  // Actualizar manualmente los datos
-  const handleManualRefresh = async () => {
-    setIsRefreshing(true);
-
-    try {
-      // Recargar datos principales
-      await Promise.all([
-        fetchOrders(true),
-        fetchProducts(true)
-      ]);
-
-      addNotification && addNotification("Datos actualizados correctamente", "success");
-    } catch (error) {
-      console.error("Error actualizando datos:", error);
-      addNotification && addNotification("Error al actualizar los datos", "error");
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
-
-  // Gestionar el PDF de pedido
-  const handleDownloadRemito = (pedidoId: string) => {
-    try {
-      const token = getAuthToken();
-      if (!token) throw new Error("No hay token de autenticación");
-
-      addNotification && addNotification("Generando PDF del remito...", "info");
-
-      // Abrir en una nueva pestaña
-      window.open(`${apiUrl}/downloads/remito/${pedidoId}`, '_blank');
-    } catch (error) {
-      console.error("Error al generar remito:", error);
-      addNotification && addNotification("Error al generar el remito", "error");
-    }
-  };
-
-  //Nueva orden
-  const handleNewOrderClick = () => {
-    resetOrderForm();
-
-    // Si es admin o supervisor de supervisores, mostrar primero el selector de supervisor
-    if (isAdminOrSuperSupervisor) {
-      // Si no hay supervisores cargados, cargarlos
-      if (supervisors.length === 0) {
-        fetchSupervisors();
-      }
-      setSupervisorSelectOpen(true);
-    } else {
-      // Para usuarios normales, abrir directamente el modal de creación
-      setCreateOrderModalOpen(true);
-    }
-  };
-
-  // ======== EFECTOS ========
-
-  // Inicializar datos desde localStorage al montar
-  useEffect(() => {
-    // Cargar datos de caché
-    const cachedUser = loadFromLocalStorage(STORAGE_KEYS.CURRENT_USER);
-    if (cachedUser) {
-      setCurrentUser(cachedUser);
-      setOrderForm(prev => ({ ...prev, userId: cachedUser._id || "" }));
-    }
-
-    const cachedProducts = loadFromLocalStorage(STORAGE_KEYS.PRODUCTS);
-    if (Array.isArray(cachedProducts) && cachedProducts.length > 0) {
-      setProducts(cachedProducts);
-
-      // Crear mapa de productos
-      const newProductsMap: Record<string, Product> = {};
-      cachedProducts.forEach(product => {
-        if (product && product._id) {
-          newProductsMap[product._id] = product;
-        }
-      });
-      setProductsMap(newProductsMap);
-    }
-
-    const cachedUsers = loadFromLocalStorage(STORAGE_KEYS.USERS);
-    if (Array.isArray(cachedUsers) && cachedUsers.length > 0) {
-      setUsers(cachedUsers);
-
-      // Crear mapa de usuarios
-      const newUsersMap: Record<string, User> = {};
-      cachedUsers.forEach(user => {
-        if (user && user._id) {
-          newUsersMap[user._id] = user;
-        }
-      });
-      setUsersMap(newUsersMap);
-    }
-
-    const cachedClients = loadFromLocalStorage(STORAGE_KEYS.CLIENTS);
-    if (Array.isArray(cachedClients) && cachedClients.length > 0) {
-      setClients(cachedClients);
-
-      // Agrupar por servicio
-      const sections: Record<string, Client[]> = {};
-      cachedClients.forEach(client => {
-        if (client && client.servicio) {
-          if (!sections[client.servicio]) {
-            sections[client.servicio] = [];
-          }
-          sections[client.servicio].push(client);
-        }
-      });
-      setClientSections(sections);
-    }
-
-    const cachedOrders = loadFromLocalStorage(STORAGE_KEYS.ORDERS);
-    if (Array.isArray(cachedOrders)) {
-      setOrders(cachedOrders);
-    }
-
-    // Marcar componente como montado
-    mountedRef.current = true;
-
-    // Cleanup
-    return () => {
-      mountedRef.current = false;
-    };
-  }, [loadFromLocalStorage]);
-
-  // Cargar datos después de la primera renderización
-  useEffect(() => {
-    const fetchInitialData = async () => {
-      if (initialLoadComplete.current) return;
-      initialLoadComplete.current = true;
-
-      setIsLoading(true);
-
-      try {
-        // Cargar datos en secuencia
-        await fetchUserData();
-        await fetchUsers();
-        await fetchProducts();
-        await fetchOrders();
-
-        if (currentUser?._id) {
-          await fetchClients(currentUser._id);
-        }
-      } catch (error) {
-        console.error("Error cargando datos iniciales:", error);
-        setError("Error cargando los datos iniciales. Por favor, recargue la página.");
-
-        addNotification && addNotification("Error cargando los datos iniciales", "error");
-      } finally {
-        if (mountedRef.current) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    fetchInitialData();
-  }, []);
-
-  // Efecto para detectar cambios de tamaño de ventana
-  useEffect(() => {
-    const handleResize = () => {
-      setWindowWidth(window.innerWidth);
-    };
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('resize', handleResize);
-      return () => window.removeEventListener('resize', handleResize);
-    }
-  }, []);
-
   // ======== FILTRADO Y PAGINACIÓN ========
 
-  // Filtrar pedidos según términos de búsqueda
+  // Productos en un mapa para acceso rápido
+  const productsMap = useMemo(() => {
+    const map = {};
+    products.forEach(product => {
+      if (product && product._id) {
+        map[product._id] = product;
+      }
+    });
+    return map;
+  }, [products]);
+
+  // Filtrar pedidos según términos de búsqueda local
   const filteredOrders = useMemo(() => {
     if (!Array.isArray(orders)) return [];
 
@@ -2168,16 +1720,24 @@ const handleEditOrder = async (order: Order) => {
       if (!searchTerm) return true;
 
       const searchLower = searchTerm.toLowerCase();
+      const userInfo = getUserInfo(order.userId);
 
       return (
         (order.servicio || '').toLowerCase().includes(searchLower) ||
         String(order.nPedido || '').includes(searchTerm) ||
         (order.seccionDelServicio || '').toLowerCase().includes(searchLower) ||
-        getUserInfo(order.userId).usuario.toLowerCase().includes(searchLower) ||
-        getUserInfo(order.userId).name.toLowerCase().includes(searchLower)
+        userInfo.usuario.toLowerCase().includes(searchLower) ||
+        userInfo.name.toLowerCase().includes(searchLower)
       );
     });
   }, [orders, searchTerm, getUserInfo]);
+
+  // Configuración de items por página según tamaño de pantalla
+  const itemsPerPage = useMemo(() => {
+    if (windowWidth < 640) return 4; // Móvil
+    if (windowWidth < 1024) return 8; // Tablet
+    return 12; // Desktop
+  }, [windowWidth]);
 
   // Calcular paginación
   const paginatedOrders = useMemo(() => {
@@ -2210,7 +1770,8 @@ const handleEditOrder = async (order: Order) => {
   // ======== RENDERIZADO ========
 
   // Mostrar pantalla de carga
-  if (isLoading && orders.length === 0) {
+  const isLoading = isLoadingUser || (isLoadingOrders && orders.length === 0);
+  if (isLoading) {
     return (
       <div className="p-4 md:p-6 bg-[#DFEFE6]/30 min-h-[300px] flex flex-col items-center justify-center">
         <Loader2 className="w-10 h-10 text-[#29696B] animate-spin mb-4" />
@@ -2221,20 +1782,7 @@ const handleEditOrder = async (order: Order) => {
 
   return (
     <div className="p-4 md:p-6 bg-[#DFEFE6]/30">
-      {/* Alertas */}
-      {error && (
-        <Alert className="mb-4 bg-red-50 border border-red-200 text-red-800 rounded-lg">
-          <AlertCircle className="h-4 w-4 text-red-600" />
-          <AlertDescription className="ml-2">{error}</AlertDescription>
-        </Alert>
-      )}
-
-      {successMessage && (
-        <Alert className="mb-4 bg-[#DFEFE6] border-[#91BEAD] text-[#29696B] rounded-lg">
-          <Check className="h-4 w-4 text-[#29696B]" />
-          <AlertDescription className="ml-2">{successMessage}</AlertDescription>
-        </Alert>
-      )}
+      {/* Alertas manejadas por el contexto de notificaciones */}
 
       {/* Barra de filtros y acciones para escritorio */}
       <div className="mb-6 space-y-4 hidden md:block bg-white p-4 rounded-xl shadow-sm border border-[#91BEAD]/20">
@@ -2253,11 +1801,11 @@ const handleEditOrder = async (order: Order) => {
           <div className="flex gap-2">
             <Button
               variant="outline"
-              onClick={handleManualRefresh}
-              disabled={isRefreshing}
+              onClick={() => refetchOrders()}
+              disabled={isRefreshingOrders}
               className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50"
             >
-              <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshingOrders ? 'animate-spin' : ''}`} />
               Actualizar
             </Button>
 
@@ -2273,6 +1821,7 @@ const handleEditOrder = async (order: Order) => {
         </div>
 
         <div className="flex flex-wrap gap-4 items-end">
+          {/* Filtro de fechas */}
           <div>
             <Label htmlFor="fechaInicio" className="text-[#29696B]">Fecha Inicio</Label>
             <Input
@@ -2295,16 +1844,58 @@ const handleEditOrder = async (order: Order) => {
             />
           </div>
 
+          {/* Filtro de estado */}
+          <div>
+            <Label htmlFor="estado" className="text-[#29696B]">Estado</Label>
+            <Select 
+              value={statusFilter} 
+              onValueChange={setStatusFilter}
+            >
+              <SelectTrigger id="estado" className="border-[#91BEAD] focus:ring-[#29696B]/20">
+                <SelectValue placeholder="Todos los estados" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos</SelectItem>
+                <SelectItem value="pendiente">Pendientes</SelectItem>
+                <SelectItem value="aprobado">Aprobados</SelectItem>
+                <SelectItem value="rechazado">Rechazados</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Filtro de supervisor (solo para admin) */}
+          {isAdminOrSuperSupervisor && (
+            <div>
+              <Label htmlFor="supervisor" className="text-[#29696B]">Supervisor</Label>
+              <Select 
+                value={supervisorFilter} 
+                onValueChange={setSupervisorFilter}
+              >
+                <SelectTrigger id="supervisor" className="border-[#91BEAD] focus:ring-[#29696B]/20">
+                  <SelectValue placeholder="Todos los supervisores" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  {supervisors.map(supervisor => (
+                    <SelectItem key={supervisor._id} value={supervisor._id}>
+                      {supervisor.usuario || (supervisor.nombre ? `${supervisor.nombre} ${supervisor.apellido || ''}` : 'Sin nombre')}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <Button
             variant="outline"
             onClick={handleDateFilter}
             className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50"
           >
             <Filter className="w-4 h-4 mr-2" />
-            Filtrar por Fecha
+            Aplicar Filtros
           </Button>
 
-          {(dateFilter.from || dateFilter.to || searchTerm) && (
+          {(dateFilter.from || dateFilter.to || searchTerm || statusFilter !== 'todos' || supervisorFilter) && (
             <Button
               variant="ghost"
               onClick={clearAllFilters}
@@ -2351,8 +1942,9 @@ const handleEditOrder = async (order: Order) => {
 
         {showMobileFilters && (
           <div className="p-4 bg-[#DFEFE6]/30 rounded-lg border border-[#91BEAD]/20 space-y-4">
-            <h3 className="font-medium text-sm text-[#29696B]">Filtrar por fecha</h3>
+            <h3 className="font-medium text-sm text-[#29696B]">Filtros avanzados</h3>
 
+            {/* Filtro de fechas */}
             <div className="space-y-2">
               <div>
                 <Label htmlFor="mFechaInicio" className="text-xs text-[#29696B]">Fecha Inicio</Label>
@@ -2375,6 +1967,48 @@ const handleEditOrder = async (order: Order) => {
                   className="w-full text-sm border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
                 />
               </div>
+              
+              {/* Filtro de estado */}
+              <div>
+                <Label htmlFor="mEstado" className="text-xs text-[#29696B]">Estado</Label>
+                <Select 
+                  value={statusFilter} 
+                  onValueChange={setStatusFilter}
+                >
+                  <SelectTrigger id="mEstado" className="text-sm border-[#91BEAD] focus:ring-[#29696B]/20">
+                    <SelectValue placeholder="Todos los estados" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos</SelectItem>
+                    <SelectItem value="pendiente">Pendientes</SelectItem>
+                    <SelectItem value="aprobado">Aprobados</SelectItem>
+                    <SelectItem value="rechazado">Rechazados</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Filtro de supervisor (solo para admin) */}
+              {isAdminOrSuperSupervisor && (
+                <div>
+                  <Label htmlFor="mSupervisor" className="text-xs text-[#29696B]">Supervisor</Label>
+                  <Select 
+                    value={supervisorFilter} 
+                    onValueChange={setSupervisorFilter}
+                  >
+                    <SelectTrigger id="mSupervisor" className="text-sm border-[#91BEAD] focus:ring-[#29696B]/20">
+                      <SelectValue placeholder="Todos los supervisores" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      {supervisors.map(supervisor => (
+                        <SelectItem key={supervisor._id} value={supervisor._id}>
+                          {supervisor.usuario || (supervisor.nombre ? `${supervisor.nombre} ${supervisor.apellido || ''}` : 'Sin nombre')}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
             <div className="flex gap-2 pt-2">
@@ -2398,15 +2032,34 @@ const handleEditOrder = async (order: Order) => {
           </div>
         )}
 
-        {(dateFilter.from || dateFilter.to) && (
+        {/* Indicador de filtros activos */}
+        {(dateFilter.from || dateFilter.to || statusFilter !== 'todos' || supervisorFilter) && (
           <div className="px-3 py-2 bg-[#DFEFE6]/50 rounded-md text-xs text-[#29696B] flex items-center justify-between border border-[#91BEAD]/20">
-            <div>
-              <CalendarRange className="w-3 h-3 inline mr-1" />
-              <span>
-                {dateFilter.from && new Date(dateFilter.from).toLocaleDateString()}
-                {dateFilter.from && dateFilter.to && ' al '}
-                {dateFilter.to && new Date(dateFilter.to).toLocaleDateString()}
-              </span>
+            <div className="flex items-center space-x-2">
+              {(dateFilter.from || dateFilter.to) && (
+                <span className="flex items-center">
+                  <CalendarRange className="w-3 h-3 mr-1" />
+                  {dateFilter.from && new Date(dateFilter.from).toLocaleDateString()}
+                  {dateFilter.from && dateFilter.to && ' - '}
+                  {dateFilter.to && new Date(dateFilter.to).toLocaleDateString()}
+                </span>
+              )}
+              
+              {statusFilter !== 'todos' && (
+                <span className="flex items-center">
+                  {statusFilter === 'pendiente' && <Clock className="w-3 h-3 mr-1 text-yellow-600" />}
+                  {statusFilter === 'aprobado' && <CheckCircle className="w-3 h-3 mr-1 text-green-600" />}
+                  {statusFilter === 'rechazado' && <XCircle className="w-3 h-3 mr-1 text-red-600" />}
+                  {statusFilter}
+                </span>
+              )}
+              
+              {supervisorFilter && (
+                <span className="flex items-center">
+                  <User className="w-3 h-3 mr-1" />
+                  {supervisors.find(s => s._id === supervisorFilter)?.usuario || 'Supervisor'}
+                </span>
+              )}
             </div>
 
             <Button
@@ -2422,7 +2075,7 @@ const handleEditOrder = async (order: Order) => {
       </div>
 
       {/* Indicador de carga o refresco */}
-      {isRefreshing && (
+      {isRefreshingOrders && (
         <div className="bg-[#DFEFE6]/30 rounded-lg p-2 mb-4 flex items-center justify-center">
           <Loader2 className="w-4 h-4 text-[#29696B] animate-spin mr-2" />
           <span className="text-sm text-[#29696B]">Actualizando datos...</span>
@@ -2440,6 +2093,8 @@ const handleEditOrder = async (order: Order) => {
             No se encontraron pedidos
             {searchTerm && ` que coincidan con "${searchTerm}"`}
             {(dateFilter.from || dateFilter.to) && " en el rango de fechas seleccionado"}
+            {statusFilter !== 'todos' && ` con estado ${statusFilter}`}
+            {supervisorFilter && " para el supervisor seleccionado"}
           </p>
 
           {(clients.length === 0 || products.length === 0) && (
@@ -2473,6 +2128,9 @@ const handleEditOrder = async (order: Order) => {
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
                       Usuario
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
+                      Estado
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
                       Productos
@@ -2528,8 +2186,16 @@ const handleEditOrder = async (order: Order) => {
                         </td>
 
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-[#29696B]" />
-                          {getUserInfo(order.userId).usuario}
+                          <div className="text-sm text-[#29696B]">
+                            {getUserInfo(order.userId).usuario}
+                          </div>
+                        </td>
+
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <OrderStatusBadge 
+                            status={order.estado || 'pendiente'}
+                            orderId={order._id}
+                          />
                         </td>
 
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -2563,7 +2229,7 @@ const handleEditOrder = async (order: Order) => {
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => handleDownloadRemito(order._id)}
+                                    onClick={() => window.open(`${apiUrl}/downloads/remito/${order._id}`, '_blank')}
                                     className="text-[#29696B] hover:bg-[#DFEFE6]/30"
                                   >
                                     <Download className="w-4 h-4" />
@@ -2582,10 +2248,10 @@ const handleEditOrder = async (order: Order) => {
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => handleEditOrder(order)}
-                                    disabled={loadingActionId === `edit-${order._id}`}
+                                    disabled={updateOrderMutation.isLoading}
                                     className="text-[#29696B] hover:bg-[#DFEFE6]/30"
                                   >
-                                    {loadingActionId === `edit-${order._id}` ? (
+                                    {updateOrderMutation.isLoading ? (
                                       <Loader2 className="w-4 h-4 animate-spin" />
                                     ) : (
                                       <FileEdit className="w-4 h-4" />
@@ -2605,10 +2271,10 @@ const handleEditOrder = async (order: Order) => {
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => confirmDeleteOrder(order._id)}
-                                    disabled={loadingActionId === `delete-${order._id}`}
+                                    disabled={deleteOrderMutation.isLoading}
                                     className="text-red-600 hover:bg-red-50"
                                   >
-                                    {loadingActionId === `delete-${order._id}` ? (
+                                    {deleteOrderMutation.isLoading && orderToDelete === order._id ? (
                                       <Loader2 className="w-4 h-4 animate-spin" />
                                     ) : (
                                       <Trash2 className="w-4 h-4" />
@@ -2627,7 +2293,7 @@ const handleEditOrder = async (order: Order) => {
                       {/* Detalles del pedido expandibles */}
                       {orderDetailsOpen[order._id] && (
                         <tr>
-                          <td colSpan={7} className="px-6 py-4 bg-[#DFEFE6]/20">
+                          <td colSpan={8} className="px-6 py-4 bg-[#DFEFE6]/20">
                             <div className="space-y-3">
                               <div className="font-medium text-[#29696B]">Detalles del Pedido</div>
 
@@ -2672,7 +2338,7 @@ const handleEditOrder = async (order: Order) => {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => handleDownloadRemito(order._id)}
+                                  onClick={() => window.open(`${apiUrl}/downloads/remito/${order._id}`, '_blank')}
                                   className="text-xs h-8 border-[#29696B] text-[#29696B] hover:bg-[#DFEFE6]/30"
                                 >
                                   <Download className="w-3 h-3 mr-1" />
@@ -2722,7 +2388,7 @@ const handleEditOrder = async (order: Order) => {
               </div>
             )}
 
-            {isRefreshing && filteredOrders.length === 0 ? (
+            {isRefreshingOrders && filteredOrders.length === 0 ? (
               <OrdersSkeleton count={3} />
             ) : (
               paginatedOrders.map(order => (
@@ -2764,6 +2430,32 @@ const handleEditOrder = async (order: Order) => {
                       <div className="flex items-center">
                         <User className="w-3 h-3 text-[#7AA79C] mr-1" />
                         <span className="text-[#29696B]">{getUserInfo(order.userId).usuario}</span>
+                      </div>
+
+                      {/* Estado del pedido */}
+                      <div className="flex items-center">
+                        {order.estado === 'aprobado' && <CheckCircle className="w-3 h-3 text-green-600 mr-1" />}
+                        {order.estado === 'rechazado' && <XCircle className="w-3 h-3 text-red-600 mr-1" />}
+                        {(!order.estado || order.estado === 'pendiente') && <Clock className="w-3 h-3 text-yellow-600 mr-1" />}
+                        <span className={`text-[#29696B] flex items-center`}>
+                          Estado: 
+                          <span 
+                            className={`ml-1 ${
+                              order.estado === 'aprobado' 
+                                ? 'text-green-600' 
+                                : order.estado === 'rechazado' 
+                                ? 'text-red-600' 
+                                : 'text-yellow-600'
+                            }`}
+                          >
+                            {order.estado === 'aprobado' 
+                              ? 'Aprobado' 
+                              : order.estado === 'rechazado' 
+                              ? 'Rechazado' 
+                              : 'Pendiente'
+                            }
+                          </span>
+                        </span>
                       </div>
 
                       <div className="flex items-center">
@@ -2823,7 +2515,7 @@ const handleEditOrder = async (order: Order) => {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleDownloadRemito(order._id)}
+                              onClick={() => window.open(`${apiUrl}/downloads/remito/${order._id}`, '_blank')}
                               className="w-full text-xs h-8 border-[#29696B] text-[#29696B] hover:bg-[#DFEFE6]/30"
                             >
                               <Download className="w-3 h-3 mr-1" />
@@ -2836,14 +2528,55 @@ const handleEditOrder = async (order: Order) => {
                   </CardContent>
 
                   <CardFooter className="py-2 px-4 bg-[#DFEFE6]/10 flex justify-end gap-2 border-t border-[#91BEAD]/20">
+                    {/* Menú desplegable para cambiar estado */}
+                    <Select
+                      value={order.estado || 'pendiente'}
+                      onValueChange={(value) => {
+                        // Actualizar estado del pedido
+                        queryClient.invalidateQueries(['orders']);
+                        const updateData = {
+                          id: order._id,
+                          status: value
+                        };
+                        // Optimistic update
+                        queryClient.setQueryData(['orders'], (oldData) => {
+                          return oldData?.map(o => o._id === order._id ? {...o, estado: value} : o);
+                        });
+                      }}
+                    >
+                      <SelectTrigger className="h-8 px-2 text-xs border-[#91BEAD] focus:ring-[#29696B]/20 w-[100px]">
+                        <SelectValue placeholder="Estado" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pendiente" className="text-xs">
+                          <div className="flex items-center">
+                            <Clock className="w-3 h-3 mr-1 text-yellow-600" />
+                            Pendiente
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="aprobado" className="text-xs">
+                          <div className="flex items-center">
+                            <CheckCircle className="w-3 h-3 mr-1 text-green-600" />
+                            Aprobado
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="rechazado" className="text-xs">
+                          <div className="flex items-center">
+                            <XCircle className="w-3 h-3 mr-1 text-red-600" />
+                            Rechazado
+                          </div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+
                     <Button
                       variant="ghost"
                       size="sm"
                       className="h-8 px-2 text-[#29696B] hover:bg-[#DFEFE6]/30"
                       onClick={() => handleEditOrder(order)}
-                      disabled={loadingActionId === `edit-${order._id}`}
+                      disabled={updateOrderMutation.isLoading}
                     >
-                      {loadingActionId === `edit-${order._id}` ? (
+                      {updateOrderMutation.isLoading ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
                       ) : (
                         <FileEdit className="w-4 h-4" />
@@ -2855,9 +2588,9 @@ const handleEditOrder = async (order: Order) => {
                       size="sm"
                       className="h-8 px-2 text-red-600 hover:bg-red-50"
                       onClick={() => confirmDeleteOrder(order._id)}
-                      disabled={loadingActionId === `delete-${order._id}`}
+                      disabled={deleteOrderMutation.isLoading}
                     >
-                      {loadingActionId === `delete-${order._id}` ? (
+                      {deleteOrderMutation.isLoading && orderToDelete === order._id ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
                       ) : (
                         <Trash2 className="w-4 h-4" />
@@ -2912,7 +2645,7 @@ const handleEditOrder = async (order: Order) => {
               {currentOrderId
                 ? `Editar Pedido #${orders.find(o => o._id === currentOrderId)?.nPedido || ''}`
                 : isAdminOrSuperSupervisor && selectedSupervisor
-                  ? `Nuevo Pedido (Para: ${supervisors.find(s => s._id === selectedSupervisor)?.nombre || 'Supervisor'})`
+                  ? `Nuevo Pedido (Para: ${supervisors.find(s => s._id === selectedSupervisor)?.usuario || 'Supervisor'})`
                   : 'Nuevo Pedido'
               }
             </DialogTitle>
@@ -2942,23 +2675,50 @@ const handleEditOrder = async (order: Order) => {
                     const supervisor = supervisors.find(s => s._id === selectedSupervisor);
                     if (!supervisor) return "Supervisor seleccionado";
 
-                    if (supervisor.nombre || supervisor.apellido) {
-                      return `${supervisor.nombre || ''} ${supervisor.apellido || ''}`.trim();
-                    }
                     return supervisor.usuario || "Supervisor seleccionado";
                   })()}
                 </span>
-              </div>
-              <div className="text-xs text-[#7AA79C] ml-6 mt-1">
-                @{(() => {
-                  const supervisor = supervisors.find(s => s._id === selectedSupervisor);
-                  return supervisor?.usuario || "usuario";
-                })()}
               </div>
             </div>
           )}
 
           <div className="py-4 space-y-6">
+            {/* Sección para cambiar el supervisor (solo para admin y cuando está editando) */}
+            {isAdminOrSuperSupervisor && currentOrderId && (
+              <div>
+                <h2 className="text-lg font-medium mb-4 flex items-center text-[#29696B]">
+                  <User className="w-5 h-5 mr-2 text-[#7AA79C]" />
+                  Supervisor Asignado
+                </h2>
+                
+                <Select
+                  value={orderForm.userId}
+                  onValueChange={(value) => {
+                    // Cambiar supervisor y recargar sus clientes
+                    setOrderForm(prev => ({
+                      ...prev,
+                      userId: value,
+                      servicio: '',
+                      seccionDelServicio: ''
+                    }));
+                    setSelectedSupervisor(value);
+                    queryClient.invalidateQueries(['clients', value]);
+                  }}
+                >
+                  <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
+                    <SelectValue placeholder="Seleccionar supervisor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {supervisors.map(supervisor => (
+                      <SelectItem key={supervisor._id} value={supervisor._id}>
+                        {supervisor.usuario || "Supervisor sin nombre"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             {/* Sección de Cliente */}
             <div>
               <h2 className="text-lg font-medium mb-4 flex items-center text-[#29696B]">
@@ -2966,12 +2726,16 @@ const handleEditOrder = async (order: Order) => {
                 Selección de Cliente
               </h2>
 
-              {clients.length === 0 ? (
+              {isLoadingClients ? (
+                <div className="flex justify-center p-4">
+                  <Loader2 className="w-6 h-6 text-[#29696B] animate-spin" />
+                </div>
+              ) : clients.length === 0 ? (
                 <Alert className="bg-[#DFEFE6]/30 border border-[#91BEAD] text-[#29696B]">
                   <AlertDescription>
                     {isAdminOrSuperSupervisor && selectedSupervisor
                       ? "El supervisor seleccionado no tiene clientes asignados."
-                      : "No tiene clientes asignados o no se pudieron cargar. Contacte a un administrador para que le asigne clientes."
+                      : "No tiene clientes asignados. Contacte a un administrador para que le asigne clientes."
                     }
                   </AlertDescription>
                 </Alert>
@@ -2985,7 +2749,6 @@ const handleEditOrder = async (order: Order) => {
                         "none"
                       }
                       onValueChange={handleClientChange}
-                      disabled={!!currentOrderId}
                     >
                       <SelectTrigger id="cliente" className="border-[#91BEAD] focus:ring-[#29696B]/20">
                         <SelectValue placeholder="Seleccionar cliente" />
@@ -2993,12 +2756,13 @@ const handleEditOrder = async (order: Order) => {
                       <SelectContent>
                         <SelectItem value="none" disabled>Seleccione un cliente</SelectItem>
                         {Array.isArray(clients) && clients.length > 0 ? (
-                          Object.entries(clientSections).map(([servicio, serviceClients]) => (
+                          clients.map(client => (
                             <SelectItem
-                              key={servicio}
-                              value={serviceClients[0]._id}
+                              key={client._id}
+                              value={client._id}
                             >
-                              {servicio}
+                              {client.servicio}
+                              {client.seccionDelServicio ? ` - ${client.seccionDelServicio}` : ''}
                             </SelectItem>
                           ))
                         ) : (
@@ -3016,6 +2780,43 @@ const handleEditOrder = async (order: Order) => {
                   )}
                 </div>
               )}
+            </div>
+
+            {/* Estado del Pedido */}
+            <div>
+              <h2 className="text-lg font-medium mb-4 flex items-center text-[#29696B]">
+                <Clock className="w-5 h-5 mr-2 text-[#7AA79C]" />
+                Estado del Pedido
+              </h2>
+              
+              <Select
+                value={orderForm.estado || 'pendiente'}
+                onValueChange={(value) => setOrderForm(prev => ({ ...prev, estado: value }))}
+              >
+                <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
+                  <SelectValue placeholder="Seleccionar estado" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pendiente">
+                    <div className="flex items-center">
+                      <Clock className="w-4 h-4 mr-2 text-yellow-600" />
+                      Pendiente
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="aprobado">
+                    <div className="flex items-center">
+                      <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
+                      Aprobado
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="rechazado">
+                    <div className="flex items-center">
+                      <XCircle className="w-4 h-4 mr-2 text-red-600" />
+                      Rechazado
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Productos del Pedido */}
@@ -3126,15 +2927,15 @@ const handleEditOrder = async (order: Order) => {
             <Button
               onClick={currentOrderId ? handleUpdateOrder : handleCreateOrder}
               disabled={
-                loadingActionId === "create-order" ||
-                loadingActionId === "update-order" ||
+                createOrderMutation.isLoading ||
+                updateOrderMutation.isLoading ||
                 !orderForm.productos ||
                 orderForm.productos.length === 0 ||
                 !orderForm.servicio
               }
               className="bg-[#29696B] hover:bg-[#29696B]/90 text-white disabled:bg-[#8DB3BA] disabled:text-white/70"
             >
-              {loadingActionId === "create-order" || loadingActionId === "update-order" ? (
+              {createOrderMutation.isLoading || updateOrderMutation.isLoading ? (
                 <span className="flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Procesando...
@@ -3144,7 +2945,6 @@ const handleEditOrder = async (order: Order) => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
 
       {/* Modal para seleccionar supervisor */}
       <Dialog open={supervisorSelectOpen} onOpenChange={setSupervisorSelectOpen}>
@@ -3157,7 +2957,7 @@ const handleEditOrder = async (order: Order) => {
           </DialogHeader>
 
           <div className="py-4">
-            {isFetchingSupervisors ? (
+            {isLoadingSupervisors ? (
               <div className="flex justify-center py-4">
                 <Loader2 className="h-8 w-8 text-[#29696B] animate-spin" />
               </div>
@@ -3178,16 +2978,9 @@ const handleEditOrder = async (order: Order) => {
                     <div className="flex items-center">
                       <User className="w-4 h-4 text-[#7AA79C] mr-2" />
                       <span className="text-[#29696B] font-medium">
-                        {supervisor.nombre && supervisor.apellido
-                          ? `${supervisor.nombre} ${supervisor.apellido}`
-                          : supervisor.usuario || "Supervisor"}
+                        {supervisor.usuario || "Supervisor"}
                       </span>
                     </div>
-                    {supervisor.usuario && (
-                      <div className="text-xs text-[#7AA79C] ml-6 mt-1">
-                        @{supervisor.usuario}
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
@@ -3201,21 +2994,6 @@ const handleEditOrder = async (order: Order) => {
               className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
             >
               Cancelar
-            </Button>
-
-            <Button
-              className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
-              onClick={() => {
-                setSupervisorSelectOpen(false);
-                if (supervisors.length > 0) {
-                  // Si solo hay un supervisor, seleccionarlo automáticamente
-                  const firstSupervisor = supervisors[0];
-                  handleSupervisorSelect(firstSupervisor._id);
-                }
-              }}
-              disabled={supervisors.length === 0}
-            >
-              Seleccionar Automáticamente
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -3233,8 +3011,9 @@ const handleEditOrder = async (order: Order) => {
 
           <div className="py-4">
             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-              {orderForm.servicio && clientSections[orderForm.servicio] &&
-                clientSections[orderForm.servicio].map((client) => (
+              {orderForm.servicio && clients
+                .filter(c => c.servicio === orderForm.servicio)
+                .map((client) => (
                   <div
                     key={client._id}
                     className="p-3 border border-[#91BEAD] rounded-md hover:bg-[#DFEFE6]/30 cursor-pointer transition-colors"
@@ -3297,7 +3076,9 @@ const handleEditOrder = async (order: Order) => {
                 </SelectTrigger>
                 <SelectContent className="max-h-80">
                   <SelectItem value="none" disabled>Seleccione un producto</SelectItem>
-                  {Array.isArray(products) && products.length > 0 ? (
+                  {isLoadingProducts ? (
+                    <SelectItem value="loading" disabled>Cargando productos...</SelectItem>
+                  ) : products.length > 0 ? (
                     products.map(product => (
                       <SelectItem
                         key={product._id}
@@ -3382,7 +3163,7 @@ const handleEditOrder = async (order: Order) => {
         description="¿Estás seguro de que deseas eliminar este pedido? Esta acción no se puede deshacer y devolverá el stock a inventario."
         confirmText="Eliminar"
         cancelText="Cancelar"
-        onConfirm={() => orderToDelete && handleDeleteOrder(orderToDelete)}
+        onConfirm={handleDeleteOrder}
         variant="destructive"
       />
     </div>

@@ -24,7 +24,9 @@ import {
   DollarSign,
   Download,
   Loader2,
-  Clock
+  Clock,
+  CheckCircle2,
+  XCircle
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -65,6 +67,7 @@ interface OrderDetails {
     fechaCreacion?: string;
     supervisorId?: string;
     supervisorNombre?: string;
+    motivoRechazo?: string;
     [key: string]: any;
   };
   [key: string]: any;
@@ -73,68 +76,34 @@ interface OrderDetails {
 interface OrderDetailsDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  orderId: string | null;
+  pedido: OrderDetails | null;
   onApprove?: (orderId: string) => void;
   onReject?: (orderId: string) => void;
+  canApprove?: boolean;
 }
 
 export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
   isOpen,
   onClose,
-  orderId,
+  pedido,
   onApprove,
-  onReject
+  onReject,
+  canApprove = false
 }) => {
-  const [orderDetails, setOrderDetails] = useState<OrderDetails | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isDownloadingRemito, setIsDownloadingRemito] = useState(false);
+  const [isDownloadingRemito, setIsDownloadingRemito] = useState<boolean>(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
 
-  // Cargar detalles del pedido cuando cambia el ID o se abre el diálogo
+  // Obtener rol del usuario al montar componente
   useEffect(() => {
-    if (isOpen && orderId) {
-      fetchOrderDetails(orderId);
-    } else {
-      // Limpiar detalles al cerrar
-      setOrderDetails(null);
-      setError(null);
+    const storedRole = localStorage.getItem('userRole');
+    if (storedRole) {
+      setUserRole(storedRole);
     }
-  }, [isOpen, orderId]);
-
-  // Función para obtener detalles del pedido
-  const fetchOrderDetails = async (id: string) => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('No se encontró token de autenticación');
-      }
-
-      const response = await fetch(`http://179.43.118.101:4000/api/pedido/${id}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error al obtener detalles del pedido (${response.status})`);
-      }
-
-      const data = await response.json();
-      setOrderDetails(data);
-    } catch (err) {
-      console.error('Error al cargar detalles del pedido:', err);
-      setError(err instanceof Error ? err.message : 'Error al cargar detalles del pedido');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, []);
 
   // Función para descargar remito del pedido
   const handleDownloadRemito = async () => {
-    if (!orderId) return;
+    if (!pedido) return;
     
     try {
       setIsDownloadingRemito(true);
@@ -144,7 +113,7 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         throw new Error('No se encontró token de autenticación');
       }
       
-      const response = await fetch(`http://179.43.118.101:4000/api/downloads/remito/${orderId}`, {
+      const response = await fetch(`http://localhost:4000/api/downloads/remito/${pedido._id}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },
@@ -165,7 +134,7 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `remito_${orderDetails?.nPedido || orderId}.pdf`);
+      link.setAttribute('download', `remito_${pedido.nPedido || pedido._id}.pdf`);
       document.body.appendChild(link);
       link.click();
       
@@ -176,7 +145,6 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
       
     } catch (error) {
       console.error('Error al descargar remito:', error);
-      setError(error instanceof Error ? error.message : 'Error al descargar remito');
     } finally {
       setIsDownloadingRemito(false);
     }
@@ -184,11 +152,11 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
 
   // Obtener total del pedido
   const calculateOrderTotal = () => {
-    if (!orderDetails || !Array.isArray(orderDetails.productos)) {
+    if (!pedido || !Array.isArray(pedido.productos)) {
       return 0;
     }
 
-    return orderDetails.productos.reduce((total, item) => {
+    return pedido.productos.reduce((total, item) => {
       let price = 0;
 
       if (typeof item.precio === 'number') {
@@ -213,31 +181,31 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
 
   // Estado visual del pedido
   const getStatusBadge = () => {
-    switch (orderDetails?.estado?.toLowerCase()) {
+    switch (pedido?.estado?.toLowerCase()) {
       case 'pendiente':
         return (
-          <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300">
+          <Badge className="bg-[#FF6B35]/20 text-[#FFCC80] border border-[#FF6B35]">
             <Clock className="w-3 h-3 mr-1" />
             Pendiente de aprobación
           </Badge>
         );
       case 'aprobado':
         return (
-          <Badge className="bg-green-100 text-green-800 border-green-300">
+          <Badge className="bg-[#2E7D32]/20 text-[#AED581] border border-[#2E7D32]">
             <ClipboardCheck className="w-3 h-3 mr-1" />
             Aprobado
           </Badge>
         );
       case 'rechazado':
         return (
-          <Badge className="bg-red-100 text-red-800 border-red-300">
+          <Badge className="bg-[#D32F2F]/20 text-[#EF9A9A] border border-[#D32F2F]">
             <Info className="w-3 h-3 mr-1" />
             Rechazado
           </Badge>
         );
       default:
         return (
-          <Badge className="bg-blue-100 text-blue-800 border-blue-300">
+          <Badge className="bg-[#2A82C7]/20 text-[#90CAF9] border border-[#2A82C7]">
             <ClipboardList className="w-3 h-3 mr-1" />
             En procesamiento
           </Badge>
@@ -245,38 +213,45 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     }
   };
 
+  // Determinar si el usuario puede aprobar/rechazar este pedido
+  const canApproveReject = () => {
+    // Solo supervisores pueden aprobar/rechazar
+    if (userRole !== 'supervisor') return false;
+    
+    // Solo se pueden aprobar/rechazar pedidos pendientes
+    if (pedido?.estado !== 'pendiente') return false;
+    
+    // Verificar si es un pedido de operario para este supervisor
+    if (pedido?.metadata?.creadoPorOperario) {
+      return canApprove; 
+    }
+    
+    return false;
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-gradient-to-r from-[#15497E]/90 to-[#2A82C7]/90 backdrop-blur-md border border-[#2A82C7] text-white">
+      <DialogContent className="shop-theme max-w-3xl max-h-[90vh] overflow-y-auto bg-gradient-to-r from-[#00701A]/90 to-[#0F172A]/90 backdrop-blur-md border border-[#2A82C7] text-white">
         <DialogHeader>
           <DialogTitle className="text-xl flex items-center text-[#F8F9FA]">
             <ShoppingCart className="w-5 h-5 mr-2" />
-            {loading ? 'Cargando detalles del pedido...' : 
-              orderDetails ? `Pedido #${orderDetails.nPedido || 'Sin número'}` : 'Detalles del pedido'}
+            {!pedido ? 'Detalles del pedido' : `Pedido #${pedido.nPedido || 'Sin número'}`}
           </DialogTitle>
           <DialogDescription className="text-[#CED4DA]">
-            {orderDetails?.metadata?.creadoPorOperario ? 
-              `Creado por operario: ${orderDetails.metadata.operarioNombre || 'No disponible'}` : 
+            {pedido?.metadata?.creadoPorOperario ? 
+              `Creado por operario: ${pedido.metadata.operarioNombre || 'No disponible'}` : 
               'Revise los detalles completos del pedido'}
           </DialogDescription>
         </DialogHeader>
 
-        {loading ? (
-          <div className="flex justify-center py-12">
-            <div className="flex flex-col items-center">
-              <div className="w-12 h-12 border-4 border-t-[#F8F9FA] border-[#2A82C7]/30 rounded-full animate-spin mb-4"></div>
-              <p className="text-[#F8F9FA]">Cargando detalles del pedido...</p>
-            </div>
+        {!pedido ? (
+          <div className="py-8 text-center text-[#CED4DA]">
+            No se ha seleccionado ningún pedido para ver sus detalles.
           </div>
-        ) : error ? (
-          <Alert className="bg-red-900/50 border border-red-400 mt-2 mb-2">
-            <AlertCircle className="h-4 w-4 text-red-400" />
-            <AlertDescription className="text-red-100 ml-2">{error}</AlertDescription>
-          </Alert>
-        ) : orderDetails ? (
+        ) : (
           <div className="space-y-6">
             {/* Información general del pedido */}
-            <div className="bg-white/10 rounded-lg p-4 space-y-3">
+            <div className="bg-white/10 rounded-lg p-4 space-y-3 border border-[#2A82C7]/30">
               <div className="flex justify-between items-start">
                 <h3 className="font-semibold text-[#F8F9FA] flex items-center">
                   <ClipboardList className="w-4 h-4 mr-2" />
@@ -291,7 +266,7 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                     <Calendar className="w-4 h-4 text-[#CED4DA] mt-0.5 mr-2" />
                     <div>
                       <p className="text-sm text-[#CED4DA]">Fecha de creación:</p>
-                      <p className="text-[#F8F9FA]">{formatDate(orderDetails.fecha)}</p>
+                      <p className="text-[#F8F9FA]">{formatDate(pedido.fecha)}</p>
                     </div>
                   </div>
                   
@@ -299,50 +274,61 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                     <Building className="w-4 h-4 text-[#CED4DA] mt-0.5 mr-2" />
                     <div>
                       <p className="text-sm text-[#CED4DA]">Servicio:</p>
-                      <p className="text-[#F8F9FA]">{orderDetails.servicio}</p>
+                      <p className="text-[#F8F9FA]">{pedido.servicio}</p>
                     </div>
                   </div>
                   
-                  {orderDetails.seccionDelServicio && (
+                  {pedido.seccionDelServicio && (
                     <div className="flex items-start">
                       <MapPin className="w-4 h-4 text-[#CED4DA] mt-0.5 mr-2" />
                       <div>
                         <p className="text-sm text-[#CED4DA]">Sección:</p>
-                        <p className="text-[#F8F9FA]">{orderDetails.seccionDelServicio}</p>
+                        <p className="text-[#F8F9FA]">{pedido.seccionDelServicio}</p>
                       </div>
                     </div>
                   )}
                 </div>
                 
                 <div className="space-y-2">
-                  {typeof orderDetails.userId === 'object' && orderDetails.userId && (
+                  {typeof pedido.userId === 'object' && pedido.userId && (
                     <div className="flex items-start">
                       <User className="w-4 h-4 text-[#CED4DA] mt-0.5 mr-2" />
                       <div>
                         <p className="text-sm text-[#CED4DA]">Creado por:</p>
                         <p className="text-[#F8F9FA]">
-                          {orderDetails.userId.nombre || orderDetails.userId.email || 'Usuario desconocido'}
+                          {pedido.userId.nombre || pedido.userId.email || 'Usuario desconocido'}
                         </p>
                       </div>
                     </div>
                   )}
                   
-                  {orderDetails.metadata?.creadoPorOperario && (
+                  {pedido.metadata?.creadoPorOperario && (
                     <div className="flex items-start">
                       <User className="w-4 h-4 text-[#CED4DA] mt-0.5 mr-2" />
                       <div>
                         <p className="text-sm text-[#CED4DA]">Operario:</p>
-                        <p className="text-[#F8F9FA]">{orderDetails.metadata.operarioNombre || 'No disponible'}</p>
+                        <p className="text-[#F8F9FA]">{pedido.metadata.operarioNombre || 'No disponible'}</p>
                       </div>
                     </div>
                   )}
                   
-                  {orderDetails.detalle && (
+                  {pedido.detalle && (
                     <div className="flex items-start">
                       <Info className="w-4 h-4 text-[#CED4DA] mt-0.5 mr-2" />
                       <div>
                         <p className="text-sm text-[#CED4DA]">Notas:</p>
-                        <p className="text-[#F8F9FA]">{orderDetails.detalle}</p>
+                        <p className="text-[#F8F9FA]">{pedido.detalle}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Mostrar motivo de rechazo si aplica */}
+                  {pedido.estado === 'rechazado' && pedido.metadata?.motivoRechazo && (
+                    <div className="flex items-start">
+                      <AlertCircle className="w-4 h-4 text-[#EF9A9A] mt-0.5 mr-2" />
+                      <div>
+                        <p className="text-sm text-[#EF9A9A]">Motivo de rechazo:</p>
+                        <p className="text-[#EF9A9A]/90">{pedido.metadata.motivoRechazo}</p>
                       </div>
                     </div>
                   )}
@@ -351,7 +337,7 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             </div>
             
             {/* Lista de productos */}
-            <div className="bg-white/10 rounded-lg p-4">
+            <div className="bg-white/10 rounded-lg p-4 border border-[#2A82C7]/30">
               <h3 className="font-semibold text-[#F8F9FA] flex items-center mb-3">
                 <Package className="w-4 h-4 mr-2" />
                 Productos del pedido
@@ -359,7 +345,7 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
               
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="border-b border-white/20">
+                  <thead className="border-b border-[#2A82C7]/30">
                     <tr>
                       <th className="py-2 px-2 text-left text-xs text-[#CED4DA]">Producto</th>
                       <th className="py-2 px-2 text-center text-xs text-[#CED4DA]">Cantidad</th>
@@ -367,8 +353,8 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                       <th className="py-2 px-2 text-right text-xs text-[#CED4DA]">Subtotal</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/10">
-                    {orderDetails.productos.map((item, index) => {
+                  <tbody className="divide-y divide-[#2A82C7]/20">
+                    {pedido.productos.map((item, index) => {
                       const productName = typeof item.productoId === 'object' && item.productoId?.nombre 
                         ? item.productoId.nombre 
                         : item.nombre || 'Producto';
@@ -391,7 +377,7 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                       );
                     })}
                     
-                    <tr className="bg-white/5 font-semibold">
+                    <tr className="bg-[#00701A]/20 font-semibold">
                       <td colSpan={3} className="py-3 px-2 text-right text-[#F8F9FA]">Total:</td>
                       <td className="py-3 px-2 text-right text-[#F8F9FA]">${calculateOrderTotal().toFixed(2)}</td>
                     </tr>
@@ -400,20 +386,16 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
               </div>
             </div>
           </div>
-        ) : (
-          <div className="py-8 text-center text-[#CED4DA]">
-            No se ha seleccionado ningún pedido para ver sus detalles.
-          </div>
         )}
 
         <DialogFooter className="flex-col sm:flex-row gap-2 sm:justify-between">
           <div>
-            {orderDetails && (
+            {pedido && (
               <Button
                 variant="outline"
                 onClick={handleDownloadRemito}
                 disabled={isDownloadingRemito}
-                className="border-[#2A82C7] text-[#F8F9FA] hover:bg-[#2A82C7]/20"
+                className="border-[#2A82C7] text-[#F8F9FA] hover:bg-[#00701A]/20"
               >
                 {isDownloadingRemito ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -429,31 +411,34 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             <Button
               variant="outline"
               onClick={onClose}
-              className="border-[#CED4DA]/30 text-[#CED4DA] hover:bg-white/10"
+              className="border-[#F8F9FA]/30 text-[#F8F9FA] hover:bg-white/10"
             >
               Cerrar
             </Button>
             
-            {orderDetails && orderDetails.estado === 'pendiente' && onApprove && onReject && (
+            {/* Mostrar botones de aprobación/rechazo para supervisores */}
+            {pedido && canApproveReject() && onApprove && onReject && (
               <>
                 <Button
                   variant="destructive"
                   onClick={() => {
-                    onReject(orderId!);
+                    onReject(pedido._id);
                     onClose();
                   }}
-                  className="bg-red-600 hover:bg-red-700"
+                  className="bg-[#D32F2F] hover:bg-[#D32F2F]/80"
                 >
+                  <XCircle className="w-4 h-4 mr-2" />
                   Rechazar
                 </Button>
                 
                 <Button
                   onClick={() => {
-                    onApprove(orderId!);
+                    onApprove(pedido._id);
                     onClose();
                   }}
-                  className="bg-green-600 hover:bg-green-700"
+                  className="bg-[#00701A] hover:bg-[#7CB342] text-white"
                 >
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
                   Aprobar
                 </Button>
               </>

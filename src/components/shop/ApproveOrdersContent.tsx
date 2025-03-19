@@ -66,6 +66,10 @@ import type { OrderDetailsDialog } from './OrderDetailsDialog';
 import ApprovalConfirmDialog  from './ApprovalConfirmDialog';
 import { Label } from "@/components/ui/label";
 import { getApiUrl } from '@/utils/apiUtils';
+import { LazyProductImage } from '@/components/LazyProductImage';
+
+// Importar estilos globales
+import '@/styles/shop-global.css';
 
 // Intentar usar el contexto de notificaciones de forma segura
 let useNotification;
@@ -234,7 +238,7 @@ export const ApproveOrdersContent: React.FC = () => {
       
       // Obtener los pedidos que deben ser aprobados por este supervisor
       // Primero obtenemos el ID del usuario actual
-      const userResponse = await fetch('http://179.43.118.101:4000/api/auth/me', {
+      const userResponse = await fetch('http://localhost:4000/api/auth/me', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -250,7 +254,7 @@ export const ApproveOrdersContent: React.FC = () => {
       }
       
       // Ahora obtenemos los pedidos pendientes para este supervisor
-      const response = await fetch(`http://179.43.118.101:4000/api/pedido/supervisor/${userId}`, {
+      const response = await fetch(`http://localhost:4000/api/pedido/supervisor/${userId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -318,8 +322,8 @@ export const ApproveOrdersContent: React.FC = () => {
       }
       
       const endpoint = action === 'approve' 
-        ? `http://179.43.118.101:4000/api/pedido/${pedidoId}/aprobar` 
-        : `http://179.43.118.101:4000/api/pedido/${pedidoId}/rechazar`;
+        ? `http://localhost:4000/api/pedido/${pedidoId}/aprobar` 
+        : `http://localhost:4000/api/pedido/${pedidoId}/rechazar`;
       
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -406,28 +410,28 @@ export const ApproveOrdersContent: React.FC = () => {
     switch (estado) {
       case 'pendiente':
         return (
-          <Badge className="bg-yellow-100 text-yellow-800 border border-yellow-300">
+          <Badge className="bg-[var(--state-warning)]/20 text-[var(--text-primary)] border border-[var(--state-warning)]/50">
             <Clock className="w-3 h-3 mr-1" />
             Pendiente
           </Badge>
         );
       case 'aprobado':
         return (
-          <Badge className="bg-green-100 text-green-800 border border-green-300">
+          <Badge className="bg-[var(--state-success)]/20 text-[var(--state-success)] border border-[var(--state-success)]/50">
             <CheckCircle className="w-3 h-3 mr-1" />
             Aprobado
           </Badge>
         );
       case 'rechazado':
         return (
-          <Badge className="bg-red-100 text-red-800 border border-red-300">
+          <Badge className="bg-[var(--state-error)]/20 text-[var(--state-error)] border border-[var(--state-error)]/50">
             <XCircle className="w-3 h-3 mr-1" />
             Rechazado
           </Badge>
         );
       default:
         return (
-          <Badge className="bg-gray-100 text-gray-800 border border-gray-300">
+          <Badge className="bg-[var(--text-disabled)]/20 text-[var(--text-secondary)] border border-[var(--text-disabled)]/50">
             {estado}
           </Badge>
         );
@@ -461,43 +465,43 @@ export const ApproveOrdersContent: React.FC = () => {
   };
   
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="shop-theme container mx-auto px-4 py-8">
       <div className="max-w-7xl mx-auto">
         {/* Encabezado */}
         <header className="mb-8">
-          <h1 className="text-3xl font-bold flex items-center text-[#F8F9FA]">
+          <h1 className="text-3xl font-bold flex items-center text-[var(--text-primary)]">
             <ClipboardCheck className="mr-3 h-8 w-8" />
             Aprobación de Pedidos
           </h1>
-          <p className="text-[#6C757D] mt-2">
+          <p className="text-[var(--text-tertiary)] mt-2">
             Gestiona los pedidos pendientes de aprobación realizados por tus operarios.
           </p>
         </header>
         
         {/* Alerta de error */}
         {error && (
-          <Alert className="mb-6 bg-red-900/30 border border-red-500">
-            <AlertCircle className="h-4 w-4 text-red-400" />
-            <AlertDescription className="ml-2 text-white">{error}</AlertDescription>
+          <Alert className="mb-6 bg-[var(--state-error)]/30 border border-[var(--state-error)]">
+            <AlertCircle className="h-4 w-4 text-[var(--state-error)]/80" />
+            <AlertDescription className="ml-2 text-[var(--text-primary)]">{error}</AlertDescription>
           </Alert>
         )}
         
         {/* Filtros y búsqueda */}
-        <Card className="mb-6 bg-gradient-to-r from-[#15497E]/40 to-[#2A82C7]/40 backdrop-blur-sm border-[#2A82C7] shadow-md">
+        <Card className="mb-6 bg-[var(--background-card)] backdrop-blur-sm border-[var(--accent-primary)]/20 shadow-md">
           <CardHeader className="pb-2">
-            <CardTitle className="text-[#F8F9FA] text-lg">Filtros</CardTitle>
+            <CardTitle className="text-[var(--text-primary)] text-lg">Filtros</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {/* Búsqueda */}
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#6C757D] w-4 h-4" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[var(--text-tertiary)] w-4 h-4" />
                 <Input
                   type="text"
                   placeholder="Buscar pedidos..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 bg-white/10 border-[#2A82C7] focus:border-[#15497E] text-white placeholder:text-[#F8F9FA]/70"
+                  className="pl-10 bg-[var(--background-card)] border-[var(--accent-primary)]/30 focus:border-[var(--accent-secondary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)]/70"
                 />
               </div>
               
@@ -506,10 +510,10 @@ export const ApproveOrdersContent: React.FC = () => {
                 value={filterStatus} 
                 onValueChange={(value: any) => setFilterStatus(value)}
               >
-                <SelectTrigger className="bg-white/10 border-[#2A82C7] text-[#F8F9FA]">
+                <SelectTrigger className="bg-[var(--background-card)] border-[var(--accent-primary)]/30 text-[var(--text-primary)]">
                   <SelectValue placeholder="Estado" />
                 </SelectTrigger>
-                <SelectContent className="bg-[#15497E] border-[#2A82C7] text-[#F8F9FA]">
+                <SelectContent className="bg-[var(--background-card)] border-[var(--accent-primary)]/30 text-[var(--text-primary)]">
                   <SelectItem value="all">Todos los estados</SelectItem>
                   <SelectItem value="pending">Pendientes</SelectItem>
                   <SelectItem value="approved">Aprobados</SelectItem>
@@ -522,10 +526,10 @@ export const ApproveOrdersContent: React.FC = () => {
                 value={sortOrder} 
                 onValueChange={(value: any) => setSortOrder(value)}
               >
-                <SelectTrigger className="bg-white/10 border-[#2A82C7] text-[#F8F9FA]">
+                <SelectTrigger className="bg-[var(--background-card)] border-[var(--accent-primary)]/30 text-[var(--text-primary)]">
                   <SelectValue placeholder="Ordenar por" />
                 </SelectTrigger>
-                <SelectContent className="bg-[#15497E] border-[#2A82C7] text-[#F8F9FA]">
+                <SelectContent className="bg-[var(--background-card)] border-[var(--accent-primary)]/30 text-[var(--text-primary)]">
                   <SelectItem value="newest">Más recientes primero</SelectItem>
                   <SelectItem value="oldest">Más antiguos primero</SelectItem>
                 </SelectContent>
@@ -533,23 +537,23 @@ export const ApproveOrdersContent: React.FC = () => {
               
               {/* Fecha inicio */}
               <div>
-                <label className="text-xs text-[#F8F9FA] mb-1 block">Desde</label>
+                <label className="text-xs text-[var(--text-primary)] mb-1 block">Desde</label>
                 <Input
                   type="date"
                   value={dateFilter.startDate}
                   onChange={(e) => setDateFilter(prev => ({ ...prev, startDate: e.target.value }))}
-                  className="bg-white/10 border-[#2A82C7] text-[#F8F9FA]"
+                  className="bg-[var(--background-card)] border-[var(--accent-primary)]/30 text-[var(--text-primary)]"
                 />
               </div>
               
               {/* Fecha fin */}
               <div>
-                <label className="text-xs text-[#F8F9FA] mb-1 block">Hasta</label>
+                <label className="text-xs text-[var(--text-primary)] mb-1 block">Hasta</label>
                 <Input
                   type="date"
                   value={dateFilter.endDate}
                   onChange={(e) => setDateFilter(prev => ({ ...prev, endDate: e.target.value }))}
-                  className="bg-white/10 border-[#2A82C7] text-[#F8F9FA]"
+                  className="bg-[var(--background-card)] border-[var(--accent-primary)]/30 text-[var(--text-primary)]"
                 />
               </div>
               
@@ -558,14 +562,14 @@ export const ApproveOrdersContent: React.FC = () => {
                 <Button 
                   variant="outline" 
                   onClick={clearFilters}
-                  className="text-[#F8F9FA] border-[#2A82C7] hover:bg-[#2A82C7]/20"
+                  className="text-[var(--text-primary)] border-[var(--accent-primary)]/30 hover:bg-[var(--accent-primary)]/20"
                 >
                   Limpiar filtros
                 </Button>
                 <Button 
                   onClick={() => fetchPedidos(true)}
                   disabled={refreshing}
-                  className="bg-[#15497E] hover:bg-[#2A82C7] text-white"
+                  className="bg-[var(--accent-primary)] hover:bg-[var(--accent-tertiary)] text-white"
                 >
                   {refreshing ? (
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -583,21 +587,21 @@ export const ApproveOrdersContent: React.FC = () => {
         {loading && !refreshing && (
           <div className="flex justify-center items-center py-20">
             <div className="flex flex-col items-center">
-              <Loader2 className="h-10 w-10 animate-spin text-[#F8F9FA]" />
-              <p className="mt-4 text-[#F8F9FA]">Cargando pedidos...</p>
+              <Loader2 className="h-10 w-10 animate-spin text-[var(--accent-primary)]" />
+              <p className="mt-4 text-[var(--text-primary)]">Cargando pedidos...</p>
             </div>
           </div>
         )}
         
         {/* Vista sin pedidos */}
         {!loading && filteredPedidos.length === 0 && (
-          <Card className="bg-gradient-to-r from-[#15497E]/40 to-[#2A82C7]/40 backdrop-blur-sm border-[#2A82C7] shadow-md text-center py-12">
+          <Card className="bg-[var(--background-card)] backdrop-blur-sm border-[var(--accent-primary)]/20 shadow-md text-center py-12">
             <CardContent>
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-[#15497E]/40 rounded-full mb-4">
-                <PackageSearch className="w-8 h-8 text-[#F8F9FA]" />
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-[var(--accent-primary)]/20 rounded-full mb-4">
+                <PackageSearch className="w-8 h-8 text-[var(--text-primary)]" />
               </div>
-              <h3 className="text-xl font-medium text-[#F8F9FA] mb-2">No hay pedidos para mostrar</h3>
-              <p className="text-[#6C757D] max-w-lg mx-auto">
+              <h3 className="text-xl font-medium text-[var(--text-primary)] mb-2">No hay pedidos para mostrar</h3>
+              <p className="text-[var(--text-tertiary)] max-w-lg mx-auto">
                 {filterStatus === 'pending'
                   ? 'No hay pedidos pendientes de aprobación en este momento.'
                   : `No se encontraron pedidos con los filtros seleccionados.`
@@ -607,7 +611,7 @@ export const ApproveOrdersContent: React.FC = () => {
                 <Button
                   variant="outline"
                   onClick={clearFilters}
-                  className="mt-4 text-[#F8F9FA] border-[#2A82C7] hover:bg-[#2A82C7]/20"
+                  className="mt-4 text-[var(--text-primary)] border-[var(--accent-primary)]/30 hover:bg-[var(--accent-primary)]/20"
                 >
                   Limpiar filtros
                 </Button>
@@ -618,37 +622,37 @@ export const ApproveOrdersContent: React.FC = () => {
         
         {/* Lista de pedidos - Vista Desktop */}
         {!loading && filteredPedidos.length > 0 && (
-          <div className="hidden md:block bg-gradient-to-r from-[#15497E]/40 to-[#2A82C7]/40 backdrop-blur-sm rounded-xl border border-[#2A82C7] shadow-md overflow-hidden">
+          <div className="hidden md:block bg-[var(--background-card)] backdrop-blur-sm rounded-xl border border-[var(--accent-primary)]/20 shadow-md overflow-hidden">
             <Table>
-              <TableHeader className="bg-[#15497E]/60">
+              <TableHeader className="bg-[var(--accent-primary)]/10">
                 <TableRow>
-                  <TableHead className="text-[#F8F9FA] font-medium">
+                  <TableHead className="text-[var(--text-primary)] font-medium">
                     <div className="flex items-center">
                       <FileSpreadsheet className="h-4 w-4 mr-2" />
                       Pedido #
                     </div>
                   </TableHead>
-                  <TableHead className="text-[#F8F9FA] font-medium">
+                  <TableHead className="text-[var(--text-primary)] font-medium">
                     <div className="flex items-center">
                       <Calendar className="h-4 w-4 mr-2" />
                       Fecha
                     </div>
                   </TableHead>
-                  <TableHead className="text-[#F8F9FA] font-medium">
+                  <TableHead className="text-[var(--text-primary)] font-medium">
                     <div className="flex items-center">
                       <Building className="h-4 w-4 mr-2" />
                       Servicio
                     </div>
                   </TableHead>
-                  <TableHead className="text-[#F8F9FA] font-medium">
+                  <TableHead className="text-[var(--text-primary)] font-medium">
                     <div className="flex items-center">
                       <UserCircle className="h-4 w-4 mr-2" />
                       Solicitado por
                     </div>
                   </TableHead>
-                  <TableHead className="text-[#F8F9FA] font-medium text-right">Total</TableHead>
-                  <TableHead className="text-[#F8F9FA] font-medium">Estado</TableHead>
-                  <TableHead className="text-[#F8F9FA] font-medium text-right">Acciones</TableHead>
+                  <TableHead className="text-[var(--text-primary)] font-medium text-right">Total</TableHead>
+                  <TableHead className="text-[var(--text-primary)] font-medium">Estado</TableHead>
+                  <TableHead className="text-[var(--text-primary)] font-medium text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -656,38 +660,38 @@ export const ApproveOrdersContent: React.FC = () => {
                   <TableRow 
                     key={pedido._id}
                     className={`
-                      hover:bg-[#15497E]/20 transition-colors
-                      ${pedido.estado === 'pendiente' ? 'bg-yellow-50/10' : ''}
-                      ${pedido.estado === 'aprobado' ? 'bg-green-50/10' : ''}
-                      ${pedido.estado === 'rechazado' ? 'bg-red-50/10' : ''}
+                      hover:bg-[var(--accent-primary)]/5 transition-colors
+                      ${pedido.estado === 'pendiente' ? 'bg-[var(--state-warning)]/5' : ''}
+                      ${pedido.estado === 'aprobado' ? 'bg-[var(--state-success)]/5' : ''}
+                      ${pedido.estado === 'rechazado' ? 'bg-[var(--state-error)]/5' : ''}
                     `}
                   >
-                    <TableCell className="font-medium text-[#F8F9FA]">
+                    <TableCell className="font-medium text-[var(--text-primary)]">
                       {pedido.nPedido || 'N/A'}
                     </TableCell>
-                    <TableCell className="text-[#6C757D]">
+                    <TableCell className="text-[var(--text-tertiary)]">
                       {formatDate(pedido.fecha)}
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
-                        <span className="text-[#F8F9FA]">{pedido.servicio}</span>
+                        <span className="text-[var(--text-primary)]">{pedido.servicio}</span>
                         {pedido.seccionDelServicio && (
-                          <span className="text-xs text-[#6C757D] flex items-center mt-1">
+                          <span className="text-xs text-[var(--text-tertiary)] flex items-center mt-1">
                             <MapPin className="w-3 h-3 mr-1" />
                             {pedido.seccionDelServicio}
                           </span>
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="text-[#F8F9FA]">
+                    <TableCell className="text-[var(--text-primary)]">
                       {getAuthorName(pedido)}
                       {pedido.metadata?.creadoPorOperario && (
-                        <span className="text-xs text-[#6C757D] block">
+                        <span className="text-xs text-[var(--text-tertiary)] block">
                           Operario
                         </span>
                       )}
                     </TableCell>
-                    <TableCell className="text-right font-medium text-[#F8F9FA]">
+                    <TableCell className="text-right font-medium text-[var(--text-primary)]">
                       ${pedido.total?.toFixed(2) || '0.00'}
                     </TableCell>
                     <TableCell>
@@ -699,7 +703,7 @@ export const ApproveOrdersContent: React.FC = () => {
                           variant="outline"
                           size="sm"
                           onClick={() => handleViewDetails(pedido)}
-                          className="text-[#F8F9FA] border-[#2A82C7] hover:bg-[#2A82C7]/20"
+                          className="text-[var(--text-primary)] border-[var(--accent-primary)]/30 hover:bg-[var(--accent-primary)]/20"
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
@@ -709,7 +713,7 @@ export const ApproveOrdersContent: React.FC = () => {
                               variant="outline"
                               size="sm"
                               onClick={() => handleApproveClick(pedido)}
-                              className="border-green-500 text-green-500 hover:bg-green-500/20"
+                              className="border-[var(--state-success)] text-[var(--state-success)] hover:bg-[var(--state-success)]/20"
                             >
                               <Check className="h-4 w-4" />
                             </Button>
@@ -717,7 +721,7 @@ export const ApproveOrdersContent: React.FC = () => {
                               variant="outline"
                               size="sm"
                               onClick={() => handleRejectClick(pedido)}
-                              className="border-red-500 text-red-500 hover:bg-red-500/20"
+                              className="border-[var(--state-error)] text-[var(--state-error)] hover:bg-[var(--state-error)]/20"
                             >
                               <X className="h-4 w-4" />
                             </Button>
@@ -739,23 +743,23 @@ export const ApproveOrdersContent: React.FC = () => {
               <Card 
                 key={pedido._id}
                 className={`
-                  bg-gradient-to-r border shadow-md overflow-hidden
+                  bg-[var(--background-card)] border shadow-md overflow-hidden
                   ${pedido.estado === 'pendiente' 
-                    ? 'from-yellow-900/40 to-yellow-800/40 border-yellow-700' 
+                    ? 'border-[var(--state-warning)]' 
                     : pedido.estado === 'aprobado'
-                      ? 'from-green-900/40 to-green-800/40 border-green-700'
-                      : 'from-red-900/40 to-red-800/40 border-red-700'
+                      ? 'border-[var(--state-success)]'
+                      : 'border-[var(--state-error)]'
                   }
                 `}
               >
                 <CardHeader className="pb-2">
                   <div className="flex justify-between items-start">
                     <div>
-                      <CardTitle className="text-lg text-[#F8F9FA] flex items-center">
+                      <CardTitle className="text-lg text-[var(--text-primary)] flex items-center">
                         <FileSpreadsheet className="h-4 w-4 mr-2" />
                         Pedido #{pedido.nPedido || 'N/A'}
                       </CardTitle>
-                      <p className="text-xs text-[#6C757D]">
+                      <p className="text-xs text-[var(--text-tertiary)]">
                         {formatDate(pedido.fecha)}
                       </p>
                     </div>
@@ -765,33 +769,33 @@ export const ApproveOrdersContent: React.FC = () => {
                 <CardContent className="space-y-3 pt-1">
                   <div className="flex justify-between items-center">
                     <div className="flex flex-col">
-                      <div className="flex items-center text-[#F8F9FA]">
-                        <Building className="h-4 w-4 mr-2 text-[#6C757D]" />
+                      <div className="flex items-center text-[var(--text-primary)]">
+                        <Building className="h-4 w-4 mr-2 text-[var(--text-tertiary)]" />
                         {pedido.servicio}
                       </div>
                       {pedido.seccionDelServicio && (
-                        <div className="flex items-center text-[#6C757D] text-xs ml-6 mt-1">
+                        <div className="flex items-center text-[var(--text-tertiary)] text-xs ml-6 mt-1">
                           <MapPin className="h-3 w-3 mr-1" />
                           {pedido.seccionDelServicio}
                         </div>
                       )}
                     </div>
                     <div className="text-right">
-                      <div className="text-lg font-medium text-[#F8F9FA]">
+                      <div className="text-lg font-medium text-[var(--text-primary)]">
                         ${pedido.total?.toFixed(2) || '0.00'}
                       </div>
-                      <div className="text-xs text-[#6C757D]">
+                      <div className="text-xs text-[var(--text-tertiary)]">
                         {pedido.productos?.length || 0} items
                       </div>
                     </div>
                   </div>
                   
-                  <div className="border-t border-[#2A82C7]/30 pt-2 flex items-center">
-                    <UserCircle className="h-4 w-4 mr-2 text-[#6C757D]" />
+                  <div className="border-t border-[var(--accent-primary)]/30 pt-2 flex items-center">
+                    <UserCircle className="h-4 w-4 mr-2 text-[var(--text-tertiary)]" />
                     <div>
-                      <span className="text-[#F8F9FA]">{getAuthorName(pedido)}</span>
+                      <span className="text-[var(--text-primary)]">{getAuthorName(pedido)}</span>
                       {pedido.metadata?.creadoPorOperario && (
-                        <span className="text-xs text-[#6C757D] block">
+                        <span className="text-xs text-[var(--text-tertiary)] block">
                           Operario
                         </span>
                       )}
@@ -803,7 +807,7 @@ export const ApproveOrdersContent: React.FC = () => {
                       variant="outline"
                       size="sm"
                       onClick={() => handleViewDetails(pedido)}
-                      className="text-[#F8F9FA] border-[#2A82C7]/50 hover:bg-[#2A82C7]/20"
+                      className="text-[var(--text-primary)] border-[var(--accent-primary)]/30 hover:bg-[var(--accent-primary)]/20"
                     >
                       <Eye className="h-4 w-4 mr-1" />
                       Detalles
@@ -814,7 +818,7 @@ export const ApproveOrdersContent: React.FC = () => {
                         <Button
                           size="sm"
                           onClick={() => handleApproveClick(pedido)}
-                          className="bg-green-600 hover:bg-green-700 text-white"
+                          className="bg-[var(--state-success)] hover:bg-[var(--accent-tertiary)] text-white"
                         >
                           <Check className="h-4 w-4 mr-1" />
                           Aprobar
@@ -823,7 +827,7 @@ export const ApproveOrdersContent: React.FC = () => {
                           variant="outline"
                           size="sm"
                           onClick={() => handleRejectClick(pedido)}
-                          className="border-red-500 text-red-500 hover:bg-red-500/20"
+                          className="border-[var(--state-error)] text-[var(--state-error)] hover:bg-[var(--state-error)]/20"
                         >
                           <X className="h-4 w-4 mr-1" />
                           Rechazar

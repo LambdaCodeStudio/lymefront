@@ -25,13 +25,21 @@ import {
   AlertTriangle,
   Users,
   FileCheck,
-  CheckCircle2
+  CheckCircle2,
+  Bell
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Card, 
+  CardContent, 
+  CardHeader, 
+  CardFooter, 
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
   Accordion,
   AccordionContent,
@@ -46,7 +54,8 @@ import {
   DialogHeader, 
   DialogTitle 
 } from "@/components/ui/dialog";
-import { Textarea } from '@/components/ui/textarea';
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { 
   Select, 
   SelectContent, 
@@ -60,9 +69,7 @@ import {
   TabsList, 
   TabsTrigger 
 } from "@/components/ui/tabs";
-import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { ShopNavbar } from './ShopNavbar';
-import { Label } from "@/components/ui/label";
 import { getApiUrl } from '@/utils/apiUtils';
 
 // Intentar usar el contexto de notificaciones de forma segura
@@ -136,13 +143,10 @@ interface Cliente {
 export const OrdersPage: React.FC = () => {
   // Usar el hook de notificaciones de forma segura
   const { addNotification } = useNotification();
+  const queryClient = useQueryClient();
 
   // Estados
-  const [orders, setOrders] = useState<Order[]>([]);
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
-  const [clients, setClients] = useState<Cliente[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [orderDetailsOpen, setOrderDetailsOpen] = useState<string | null>(null);
   const [isDownloadingRemito, setIsDownloadingRemito] = useState<string | null>(null);
@@ -164,18 +168,21 @@ export const OrdersPage: React.FC = () => {
   const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
-  const [isProcessingApproval, setIsProcessingApproval] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   
   // Información del usuario
   const [userRole, setUserRole] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   
-  // Referencias para caché
-  const cacheTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const lastFetchTimeRef = useRef<number>(0);
-  const CACHE_DURATION = 2 * 60 * 1000; // 2 minutos
-  
+  // Obtener parámetros de URL al cargar
+  useEffect(() => {
+    // Verificar tab en URL
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+    if (tabParam) {
+      setActiveTab(tabParam);
+    }
+  }, []);
+
   // Obtener información del usuario actual
   useEffect(() => {
     const storedRole = localStorage.getItem('userRole');
@@ -187,17 +194,183 @@ export const OrdersPage: React.FC = () => {
     fetchUserData();
   }, []);
 
-  // Cargar datos iniciales
-  useEffect(() => {
-    fetchOrders(true);
-    
-    // Limpiar timeout al desmontar
-    return () => {
-      if (cacheTimeoutRef.current) {
-        clearTimeout(cacheTimeoutRef.current);
+  // Obtener información del usuario actual
+  const fetchUserData = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No se encontró token de autenticación');
       }
-    };
-  }, [userRole, userId]);
+
+      const response = await fetch('http://localhost:4000/api/auth/me', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al obtener información del usuario');
+      }
+
+      const userData = await response.json();
+      
+      // Actualizar estados y localStorage
+      if (userData.role) {
+        localStorage.setItem('userRole', userData.role);
+        setUserRole(userData.role);
+      }
+      
+      if (userData._id) {
+        localStorage.setItem('userId', userData._id);
+        setUserId(userData._id);
+      }
+      
+      return userData._id || userData.id || null;
+    } catch (error) {
+      console.error('Error al obtener el usuario:', error);
+      return null;
+    }
+  };
+
+  // Función para obtener pedidos con React Query
+  const fetchOrders = async (): Promise<Order[]> => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      throw new Error('No se encontró token de autenticación');
+    }
+    
+    // Obtener todos los pedidos
+    const response = await fetch('http://localhost:4000/api/pedido', {
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'Cache-Control': 'no-cache'
+      }
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('userRole');
+        localStorage.removeItem('userId');
+        window.location.href = '/login';
+        return [];
+      }
+      throw new Error(`Error al cargar pedidos (estado: ${response.status})`);
+    }
+
+    const allOrders = await response.json();
+    
+    // Determinar qué pedidos mostrar según el rol del usuario
+    let relevantOrders: Order[] = [];
+    
+    if (userRole === 'supervisor') {
+      // Para supervisores: mostrar pedidos propios + los creados por sus operarios
+      relevantOrders = allOrders.filter((order: Order) => {
+        // Pedidos propios del supervisor
+        const isOwnOrder = typeof order.userId === 'object' 
+          ? order.userId._id === userId 
+          : order.userId === userId;
+        
+        // Pedidos creados por operarios que el supervisor supervisa
+        const isOperarioOrder = order.metadata?.creadoPorOperario && 
+                               order.metadata?.supervisorId === userId;
+        
+        return isOwnOrder || isOperarioOrder;
+      });
+    } else if (userRole === 'operario') {
+      // Para operarios: solo mostrar sus propios pedidos
+      relevantOrders = allOrders.filter((order: Order) => {
+        const isDirectOrder = typeof order.userId === 'object' 
+          ? order.userId._id === userId 
+          : order.userId === userId;
+        
+        const isIndirectOrder = order.metadata?.creadoPorOperario && 
+                               order.metadata?.operarioId === userId;
+        
+        return isDirectOrder || isIndirectOrder;
+      });
+    } else {
+      // Para otros roles: mostrar todos los pedidos
+      relevantOrders = allOrders;
+    }
+    
+    // Procesar pedidos (calcular totales y ordenar)
+    const processedOrders = relevantOrders.map((order: Order) => ({
+      ...order,
+      displayNumber: order.nPedido?.toString() || order.numero || 'S/N',
+      total: calculateOrderTotal(order)
+    })).sort((a: Order, b: Order) => 
+      new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
+    );
+    
+    // Crear caché de productos para cálculos de precios
+    const productCache: Record<string, any> = {};
+    allOrders.forEach((order: Order) => {
+      if (Array.isArray(order.productos)) {
+        order.productos.forEach(item => {
+          if (typeof item.productoId === 'object' && item.productoId) {
+            const productId = item.productoId._id;
+            if (productId) {
+              productCache[productId] = {
+                nombre: item.productoId.nombre || item.nombre || 'Producto desconocido',
+                precio: item.productoId.precio || item.precio || 0
+              };
+            }
+          } else if (item.nombre && typeof item.precio === 'number' && typeof item.productoId === 'string') {
+            productCache[item.productoId] = {
+              nombre: item.nombre,
+              precio: item.precio
+            };
+          }
+        });
+      }
+    });
+    
+    setCachedProducts(productCache);
+    
+    return processedOrders;
+  };
+
+  // Usar React Query para obtener pedidos
+  const { 
+    data: orders = [], 
+    isLoading, 
+    error, 
+    refetch 
+  } = useQuery({
+    queryKey: ['orders', userId, userRole],
+    queryFn: fetchOrders,
+    enabled: !!userId && !!userRole,
+    staleTime: 30000, // 30 segundos
+    refetchOnWindowFocus: false
+  });
+
+  // Calcular el total de un pedido
+  const calculateOrderTotal = (order: Order): number => {
+    if (!Array.isArray(order.productos)) return 0;
+    
+    return order.productos.reduce((total, item) => {
+      let price = 0;
+      
+      // Primero intentamos usar el precio que ya viene en el item
+      if (typeof item.precio === 'number') {
+        price = item.precio;
+      } else if (typeof item.productoId === 'object' && item.productoId && typeof item.productoId.precio === 'number') {
+        // Si el producto está poblado y tiene precio
+        price = item.productoId.precio;
+      } else {
+        // Extraer ID del producto para buscar en caché
+        const productId = typeof item.productoId === 'object' 
+          ? item.productoId._id 
+          : item.productoId;
+        
+        // Verificar en caché
+        if (cachedProducts[productId] && typeof cachedProducts[productId].precio === 'number') {
+          price = cachedProducts[productId].precio;
+        }
+      }
+      
+      return total + (price * item.cantidad);
+    }, 0);
+  };
 
   // Efecto para filtrar pedidos cuando cambian los filtros
   useEffect(() => {
@@ -246,266 +419,98 @@ export const OrdersPage: React.FC = () => {
     setFilteredOrders(result);
   }, [searchTerm, orders, statusFilter, activeTab]);
 
-  // Obtener información del usuario actual
-  const fetchUserData = async () => {
-    try {
+  // Mutación para aprobar un pedido
+  const approveMutation = useMutation({
+    mutationFn: async (orderId: string) => {
       const token = localStorage.getItem('token');
       if (!token) {
-        throw new Error('No se encontró token de autenticación');
+        throw new Error('No hay token de autenticación');
       }
-
-      const response = await fetch('http://179.43.118.101:4000/api/auth/me', {
-        headers: { 'Authorization': `Bearer ${token}` }
+      
+      const response = await fetch(`http://localhost:4000/api/pedido/${orderId}/aprobar`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          estado: OrderStatus.APPROVED,
+          fechaAprobacion: new Date().toISOString()
+        })
       });
-
+      
       if (!response.ok) {
-        throw new Error('Error al obtener información del usuario');
-      }
-
-      const userData = await response.json();
-      
-      // Actualizar estados y localStorage
-      if (userData.role) {
-        localStorage.setItem('userRole', userData.role);
-        setUserRole(userData.role);
+        const errorData = await response.json();
+        throw new Error(errorData.mensaje || `Error al aprobar pedido (${response.status})`);
       }
       
-      if (userData._id) {
-        localStorage.setItem('userId', userData._id);
-        setUserId(userData._id);
-      }
-      
-      return userData._id || userData.id || null;
-    } catch (error) {
-      console.error('Error al obtener el usuario:', error);
-      setError('Error al cargar información del usuario. Por favor, inténtelo de nuevo.');
-      return null;
+      return orderId;
+    },
+    onSuccess: (orderId) => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      addNotification('Pedido aprobado correctamente', 'success');
+      setApprovalDialogOpen(false);
+      setSelectedOrderId(null);
+    },
+    onError: (error) => {
+      addNotification(`Error al aprobar pedido: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
     }
-  };
+  });
 
-  // Calcular el total de un pedido
-  const calculateOrderTotal = (order: Order): number => {
-    if (!Array.isArray(order.productos)) return 0;
-    
-    return order.productos.reduce((total, item) => {
-      let price = 0;
-      
-      // Primero intentamos usar el precio que ya viene en el item
-      if (typeof item.precio === 'number') {
-        price = item.precio;
-      } else if (typeof item.productoId === 'object' && item.productoId && typeof item.productoId.precio === 'number') {
-        // Si el producto está poblado y tiene precio
-        price = item.productoId.precio;
-      } else {
-        // Extraer ID del producto para buscar en caché
-        const productId = typeof item.productoId === 'object' 
-          ? item.productoId._id 
-          : item.productoId;
-        
-        // Verificar en caché
-        if (cachedProducts[productId] && typeof cachedProducts[productId].precio === 'number') {
-          price = cachedProducts[productId].precio;
-        }
-      }
-      
-      return total + (price * item.cantidad);
-    }, 0);
-  };
-
-  // Función optimizada para cargar pedidos
-  const fetchOrders = useCallback(async (forceRefresh = false) => {
-    // Evitar múltiples solicitudes cercanas en el tiempo
-    const now = Date.now();
-    if (!forceRefresh && now - lastFetchTimeRef.current < 5000) {
-      console.log('Solicitud descartada: demasiado frecuente');
-      return;
-    }
-    
-    // Verificar si tenemos datos en caché recientes
-    if (!forceRefresh && orders.length > 0 && now - lastFetchTimeRef.current < CACHE_DURATION) {
-      console.log('Usando datos en caché');
-      return;
-    }
-    
-    try {
-      setLoading(forceRefresh);
-      if (forceRefresh) {
-        setRefreshing(true);
-      }
-      
+  // Mutación para rechazar un pedido
+  const rejectMutation = useMutation({
+    mutationFn: async ({orderId, motivo}: {orderId: string, motivo: string}) => {
       const token = localStorage.getItem('token');
       if (!token) {
-        throw new Error('No se encontró token de autenticación');
+        throw new Error('No hay token de autenticación');
       }
       
-      // Obtener todos los pedidos primero
-      const response = await fetch('http://179.43.118.101:4000/api/pedido', {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Cache-Control': 'no-cache'
-        }
+      const response = await fetch(`http://localhost:4000/api/pedido/${orderId}/rechazar`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          estado: OrderStatus.REJECTED,
+          motivoRechazo: motivo,
+          fechaRechazo: new Date().toISOString()
+        })
       });
-  
+      
       if (!response.ok) {
-        if (response.status === 401) {
-          localStorage.removeItem('token');
-          localStorage.removeItem('userRole');
-          localStorage.removeItem('userId');
-          window.location.href = '/login';
-          return;
-        }
-        throw new Error(`Error al cargar pedidos (estado: ${response.status})`);
-      }
-  
-      const allOrders = await response.json();
-      lastFetchTimeRef.current = Date.now();
-      
-      // Obtener información del usuario actual
-      let currentUserId = userId;
-      
-      if (!currentUserId) {
-        try {
-          // Intentar obtener el ID del usuario desde la API
-          const userResponse = await fetch('http://179.43.118.101:4000/api/auth/me', {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          
-          if (!userResponse.ok) {
-            throw new Error(`Error al obtener información del usuario (estado: ${userResponse.status})`);
-          }
-          
-          const userData = await userResponse.json();
-          currentUserId = userData._id || userData.id;
-          
-          if (!currentUserId) {
-            throw new Error('No se pudo obtener un ID de usuario válido');
-          }
-          
-          // Guardar en estado y localStorage para futuras consultas
-          setUserId(currentUserId);
-          localStorage.setItem('userId', currentUserId);
-        } catch (userError) {
-          console.error('Error al obtener información del usuario:', userError);
-        }
+        const errorData = await response.json();
+        throw new Error(errorData.mensaje || `Error al rechazar pedido (${response.status})`);
       }
       
-      // Determinar qué pedidos mostrar según el rol del usuario
-      let relevantOrders: Order[] = [];
-      
-      if (userRole === 'supervisor') {
-        // Para supervisores: mostrar pedidos propios + los creados por sus operarios
-        relevantOrders = allOrders.filter((order: Order) => {
-          // Pedidos propios del supervisor
-          const isOwnOrder = typeof order.userId === 'object' 
-            ? order.userId._id === currentUserId 
-            : order.userId === currentUserId;
-          
-          // Pedidos creados por operarios que el supervisor supervisa
-          const isOperarioOrder = order.metadata?.creadoPorOperario && 
-                                 order.metadata?.supervisorId === currentUserId;
-          
-          return isOwnOrder || isOperarioOrder;
-        });
-      } else if (userRole === 'operario') {
-        // Para operarios: solo mostrar sus propios pedidos
-        relevantOrders = allOrders.filter((order: Order) => {
-          const isDirectOrder = typeof order.userId === 'object' 
-            ? order.userId._id === currentUserId 
-            : order.userId === currentUserId;
-          
-          const isIndirectOrder = order.metadata?.creadoPorOperario && 
-                                 order.metadata?.operarioId === currentUserId;
-          
-          return isDirectOrder || isIndirectOrder;
-        });
-      } else {
-        // Para otros roles: mostrar todos los pedidos
-        relevantOrders = allOrders;
-      }
-      
-      // Procesar pedidos (calcular totales y ordenar)
-      const processedOrders = relevantOrders.map((order: Order) => ({
-        ...order,
-        displayNumber: order.nPedido?.toString() || order.numero || 'S/N',
-        total: calculateOrderTotal(order)
-      })).sort((a: Order, b: Order) => 
-        new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
-      );
-      
-      setOrders(processedOrders);
-      setFilteredOrders(processedOrders);
-      
-      // Crear caché de productos para cálculos de precios
-      const productCache: Record<string, any> = {};
-      allOrders.forEach((order: Order) => {
-        if (Array.isArray(order.productos)) {
-          order.productos.forEach(item => {
-            if (typeof item.productoId === 'object' && item.productoId) {
-              const productId = item.productoId._id;
-              if (productId) {
-                productCache[productId] = {
-                  nombre: item.productoId.nombre || item.nombre || 'Producto desconocido',
-                  precio: item.productoId.precio || item.precio || 0
-                };
-              }
-            } else if (item.nombre && typeof item.precio === 'number' && typeof item.productoId === 'string') {
-              productCache[item.productoId] = {
-                nombre: item.nombre,
-                precio: item.precio
-              };
-            }
-          });
-        }
-      });
-      
-      setCachedProducts(productCache);
-      
-      // Programar la próxima actualización
-      if (cacheTimeoutRef.current) {
-        clearTimeout(cacheTimeoutRef.current);
-      }
-      
-      cacheTimeoutRef.current = setTimeout(() => {
-        console.log('Actualizando datos por expiración de caché');
-        fetchOrders(true);
-      }, CACHE_DURATION);
-      
-      setError(null);
-    } catch (err) {
-      const errorMsg = 'Error al cargar pedidos: ' +
-        (err instanceof Error ? err.message : String(err));
-      console.error(errorMsg);
-      setError(errorMsg);
-      
-      if (addNotification) {
-        addNotification(errorMsg, 'error');
-      }
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+      return orderId;
+    },
+    onSuccess: (orderId) => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      addNotification('Pedido rechazado correctamente', 'success');
+      setRejectionDialogOpen(false);
+      setSelectedOrderId(null);
+      setRejectionReason('');
+    },
+    onError: (error) => {
+      addNotification(`Error al rechazar pedido: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
     }
-  }, [orders.length, userRole, userId]);
+  });
 
   // Filtrar pedidos por rango de fechas
   const filterOrdersByDate = async () => {
     if (!dateFilter.fechaInicio || !dateFilter.fechaFin) {
-      setError('Por favor seleccione ambas fechas, inicio y fin');
-      
-      if (addNotification) {
-        addNotification('Por favor seleccione ambas fechas, inicio y fin', 'warning');
-      }
-      
+      addNotification('Por favor seleccione ambas fechas, inicio y fin', 'warning');
       return;
     }
 
     try {
-      setLoading(true);
       const token = localStorage.getItem('token');
       if (!token) {
         throw new Error('No se encontró token de autenticación');
       }
 
-      const url = `http://179.43.118.101:4000/api/pedido/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
+      const url = `http://localhost:4000/api/pedido/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
       
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -519,17 +524,16 @@ export const OrdersPage: React.FC = () => {
       
       // Filtrar según el rol del usuario
       let relevantOrders: Order[] = [];
-      const currentUserId = userId;
       
       if (userRole === 'supervisor') {
         // Para supervisores: mostrar pedidos propios + los creados por sus operarios
         relevantOrders = data.filter((order: Order) => {
           const isOwnOrder = typeof order.userId === 'object' 
-            ? order.userId._id === currentUserId 
-            : order.userId === currentUserId;
+            ? order.userId._id === userId 
+            : order.userId === userId;
           
           const isOperarioOrder = order.metadata?.creadoPorOperario && 
-                                 order.metadata?.supervisorId === currentUserId;
+                                 order.metadata?.supervisorId === userId;
           
           return isOwnOrder || isOperarioOrder;
         });
@@ -537,11 +541,11 @@ export const OrdersPage: React.FC = () => {
         // Para operarios: solo mostrar sus propios pedidos
         relevantOrders = data.filter((order: Order) => {
           const isDirectOrder = typeof order.userId === 'object' 
-            ? order.userId._id === currentUserId 
-            : order.userId === currentUserId;
+            ? order.userId._id === userId 
+            : order.userId === userId;
           
           const isIndirectOrder = order.metadata?.creadoPorOperario && 
-                                 order.metadata?.operarioId === currentUserId;
+                                 order.metadata?.operarioId === userId;
           
           return isDirectOrder || isIndirectOrder;
         });
@@ -559,30 +563,17 @@ export const OrdersPage: React.FC = () => {
         new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
       );
       
-      setOrders(processedOrders);
-      setFilteredOrders(processedOrders);
+      // Actualizar la caché de React Query manualmente
+      queryClient.setQueryData(['orders', userId, userRole], processedOrders);
       
-      setError(null);
-      
-      const successMsg = `Se encontraron ${processedOrders.length} pedidos en el rango de fechas seleccionado`;
-      
-      if (addNotification) {
-        addNotification(successMsg, processedOrders.length === 0 ? 'info' : 'success');
-      }
+      addNotification(`Se encontraron ${processedOrders.length} pedidos en el rango de fechas seleccionado`, 
+        processedOrders.length === 0 ? 'info' : 'success');
       
       // Cerrar filtros móviles si están abiertos
       setShowMobileFilters(false);
-    } catch (err) {
-      const errorMsg = 'Error al filtrar por fecha: ' +
-        (err instanceof Error ? err.message : String(err));
-      console.error(errorMsg, err);
-      setError(errorMsg);
-      
-      if (addNotification) {
-        addNotification(errorMsg, 'error');
-      }
-    } finally {
-      setLoading(false);
+    } catch (error) {
+      console.error('Error al filtrar por fecha:', error);
+      addNotification(`Error al filtrar por fecha: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
     }
   };
 
@@ -591,12 +582,10 @@ export const OrdersPage: React.FC = () => {
     setSearchTerm('');
     setDateFilter({ fechaInicio: '', fechaFin: '' });
     setStatusFilter('all');
-    fetchOrders(true);
+    refetch();
     setShowMobileFilters(false);
     
-    if (addNotification) {
-      addNotification('Filtros eliminados. Mostrando todos los pedidos.', 'info');
-    }
+    addNotification('Filtros eliminados. Mostrando todos los pedidos.', 'info');
   };
 
   // Alternar detalles del pedido
@@ -620,9 +609,7 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No se encontró token de autenticación');
       }
       
-      console.log(`Iniciando descarga de remito para pedido: ${orderId}`);
-      
-      const response = await fetch(`http://179.43.118.101:4000/api/downloads/remito/${orderId}`, {
+      const response = await fetch(`http://localhost:4000/api/downloads/remito/${orderId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },
@@ -661,17 +648,10 @@ export const OrdersPage: React.FC = () => {
         window.URL.revokeObjectURL(url);
       }, 100);
       
-      console.log('Remito descargado correctamente');
-      
-      if (addNotification) {
-        addNotification('Remito descargado correctamente', 'success');
-      }
+      addNotification('Remito descargado correctamente', 'success');
     } catch (error) {
       console.error('Error al descargar remito:', error);
-      
-      if (addNotification) {
-        addNotification(`Error al descargar remito: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
-      }
+      addNotification(`Error al descargar remito: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
     } finally {
       setIsDownloadingRemito(null);
     }
@@ -718,130 +698,19 @@ export const OrdersPage: React.FC = () => {
   };
 
   // Aprobar pedido
-  const approveOrder = async () => {
-    if (!selectedOrderId) return;
-
-    try {
-      setIsProcessingApproval(true);
-      
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-      
-      const response = await fetch(`http://179.43.118.101:4000/api/pedido/${selectedOrderId}/approve`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          estado: OrderStatus.APPROVED,
-          fechaAprobacion: new Date().toISOString()
-        })
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.mensaje || `Error al aprobar pedido (${response.status})`);
-      }
-      
-      // Actualizar la lista de pedidos
-      await fetchOrders(true);
-      
-      // Notificar al usuario
-      if (addNotification) {
-        addNotification('Pedido aprobado correctamente', 'success');
-      }
-      
-      // Cerrar el diálogo
-      setApprovalDialogOpen(false);
-      setSelectedOrderId(null);
-    } catch (error) {
-      console.error('Error al aprobar pedido:', error);
-      
-      if (addNotification) {
-        addNotification(`Error al aprobar pedido: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
-      }
-    } finally {
-      setIsProcessingApproval(false);
+  const handleApproveOrder = () => {
+    if (selectedOrderId) {
+      approveMutation.mutate(selectedOrderId);
     }
   };
 
   // Rechazar pedido
-  const rejectOrder = async () => {
-    if (!selectedOrderId || !rejectionReason.trim()) {
-      // Validar que se proporcionó un motivo de rechazo
-      if (!rejectionReason.trim()) {
-        addNotification('Debe proporcionar un motivo para rechazar el pedido', 'warning');
-      }
-      return;
+  const handleRejectOrder = () => {
+    if (selectedOrderId && rejectionReason.trim()) {
+      rejectMutation.mutate({ orderId: selectedOrderId, motivo: rejectionReason });
+    } else if (!rejectionReason.trim()) {
+      addNotification('Debe proporcionar un motivo para rechazar el pedido', 'warning');
     }
-
-    try {
-      setIsProcessingApproval(true);
-      
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-      
-      const response = await fetch(`http://179.43.118.101:4000/api/pedido/${selectedOrderId}/reject`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          estado: OrderStatus.REJECTED,
-          motivoRechazo: rejectionReason,
-          fechaRechazo: new Date().toISOString()
-        })
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.mensaje || `Error al rechazar pedido (${response.status})`);
-      }
-      
-      // Actualizar la lista de pedidos
-      await fetchOrders(true);
-      
-      // Notificar al usuario
-      if (addNotification) {
-        addNotification('Pedido rechazado correctamente', 'success');
-      }
-      
-      // Cerrar el diálogo
-      setRejectionDialogOpen(false);
-      setSelectedOrderId(null);
-      setRejectionReason('');
-    } catch (error) {
-      console.error('Error al rechazar pedido:', error);
-      
-      if (addNotification) {
-        addNotification(`Error al rechazar pedido: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
-      }
-    } finally {
-      setIsProcessingApproval(false);
-    }
-  };
-
-  // Obtener nombre del cliente por servicio y sección
-  const getClientName = (servicio: string, seccion?: string): string => {
-    const client = clients.find(
-      c => c.servicio === servicio && c.seccionDelServicio === (seccion || '')
-    );
-    
-    if (client) {
-      return seccion 
-        ? `${servicio} - ${seccion}`
-        : servicio;
-    }
-    
-    return seccion 
-      ? `${servicio} - ${seccion}` 
-      : servicio;
   };
 
   // Obtener email del usuario desde el pedido
@@ -858,28 +727,28 @@ export const OrdersPage: React.FC = () => {
     switch (status) {
       case OrderStatus.PENDING:
         return (
-          <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
+          <Badge variant="outline" className="bg-[#FF6B35]/20 text-[#FFCC80] border-[#FF6B35]">
             <Clock className="w-3 h-3 mr-1" />
             Pendiente
           </Badge>
         );
       case OrderStatus.APPROVED:
         return (
-          <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
+          <Badge variant="outline" className="bg-[#2E7D32]/20 text-[#AED581] border-[#2E7D32]">
             <CheckSquare className="w-3 h-3 mr-1" />
             Aprobado
           </Badge>
         );
       case OrderStatus.REJECTED:
         return (
-          <Badge variant="outline" className="bg-red-100 text-red-800 border-red-300">
+          <Badge variant="outline" className="bg-[#D32F2F]/20 text-[#EF9A9A] border-[#D32F2F]">
             <XSquare className="w-3 h-3 mr-1" />
             Rechazado
           </Badge>
         );
       case OrderStatus.DELIVERED:
         return (
-          <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300">
+          <Badge variant="outline" className="bg-[#2A82C7]/20 text-[#90CAF9] border-[#2A82C7]">
             <Package className="w-3 h-3 mr-1" />
             Entregado
           </Badge>
@@ -923,15 +792,15 @@ export const OrdersPage: React.FC = () => {
 
   // Función para actualizar manualmente
   const handleManualRefresh = () => {
-    fetchOrders(true);
+    refetch();
   };
 
   return (
     <>
       <ShopNavbar />
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-8 shop-theme">
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-3xl font-bold mb-8 flex items-center text-[#F8F9FA]">
+          <h1 className="text-3xl font-bold mb-8 flex items-center text-white">
             <ShoppingCart className="mr-3 h-8 w-8" />
             Mis Pedidos
           </h1>
@@ -940,73 +809,88 @@ export const OrdersPage: React.FC = () => {
           {error && (
             <Alert className="mb-6 bg-red-900/30 border border-red-500">
               <AlertCircle className="h-4 w-4 text-red-400" />
-              <AlertDescription className="ml-2 text-white">{error}</AlertDescription>
+              <AlertDescription className="ml-2 text-white">
+                {error instanceof Error ? error.message : 'Error al cargar pedidos'}
+              </AlertDescription>
             </Alert>
           )}
 
+          {/* Pestañas para filtrar por categorías principales */}
+          <div className="mb-6">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsList className="bg-[#00701A]/50 border border-[#00701A]/40 w-full">
+                <TabsTrigger 
+                  value="todos" 
+                  className="flex-1 data-[state=active]:bg-[#00701A] data-[state=active]:text-white text-white"
+                >
+                  Todos
+                </TabsTrigger>
+                
+                {/* Pestaña extra para supervisores: pedidos por aprobar */}
+                {userRole === 'supervisor' && (
+                  <TabsTrigger 
+                    value="porAprobar" 
+                    className="flex-1 data-[state=active]:bg-[#00701A] data-[state=active]:text-white text-white relative"
+                  >
+                    <FileCheck className="w-4 h-4 mr-1" />
+                    Por aprobar
+                    {getPendingApprovalCount() > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-[#FF6B35] text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                        {getPendingApprovalCount()}
+                      </span>
+                    )}
+                  </TabsTrigger>
+                )}
+                
+                <TabsTrigger 
+                  value="pendientes" 
+                  className="flex-1 data-[state=active]:bg-[#00701A] data-[state=active]:text-white text-white"
+                >
+                  <Clock className="w-4 h-4 mr-1" />
+                  Pendientes
+                </TabsTrigger>
+                
+                <TabsTrigger 
+                  value="aprobados" 
+                  className="flex-1 data-[state=active]:bg-[#00701A] data-[state=active]:text-white text-white"
+                >
+                  <CheckCircle2 className="w-4 h-4 mr-1" />
+                  Aprobados
+                </TabsTrigger>
+                
+                <TabsTrigger 
+                  value="rechazados" 
+                  className="flex-1 data-[state=active]:bg-[#00701A] data-[state=active]:text-white text-white"
+                >
+                  <XSquare className="w-4 h-4 mr-1" />
+                  Rechazados
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+
           {/* Filtros y búsqueda */}
-          <div className="mb-6 space-y-4 bg-white/10 backdrop-blur-sm p-4 rounded-xl shadow-sm border border-[#2A82C7]/20">
-            {/* Pestañas para filtrar por categorías principales */}
-            <div className="flex justify-between items-center">
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="bg-[#15497E]/50 border border-[#2A82C7]/40 w-full">
-                  <TabsTrigger 
-                    value="todos" 
-                    className="flex-1 data-[state=active]:bg-[#15497E] data-[state=active]:text-white text-[#F8F9FA]"
-                  >
-                    Todos
-                  </TabsTrigger>
-                  
-                  {/* Pestaña extra para supervisores: pedidos por aprobar */}
-                  {userRole === 'supervisor' && (
-                    <TabsTrigger 
-                      value="porAprobar" 
-                      className="flex-1 data-[state=active]:bg-[#15497E] data-[state=active]:text-white text-[#F8F9FA] relative"
-                    >
-                      <FileCheck className="w-4 h-4 mr-1" />
-                      Por aprobar
-                      {getPendingApprovalCount() > 0 && (
-                        <span className="absolute -top-1 -right-1 bg-[#FF6B35] text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                          {getPendingApprovalCount()}
-                        </span>
-                      )}
-                    </TabsTrigger>
-                  )}
-                  
-                  <TabsTrigger 
-                    value="pendientes" 
-                    className="flex-1 data-[state=active]:bg-[#15497E] data-[state=active]:text-white text-[#F8F9FA]"
-                  >
-                    <Clock className="w-4 h-4 mr-1" />
-                    Pendientes
-                  </TabsTrigger>
-                  
-                  <TabsTrigger 
-                    value="aprobados" 
-                    className="flex-1 data-[state=active]:bg-[#15497E] data-[state=active]:text-white text-[#F8F9FA]"
-                  >
-                    <CheckCircle2 className="w-4 h-4 mr-1" />
-                    Aprobados
-                  </TabsTrigger>
-                  
-                  <TabsTrigger 
-                    value="rechazados" 
-                    className="flex-1 data-[state=active]:bg-[#15497E] data-[state=active]:text-white text-[#F8F9FA]"
-                  >
-                    <XSquare className="w-4 h-4 mr-1" />
-                    Rechazados
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
+          <div className="mb-6 space-y-4 bg-white/10 backdrop-blur-sm p-4 rounded-xl shadow-sm border border-[#00701A]/20">
+            <div className="flex flex-wrap gap-4 items-center justify-between">
+              <div className="relative flex-1 min-w-[280px]">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#00701A] w-4 h-4" />
+                <Input
+                  type="text"
+                  placeholder="Buscar pedidos..."
+                  className="pl-10 bg-white/10 border-[#2A82C7] focus:border-[#7CB342] text-white placeholder:text-white/70"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
               
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleManualRefresh}
-                disabled={refreshing}
-                className="ml-2 hidden sm:flex border-[#2A82C7] text-[#F8F9FA] hover:bg-[#2A82C7]/20"
+                disabled={isLoading || approveMutation.isPending || rejectMutation.isPending}
+                className="border-[#2A82C7] text-white hover:bg-[#00701A]/20"
               >
-                {refreshing ? (
+                {isLoading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <RefreshCw className="w-4 h-4" />
@@ -1014,22 +898,9 @@ export const OrdersPage: React.FC = () => {
               </Button>
             </div>
 
-            <div className="flex flex-wrap gap-4 items-center justify-between">
-              <div className="relative flex-1 min-w-[280px]">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#6C757D] w-4 h-4" />
-                <Input
-                  type="text"
-                  placeholder="Buscar pedidos..."
-                  className="pl-10 bg-white/10 border-[#2A82C7] focus:border-[#15497E] text-white placeholder:text-[#F8F9FA]/70"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-            </div>
-
             <div className="flex flex-wrap gap-4 items-end">
               <div>
-                <label htmlFor="fechaInicio" className="text-[#F8F9FA] text-sm font-medium">
+                <label htmlFor="fechaInicio" className="text-white text-sm font-medium">
                   Fecha Inicio
                 </label>
                 <Input
@@ -1037,11 +908,11 @@ export const OrdersPage: React.FC = () => {
                   type="date"
                   value={dateFilter.fechaInicio}
                   onChange={(e) => setDateFilter({ ...dateFilter, fechaInicio: e.target.value })}
-                  className="w-full bg-white/10 border-[#2A82C7] focus:border-[#15497E] text-white mt-1"
+                  className="w-full bg-white/10 border-[#2A82C7] focus:border-[#7CB342] text-white mt-1"
                 />
               </div>
               <div>
-                <label htmlFor="fechaFin" className="text-[#F8F9FA] text-sm font-medium">
+                <label htmlFor="fechaFin" className="text-white text-sm font-medium">
                   Fecha Fin
                 </label>
                 <Input
@@ -1049,13 +920,13 @@ export const OrdersPage: React.FC = () => {
                   type="date"
                   value={dateFilter.fechaFin}
                   onChange={(e) => setDateFilter({ ...dateFilter, fechaFin: e.target.value })}
-                  className="w-full bg-white/10 border-[#2A82C7] focus:border-[#15497E] text-white mt-1"
+                  className="w-full bg-white/10 border-[#2A82C7] focus:border-[#7CB342] text-white mt-1"
                 />
               </div>
               <Button
                 variant="outline"
                 onClick={filterOrdersByDate}
-                className="border-[#2A82C7] text-[#F8F9FA] hover:bg-[#15497E]/50"
+                className="border-[#2A82C7] text-white hover:bg-[#00701A]/50"
               >
                 <Filter className="w-4 h-4 mr-2" />
                 Filtrar por Fecha
@@ -1064,7 +935,7 @@ export const OrdersPage: React.FC = () => {
                 <Button
                   variant="ghost"
                   onClick={clearAllFilters}
-                  className="text-[#6C757D] hover:text-[#F8F9FA] hover:bg-[#15497E]/30"
+                  className="text-[#6C757D] hover:text-white hover:bg-[#00701A]/30"
                 >
                   Limpiar filtros
                 </Button>
@@ -1073,23 +944,23 @@ export const OrdersPage: React.FC = () => {
           </div>
 
           {/* Estado de carga */}
-          {loading && (
+          {isLoading && (
             <div className="flex justify-center items-center py-20">
               <div className="flex flex-col items-center">
-                <Loader2 className="h-10 w-10 animate-spin text-[#F8F9FA]" />
-                <p className="mt-4 text-[#F8F9FA]">Cargando pedidos...</p>
+                <Loader2 className="h-10 w-10 animate-spin text-[#00701A]" />
+                <p className="mt-4 text-white">Cargando pedidos...</p>
               </div>
             </div>
           )}
 
           {/* Sin pedidos */}
-          {!loading && filteredOrders.length === 0 && (
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl shadow-sm p-8 text-center border border-[#2A82C7]/20">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-[#15497E]/30 rounded-full mb-4">
-                <ShoppingCart className="w-8 h-8 text-[#F8F9FA]" />
+          {!isLoading && filteredOrders.length === 0 && (
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl shadow-sm p-8 text-center border border-[#00701A]/20">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-[#00701A]/30 rounded-full mb-4">
+                <ShoppingCart className="w-8 h-8 text-white" />
               </div>
-              <h2 className="text-xl font-bold mb-2 text-[#F8F9FA]">No se encontraron pedidos</h2>
-              <p className="text-[#6C757D] max-w-lg mx-auto">
+              <h2 className="text-xl font-bold mb-2 text-white">No se encontraron pedidos</h2>
+              <p className="text-[#E8F5E9] max-w-lg mx-auto">
                 {searchTerm || dateFilter.fechaInicio || dateFilter.fechaFin || statusFilter !== 'all'
                   ? 'No hay pedidos que coincidan con los filtros seleccionados.' 
                   : activeTab === 'porAprobar'
@@ -1105,7 +976,7 @@ export const OrdersPage: React.FC = () => {
               {(searchTerm || dateFilter.fechaInicio || dateFilter.fechaFin || statusFilter !== 'all' || activeTab !== 'todos') && (
                 <Button 
                   onClick={clearAllFilters}
-                  className="mt-4 bg-[#15497E] hover:bg-[#2A82C7] text-white"
+                  className="mt-4 bg-[#00701A] hover:bg-[#7CB342] text-white"
                 >
                   Mostrar todos los pedidos
                 </Button>
@@ -1114,24 +985,24 @@ export const OrdersPage: React.FC = () => {
           )}
 
           {/* Lista de pedidos */}
-          {!loading && filteredOrders.length > 0 && (
+          {!isLoading && filteredOrders.length > 0 && (
             <div className="space-y-6">
-              <h2 className="text-xl font-medium mb-4 flex items-center text-[#F8F9FA]">
+              <h2 className="text-xl font-medium mb-4 flex items-center text-white">
                 {activeTab === 'todos' ? 'Todos los pedidos' : 
                  activeTab === 'porAprobar' ? 'Pedidos por aprobar' :
                  activeTab === 'pendientes' ? 'Pedidos pendientes' :
                  activeTab === 'aprobados' ? 'Pedidos aprobados' :
                  activeTab === 'rechazados' ? 'Pedidos rechazados' : 'Pedidos'}
-                <Badge variant="outline" className="ml-3 bg-white/10 text-[#F8F9FA] border-[#2A82C7]">
+                <Badge variant="outline" className="ml-3 bg-white/10 text-white border-[#2A82C7]">
                   {filteredOrders.length} pedidos
                 </Badge>
               </h2>
 
               {/* Vista para escritorio */}
               <div className="hidden md:block">
-                <div className="bg-white/10 backdrop-blur-sm rounded-xl shadow-sm overflow-hidden border border-[#2A82C7]/20">
+                <div className="bg-white/10 backdrop-blur-sm rounded-xl shadow-sm overflow-hidden border border-[#00701A]/20">
                   <table className="w-full">
-                    <thead className="bg-[#15497E]/30 text-[#F8F9FA] border-b border-[#2A82C7]/30">
+                    <thead className="bg-[#00701A]/30 text-white border-b border-[#00701A]/30">
                       <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
                           Pedido #
@@ -1159,26 +1030,26 @@ export const OrdersPage: React.FC = () => {
                     <tbody className="bg-white/5 divide-y divide-[#2A82C7]/20">
                       {filteredOrders.map((order) => (
                         <React.Fragment key={order._id}>
-                          <tr className="hover:bg-[#15497E]/20 transition-colors">
+                          <tr className="hover:bg-[#00701A]/20 transition-colors">
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex items-center font-medium">
-                                <Hash className="w-4 h-4 text-[#6C757D] mr-2" />
+                              <div className="flex items-center font-medium text-white">
+                                <Hash className="w-4 h-4 text-[#E8F5E9] mr-2" />
                                 {order.displayNumber}
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <div>{formatDate(order.fecha)}</div>
-                              <div className="text-xs text-[#6C757D]">
+                              <div className="text-white">{formatDate(order.fecha)}</div>
+                              <div className="text-xs text-[#E8F5E9]">
                                 {formatTime(order.fecha)}
                               </div>
                             </td>
                             <td className="px-6 py-4">
                               <div className="flex items-center">
-                                <Building className="w-4 h-4 text-[#6C757D] mr-2" />
+                                <Building className="w-4 h-4 text-[#E8F5E9] mr-2" />
                                 <div>
-                                  <div className="font-medium text-[#F8F9FA]">{order.servicio}</div>
+                                  <div className="font-medium text-white">{order.servicio}</div>
                                   {order.seccionDelServicio && (
-                                    <div className="text-xs text-[#6C757D] flex items-center mt-1">
+                                    <div className="text-xs text-[#E8F5E9] flex items-center mt-1">
                                       <MapPin className="w-3 h-3 mr-1" />
                                       {order.seccionDelServicio}
                                     </div>
@@ -1187,14 +1058,14 @@ export const OrdersPage: React.FC = () => {
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <Badge className="bg-[#2A82C7]/30 text-[#F8F9FA] border-[#2A82C7]/50">
+                              <Badge className="bg-[#00701A]/30 text-white border-[#2A82C7]/50">
                                 {order.productos?.length || 0} items
                               </Badge>
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => toggleOrderDetails(order._id)}
-                                className="ml-2 text-[#6C757D] hover:text-[#F8F9FA] hover:bg-[#15497E]/20"
+                                className="ml-2 text-[#E8F5E9] hover:text-white hover:bg-[#00701A]/20"
                               >
                                 <Eye className="w-4 h-4" />
                               </Button>
@@ -1205,7 +1076,7 @@ export const OrdersPage: React.FC = () => {
                                 {renderOperarioBadge(order)}
                               </div>
                             </td>
-                            <td className="px-6 py-4 text-right whitespace-nowrap font-bold text-[#F8F9FA]">
+                            <td className="px-6 py-4 text-right whitespace-nowrap font-bold text-white">
                               ${order.total?.toFixed(2) || '0.00'}
                             </td>
                             <td className="px-6 py-4 text-right whitespace-nowrap">
@@ -1216,7 +1087,7 @@ export const OrdersPage: React.FC = () => {
                                   size="sm"
                                   onClick={() => handleRemitoDownload(order._id)}
                                   disabled={isDownloadingRemito === order._id}
-                                  className="border-[#2A82C7] text-[#F8F9FA] hover:bg-[#15497E]/30"
+                                  className="border-[#2A82C7] text-white hover:bg-[#00701A]/30"
                                 >
                                   {isDownloadingRemito === order._id ? (
                                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -1235,6 +1106,7 @@ export const OrdersPage: React.FC = () => {
                                       size="sm"
                                       onClick={() => openApprovalDialog(order._id)}
                                       className="border-green-500 text-green-500 hover:bg-green-900/20 hover:text-green-400"
+                                      disabled={approveMutation.isPending || rejectMutation.isPending}
                                     >
                                       <CheckSquare className="h-4 w-4" />
                                     </Button>
@@ -1243,6 +1115,7 @@ export const OrdersPage: React.FC = () => {
                                       size="sm"
                                       onClick={() => openRejectionDialog(order._id)}
                                       className="border-red-500 text-red-500 hover:bg-red-900/20 hover:text-red-400"
+                                      disabled={approveMutation.isPending || rejectMutation.isPending}
                                     >
                                       <XSquare className="h-4 w-4" />
                                     </Button>
@@ -1255,15 +1128,15 @@ export const OrdersPage: React.FC = () => {
                           {/* Detalles del pedido (expandido) */}
                           {orderDetailsOpen === order._id && (
                             <tr>
-                              <td colSpan={7} className="px-6 py-4 bg-[#15497E]/20">
+                              <td colSpan={7} className="px-6 py-4 bg-[#00701A]/20">
                                 <div className="space-y-3">
                                   <div className="flex justify-between items-start">
-                                    <h3 className="font-medium text-[#F8F9FA]">Detalles del Pedido #{order.displayNumber}</h3>
+                                    <h3 className="font-medium text-white">Detalles del Pedido #{order.displayNumber}</h3>
                                     
                                     {/* Mostrar información de operario (si aplica) */}
                                     {order.metadata?.creadoPorOperario && (
-                                      <div className="bg-white/10 rounded-md p-2 text-xs text-[#F8F9FA] border border-[#2A82C7]/50">
-                                        <div className="flex items-center mb-1 text-[#2A82C7]">
+                                      <div className="bg-white/10 rounded-md p-2 text-xs text-white border border-[#2A82C7]/50">
+                                        <div className="flex items-center mb-1 text-[#7CB342]">
                                           <UserCheck className="h-3 w-3 mr-1" />
                                           <span className="font-medium">Pedido creado por operario</span>
                                         </div>
@@ -1288,18 +1161,18 @@ export const OrdersPage: React.FC = () => {
                                   {/* Productos del pedido */}
                                   <div className="bg-white/5 rounded-md border border-[#2A82C7]/20 overflow-hidden">
                                     <table className="min-w-full">
-                                      <thead className="bg-[#15497E]/30 border-b border-[#2A82C7]/20">
+                                      <thead className="bg-[#00701A]/30 border-b border-[#2A82C7]/20">
                                         <tr>
-                                          <th className="px-4 py-2 text-left text-xs font-medium text-[#F8F9FA] uppercase">
+                                          <th className="px-4 py-2 text-left text-xs font-medium text-white uppercase">
                                             Producto
                                           </th>
-                                          <th className="px-4 py-2 text-left text-xs font-medium text-[#F8F9FA] uppercase">
+                                          <th className="px-4 py-2 text-left text-xs font-medium text-white uppercase">
                                             Cantidad
                                           </th>
-                                          <th className="px-4 py-2 text-right text-xs font-medium text-[#F8F9FA] uppercase">
+                                          <th className="px-4 py-2 text-right text-xs font-medium text-white uppercase">
                                             Precio
                                           </th>
-                                          <th className="px-4 py-2 text-right text-xs font-medium text-[#F8F9FA] uppercase">
+                                          <th className="px-4 py-2 text-right text-xs font-medium text-white uppercase">
                                             Total
                                           </th>
                                         </tr>
@@ -1321,16 +1194,16 @@ export const OrdersPage: React.FC = () => {
                                           
                                           return (
                                             <tr key={index} className="hover:bg-white/5">
-                                              <td className="px-4 py-3 text-[#F8F9FA]">
+                                              <td className="px-4 py-3 text-white">
                                                 {productName}
                                               </td>
-                                              <td className="px-4 py-3 text-[#6C757D]">
+                                              <td className="px-4 py-3 text-[#E8F5E9]">
                                                 {item.cantidad}
                                               </td>
-                                              <td className="px-4 py-3 text-right text-[#6C757D]">
+                                              <td className="px-4 py-3 text-right text-[#E8F5E9]">
                                                 ${productPrice.toFixed(2)}
                                               </td>
-                                              <td className="px-4 py-3 text-right font-medium text-[#F8F9FA]">
+                                              <td className="px-4 py-3 text-right font-medium text-white">
                                                 ${(productPrice * item.cantidad).toFixed(2)}
                                               </td>
                                             </tr>
@@ -1338,11 +1211,11 @@ export const OrdersPage: React.FC = () => {
                                         })}
                                         
                                         {/* Fila de total */}
-                                        <tr className="bg-[#15497E]/20">
-                                          <td colSpan={3} className="px-4 py-3 text-right font-medium text-[#F8F9FA]">
+                                        <tr className="bg-[#00701A]/20">
+                                          <td colSpan={3} className="px-4 py-3 text-right font-medium text-white">
                                             Total:
                                           </td>
-                                          <td className="px-4 py-3 text-right font-bold text-[#F8F9FA]">
+                                          <td className="px-4 py-3 text-right font-bold text-white">
                                             ${order.total?.toFixed(2) || '0.00'}
                                           </td>
                                         </tr>
@@ -1353,8 +1226,8 @@ export const OrdersPage: React.FC = () => {
                                   {/* Sección de notas */}
                                   {order.detalle && order.detalle.trim() !== '' && (
                                     <div className="mt-3">
-                                      <h4 className="text-sm font-medium text-[#F8F9FA]">Notas:</h4>
-                                      <p className="text-sm text-[#6C757D] bg-white/5 p-3 rounded-md border border-[#2A82C7]/20 mt-1">
+                                      <h4 className="text-sm font-medium text-white">Notas:</h4>
+                                      <p className="text-sm text-[#E8F5E9] bg-white/5 p-3 rounded-md border border-[#2A82C7]/20 mt-1">
                                         {order.detalle}
                                       </p>
                                     </div>
@@ -1374,21 +1247,21 @@ export const OrdersPage: React.FC = () => {
               <div className="md:hidden space-y-4">
                 {filteredOrders.map((order) => (
                   <Card key={order._id} className="bg-white/10 backdrop-blur-sm border-[#2A82C7]/20 overflow-hidden">
-                    <CardHeader className="pb-2 bg-[#15497E]/20 border-b border-[#2A82C7]/20">
+                    <CardHeader className="pb-2 bg-[#00701A]/20 border-b border-[#2A82C7]/20">
                       <div className="flex justify-between items-start">
                         <div>
-                          <CardTitle className="text-sm flex items-center text-[#F8F9FA]">
-                            <Hash className="w-4 h-4 text-[#6C757D] mr-1" />
+                          <CardTitle className="text-sm flex items-center text-white">
+                            <Hash className="w-4 h-4 text-[#E8F5E9] mr-1" />
                             Pedido #{order.displayNumber}
                           </CardTitle>
-                          <p className="text-xs text-[#6C757D] mt-1">
+                          <p className="text-xs text-[#E8F5E9] mt-1">
                             {formatDate(order.fecha)} - {formatTime(order.fecha)}
                           </p>
                         </div>
                         <div className="flex flex-col items-end">
                           {renderStatusBadge(order.estado)}
                           <div className="text-xs text-right mt-1">
-                            <span className="text-[#F8F9FA] font-medium">${order.total?.toFixed(2) || '0.00'}</span>
+                            <span className="text-white font-medium">${order.total?.toFixed(2) || '0.00'}</span>
                           </div>
                         </div>
                       </div>
@@ -1397,11 +1270,11 @@ export const OrdersPage: React.FC = () => {
                       <div className="space-y-2">
                         {/* Datos de cliente */}
                         <div className="flex items-start gap-2">
-                          <Building className="w-4 h-4 text-[#6C757D] mt-0.5" />
+                          <Building className="w-4 h-4 text-[#E8F5E9] mt-0.5" />
                           <div>
-                            <p className="text-sm font-medium text-[#F8F9FA]">{order.servicio}</p>
+                            <p className="text-sm font-medium text-white">{order.servicio}</p>
                             {order.seccionDelServicio && (
-                              <p className="text-xs text-[#6C757D] flex items-center mt-0.5">
+                              <p className="text-xs text-[#E8F5E9] flex items-center mt-0.5">
                                 <MapPin className="w-3 h-3 mr-1" />
                                 {order.seccionDelServicio}
                               </p>
@@ -1412,7 +1285,7 @@ export const OrdersPage: React.FC = () => {
                         {/* Badge de operario si aplica */}
                         {renderOperarioBadge(order)}
                         
-                        {/* Motivo de rechazo si aplica */}
+                        {/* Mostrar motivo de rechazo si aplica */}
                         {order.estado === OrderStatus.REJECTED && order.metadata?.motivoRechazo && (
                           <div className="mt-2 bg-red-900/20 border border-red-400 rounded-md p-2 text-xs text-red-100">
                             <span className="font-bold">Motivo de rechazo:</span> {order.metadata.motivoRechazo}
@@ -1420,11 +1293,11 @@ export const OrdersPage: React.FC = () => {
                         )}
                         
                         <div className="flex justify-between items-center mt-2">
-                          <div className="text-sm text-[#6C757D] flex items-center">
+                          <div className="text-sm text-[#E8F5E9] flex items-center">
                             <DollarSign className="h-4 w-4 mr-1" />
                             Productos:
                           </div>
-                          <Badge className="bg-[#2A82C7]/30 text-[#F8F9FA] border-[#2A82C7]/50">
+                          <Badge className="bg-[#00701A]/30 text-white border-[#2A82C7]/50">
                             {order.productos?.length || 0} items
                           </Badge>
                         </div>
@@ -1433,7 +1306,7 @@ export const OrdersPage: React.FC = () => {
                       {/* Detalles expandibles del pedido */}
                       <Accordion type="single" collapsible className="mt-2">
                         <AccordionItem value="details" className="border-t border-[#2A82C7]/20 pt-2">
-                          <AccordionTrigger className="py-2 text-xs text-[#F8F9FA]">
+                          <AccordionTrigger className="py-2 text-xs text-white">
                             Ver detalles del pedido
                           </AccordionTrigger>
                           <AccordionContent>
@@ -1450,13 +1323,13 @@ export const OrdersPage: React.FC = () => {
                                 
                                 return (
                                   <div key={index} className="flex justify-between items-center py-1 border-b border-[#2A82C7]/10">
-                                    <div className="text-[#F8F9FA]">
+                                    <div className="text-white">
                                       <div className="text-sm font-medium">{productName}</div>
-                                      <div className="text-xs text-[#6C757D]">
+                                      <div className="text-xs text-[#E8F5E9]">
                                         Cant: {item.cantidad} x ${productPrice.toFixed(2)}
                                       </div>
                                     </div>
-                                    <div className="text-sm font-medium text-[#F8F9FA]">
+                                    <div className="text-sm font-medium text-white">
                                       ${(productPrice * item.cantidad).toFixed(2)}
                                     </div>
                                   </div>
@@ -1466,8 +1339,8 @@ export const OrdersPage: React.FC = () => {
                               {/* Notas */}
                               {order.detalle && order.detalle.trim() !== '' && (
                                 <div className="mt-3 pt-2">
-                                  <h4 className="text-xs font-medium text-[#F8F9FA]">Notas:</h4>
-                                  <p className="text-xs text-[#6C757D] bg-white/5 p-2 rounded border border-[#2A82C7]/20 mt-1">
+                                  <h4 className="text-xs font-medium text-white">Notas:</h4>
+                                  <p className="text-xs text-[#E8F5E9] bg-white/5 p-2 rounded border border-[#2A82C7]/20 mt-1">
                                     {order.detalle}
                                   </p>
                                 </div>
@@ -1483,7 +1356,7 @@ export const OrdersPage: React.FC = () => {
                         size="sm"
                         onClick={() => handleRemitoDownload(order._id)}
                         disabled={isDownloadingRemito === order._id}
-                        className="border-[#2A82C7] text-[#F8F9FA] hover:bg-[#15497E]/30"
+                        className="border-[#2A82C7] text-white hover:bg-[#00701A]/30"
                       >
                         {isDownloadingRemito === order._id ? (
                           <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -1503,6 +1376,7 @@ export const OrdersPage: React.FC = () => {
                             size="sm"
                             onClick={() => openApprovalDialog(order._id)}
                             className="border-green-500 text-green-500 hover:bg-green-900/20 hover:text-green-400"
+                            disabled={approveMutation.isPending || rejectMutation.isPending}
                           >
                             <CheckSquare className="h-4 w-4 mr-1" />
                             Aprobar
@@ -1512,6 +1386,7 @@ export const OrdersPage: React.FC = () => {
                             size="sm"
                             onClick={() => openRejectionDialog(order._id)}
                             className="border-red-500 text-red-500 hover:bg-red-900/20 hover:text-red-400"
+                            disabled={approveMutation.isPending || rejectMutation.isPending}
                           >
                             <XSquare className="h-4 w-4 mr-1" />
                             Rechazar
@@ -1529,21 +1404,24 @@ export const OrdersPage: React.FC = () => {
       
       {/* Diálogo de confirmación de aprobación */}
       <Dialog open={approvalDialogOpen} onOpenChange={setApprovalDialogOpen}>
-        <DialogContent className="sm:max-w-md bg-[#15497E] border-[#2A82C7] text-white">
+        <DialogContent className="sm:max-w-md bg-[#00701A] border-[#E8F5E9] text-white">
           <DialogHeader>
-            <DialogTitle className="text-[#F8F9FA]">Aprobar Pedido</DialogTitle>
-            <DialogDescription className="text-[#6C757D]">
+            <DialogTitle className="text-white flex items-center">
+              <CheckCircle2 className="mr-2 h-5 w-5 text-white" />
+              Aprobar Pedido
+            </DialogTitle>
+            <DialogDescription className="text-white/70">
               Al aprobar este pedido, se generará la orden y se procesará para su entrega.
             </DialogDescription>
           </DialogHeader>
           
           <div className="py-4">
-            <p className="text-[#F8F9FA]">
+            <p className="text-white">
               ¿Estás seguro de que deseas aprobar este pedido?
             </p>
             
-            <div className="mt-4 bg-white/10 p-3 rounded-md border border-[#2A82C7]/40">
-              <p className="text-sm text-[#6C757D]">
+            <div className="mt-4 bg-white/10 p-3 rounded-md border border-white/20">
+              <p className="text-sm text-white/80">
                 Una vez aprobado, el pedido se enviará a logística para su procesamiento y entrega. 
                 El operario será notificado de que su pedido ha sido aprobado.
               </p>
@@ -1555,18 +1433,18 @@ export const OrdersPage: React.FC = () => {
               type="button" 
               variant="outline"
               onClick={() => setApprovalDialogOpen(false)}
-              className="border-[#2A82C7] text-[#F8F9FA]"
-              disabled={isProcessingApproval}
+              className="border-white text-white"
+              disabled={approveMutation.isPending}
             >
               Cancelar
             </Button>
             <Button 
               type="button"
-              onClick={approveOrder}
-              disabled={isProcessingApproval}
-              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={handleApproveOrder}
+              disabled={approveMutation.isPending}
+              className="bg-[#E8F5E9] hover:bg-white text-[#00701A] font-medium"
             >
-              {isProcessingApproval ? (
+              {approveMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Procesando...
@@ -1584,16 +1462,19 @@ export const OrdersPage: React.FC = () => {
       
       {/* Diálogo de rechazo de pedido */}
       <Dialog open={rejectionDialogOpen} onOpenChange={setRejectionDialogOpen}>
-        <DialogContent className="sm:max-w-md bg-[#15497E] border-[#2A82C7] text-white">
+        <DialogContent className="sm:max-w-md bg-[#00701A] border-[#E8F5E9] text-white">
           <DialogHeader>
-            <DialogTitle className="text-[#F8F9FA]">Rechazar Pedido</DialogTitle>
-            <DialogDescription className="text-[#6C757D]">
+            <DialogTitle className="text-white flex items-center">
+              <XSquare className="mr-2 h-5 w-5 text-white" />
+              Rechazar Pedido
+            </DialogTitle>
+            <DialogDescription className="text-white/70">
               Por favor, proporciona un motivo para el rechazo del pedido.
             </DialogDescription>
           </DialogHeader>
           
           <div className="py-4">
-            <Label htmlFor="rejectionReason" className="text-[#F8F9FA] mb-2 block">
+            <Label htmlFor="rejectionReason" className="text-white mb-2 block">
               Motivo del rechazo *
             </Label>
             <Textarea
@@ -1601,12 +1482,12 @@ export const OrdersPage: React.FC = () => {
               value={rejectionReason}
               onChange={(e) => setRejectionReason(e.target.value)}
               placeholder="Explica por qué estás rechazando este pedido..."
-              className="min-h-[120px] bg-white/10 border-[#2A82C7] text-[#F8F9FA] placeholder:text-[#6C757D]"
+              className="min-h-[120px] bg-white/10 border-white/30 text-white placeholder:text-white/50"
               required
             />
             
             <div className="mt-4 bg-red-900/20 p-3 rounded-md border border-red-500/40">
-              <p className="text-sm text-red-200">
+              <p className="text-sm text-white/90">
                 Al rechazar un pedido, se notificará al operario con el motivo proporcionado. 
                 El pedido no se procesará y los productos volverán a estar disponibles.
               </p>
@@ -1618,18 +1499,18 @@ export const OrdersPage: React.FC = () => {
               type="button" 
               variant="outline"
               onClick={() => setRejectionDialogOpen(false)}
-              className="border-[#2A82C7] text-[#F8F9FA]"
-              disabled={isProcessingApproval}
+              className="border-white text-white"
+              disabled={rejectMutation.isPending}
             >
               Cancelar
             </Button>
             <Button 
               type="button"
-              onClick={rejectOrder}
-              disabled={isProcessingApproval || !rejectionReason.trim()}
+              onClick={handleRejectOrder}
+              disabled={rejectMutation.isPending || !rejectionReason.trim()}
               className="bg-red-600 hover:bg-red-700 text-white"
             >
-              {isProcessingApproval ? (
+              {rejectMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Procesando...

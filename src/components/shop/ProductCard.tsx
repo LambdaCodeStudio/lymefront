@@ -77,34 +77,34 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     return text.slice(0, maxLength) + '...';
   };
 
-  // Determinar la clase de gradiente según la categoría
+  // Determinar la clase de gradiente según la categoría - ACTUALIZADO con nueva paleta
   const getGradientClass = () => {
     if (product.esCombo) {
-      return 'from-[#8A4FFF]/70 to-[#AF7FFF]/70'; // Gradiente especial para combos
+      return 'from-[#1B9C96]/80 to-[#84D6C8]/80'; // Degradado de turquesa a turquesa claro para combos
     } else if (product.categoria === 'limpieza') {
-      return 'from-[#15497E]/70 to-[#2A82C7]/70';
+      return 'from-[#84D6C8]/80 to-[#CFF2E4]/80'; // Degradado de turquesa claro a verde menta para limpieza
     }
-    return 'from-[#2A82C7]/70 to-[#6C757D]/70';
+    return 'from-[#29696B]/80 to-[#1B9C96]/80'; // Degradado de turquesa oscuro a turquesa para mantenimiento
   };
 
   // Determinar el color de borde según la categoría
   const getBorderClass = () => {
     if (product.esCombo) {
-      return 'border-[#8A4FFF]'; // Borde especial para combos
+      return 'border-[#1B9C96]'; // Borde turquesa para combos
     } else if (product.categoria === 'limpieza') {
-      return 'border-[#15497E]';
+      return 'border-[#84D6C8]'; // Borde turquesa claro para limpieza
     }
-    return 'border-[#2A82C7]';
+    return 'border-[#29696B]'; // Borde turquesa oscuro para mantenimiento
   };
 
   // Determinar el color del botón según la categoría
   const getButtonClass = () => {
     if (product.esCombo) {
-      return 'bg-[#8A4FFF] hover:bg-[#7A4EE5]'; // Botón especial para combos
+      return 'bg-[#1B9C96] hover:bg-[#139692]'; // Botón especial para combos
     } else if (product.categoria === 'limpieza') {
-      return 'bg-[#15497E] hover:bg-[#2A82C7]';
+      return 'bg-[#1B9C96] hover:bg-[#139692]'; // Botón turquesa para limpieza
     }
-    return 'bg-[#2A82C7] hover:bg-[#15497E]';
+    return 'bg-[#29696B] hover:bg-[#1B9C96]'; // Botón turquesa oscuro a turquesa para mantenimiento
   };
 
   // Obtener colores y estilos para el indicador de stock
@@ -112,9 +112,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     // Para productos de mantenimiento, no mostramos stock específico
     if (product.categoria === 'mantenimiento') {
       return {
-        bg: 'bg-blue-50',
-        text: 'text-blue-700',
-        border: 'border-blue-200',
+        bg: 'bg-[#F8FDFC]',
+        text: 'text-[#1B9C96]',
+        border: 'border-[#1B9C96]',
         icon: <Check size={12} className="mr-1" />,
         label: 'Disponible'
       };
@@ -123,37 +123,46 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     // Para productos de limpieza
     if (product.stock <= 5) {
       return {
-        bg: 'bg-amber-50',
-        text: 'text-amber-700',
-        border: 'border-amber-200',
+        bg: 'bg-[#E74C3C]/10',
+        text: 'text-[#E74C3C]',
+        border: 'border-[#E74C3C]',
         icon: <AlertTriangle size={12} className="mr-1" />,
         label: 'Stock bajo'
       };
     } else if (product.stock <= 15) {
       return {
-        bg: 'bg-blue-50',
-        text: 'text-blue-700',
-        border: 'border-blue-200',
+        bg: 'bg-[#F2A516]/10',
+        text: 'text-[#F2A516]',
+        border: 'border-[#F2A516]',
         icon: <Package size={12} className="mr-1" />,
         label: `Stock: ${product.stock}`
       };
     } else {
       return {
-        bg: 'bg-green-50',
-        text: 'text-green-700',
-        border: 'border-green-200',
+        bg: 'bg-[#CFF2E4]',
+        text: 'text-[#1B9C96]',
+        border: 'border-[#1B9C96]',
         icon: <Check size={12} className="mr-1" />,
         label: `Stock: ${product.stock}`
       };
     }
   };
 
-  // Manejar cambio de cantidad
+  // Manejar cambio de cantidad con validación según categoría
   const handleQuantityChange = (newQuantity: number) => {
-    // Asegurar que la cantidad esté entre 1 y el stock disponible
-    // Para mantenimiento no limitamos por stock
-    const maxQuantity = product.categoria === 'mantenimiento' ? 999 : product.stock;
-    const limitedQuantity = Math.min(Math.max(1, newQuantity), maxQuantity);
+    // Asegurar que la cantidad sea siempre al menos 1
+    newQuantity = Math.max(1, newQuantity);
+    
+    // Para productos de mantenimiento, NO limitamos por stock
+    if (product.categoria === 'mantenimiento') {
+      // Sin límite superior para productos de mantenimiento
+      setQuantity(newQuantity);
+      return;
+    }
+    
+    // Para productos de limpieza y otros, limitamos según stock disponible
+    const maxQuantity = product.stock;
+    const limitedQuantity = Math.min(newQuantity, maxQuantity);
     setQuantity(limitedQuantity);
   };
 
@@ -205,32 +214,32 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     };
 
     return (
-      <div className="mt-2 text-[#F8F9FA]/90 bg-black/10 rounded-md p-2 text-xs">
+      <div className="mt-2 text-[#0D4E4B] bg-[#CFF2E4]/70 rounded-md p-2 text-xs">
         <div className="font-medium mb-1 flex items-center justify-between">
           <div className="flex items-center">
-            <PackagePlus size={14} className="mr-1" />
+            <PackagePlus size={14} className="mr-1 text-[#1B9C96]" />
             Incluye:
           </div>
           {hasMoreItems && (
             <Button
               variant="ghost"
-              className="h-5 px-1 py-0 text-[10px] text-[#F8F9FA]/80 hover:bg-white/10"
+              className="h-5 px-1 py-0 text-[10px] text-[#0D4E4B] hover:bg-[#1B9C96]/20"
               onClick={toggleExpand}
             >
               {expandedCombo ? 'Ver menos' : `Ver todos (${comboItems.length})`}
             </Button>
           )}
         </div>
-        <ul className={`space-y-1 ${expandedCombo ? 'max-h-48' : 'max-h-16'} overflow-y-auto transition-all duration-300 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent`}>
+        <ul className={`space-y-1 ${expandedCombo ? 'max-h-48' : 'max-h-16'} overflow-y-auto transition-all duration-300 scrollbar-thin scrollbar-thumb-[#1B9C96]/40 scrollbar-track-transparent`}>
           {displayedItems.map((item, index) => (
             <li key={index} className="flex justify-between">
               <span className="truncate pr-2">{item.nombre}</span>
-              <span className="text-white">x{item.cantidad}</span>
+              <span className="text-[#1B9C96]">x{item.cantidad}</span>
             </li>
           ))}
         </ul>
         {!expandedCombo && hasMoreItems && (
-          <div className="mt-1 text-center text-[#F8F9FA]/60 text-[10px]">
+          <div className="mt-1 text-center text-[#4A7C79] text-[10px]">
             +{comboItems.length - initialItemsToShow} productos más
           </div>
         )}
@@ -250,15 +259,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
       whileHover={{ y: -5 }}
-      className="h-full"
+      className="h-full product-card"
     >
       <Card 
-        className={`h-full flex flex-col bg-gradient-to-br ${getGradientClass()} backdrop-blur-sm border ${getBorderClass()} hover:shadow-lg transition-all overflow-hidden`}
+        className={`h-full flex flex-col bg-gradient-to-br ${getGradientClass()} border ${getBorderClass()} hover:shadow-lg hover:shadow-[#1B9C96]/20 transition-all overflow-hidden`}
         onClick={onShowDetails}
       >
         {/* Imagen del producto - Optimizada para responsividad */}
         <div className="pt-2 sm:pt-3 px-2 sm:px-3">
-          <div className="aspect-square w-full rounded-lg overflow-hidden bg-white/10 relative">
+          <div className="aspect-square w-full rounded-lg overflow-hidden bg-white relative">
             {useBase64 && product.imageBase64 ? (
               <div className="absolute inset-0 flex items-center justify-center">
                 <img
@@ -266,30 +275,86 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                   alt={product.nombre}
                   className="w-full h-full object-contain"
                   loading="lazy"
+                  onError={(e) => {
+                    // Si hay un error cargando la imagen base64, ocultar la imagen
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = 'none';
+                    
+                    // Crear un elemento de fallback
+                    const fallbackDiv = document.createElement('div');
+                    fallbackDiv.className = "flex items-center justify-center w-full h-full text-[#4A7C79]";
+                    fallbackDiv.textContent = product.esCombo ? "Combo" : "Sin imagen";
+                    if (e.currentTarget.parentElement) {
+                      e.currentTarget.parentElement.appendChild(fallbackDiv);
+                    }
+                  }}
                 />
               </div>
             ) : (
               <div className="absolute inset-0 flex items-center justify-center">
-                <OptimizedProductImage
-                  productId={product._id}
-                  alt={product.nombre}
-                  width={300}
-                  height={300}
-                  quality={compact ? 60 : 75}
-                  className="w-full h-full object-contain"
-                  containerClassName="flex items-center justify-center w-full h-full"
-                  fallbackClassName="flex items-center justify-center w-full h-full text-white/70"
-                  placeholderText={product.esCombo ? "Combo" : "Sin imagen"}
-                  useBase64={useBase64}
-                  priority={false}
-                />
+                {product.hasImage ? (
+                  <img
+                    src={`http://localhost:4000/api/producto/${product._id}/imagen?width=${compact ? 200 : 300}&height=${compact ? 200 : 300}&quality=${compact ? 60 : 75}&${Date.now()}`}
+                    alt={product.nombre}
+                    className="w-full h-full object-contain"
+                    loading="lazy"
+                    onError={(e) => {
+                      // Si hay un error cargando la imagen, ocultar y mostrar fallback
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      
+                      // Crear un elemento de fallback con el logo
+                      if (e.currentTarget.parentElement) {
+                        const fallbackContainer = document.createElement('div');
+                        fallbackContainer.className = "flex items-center justify-center w-full h-full";
+                        
+                        const logoImg = document.createElement('img');
+                        logoImg.src = "/lyme.png";
+                        logoImg.alt = "Lyme Logo";
+                        logoImg.className = "h-3/4 w-3/4 object-contain";
+                        
+                        // Si el logo no carga, mostrar texto alternativo
+                        logoImg.onerror = () => {
+                          logoImg.style.display = 'none';
+                          const textSpan = document.createElement('span');
+                          textSpan.className = "text-[#4A7C79]";
+                          textSpan.textContent = product.esCombo ? "Combo" : "Sin imagen";
+                          fallbackContainer.appendChild(textSpan);
+                        };
+                        
+                        fallbackContainer.appendChild(logoImg);
+                        e.currentTarget.parentElement.appendChild(fallbackContainer);
+                      }
+                    }}
+                  />
+                ) : (
+                  <div className="flex items-center justify-center w-full h-full">
+                    <img
+                      src="/lyme.png"
+                      alt="Lyme Logo"
+                      className="h-3/4 w-3/4 object-contain"
+                      onError={(e) => {
+                        // Si el logo no carga, mostrar texto alternativo
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        
+                        if (e.currentTarget.parentElement) {
+                          const textSpan = document.createElement('span');
+                          textSpan.className = "text-[#4A7C79]";
+                          textSpan.textContent = product.esCombo ? "Combo" : "Sin imagen";
+                          e.currentTarget.parentElement.appendChild(textSpan);
+                        }
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             )}
 
             {/* Badge de combo */}
             {product.esCombo && (
               <Badge 
-                className="absolute top-2 left-2 z-10 bg-purple-100 text-purple-800 border border-purple-300"
+                className="absolute top-2 left-2 z-10 bg-[#ffffff] text-[#1B9C96] border border-[#1B9C96]"
               >
                 <PackagePlus size={12} className="mr-1" />
                 Combo
@@ -316,9 +381,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             <Button
               variant="ghost"
               size="icon"
-              className={`absolute top-2 right-2 z-10 bg-white/50 backdrop-blur-md hover:bg-red/70 rounded-full 
+              className={`absolute top-2 right-2 z-10 bg-white/70 hover:bg-[#F2A516]/20 rounded-full 
                 ${compact ? 'h-7 w-7 sm:h-8 sm:w-8' : 'h-8 w-8'} 
-                ${isFavorite ? 'text-red-500' : 'text-[#15497E]/70'} 
+                ${isFavorite ? 'text-[#F2A516]' : 'text-[#4A7C79]'} 
                 transition-all touch-manipulation`}
               onClick={(e) => {
                 e.stopPropagation();
@@ -335,14 +400,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {/* Badge de categoría - Responsivo */}
           <Badge 
             variant="outline" 
-            className={`mb-1 sm:mb-2 text-xs border-[#6C757D] text-[#F8F9FA] bg-[#6C757D]/20
-              ${compact ? 'hidden xs:inline-flex' : ''}`}
+            className={`mb-1 sm:mb-2 text-xs border-[#1B9C96] text-[#0D4E4B] bg-white/60
+              ${compact ? 'hidden xs:inline-flex' : ''} category-badge ${product.categoria === 'mantenimiento' ? 'maintenance' : 'cleaning'}`}
           >
             {product.subCategoria}
           </Badge>
 
           {/* Nombre del producto - Con tamaño adaptable */}
-          <h3 className={`font-medium line-clamp-1 text-white 
+          <h3 className={`font-medium line-clamp-1 text-[#0D4E4B] 
             ${compact ? 'text-sm sm:text-base' : 'text-base sm:text-lg'} mb-1`}>
             {product.nombre}
           </h3>
@@ -350,14 +415,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {/* Descripción - Con expansión controlada */}
           {product.descripcion && (
             <div className="relative">
-              <p className={`text-sm text-[#F8F9FA]/80 ${showDescription ? '' : 'line-clamp-2'} 
+              <p className={`text-sm text-[#29696B] ${showDescription ? '' : 'line-clamp-2'} 
                 ${compact ? 'text-xs sm:text-sm mb-1' : 'mb-1 sm:mb-2'}`}>
                 {product.descripcion}
               </p>
               {product.descripcion.length > 100 && (
                 <Button
                   variant="ghost"
-                  className="absolute bottom-0 right-0 h-6 px-1 py-0.5 text-xs text-[#F8F9FA]/80 hover:bg-white/10"
+                  className="absolute bottom-0 right-0 h-6 px-1 py-0.5 text-xs text-[#4A7C79] hover:bg-[#1B9C96]/20 hover:text-[#0D4E4B]"
                   onClick={toggleDescription}
                   aria-label={showDescription ? "Mostrar menos" : "Mostrar más"}
                 >
@@ -371,7 +436,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {product.esCombo && renderComboContent()}
 
           {/* Precio - Con formato adaptable */}
-          <div className={`font-bold text-white ${compact ? 'text-base sm:text-lg mt-1' : 'text-xl mt-2'}`}>
+          <div className={`font-bold text-[#F2A516] ${compact ? 'text-base sm:text-lg mt-1' : 'text-xl mt-2'}`}>
             ${product.precio.toFixed(2)}
           </div>
         </CardContent>
@@ -379,11 +444,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         <CardFooter className={compact ? "pt-1 pb-2 sm:pb-3 px-2 sm:px-3" : "pt-2 pb-3 sm:pb-4 px-3"}>
           {showQuantitySelector ? (
             <div className="w-full">
-              <div className="flex items-center justify-between mb-2 bg-white/10 rounded-md p-1">
+              <div className="flex items-center justify-between mb-2 bg-white/80 rounded-md p-1">
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`${compact ? 'h-8 w-8 sm:h-8 sm:w-8' : 'h-8 w-8'} p-0 text-[#F8F9FA] touch-manipulation`}
+                  className={`${compact ? 'h-8 w-8 sm:h-8 sm:w-8' : 'h-8 w-8'} p-0 text-[#0D4E4B] hover:text-[#1B9C96] hover:bg-[#CFF2E4] touch-manipulation`}
                   onClick={(e) => {
                     e.stopPropagation();
                     handleQuantityChange(quantity - 1);
@@ -395,17 +460,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 <Input
                   type="number"
                   min="1"
-                  max={product.categoria === 'mantenimiento' ? 999 : product.stock}
+                  max={product.categoria === 'mantenimiento' ? undefined : product.stock}
                   value={quantity}
                   onChange={(e) => handleQuantityChange(parseInt(e.target.value) || 1)}
                   onClick={(e) => e.stopPropagation()}
-                  className={`${compact ? 'w-10 sm:w-14 h-8' : 'w-14 h-8'} text-center p-0 border-0 bg-transparent focus:ring-0 text-[#F8F9FA]`}
+                  className={`${compact ? 'w-10 sm:w-14 h-8' : 'w-14 h-8'} text-center p-0 border-0 bg-transparent focus:ring-0 text-[#0D4E4B]`}
                   aria-label="Cantidad"
                 />
                 <Button
                   variant="ghost"
                   size="sm"
-                  className={`${compact ? 'h-8 w-8 sm:h-8 sm:w-8' : 'h-8 w-8'} p-0 text-[#F8F9FA] touch-manipulation`}
+                  className={`${compact ? 'h-8 w-8 sm:h-8 sm:w-8' : 'h-8 w-8'} p-0 text-[#0D4E4B] hover:text-[#1B9C96] hover:bg-[#CFF2E4] touch-manipulation`}
                   onClick={(e) => {
                     e.stopPropagation();
                     handleQuantityChange(quantity + 1);
@@ -416,7 +481,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 </Button>
               </div>
               <Button
-                className={`w-full ${getButtonClass()} text-white ${compact ? 'text-xs sm:text-sm py-1 h-8 sm:h-9' : 'h-9 sm:h-10'} touch-manipulation`}
+                className={`w-full ${getButtonClass()} text-white ${compact ? 'text-xs sm:text-sm py-1 h-8 sm:h-9' : 'h-9 sm:h-10'} touch-manipulation shadow-md hover:shadow-lg hover:shadow-[#1B9C96]/30 transition-all duration-300`}
                 onClick={(e) => {
                   e.stopPropagation();
                   handleAddToCart();
@@ -432,7 +497,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           ) : (
             <Button
               className={`w-full ${getButtonClass()} group transition-all duration-300 text-white 
-                ${compact ? 'text-xs sm:text-sm py-1 h-8 sm:h-9' : 'h-9 sm:h-10'} touch-manipulation`}
+                ${compact ? 'text-xs sm:text-sm py-1 h-8 sm:h-9' : 'h-9 sm:h-10'} touch-manipulation shadow-md hover:shadow-lg hover:shadow-[#1B9C96]/30`}
               onClick={(e) => {
                 e.stopPropagation();
                 setShowQuantitySelector(true);
@@ -453,7 +518,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="absolute bottom-2 right-2 h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-white/20 hover:bg-white/40 text-white touch-manipulation"
+                  className="absolute bottom-2 right-2 h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-white/70 hover:bg-[#1B9C96]/60 text-[#1B9C96] hover:text-white touch-manipulation"
                   onClick={(e) => {
                     e.stopPropagation();
                     onShowDetails();
@@ -463,7 +528,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                   <Info size={compact ? 14 : 16} />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>
+              <TooltipContent className="bg-white border-[#1B9C96] text-[#0D4E4B]">
                 <p>Ver detalles</p>
               </TooltipContent>
             </Tooltip>

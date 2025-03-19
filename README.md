@@ -35,8 +35,8 @@ LymeFront es la interfaz de usuario para el sistema de gestión Lyme, una aplica
 
 3. Crear archivo `.env` en la raíz del proyecto con las siguientes variables:
    ```
-   PUBLIC_API_URL=http://179.43.118.101:4000/api
-   PUBLIC_SITE_URL=http://localhost:3000
+   PUBLIC_API_URL=http://179.43.118.101/api
+   PUBLIC_SITE_URL=http://179.43.118.101
    ```
 
 ## Ejecución
@@ -47,7 +47,7 @@ LymeFront es la interfaz de usuario para el sistema de gestión Lyme, una aplica
 npm run dev
 ```
 
-La aplicación estará disponible en `http://localhost:3000`.
+La aplicación estará disponible en `http://179.43.118.101`.
 
 ### Modo producción
 

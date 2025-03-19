@@ -66,7 +66,7 @@ import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/comp
 // InventorySection.tsx (omitiendo importaciones)
 
 // Definir URL base para la API
-const API_URL = "http://179.43.118.101:4000/api/";
+const API_URL = "http://localhost:4000/api/";
 
 // Definir umbral de stock bajo
 const LOW_STOCK_THRESHOLD = 10;
@@ -129,55 +129,55 @@ const InventorySection = () => {
   const [tempSelectedItems, setTempSelectedItems] = useState<ComboItemType[]>([]);
   const initialFetchDone = useRef(false);
   const [isAddingStock, setIsAddingStock] = useState(false);
-  
+
   // Estado para la paginación
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  
+
   // Estado para productos con stock bajo
   const [lowStockCount, setLowStockCount] = useState(0);
   const [showLowStockOnly, setShowLowStockOnly] = useState(false);
   const [isLowStockLoading, setIsLowStockLoading] = useState(false);
-  
+
   // Estado para productos sin stock
   const [noStockCount, setNoStockCount] = useState(0);
   const [showNoStockOnly, setShowNoStockOnly] = useState(false);
   const [isNoStockLoading, setIsNoStockLoading] = useState(false);
-  
+
   // Referencias para el scroll en móvil
   const mobileListRef = useRef<HTMLDivElement>(null);
-  
+
   // IMPORTANTE: Tamaños fijos para cada tipo de dispositivo
   const ITEMS_PER_PAGE_MOBILE = 5;
   const ITEMS_PER_PAGE_DESKTOP = 10;
-  
+
   // Estado para controlar el ancho de la ventana
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
-  
+
   // Calculamos dinámicamente itemsPerPage basado en el ancho de la ventana
   const itemsPerPage = windowWidth < 768 ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP;
-  
+
   // Hook para paginación con lógica adaptada de AdminUserManagement
   const useMediaQuery = (query: string) => {
     const [matches, setMatches] = useState(
       typeof window !== 'undefined' ? window.matchMedia(query).matches : false
     );
-    
+
     useEffect(() => {
       if (typeof window === 'undefined') return;
-      
+
       const mediaQuery = window.matchMedia(query);
       setMatches(mediaQuery.matches);
-      
+
       const handler = (event: MediaQueryListEvent) => setMatches(event.matches);
-      
+
       if (mediaQuery.addEventListener) {
         mediaQuery.addEventListener('change', handler);
       } else {
         // @ts-ignore - Para compatibilidad con navegadores antiguos
         mediaQuery.addListener(handler);
       }
-      
+
       return () => {
         if (mediaQuery.removeEventListener) {
           mediaQuery.removeEventListener('change', handler);
@@ -187,7 +187,7 @@ const InventorySection = () => {
         }
       };
     }, [query]);
-    
+
     return matches;
   };
 
@@ -228,7 +228,7 @@ const InventorySection = () => {
 
   // Usar productos directamente de la respuesta de la API en lugar de filtrar localmente
   const currentProducts = products;
-  
+
   // Componente para input de stock con límite máximo - CORREGIDO el problema del foco
   const ProductStockInput = ({
     value,
@@ -237,7 +237,7 @@ const InventorySection = () => {
     required = true,
     maxStock = 999999999,
     isAddingStock = false,
-    onAddingStockChange = () => {},
+    onAddingStockChange = () => { },
     currentStock = 0
   }: {
     value: string;
@@ -249,36 +249,29 @@ const InventorySection = () => {
     onAddingStockChange?: (isAdding: boolean) => void;
     currentStock?: number;
   }) => {
-    // Función modificada para mantener el foco 
+    // Simplificar el manejo de cambios para mantener el foco
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const inputValue = e.target.value;
-      
-      // Si el campo está vacío, permitirlo
+
+      // Permitir campo vacío
       if (inputValue === '') {
         onChange('');
         return;
       }
-      
-      // Validación específica para permitir solo números
+
+      // Verificar si es un número válido usando una expresión regular simple
       if (!/^\d*$/.test(inputValue)) {
-        return;
+        return; // Rechazar entrada no numérica sin cambiar el valor
       }
-      
-      const numValue = parseInt(inputValue, 10);
-      if (isNaN(numValue)) {
-        return;
-      }
-      
-      // Aplicar restricciones pero no modificar el valor a menos que sea necesario
-      if (numValue > maxStock) {
+
+      // Solo validar el límite máximo al perder el foco, no durante la escritura
+      if (parseInt(inputValue) > maxStock) {
         onChange(maxStock.toString());
-      } else if (numValue < 0) {
-        onChange('0');
       } else {
-        onChange(inputValue); // Usar directamente el valor de entrada
+        onChange(inputValue);
       }
     };
-  
+
     return (
       <div className="space-y-2">
         {/* Checkbox para agregar stock */}
@@ -299,18 +292,19 @@ const InventorySection = () => {
             </div>
           </div>
         )}
-  
+
         <Input
           id={id}
-          type="text" // Cambiado a text para mejor control
-          inputMode="numeric" // Para teclado numérico en móviles
-          pattern="[0-9]*" // Para validación HTML
+          // Usar type="number" como en el campo de precio
+          type="number"
+          min="0"
+          max={maxStock}
           value={value}
           onChange={handleChange}
           required={required}
           className="mt-1"
         />
-        
+
         {isAddingStock && (
           <div className="mt-1 text-xs text-[#29696B] bg-[#DFEFE6]/20 p-2 rounded border border-[#91BEAD]/30">
             <span className="font-medium">Stock actual:</span> {currentStock} unidades
@@ -318,14 +312,14 @@ const InventorySection = () => {
             <span className="font-medium">Stock final:</span> {currentStock + parseInt(value || '0')} unidades
           </div>
         )}
-        
+
         <p className="text-xs text-[#7AA79C]">
           Máximo: {maxStock.toLocaleString()}
         </p>
       </div>
     );
   };
-  
+
   // Función mejorada para cargar productos
   const fetchProducts = async (forceRefresh = false, page = currentPage, limit = itemsPerPage) => {
     try {
@@ -452,7 +446,7 @@ const InventorySection = () => {
   const countLowStockProducts = async () => {
     try {
       setIsLowStockLoading(true);
-      
+
       const token = getAuthToken();
       if (!token) {
         throw new Error('No hay token de autenticación');
@@ -471,7 +465,7 @@ const InventorySection = () => {
       }
 
       const data = await response.json();
-      
+
       // El endpoint debe devolver un objeto con la propiedad 'count'
       if (data && typeof data.count === 'number') {
         console.log(`Se encontraron ${data.count} productos con stock bajo`);
@@ -481,14 +475,14 @@ const InventorySection = () => {
       }
     } catch (error) {
       console.error("Error al contar productos con stock bajo:", error);
-      
+
       // En caso de error, intentamos una estimación basada en los productos cargados
       try {
         const authToken = getAuthToken();
         // Consultar el endpoint normal con filtro de stock bajo
         if (authToken) {
           const altResponse = await fetch(
-            `${API_URL}producto?lowStock=true&threshold=${LOW_STOCK_THRESHOLD}&limit=1`, 
+            `${API_URL}producto?lowStock=true&threshold=${LOW_STOCK_THRESHOLD}&limit=1`,
             {
               headers: {
                 'Authorization': `Bearer ${authToken}`,
@@ -496,7 +490,7 @@ const InventorySection = () => {
               }
             }
           );
-          
+
           if (altResponse.ok) {
             const altData = await altResponse.json();
             if (altData && altData.totalItems) {
@@ -509,7 +503,7 @@ const InventorySection = () => {
       } catch (altError) {
         console.error("Error en método alternativo:", altError);
       }
-      
+
       // Si todo lo demás falla, usamos una estimación local
       const lowStockEstimate = products.filter(
         product => product.stock <= LOW_STOCK_THRESHOLD && product.stock > 0
@@ -525,7 +519,7 @@ const InventorySection = () => {
   const countNoStockProducts = async () => {
     try {
       setIsNoStockLoading(true);
-      
+
       const token = getAuthToken();
       if (!token) {
         throw new Error('No hay token de autenticación');
@@ -544,7 +538,7 @@ const InventorySection = () => {
       }
 
       const data = await response.json();
-      
+
       // Verificar si hay datos paginados
       if (data && typeof data.totalItems === 'number') {
         console.log(`Se encontraron ${data.totalItems} productos sin stock`);
@@ -557,7 +551,7 @@ const InventorySection = () => {
       }
     } catch (error) {
       console.error("Error al contar productos sin stock:", error);
-      
+
       // Estimación local como fallback
       const noStockEstimate = products.filter(product => product.stock === 0).length;
       console.log(`Estimando localmente: al menos ${noStockEstimate} productos sin stock`);
@@ -652,7 +646,7 @@ const InventorySection = () => {
 
     // Cargar productos inmediatamente al montar el componente
     fetchProducts(true);
-    
+
     // Contar productos con stock bajo y sin stock
     countLowStockProducts();
     countNoStockProducts();
@@ -729,7 +723,7 @@ const InventorySection = () => {
       const matchesLowStock = !showLowStockOnly || (
         product.stock <= LOW_STOCK_THRESHOLD && product.stock > 0
       );
-      
+
       // Verificar sin stock si el filtro está activado
       const matchesNoStock = !showNoStockOnly || product.stock === 0;
 
@@ -1010,7 +1004,7 @@ const InventorySection = () => {
 
       // Procesar el stock basado en si es adición o reemplazo
       let finalStock = parseInt(formData.stock || '0');
-      
+
       // Si estamos editando y agregando stock, sumamos al stock existente
       if (editingProduct && isAddingStock) {
         finalStock = editingProduct.stock + finalStock;
@@ -1094,7 +1088,7 @@ const InventorySection = () => {
 
       // Notificar a otros componentes que deben actualizarse
       inventoryObservable.notify();
-      
+
       // Actualizar contadores
       countLowStockProducts();
       countNoStockProducts();
@@ -1151,7 +1145,7 @@ const InventorySection = () => {
         if (!Array.isArray(prevProducts)) return [];
         return prevProducts.filter(product => product._id !== id);
       });
-      
+
       // Actualizar contadores
       countLowStockProducts();
       countNoStockProducts();
@@ -1183,7 +1177,7 @@ const InventorySection = () => {
       // Detectar si es un combo
       const isProductCombo = product.esCombo || false;
       setIsCombo(isProductCombo);
-      
+
       // Resetear el modo de adición de stock al editar
       setIsAddingStock(false);
 
@@ -1359,7 +1353,7 @@ const InventorySection = () => {
       mobileListRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   };
-  
+
   // Comprobar si la página actual es mayor que el total de páginas
   useEffect(() => {
     if (currentPage > totalPages && totalPages > 0) {
@@ -1380,32 +1374,32 @@ const InventorySection = () => {
     if (showNoStockOnly) {
       setShowNoStockOnly(false);
     }
-    
+
     // Invertir el estado del filtro de stock bajo
     const newState = !showLowStockOnly;
     setShowLowStockOnly(newState);
-    
+
     // Volver a la primera página al cambiar el filtro
     setCurrentPage(1);
-    
+
     // Recargar productos con el filtro aplicado
     fetchProducts(true, 1, itemsPerPage);
   };
-  
+
   // Función para alternar mostrar solo productos sin stock
   const toggleNoStockFilter = () => {
     // Si el filtro de stock bajo está activo, lo desactivamos primero
     if (showLowStockOnly) {
       setShowLowStockOnly(false);
     }
-    
+
     // Invertir el estado del filtro de sin stock
     const newState = !showNoStockOnly;
     setShowNoStockOnly(newState);
-    
+
     // Volver a la primera página al cambiar el filtro
     setCurrentPage(1);
-    
+
     // Recargar productos con el filtro aplicado
     fetchProducts(true, 1, itemsPerPage);
   };
@@ -1486,8 +1480,8 @@ const InventorySection = () => {
             variant={showLowStockOnly ? "default" : "outline"}
             className={`
               relative 
-              ${showLowStockOnly 
-                ? 'bg-yellow-500 hover:bg-yellow-600 border-yellow-500 text-white' 
+              ${showLowStockOnly
+                ? 'bg-yellow-500 hover:bg-yellow-600 border-yellow-500 text-white'
                 : 'border-yellow-500 text-yellow-700 hover:bg-yellow-50'
               }
             `}
@@ -1504,15 +1498,15 @@ const InventorySection = () => {
               <Loader2 className="w-4 h-4 ml-1 animate-spin" />
             )}
           </Button>
-          
+
           {/* Botón para filtrar productos sin stock */}
           <Button
             onClick={toggleNoStockFilter}
             variant={showNoStockOnly ? "default" : "outline"}
             className={`
               relative 
-              ${showNoStockOnly 
-                ? 'bg-red-500 hover:bg-red-600 border-red-500 text-white' 
+              ${showNoStockOnly
+                ? 'bg-red-500 hover:bg-red-600 border-red-500 text-white'
                 : 'border-red-500 text-red-700 hover:bg-red-50'
               }
             `}
@@ -1581,9 +1575,9 @@ const InventorySection = () => {
                   </span>
                 )}
               </AlertDescription>
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={toggleLowStockFilter}
                 className="ml-2 h-7 text-xs border-yellow-300 text-yellow-700 hover:bg-yellow-100"
               >
@@ -1601,9 +1595,9 @@ const InventorySection = () => {
                   </span>
                 )}
               </AlertDescription>
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={toggleNoStockFilter}
                 className="ml-2 h-7 text-xs border-red-300 text-red-700 hover:bg-red-100"
               >
@@ -1691,7 +1685,6 @@ const InventorySection = () => {
                     <td className="px-6 py-4">
                       <div className="flex items-center">
                         <div className="flex-shrink-0 h-10 w-10 mr-3">
-                          {/* Usamos la imagen directamente en lugar de ProductImage */}
                           <div className="h-10 w-10 rounded-full bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30 overflow-hidden">
                             {product.hasImage ? (
                               <img
@@ -1702,14 +1695,32 @@ const InventorySection = () => {
                                 onError={(e) => {
                                   const target = e.target as HTMLImageElement;
                                   target.style.display = 'none';
-                                  if (target.nextSibling) {
-                                    (target.nextSibling as HTMLElement).style.display = 'flex';
+                                  const fallbackElement = target.parentNode?.querySelector('div:last-child');
+                                  if (fallbackElement) {
+                                    (fallbackElement as HTMLElement).style.display = 'flex';
                                   }
                                 }}
                               />
                             ) : null}
-                            <div className={`h-10 w-10 rounded-full bg-[#DFEFE6]/50 flex items-center justify-center text-xs text-[#29696B] ${product.hasImage ? 'hidden' : ''}`}>
-                              {product.esCombo ? <PackagePlus size={16} /> : <img src="/lyme.png" alt="Lyme Logo" className="h-8 w-8 object-contain" />}
+                            <div className={`h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center text-xs text-[#29696B] ${product.hasImage ? 'hidden' : ''}`}>
+                              <img
+                                src="/lyme.png"
+                                alt="Lyme Logo"
+                                className="h-12 w-12 object-contain"
+                                onError={(e) => {
+                                  const target = e.target as HTMLImageElement;
+                                  target.style.display = 'none';
+                                  // Si la imagen falla, mostrar un ícono de fallback según el tipo de producto
+                                  if (product.esCombo) {
+                                    const parent = target.parentElement;
+                                    if (parent) {
+                                      const icon = document.createElement('div');
+                                      icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><path d="M12 22.08V12"></path><path d="M12 12 3.3 6.81"></path><path d="M12 12 20.7 6.8"></path><path d="M12 2v10"></path><path d="M3.3 6.8 12 12l8.7-5.2"></path></svg>';
+                                      parent.appendChild(icon);
+                                    }
+                                  }
+                                }}
+                              />
                             </div>
                           </div>
                         </div>
@@ -1831,7 +1842,6 @@ const InventorySection = () => {
             <CardContent className="p-4 pt-2 pb-3">
               <div className="flex gap-4 mb-3">
                 <div className="flex-shrink-0 h-16 w-16">
-                  {/* Usar enfoque más simplificado para imágenes en móvil */}
                   <div className="h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30 overflow-hidden">
                     {product.hasImage ? (
                       <img
@@ -1842,14 +1852,32 @@ const InventorySection = () => {
                         onError={(e) => {
                           const target = e.target as HTMLImageElement;
                           target.style.display = 'none';
-                          if (target.nextSibling) {
-                            (target.nextSibling as HTMLElement).style.display = 'flex';
+                          const fallbackElement = target.parentNode?.querySelector('div:last-child');
+                          if (fallbackElement) {
+                            (fallbackElement as HTMLElement).style.display = 'flex';
                           }
                         }}
                       />
                     ) : null}
                     <div className={`h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center text-xs text-[#29696B] ${product.hasImage ? 'hidden' : ''}`}>
-                      {product.esCombo ? <PackagePlus size={24} /> : <img src="/lyme.png" alt="Lyme Logo" className="h-12 w-12 object-contain" />}
+                      <img
+                        src="/lyme.png"
+                        alt="Lyme Logo"
+                        className="h-12 w-12 object-contain"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          // Si la imagen falla, mostrar un ícono de fallback según el tipo de producto
+                          if (product.esCombo) {
+                            const parent = target.parentElement;
+                            if (parent) {
+                              const icon = document.createElement('div');
+                              icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><path d="M12 22.08V12"></path><path d="M12 12 3.3 6.81"></path><path d="M12 12 20.7 6.8"></path><path d="M12 2v10"></path><path d="M3.3 6.8 12 12l8.7-5.2"></path></svg>';
+                              parent.appendChild(icon);
+                            }
+                          }
+                        }}
+                      />
                     </div>
                   </div>
                 </div>
@@ -2087,20 +2115,54 @@ const InventorySection = () => {
 
                 <div>
                   <Label htmlFor="stock" className="text-sm text-[#29696B]">
-                    {editingProduct 
-                      ? (isAddingStock ? "Agregar al stock" : "Stock") 
+                    {editingProduct
+                      ? (isAddingStock ? "Agregar al stock" : "Stock")
                       : "Stock"}
                   </Label>
-                  <ProductStockInput
+                  {editingProduct && (
+                    <div className="mb-2 px-1">
+                      <div className="flex items-center gap-2 bg-[#DFEFE6]/30 p-2 rounded-md border border-[#91BEAD]/30">
+                        <Checkbox
+                          id="stock-checkbox"
+                          checked={isAddingStock}
+                          onCheckedChange={(checked) => setIsAddingStock(!!checked)}
+                        />
+                        <label
+                          htmlFor="stock-checkbox"
+                          className="text-sm text-[#29696B] cursor-pointer font-medium"
+                        >
+                          Añadir al stock existente
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Input directo como el de precio */}
+                  <Input
                     id="stock"
+                    type="number"
+                    min="0"
                     value={formData.stock}
-                    onChange={(value) => setFormData({ ...formData, stock: value })}
+                    onChange={(e) => {
+                      // Usar la misma estructura exacta que el campo de precio
+                      setFormData({ ...formData, stock: e.target.value });
+                    }}
                     required
-                    maxStock={999999999}
-                    isAddingStock={isAddingStock}
-                    onAddingStockChange={setIsAddingStock}
-                    currentStock={editingProduct ? editingProduct.stock : 0}
+                    className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
                   />
+
+                  {/* Información adicional */}
+                  {isAddingStock && editingProduct && (
+                    <div className="mt-1 text-xs text-[#29696B] bg-[#DFEFE6]/20 p-2 rounded border border-[#91BEAD]/30">
+                      <span className="font-medium">Stock actual:</span> {editingProduct.stock} unidades
+                      <span className="mx-1">→</span>
+                      <span className="font-medium">Stock final:</span> {editingProduct.stock + parseInt(formData.stock || '0')} unidades
+                    </div>
+                  )}
+
+                  <p className="text-xs text-[#7AA79C]">
+                    Máximo: {(999999999).toLocaleString()}
+                  </p>
                 </div>
               </div>
 
@@ -2165,9 +2227,9 @@ const InventorySection = () => {
               )}
 
               {/* Campo de imagen */}
-                <div>
+              <div>
                 <Label className="text-sm text-[#29696B] block mb-2">Imagen del Producto</Label>
-              
+
                 <div className="mt-1 flex flex-col space-y-2">
                   {formData.imagenPreview ? (
                     <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
@@ -2437,7 +2499,7 @@ const InventorySection = () => {
         onConfirm={() => productToDelete && handleDeleteProductImage(productToDelete)}
         variant="destructive"
       />
-      
+
       {/* Botones flotantes para filtros en móviles */}
       {!loading && (lowStockCount > 0 || noStockCount > 0) && !showLowStockOnly && !showNoStockOnly && windowWidth < 768 && (
         <div className="fixed bottom-6 right-6 z-10 flex flex-col gap-2">
@@ -2445,7 +2507,7 @@ const InventorySection = () => {
             {lowStockCount > 0 && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button 
+                  <Button
                     onClick={toggleLowStockFilter}
                     className="rounded-full h-14 w-14 shadow-lg bg-yellow-500 hover:bg-yellow-600 text-white"
                   >
@@ -2463,11 +2525,11 @@ const InventorySection = () => {
                 </TooltipContent>
               </Tooltip>
             )}
-            
+
             {noStockCount > 0 && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button 
+                  <Button
                     onClick={toggleNoStockFilter}
                     className="rounded-full h-14 w-14 shadow-lg bg-red-500 hover:bg-red-600 text-white"
                   >

@@ -210,7 +210,7 @@ export const Cart: React.FC = () => {
       if (storedRole) setUserRole(storedRole);
       if (storedSecciones) setUserSecciones(storedSecciones);
       
-      const response = await fetch('http://179.43.118.101:4000/api/auth/me', {
+      const response = await fetch('http://localhost:4000/api/auth/me', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -264,7 +264,7 @@ export const Cart: React.FC = () => {
         try {
           console.log('Obteniendo información del supervisor...');
           
-          const supervisorResponse = await fetch(`http://179.43.118.101:4000/api/auth/users/${createdById}`, {
+          const supervisorResponse = await fetch(`http://localhost:4000/api/auth/users/${createdById}`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           
@@ -332,7 +332,7 @@ export const Cart: React.FC = () => {
       }
       
       // Realizar la solicitud de clientes
-      const response = await fetch(`http://179.43.118.101:4000/api/cliente/user/${clientsUserId}`, {
+      const response = await fetch(`http://localhost:4000/api/cliente/user/${clientsUserId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -418,7 +418,7 @@ export const Cart: React.FC = () => {
       }
       
       // Realizar la solicitud con un timeout adecuado
-      const response = await fetch(`http://179.43.118.101:4000/api/downloads/remito/${createdOrderId}`, {
+      const response = await fetch(`http://localhost:4000/api/downloads/remito/${createdOrderId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },
@@ -465,7 +465,16 @@ export const Cart: React.FC = () => {
   const handleQuantityChange = (id: string, newQuantity: number) => {
     // Sólo aseguramos que la cantidad sea positiva
     if (newQuantity < 1) newQuantity = 1;
-    // Eliminamos el límite superior de 99 unidades
+    
+    // Buscar el item para verificar si es de mantenimiento (sin límite)
+    const item = items.find(item => item.id === id);
+    if (item && item.category === 'mantenimiento') {
+      // No aplicamos límite superior para productos de mantenimiento
+      updateQuantity(id, newQuantity);
+      return;
+    }
+    
+    // Para otros productos (como limpieza), mantenemos el comportamiento actual
     updateQuantity(id, newQuantity);
   };
   
@@ -561,7 +570,7 @@ export const Cart: React.FC = () => {
       console.log('Enviando pedido:', JSON.stringify(orderData));
       
       // Enviar pedido a la API
-      const response = await fetch('http://179.43.118.101:4000/api/pedido', {
+      const response = await fetch('http://localhost:4000/api/pedido', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -616,18 +625,18 @@ export const Cart: React.FC = () => {
     return (
       <>
         <ShopNavbar />
-        <div className="container mx-auto px-4 py-8">
+        <div className="container mx-auto px-4 py-8 shop-theme">
           <div className="flex flex-col items-center justify-center py-16">
-            <div className="bg-[#15497E]/30 backdrop-blur-md rounded-full p-6 mb-6 shadow-lg shadow-[#15497E]/20">
-              <ShoppingCart className="h-16 w-16 text-[#F8F9FA]" />
+            <div className="bg-[#1B9C96]/30 backdrop-blur-md rounded-full p-6 mb-6 shadow-lg shadow-[#1B9C96]/20">
+              <ShoppingCart className="h-16 w-16 text-[#0D4E4B]" />
             </div>
-            <h2 className="text-2xl font-semibold mb-4 text-[#F8F9FA]">Tu carrito está vacío</h2>
-            <p className="text-[#6C757D] mb-8 text-center max-w-md">
+            <h2 className="text-2xl font-semibold mb-4 text-[#0D4E4B]">Tu carrito está vacío</h2>
+            <p className="text-[#29696B] mb-8 text-center max-w-md">
               Parece que aún no has agregado productos a tu carrito. 
               Explora nuestro catálogo y encuentra lo que necesitas.
             </p>
             <Button 
-              className="bg-[#15497E] hover:bg-[#2A82C7] text-white shadow-md shadow-[#15497E]/20"
+              className="bg-[#1B9C96] hover:bg-[#139692] text-white shadow-md shadow-[#1B9C96]/20"
               onClick={() => window.location.href = '/shop'}
             >
               <ArrowLeft className="mr-2 h-4 w-4" />
@@ -644,34 +653,34 @@ export const Cart: React.FC = () => {
     return (
       <>
         <ShopNavbar />
-        <div className="container mx-auto px-4 py-8">
+        <div className="container mx-auto px-4 py-8 shop-theme">
           <div className="max-w-xl mx-auto">
             <motion.div
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5 }}
-              className="bg-gradient-to-r from-[#15497E]/40 to-[#2A82C7]/40 backdrop-blur-md border border-[#2A82C7] p-8 rounded-2xl text-center shadow-lg shadow-[#15497E]/10"
+              className="bg-gradient-to-r from-[#1B9C96]/40 to-[#84D6C8]/40 backdrop-blur-md border border-[#1B9C96] p-8 rounded-2xl text-center shadow-lg shadow-[#1B9C96]/10"
             >
-              <div className="bg-green-500 rounded-full h-20 w-20 flex items-center justify-center mx-auto mb-6 shadow-lg shadow-green-500/30">
+              <div className="bg-[#1B9C96] rounded-full h-20 w-20 flex items-center justify-center mx-auto mb-6 shadow-lg shadow-[#1B9C96]/30">
                 <Check className="h-10 w-10 text-white" />
               </div>
-              <h2 className="text-2xl font-bold mb-4 text-[#F8F9FA]">¡Pedido realizado con éxito!</h2>
+              <h2 className="text-2xl font-bold mb-4 text-[#0D4E4B]">¡Pedido realizado con éxito!</h2>
               
               {userRole === 'operario' ? (
-                <p className="text-[#6C757D] mb-6">
+                <p className="text-[#29696B] mb-6">
                   Tu pedido ha sido enviado a tu supervisor para su aprobación. 
                   Te notificaremos cuando sea procesado.
                 </p>
               ) : (
-                <p className="text-[#6C757D] mb-6">
+                <p className="text-[#29696B] mb-6">
                   Hemos recibido tu solicitud. El equipo de administración revisará tu pedido y te contactará pronto.
                 </p>
               )}
               
               {/* Mostrar información del supervisor si es operario */}
               {userRole === 'operario' && supervisorName && (
-                <div className="mb-6 p-3 bg-white/10 border border-[#2A82C7] rounded-lg">
-                  <p className="flex items-center justify-center text-[#F8F9FA]">
+                <div className="mb-6 p-3 bg-white/10 border border-[#1B9C96] rounded-lg">
+                  <p className="flex items-center justify-center text-[#0D4E4B]">
                     <UserCircle2 className="h-4 w-4 mr-2" />
                     Pedido enviado a: <span className="font-bold ml-1">{supervisorName}</span>
                   </p>
@@ -681,7 +690,7 @@ export const Cart: React.FC = () => {
               {/* Botones de acción */}
               <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 justify-center mb-6">
                 <Button 
-                  className="bg-[#15497E] hover:bg-[#2A82C7] text-white shadow-md shadow-[#15497E]/20"
+                  className="bg-[#1B9C96] hover:bg-[#139692] text-white shadow-md shadow-[#1B9C96]/20"
                   onClick={handleRemitoDownload}
                   disabled={isDownloadingRemito}
                 >
@@ -695,7 +704,7 @@ export const Cart: React.FC = () => {
                 
                 <Button 
                   variant="outline"
-                  className="border-[#2A82C7] text-[#F8F9FA] hover:bg-[#15497E]/20"
+                  className="border-[#1B9C96] text-[#0D4E4B] hover:bg-[#1B9C96]/20"
                   onClick={() => window.location.href = '/shop'}
                 >
                   Volver a la tienda
@@ -703,9 +712,9 @@ export const Cart: React.FC = () => {
               </div>
               
               {/* Contador */}
-              <div className="bg-white/10 border border-[#2A82C7]/50 rounded-lg p-3 inline-flex items-center">
-                <Clock className="h-4 w-4 mr-2 text-[#F8F9FA]" />
-                <span className="text-[#F8F9FA]">
+              <div className="bg-white/10 border border-[#1B9C96]/50 rounded-lg p-3 inline-flex items-center">
+                <Clock className="h-4 w-4 mr-2 text-[#1B9C96]" />
+                <span className="text-[#0D4E4B]">
                   Volviendo a la tienda en <span className="font-bold">{countdown}</span> segundos
                 </span>
               </div>
@@ -719,18 +728,18 @@ export const Cart: React.FC = () => {
   return (
     <>
       <ShopNavbar />
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-8 shop-theme">
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-3xl font-bold mb-8 flex items-center text-[#F8F9FA]">
+          <h1 className="text-3xl font-bold mb-8 flex items-center text-[#0D4E4B]">
             <ShoppingCart className="mr-3 h-8 w-8" />
             Tu Carrito
           </h1>
           
           {/* Mostrar banner informativo para operarios */}
           {userRole === 'operario' && supervisorName && (
-            <Alert className="mb-6 bg-[#15497E]/30 border-[#2A82C7] shadow-md">
-              <UserCircle2 className="h-5 w-5 text-[#F8F9FA]" />
-              <AlertDescription className="ml-2 text-[#F8F9FA]">
+            <Alert className="mb-6 bg-[#1B9C96]/30 border-[#1B9C96] shadow-md">
+              <UserCircle2 className="h-5 w-5 text-[#0D4E4B]" />
+              <AlertDescription className="ml-2 text-[#0D4E4B]">
                 Estás realizando un pedido como operario. 
                 El pedido será enviado a <span className="font-bold">{supervisorName}</span> para su aprobación.
               </AlertDescription>
@@ -749,22 +758,22 @@ export const Cart: React.FC = () => {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, x: -100 }}
-                        className="bg-gradient-to-r from-[#15497E]/40 to-[#2A82C7]/40 backdrop-blur-sm border border-[#2A82C7] rounded-lg overflow-hidden shadow-md"
+                        className="bg-gradient-to-r from-[#1B9C96]/40 to-[#84D6C8]/40 backdrop-blur-sm border border-[#1B9C96] rounded-lg overflow-hidden shadow-md"
                       >
                         <div className="p-4 flex gap-4">
                           {/* Imagen del producto */}
-                          <div className="w-20 h-20 bg-white/10 rounded-md overflow-hidden flex-shrink-0 border border-[#2A82C7]/30">
+                          <div className="w-20 h-20 bg-white rounded-md overflow-hidden flex-shrink-0 border border-[#1B9C96]/30">
                             <CartItemImage item={item} />
                           </div>
                           
                           {/* Información del producto */}
                           <div className="flex-grow">
                             <div className="flex justify-between">
-                              <h3 className="font-medium text-lg text-[#F8F9FA]">{item.name}</h3>
+                              <h3 className="font-medium text-lg text-[#0D4E4B]">{item.name}</h3>
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-8 w-8 p-0 text-[#F8F9FA]/60 hover:text-red-400 hover:bg-transparent"
+                                className="h-8 w-8 p-0 text-[#4A7C79] hover:text-[#E74C3C] hover:bg-transparent"
                                 onClick={() => removeItem(item.id)}
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -773,17 +782,17 @@ export const Cart: React.FC = () => {
                             
                             {/* Categoría */}
                             {item.category && (
-                              <p className="text-sm text-[#6C757D] capitalize">
+                              <p className="text-sm text-[#29696B] capitalize">
                                 {item.category} {item.subcategory && `- ${item.subcategory}`}
                               </p>
                             )}
                             
                             <div className="flex justify-between items-center mt-2">
-                              <div className="flex items-center space-x-1 bg-white/10 rounded-md border border-[#2A82C7]/30">
+                              <div className="flex items-center space-x-1 bg-white rounded-md border border-[#1B9C96]/30">
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  className="h-8 w-8 p-0 text-[#F8F9FA]"
+                                  className="h-8 w-8 p-0 text-[#0D4E4B]"
                                   onClick={() => handleQuantityChange(item.id, item.quantity - 1)}
                                 >
                                   <Minus className="h-3 w-3" />
@@ -793,12 +802,12 @@ export const Cart: React.FC = () => {
                                   min="1"
                                   value={item.quantity}
                                   onChange={(e) => handleQuantityChange(item.id, parseInt(e.target.value) || 1)}
-                                  className="w-16 h-8 text-center p-0 border-0 bg-transparent focus:ring-0 text-[#F8F9FA]"
+                                  className="w-16 h-8 text-center p-0 border-0 bg-transparent focus:ring-0 text-[#0D4E4B]"
                                 />
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  className="h-8 w-8 p-0 text-[#F8F9FA]"
+                                  className="h-8 w-8 p-0 text-[#0D4E4B]"
                                   onClick={() => handleQuantityChange(item.id, item.quantity + 1)}
                                 >
                                   <Plus className="h-3 w-3" />
@@ -806,8 +815,8 @@ export const Cart: React.FC = () => {
                               </div>
                               
                               <div className="text-right">
-                                <div className="text-lg font-semibold text-[#F8F9FA]">${(item.price * item.quantity).toFixed(2)}</div>
-                                <div className="text-xs text-[#6C757D]">${item.price.toFixed(2)} por unidad</div>
+                                <div className="text-lg font-semibold text-[#0D4E4B]">${(item.price * item.quantity).toFixed(2)}</div>
+                                <div className="text-xs text-[#4A7C79]">${item.price.toFixed(2)} por unidad</div>
                               </div>
                             </div>
                           </div>
@@ -822,27 +831,27 @@ export const Cart: React.FC = () => {
                     className="space-y-6"
                   >
                     {/* Selector de clientes */}
-                    <Card className="bg-gradient-to-r from-[#15497E]/40 to-[#2A82C7]/40 backdrop-blur-sm border-[#2A82C7] shadow-md">
-                      <CardHeader className="border-b border-[#2A82C7]/50">
-                        <CardTitle className="text-[#F8F9FA]">Seleccionar Cliente</CardTitle>
+                    <Card className="bg-gradient-to-r from-[#1B9C96]/40 to-[#84D6C8]/40 backdrop-blur-sm border-[#1B9C96] shadow-md">
+                      <CardHeader className="border-b border-[#1B9C96]/50">
+                        <CardTitle className="text-[#0D4E4B]">Seleccionar Cliente</CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-4 pt-6">
                         {cargandoClientes ? (
                           <div className="py-3 flex justify-center">
-                            <Loader2 className="h-6 w-6 animate-spin text-[#F8F9FA]" />
+                            <Loader2 className="h-6 w-6 animate-spin text-[#1B9C96]" />
                           </div>
                         ) : errorClientes ? (
-                          <Alert className="bg-red-900/30 border-red-400">
-                            <AlertCircle className="h-4 w-4 text-red-400" />
-                            <AlertDescription className="ml-2 text-red-100">
+                          <Alert className="bg-[#E74C3C]/10 border-[#E74C3C]">
+                            <AlertCircle className="h-4 w-4 text-[#E74C3C]" />
+                            <AlertDescription className="ml-2 text-[#E74C3C]">
                               {errorClientes}
                             </AlertDescription>
                           </Alert>
                         ) : clientes.length === 0 ? (
                           <div>
-                            <Alert className="bg-yellow-600/30 border-2 border-yellow-500/80 mb-4">
-                              <AlertTriangle className="h-4 w-4 text-yellow-300" />
-                              <AlertDescription className="ml-2 text-yellow-100 font-medium">
+                            <Alert className="bg-[#F2A516]/10 border-2 border-[#F2A516] mb-4">
+                              <AlertTriangle className="h-4 w-4 text-[#F2A516]" />
+                              <AlertDescription className="ml-2 text-[#0D4E4B] font-medium">
                                 No hay clientes asignados. Por favor, contacta con administración para que te asignen clientes antes de realizar pedidos.
                               </AlertDescription>
                             </Alert>
@@ -850,7 +859,7 @@ export const Cart: React.FC = () => {
                             <div className="flex justify-center mt-6">
                               <Button 
                                 onClick={() => window.location.href = '/shop'}
-                                className="bg-[#15497E] hover:bg-[#2A82C7] text-white"
+                                className="bg-[#1B9C96] hover:bg-[#139692] text-white"
                               >
                                 <ArrowLeft className="mr-2 h-4 w-4" />
                                 Volver a la tienda
@@ -859,15 +868,15 @@ export const Cart: React.FC = () => {
                           </div>
                         ) : (
                           <div className="space-y-2">
-                            <Label htmlFor="clienteSelector" className="text-white font-medium flex items-center">
+                            <Label htmlFor="clienteSelector" className="text-[#0D4E4B] font-medium flex items-center">
                               Cliente Asociado
-                              {cargandoClientes && <Loader2 className="ml-2 h-3 w-3 animate-spin text-white/70" />}
+                              {cargandoClientes && <Loader2 className="ml-2 h-3 w-3 animate-spin text-[#1B9C96]" />}
                             </Label>
                             
                             {/* Indicador de operario/supervisor */}
                             {userRole === 'operario' && supervisorName && (
-                              <div className="text-xs text-[#F8F9FA] mb-2 flex items-center">
-                                <UserCircle2 className="h-3 w-3 mr-1 text-[#2A82C7]" />
+                              <div className="text-xs text-[#29696B] mb-2 flex items-center">
+                                <UserCircle2 className="h-3 w-3 mr-1 text-[#1B9C96]" />
                                 Mostrando clientes de: {supervisorName}
                               </div>
                             )}
@@ -879,15 +888,15 @@ export const Cart: React.FC = () => {
                                 disabled={cargandoClientes}
                               >
                                 <SelectTrigger 
-                                  className="w-full bg-white/10 border-2 border-[#2A82C7] rounded-md text-white"
+                                  className="w-full bg-white border-2 border-[#1B9C96] rounded-md text-[#0D4E4B]"
                                 >
                                   <SelectValue placeholder="Selecciona un cliente" />
                                 </SelectTrigger>
-                                <SelectContent className="max-h-80 overflow-y-auto bg-[#15497E] border-[#2A82C7]">
+                                <SelectContent className="max-h-80 overflow-y-auto bg-white border-[#1B9C96]">
                                   {Object.entries(clientesAgrupados).map(([servicio, clientesServicio]) => (
                                     <div key={servicio} className="px-1 py-1">
                                       {/* Encabezado de grupo de servicio */}
-                                      <div className="flex items-center px-2 py-1.5 text-xs uppercase tracking-wider font-semibold bg-[#2A82C7]/30 text-[#F8F9FA] rounded mb-1">
+                                      <div className="flex items-center px-2 py-1.5 text-xs uppercase tracking-wider font-semibold bg-[#CFF2E4] text-[#0D4E4B] rounded mb-1">
                                         <Building className="h-3 w-3 mr-2" />
                                         {servicio}
                                       </div>
@@ -898,17 +907,17 @@ export const Cart: React.FC = () => {
                                           <SelectItem 
                                             key={cliente._id} 
                                             value={cliente._id}
-                                            className="focus:bg-[#2A82C7]/50 data-[state=checked]:bg-[#2A82C7] data-[state=checked]:text-white"
+                                            className="focus:bg-[#CFF2E4] data-[state=checked]:bg-[#1B9C96] data-[state=checked]:text-white"
                                           >
                                             <div className="flex items-center">
                                               {cliente.seccionDelServicio ? (
                                                 <>
-                                                  <MapPin className="h-3 w-3 mr-2 text-[#F8F9FA]/70" />
+                                                  <MapPin className="h-3 w-3 mr-2 text-[#29696B]" />
                                                   <span>{cliente.seccionDelServicio}</span>
                                                 </>
                                               ) : (
                                                 <>
-                                                  <Check className="h-3 w-3 mr-2 text-[#F8F9FA]/70" />
+                                                  <Check className="h-3 w-3 mr-2 text-[#29696B]" />
                                                   <span>Principal</span>
                                                 </>
                                               )}
@@ -927,17 +936,17 @@ export const Cart: React.FC = () => {
                               <motion.div 
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className="mt-4 p-3 rounded-md bg-white/10 border border-[#2A82C7]/50 backdrop-blur-sm"
+                                className="mt-4 p-3 rounded-md bg-[#CFF2E4]/40 border border-[#1B9C96]/50 backdrop-blur-sm"
                               >
-                                <div className="text-sm text-[#F8F9FA]">
+                                <div className="text-sm text-[#0D4E4B]">
                                   <p className="flex items-center">
-                                    <Building className="w-4 h-4 mr-2 text-[#2A82C7]" />
+                                    <Building className="w-4 h-4 mr-2 text-[#1B9C96]" />
                                     <span className="font-medium">Servicio:</span>
                                     <span className="ml-1">{orderForm.servicio}</span>
                                   </p>
                                   {orderForm.seccionDelServicio && (
                                     <p className="flex items-center mt-1">
-                                      <MapPin className="w-4 h-4 mr-2 text-[#2A82C7]" />
+                                      <MapPin className="w-4 h-4 mr-2 text-[#1B9C96]" />
                                       <span className="font-medium">Sección:</span>
                                       <span className="ml-1">{orderForm.seccionDelServicio}</span>
                                     </p>
@@ -950,17 +959,17 @@ export const Cart: React.FC = () => {
                       </CardContent>
                     </Card>
                     
-                    <Card className="bg-gradient-to-r from-[#15497E]/40 to-[#2A82C7]/40 backdrop-blur-sm border-[#2A82C7] shadow-md">
-                      <CardHeader className="border-b border-[#2A82C7]/50">
-                        <CardTitle className="text-[#F8F9FA]">Información del pedido</CardTitle>
+                    <Card className="bg-gradient-to-r from-[#1B9C96]/40 to-[#84D6C8]/40 backdrop-blur-sm border-[#1B9C96] shadow-md">
+                      <CardHeader className="border-b border-[#1B9C96]/50">
+                        <CardTitle className="text-[#0D4E4B]">Información del pedido</CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-4 pt-6">
                         <div>
-                          <Label htmlFor="notes" className="text-[#F8F9FA]">Notas adicionales</Label>
+                          <Label htmlFor="notes" className="text-[#0D4E4B]">Notas adicionales</Label>
                           <Textarea
                             id="notes"
                             placeholder="Instrucciones especiales, ubicación de entrega, etc."
-                            className="bg-white/10 border-[#2A82C7] mt-1 text-[#F8F9FA] placeholder:text-[#F8F9FA]/50"
+                            className="bg-white border-[#1B9C96] mt-1 text-[#0D4E4B] placeholder:text-[#4A7C79]"
                             value={orderForm.notes}
                             onChange={(e) => setOrderForm({...orderForm, notes: e.target.value})}
                           />
@@ -968,21 +977,21 @@ export const Cart: React.FC = () => {
                       </CardContent>
                     </Card>
                     
-                    <Card className="bg-gradient-to-r from-[#15497E]/40 to-[#2A82C7]/40 backdrop-blur-sm border-[#2A82C7] shadow-md">
-                      <CardHeader className="border-b border-[#2A82C7]/50">
-                        <CardTitle className="text-[#F8F9FA]">Resumen del pedido</CardTitle>
+                    <Card className="bg-gradient-to-r from-[#1B9C96]/40 to-[#84D6C8]/40 backdrop-blur-sm border-[#1B9C96] shadow-md">
+                      <CardHeader className="border-b border-[#1B9C96]/50">
+                        <CardTitle className="text-[#0D4E4B]">Resumen del pedido</CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-3 pt-6 overflow-y-auto max-h-60">
                         {items.map((item) => (
-                          <div key={item.id} className="flex justify-between py-1 text-[#F8F9FA]">
+                          <div key={item.id} className="flex justify-between py-1 text-[#0D4E4B]">
                             <span>
-                              {item.name} <span className="text-[#6C757D]">x{item.quantity}</span>
+                              {item.name} <span className="text-[#29696B]">x{item.quantity}</span>
                             </span>
                             <span>${(item.price * item.quantity).toFixed(2)}</span>
                           </div>
                         ))}
-                        <Separator className="bg-[#2A82C7]/30 my-2" />
-                        <div className="flex justify-between font-bold text-[#F8F9FA]">
+                        <Separator className="bg-[#1B9C96]/30 my-2" />
+                        <div className="flex justify-between font-bold text-[#0D4E4B]">
                           <span>Total:</span>
                           <span>${totalPrice.toFixed(2)}</span>
                         </div>
@@ -990,9 +999,9 @@ export const Cart: React.FC = () => {
                     </Card>
                     
                     {orderError && (
-                      <Alert className="bg-red-100 border-2 border-red-500 shadow-md">
-                        <AlertCircle className="h-5 w-5 text-red-600" />
-                        <AlertDescription className="ml-2 text-red-800 font-medium">{orderError}</AlertDescription>
+                      <Alert className="bg-[#E74C3C]/10 border-2 border-[#E74C3C] shadow-md">
+                        <AlertCircle className="h-5 w-5 text-[#E74C3C]" />
+                        <AlertDescription className="ml-2 text-[#E74C3C] font-medium">{orderError}</AlertDescription>
                       </Alert>
                     )}
                   </motion.div>
@@ -1003,7 +1012,7 @@ export const Cart: React.FC = () => {
                 <div className="mt-4 flex justify-between">
                   <Button 
                     variant="outline" 
-                    className="border-red-400 text-red-400 hover:bg-red-900/20 hover:text-red-300"
+                    className="border-[#E74C3C] text-[#E74C3C] hover:bg-[#E74C3C]/10 hover:text-[#E74C3C]"
                     onClick={clearCart}
                   >
                     <Trash2 className="mr-2 h-4 w-4" />
@@ -1016,7 +1025,7 @@ export const Cart: React.FC = () => {
                 <div className="mt-6 flex justify-between">
                   <Button 
                     variant="outline"
-                    className="border-[#2A82C7] text-[#F8F9FA] hover:bg-[#2A82C7]/20"
+                    className="border-[#1B9C96] text-[#0D4E4B] hover:bg-[#1B9C96]/20"
                     onClick={() => setCheckoutStep(1)}
                   >
                     <ArrowLeft className="mr-2 h-4 w-4" />
@@ -1025,7 +1034,7 @@ export const Cart: React.FC = () => {
                   
                   <Button 
                     onClick={processOrder}
-                    className="bg-[#15497E] hover:bg-[#2A82C7] text-white shadow-md shadow-[#15497E]/20"
+                    className="bg-[#1B9C96] hover:bg-[#139692] text-white shadow-md shadow-[#1B9C96]/20"
                     disabled={processingOrder}
                   >
                     {processingOrder ? (
@@ -1052,38 +1061,38 @@ export const Cart: React.FC = () => {
             {/* Resumen de compra */}
             <div className="w-full lg:w-80 flex-shrink-0">
               <div className="sticky top-20">
-                <Card className="bg-gradient-to-br from-[#15497E]/60 to-[#2A82C7]/60 backdrop-blur-md border border-[#2A82C7] shadow-lg shadow-[#15497E]/10">
-                  <CardHeader className="border-b border-[#2A82C7]/50">
-                    <CardTitle className="text-[#F8F9FA]">Resumen</CardTitle>
+                <Card className="bg-gradient-to-br from-[#1B9C96]/60 to-[#84D6C8]/60 backdrop-blur-md border border-[#1B9C96] shadow-lg shadow-[#1B9C96]/10">
+                  <CardHeader className="border-b border-[#1B9C96]/50">
+                    <CardTitle className="text-[#0D4E4B]">Resumen</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4 pt-6">
-                    <div className="flex justify-between text-sm text-[#F8F9FA]">
+                    <div className="flex justify-between text-sm text-[#0D4E4B]">
                       <span>Subtotal:</span>
                       <span>${totalPrice.toFixed(2)}</span>
                     </div>
                     
-                    <div className="flex justify-between text-sm text-[#F8F9FA]">
+                    <div className="flex justify-between text-sm text-[#0D4E4B]">
                       <span>Productos:</span>
                       <span>{totalItems} {totalItems === 1 ? 'item' : 'items'}</span>
                     </div>
                     
                     {/* Mostrar información del supervisor para operarios */}
                     {userRole === 'operario' && supervisorName && (
-                      <div className="bg-white/10 rounded-md p-2 text-xs text-[#F8F9FA] border border-[#2A82C7]/50">
-                        <div className="flex items-center mb-1 text-[#2A82C7]">
+                      <div className="bg-white/20 rounded-md p-2 text-xs text-[#0D4E4B] border border-[#1B9C96]/50">
+                        <div className="flex items-center mb-1 text-[#1B9C96]">
                           <UserCircle2 className="h-3 w-3 mr-1" />
                           <span className="font-medium">Información de pedido</span>
                         </div>
                         <p>Supervisor: <span className="font-medium">{supervisorName}</span></p>
-                        <p className="text-[#6C757D] text-[10px] mt-1">
+                        <p className="text-[#29696B] text-[10px] mt-1">
                           El pedido requiere aprobación
                         </p>
                       </div>
                     )}
                     
-                    <Separator className="bg-[#2A82C7]/30" />
+                    <Separator className="bg-[#1B9C96]/30" />
                     
-                    <div className="flex justify-between font-semibold text-lg text-[#F8F9FA]">
+                    <div className="flex justify-between font-semibold text-lg text-[#0D4E4B]">
                       <span>Total:</span>
                       <span>${totalPrice.toFixed(2)}</span>
                     </div>
@@ -1093,30 +1102,30 @@ export const Cart: React.FC = () => {
                     {checkoutStep === 1 ? (
                       <Button 
                         onClick={() => setCheckoutStep(2)}
-                        className="w-full bg-[#15497E] hover:bg-[#2A82C7] text-white shadow-md shadow-[#15497E]/20"
+                        className="w-full bg-[#1B9C96] hover:bg-[#139692] text-white shadow-md shadow-[#1B9C96]/20"
                       >
                         Proceder a confirmar la orden
                       </Button>
                     ) : (
-                      <div className="w-full text-center text-sm text-[#F8F9FA]/90">
+                      <div className="w-full text-center text-sm text-[#0D4E4B]">
                         <p>Revisa tu pedido y completa la información requerida.</p>
                       </div>
                     )}
                   </CardFooter>
                 </Card>
                 
-                <div className="mt-4 p-4 bg-gradient-to-br from-[#2A82C7]/20 to-[#6C757D]/20 backdrop-blur-sm rounded-lg border border-[#2A82C7] shadow-md">
-                  <h3 className="flex items-center text-sm font-medium mb-2 text-[#F8F9FA]">
-                    <Check className="text-[#F8F9FA] mr-2 h-4 w-4" />
+                <div className="mt-4 p-4 bg-gradient-to-br from-[#1B9C96]/20 to-[#84D6C8]/20 backdrop-blur-sm rounded-lg border border-[#1B9C96] shadow-md">
+                  <h3 className="flex items-center text-sm font-medium mb-2 text-[#0D4E4B]">
+                    <Check className="text-[#1B9C96] mr-2 h-4 w-4" />
                     Política de pedidos
                   </h3>
                   {userRole === 'operario' ? (
-                    <p className="text-xs text-[#6C757D]">
+                    <p className="text-xs text-[#29696B]">
                       Los pedidos realizados por operarios requieren aprobación del supervisor 
                       antes de ser procesados.
                     </p>
                   ) : (
-                    <p className="text-xs text-[#6C757D]">
+                    <p className="text-xs text-[#29696B]">
                       Los pedidos realizados están sujetos a revisión y aprobación por el equipo administrativo.
                       Una vez confirmado, se coordinará la entrega de los productos.
                     </p>
