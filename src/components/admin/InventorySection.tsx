@@ -53,7 +53,9 @@ import {
   ShoppingBag,
   Minus,
   Filter,
-  HelpCircle
+  HelpCircle,
+  Building,
+  Tag
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -62,53 +64,43 @@ import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { useNotification } from '@/context/NotificationContext';
 import { inventoryObservable, getAuthToken } from '@/utils/inventoryUtils';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-
-// InventorySection.tsx (omitiendo importaciones)
+import { 
+  Product, 
+  ComboItemType, 
+  ProveedorType, 
+  PaginatedResponse
+} from '@/types/inventory';
 
 // Definir URL base para la API
-const API_URL = "/api/";
+const API_URL = "http://localhost:3000/api/";
 
 // Definir umbral de stock bajo
 const LOW_STOCK_THRESHOLD = 10;
 
-// Tipos para los productos y sus propiedades
-interface ProductType {
-  _id: string;
-  nombre: string;
-  descripcion?: string;
-  categoria: string;
-  subCategoria: string;
-  precio: number;
-  stock: number;
-  vendidos?: number;
-  proovedorInfo?: string;
-  esCombo?: boolean;
-  itemsCombo?: ComboItemType[];
-  hasImage?: boolean;
-}
-
-interface ComboItemType {
-  productoId: string | { _id: string; nombre: string; precio: number };
-  cantidad: number;
-  nombre?: string;
-  precio?: number;
-}
-
+// Interface para el formulario de producto
 interface FormDataType {
   nombre: string;
   descripcion: string;
   categoria: string;
   subCategoria: string;
+  marca: string;
   precio: string;
   stock: string;
-  proovedorInfo: string;
+  stockMinimo: string;
+  proveedor: {
+    nombre: string;
+    contacto: string;
+    telefono: string;
+    email: string;
+  };
+  estado: string;
   imagen: File | null;
   imagenPreview: string | ArrayBuffer | null;
 }
 
 const InventorySection = () => {
   const { addNotification } = useNotification();
-  const [products, setProducts] = useState<ProductType[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [imageLoading, setImageLoading] = useState(false);
@@ -118,7 +110,7 @@ const InventorySection = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteImageDialogOpen, setDeleteImageDialogOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<string | null>(null);
-  const [editingProduct, setEditingProduct] = useState<ProductType | null>(null);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -196,9 +188,17 @@ const InventorySection = () => {
     descripcion: '',
     categoria: '',
     subCategoria: '',
+    marca: '',
     precio: '',
     stock: '',
-    proovedorInfo: '',
+    stockMinimo: '5', // Valor predeterminado para stock mínimo
+    proveedor: {
+      nombre: '',
+      contacto: '',
+      telefono: '',
+      email: ''
+    },
+    estado: 'activo', // Valor predeterminado para estado
     imagen: null,
     imagenPreview: null
   });
@@ -226,10 +226,17 @@ const InventorySection = () => {
     ]
   };
 
+  // Estados de producto
+  const estadosProducto = [
+    { value: 'activo', label: 'Activo' },
+    { value: 'discontinuado', label: 'Discontinuado' },
+    { value: 'agotado', label: 'Agotado' }
+  ];
+
   // Usar productos directamente de la respuesta de la API en lugar de filtrar localmente
   const currentProducts = products;
 
-  // Componente para input de stock con límite máximo - CORREGIDO el problema del foco
+  // Componente para input de stock con límite máximo
   const ProductStockInput = ({
     value,
     onChange,
@@ -295,7 +302,6 @@ const InventorySection = () => {
 
         <Input
           id={id}
-          // Usar type="number" como en el campo de precio
           type="number"
           min="0"
           max={maxStock}
@@ -395,7 +401,7 @@ const InventorySection = () => {
       }
 
       // Manejar correctamente el formato de respuesta paginada o array simple
-      let extractedProducts: ProductType[] = [];
+      let extractedProducts: Product[] = [];
       let totalItems = 0;
 
       if (responseData && typeof responseData === 'object') {
@@ -453,7 +459,7 @@ const InventorySection = () => {
       }
 
       // Usar el endpoint específico para estadísticas de stock bajo
-      const response = await fetch(`${API_URL}producto/stats/lowstock?threshold=${LOW_STOCK_THRESHOLD}`, {
+      const response = await fetch(`${API_URL}producto/stats/stock?threshold=${LOW_STOCK_THRESHOLD}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -562,7 +568,7 @@ const InventorySection = () => {
   };
 
   // Obtener un producto por ID (para actualizar después de cambios)
-  const fetchProductById = async (productId: string): Promise<ProductType | null> => {
+  const fetchProductById = async (productId: string): Promise<Product | null> => {
     try {
       const token = getAuthToken();
       if (!token) {
@@ -589,7 +595,7 @@ const InventorySection = () => {
   };
 
   // Cargar todos los productos sin paginación para los combos
-  const fetchAllProducts = async (): Promise<ProductType[]> => {
+  const fetchAllProducts = async (): Promise<Product[]> => {
     try {
       const token = getAuthToken();
       if (!token) {
@@ -609,7 +615,7 @@ const InventorySection = () => {
       }
 
       const responseData = await response.json();
-      let allProducts: ProductType[] = [];
+      let allProducts: Product[] = [];
 
       if (responseData && typeof responseData === 'object') {
         if (Array.isArray(responseData)) {
@@ -627,7 +633,7 @@ const InventorySection = () => {
   };
 
   // Actualizar un producto específico en el estado
-  const updateProductInState = (updatedProduct: ProductType) => {
+  const updateProductInState = (updatedProduct: Product) => {
     if (!updatedProduct || !updatedProduct._id) return;
 
     setProducts(prevProducts => {
@@ -710,7 +716,8 @@ const InventorySection = () => {
         searchTerm === '' || (
           (product.nombre && product.nombre.toLowerCase().includes(searchTerm.toLowerCase())) ||
           (product.descripcion && product.descripcion.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          (product.proovedorInfo && product.proovedorInfo.toLowerCase().includes(searchTerm.toLowerCase()))
+          (product.proveedor?.nombre && product.proveedor.nombre.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (product.marca && product.marca.toLowerCase().includes(searchTerm.toLowerCase()))
         );
 
       // Verificar categoría
@@ -732,7 +739,7 @@ const InventorySection = () => {
   };
 
   // Estado para almacenar todos los productos disponibles para combos
-  const [allAvailableProducts, setAllAvailableProducts] = useState<ProductType[]>([]);
+  const [allAvailableProducts, setAllAvailableProducts] = useState<Product[]>([]);
 
   // Cargar todos los productos al abrir el modal de combos
   useEffect(() => {
@@ -904,24 +911,37 @@ const InventorySection = () => {
   };
 
   // Agregar un ítem al combo
-  const handleAddComboItem = (product: ProductType) => {
+  const handleAddComboItem = (product: Product) => {
     // Verificar si ya existe
-    const existingItem = tempSelectedItems.find(item => item.productoId === product._id);
+    const existingItem = tempSelectedItems.find(item => 
+      typeof item.productoId === 'string' 
+        ? item.productoId === product._id 
+        : item.productoId._id === product._id
+    );
 
     if (existingItem) {
       // Si ya existe, solo actualizar la cantidad
       setTempSelectedItems(prevItems =>
-        prevItems.map(item =>
-          item.productoId === product._id
+        prevItems.map(item => {
+          const itemId = typeof item.productoId === 'string' 
+            ? item.productoId 
+            : item.productoId._id;
+            
+          return itemId === product._id
             ? { ...item, cantidad: item.cantidad + 1 }
-            : item
-        )
+            : item;
+        })
       );
     } else {
       // Si no existe, agregarlo
       setTempSelectedItems(prevItems => [
         ...prevItems,
-        { productoId: product._id, nombre: product.nombre, cantidad: 1, precio: product.precio }
+        { 
+          productoId: product._id, 
+          nombre: product.nombre, 
+          cantidad: 1, 
+          precio: product.precio 
+        }
       ]);
     }
   };
@@ -931,16 +951,25 @@ const InventorySection = () => {
     if (newQuantity <= 0) {
       // Si la cantidad es 0 o menos, eliminar el ítem
       setTempSelectedItems(prevItems =>
-        prevItems.filter(item => item.productoId !== productId)
+        prevItems.filter(item => {
+          const itemId = typeof item.productoId === 'string' 
+            ? item.productoId 
+            : item.productoId._id;
+          return itemId !== productId;
+        })
       );
     } else {
       // Actualizar la cantidad
       setTempSelectedItems(prevItems =>
-        prevItems.map(item =>
-          item.productoId === productId
+        prevItems.map(item => {
+          const itemId = typeof item.productoId === 'string' 
+            ? item.productoId 
+            : item.productoId._id;
+          
+          return itemId === productId
             ? { ...item, cantidad: newQuantity }
-            : item
-        )
+            : item;
+        })
       );
     }
   };
@@ -1016,13 +1045,21 @@ const InventorySection = () => {
         descripcion: formData.descripcion,
         categoria: formData.categoria,
         subCategoria: formData.subCategoria,
+        marca: formData.marca,
         precio: Number(formData.precio),
         stock: finalStock,
-        proovedorInfo: formData.proovedorInfo,
+        stockMinimo: Number(formData.stockMinimo),
+        proveedor: {
+          nombre: formData.proveedor.nombre,
+          contacto: formData.proveedor.contacto,
+          telefono: formData.proveedor.telefono,
+          email: formData.proveedor.email
+        },
+        estado: formData.estado,
         // Si es combo, incluir los ítems del combo
         esCombo: isCombo,
         itemsCombo: isCombo ? selectedComboItems.map(item => ({
-          productoId: item.productoId,
+          productoId: typeof item.productoId === 'string' ? item.productoId : item.productoId._id,
           cantidad: item.cantidad
         })) : []
       };
@@ -1038,11 +1075,11 @@ const InventorySection = () => {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Error al procesar la solicitud');
+        throw new Error(error.error || error.mensaje || 'Error al procesar la solicitud');
       }
 
       // Parsear la respuesta JSON
-      let savedProduct: ProductType;
+      let savedProduct: Product;
       try {
         savedProduct = await response.json();
       } catch (jsonError) {
@@ -1137,7 +1174,7 @@ const InventorySection = () => {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Error al eliminar producto');
+        throw new Error(error.error || error.mensaje || 'Error al eliminar producto');
       }
 
       // Eliminar el producto del estado local
@@ -1170,7 +1207,7 @@ const InventorySection = () => {
   };
 
   // Preparar edición de producto
-  const handleEdit = async (product: ProductType) => {
+  const handleEdit = async (product: Product) => {
     try {
       setEditingProduct(product);
 
@@ -1225,15 +1262,23 @@ const InventorySection = () => {
         }
       }
 
-      // CORREGIDO: Mostrar el stock actual del producto al editar
+      // Preparar datos del formulario para la edición
       setFormData({
         nombre: product.nombre || '',
         descripcion: product.descripcion || '',
         categoria: product.categoria || '',
         subCategoria: product.subCategoria || '',
+        marca: product.marca || '',
         precio: product.precio ? product.precio.toString() : '',
-        stock: product.stock ? product.stock.toString() : '0', // Mostrar stock actual
-        proovedorInfo: product.proovedorInfo || '',
+        stock: product.stock ? product.stock.toString() : '0',
+        stockMinimo: (product.stockMinimo || 5).toString(),
+        proveedor: {
+          nombre: product.proveedor?.nombre || '',
+          contacto: product.proveedor?.contacto || '',
+          telefono: product.proveedor?.telefono || '',
+          email: product.proveedor?.email || ''
+        },
+        estado: product.estado || 'activo',
         imagen: null,
         imagenPreview: imagePreview
       });
@@ -1252,9 +1297,17 @@ const InventorySection = () => {
       descripcion: '',
       categoria: '',
       subCategoria: '',
+      marca: '',
       precio: '',
       stock: '',
-      proovedorInfo: '',
+      stockMinimo: '5',
+      proveedor: {
+        nombre: '',
+        contacto: '',
+        telefono: '',
+        email: ''
+      },
+      estado: 'activo',
       imagen: null,
       imagenPreview: null
     });
@@ -1300,7 +1353,12 @@ const InventorySection = () => {
   };
 
   // Función para renderizar indicador de stock
-  const renderStockIndicator = (stock: number) => {
+  const renderStockIndicator = (stock: number, alertaStockBajo?: boolean) => {
+    // Usar el flag alertaStockBajo del backend si está disponible
+    const isLowStock = alertaStockBajo !== undefined 
+      ? alertaStockBajo 
+      : (stock <= LOW_STOCK_THRESHOLD && stock > 0);
+      
     if (stock <= 0) {
       return (
         <div className="flex items-center gap-1">
@@ -1310,7 +1368,7 @@ const InventorySection = () => {
           </span>
         </div>
       );
-    } else if (stock <= LOW_STOCK_THRESHOLD) {
+    } else if (isLowStock) {
       return (
         <div className="flex items-center gap-1">
           <AlertTriangle className="w-4 h-4 text-yellow-500 animate-pulse" />
@@ -1655,7 +1713,7 @@ const InventorySection = () => {
                     Nombre
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
-                    Categoría
+                    Categoría/Marca
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
                     Precio
@@ -1664,7 +1722,7 @@ const InventorySection = () => {
                     Stock
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
-                    Vendidos
+                    Estado
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-[#29696B] uppercase tracking-wider">
                     Acciones
@@ -1675,11 +1733,13 @@ const InventorySection = () => {
                 {products.map((product) => (
                   <tr
                     key={product._id}
-                    className={`hover:bg-[#DFEFE6]/20 transition-colors ${product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD
+                    className={`hover:bg-[#DFEFE6]/20 transition-colors ${product.stock > 0 && product.alertaStockBajo
                       ? 'bg-yellow-50 hover:bg-yellow-100'
                       : product.stock <= 0
                         ? 'bg-red-50 hover:bg-red-100'
-                        : ''
+                        : product.estado === 'discontinuado'
+                          ? 'bg-gray-50 hover:bg-gray-100'
+                          : ''
                       }`}
                   >
                     <td className="px-6 py-4">
@@ -1740,6 +1800,12 @@ const InventorySection = () => {
                               {product.descripcion}
                             </div>
                           )}
+                          {product.proveedor?.nombre && (
+                            <div className="text-xs text-[#7AA79C] flex items-center mt-1">
+                              <Building className="w-3 h-3 mr-1" />
+                              {product.proveedor.nombre}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -1748,15 +1814,40 @@ const InventorySection = () => {
                         {product.categoria}
                       </Badge>
                       <div className="text-xs mt-1 capitalize text-[#7AA79C]">{product.subCategoria}</div>
+                      {product.marca && (
+                        <div className="flex items-center mt-1 text-xs">
+                          <Tag className="w-3 h-3 mr-1 text-[#7AA79C]" />
+                          <span className="text-[#7AA79C]">{product.marca}</span>
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-sm font-medium text-[#29696B]">
                       ${product.precio.toFixed(2)}
                     </td>
                     <td className="px-6 py-4">
-                      {renderStockIndicator(product.stock)}
+                      {renderStockIndicator(product.stock, product.alertaStockBajo)}
+                      {product.stockMinimo && product.stockMinimo > 0 && (
+                        <div className="text-xs text-[#7AA79C] mt-1">
+                          Mínimo: {product.stockMinimo} unidades
+                        </div>
+                      )}
                     </td>
-                    <td className="px-6 py-4 text-sm text-[#7AA79C]">
-                      {product.vendidos || 0}
+                    <td className="px-6 py-4">
+                      <Badge 
+                        className={`
+                          ${product.estado === 'activo' 
+                            ? 'bg-green-100 text-green-800 border-green-200' 
+                            : product.estado === 'discontinuado'
+                              ? 'bg-gray-100 text-gray-800 border-gray-200'
+                              : 'bg-red-100 text-red-800 border-red-200'
+                          }
+                        `}
+                      >
+                        {product.estado || 'activo'}
+                      </Badge>
+                      <div className="text-xs text-[#7AA79C] mt-1">
+                        Vendidos: {product.vendidos || 0}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-right text-sm font-medium">
                       <div className="flex justify-end space-x-2">
@@ -1815,13 +1906,15 @@ const InventorySection = () => {
         {!loading && currentProducts.map(product => (
           <Card
             key={product._id}
-            className={`overflow-hidden shadow-sm border ${product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD
+            className={`overflow-hidden shadow-sm border ${product.stock > 0 && product.alertaStockBajo
               ? 'border-yellow-300 bg-yellow-50'
               : product.stock <= 0
                 ? 'border-red-300 bg-red-50'
                 : product.esCombo
                   ? 'border-[#00888A]/50 bg-[#00888A]/5'
-                  : 'border-[#91BEAD]/20 bg-white'
+                  : product.estado === 'discontinuado'
+                    ? 'border-gray-300 bg-gray-50'
+                    : 'border-[#91BEAD]/20 bg-white'
               }`}
           >
             <CardHeader className="p-4 pb-2">
@@ -1834,8 +1927,17 @@ const InventorySection = () => {
                     </Badge>
                   )}
                 </div>
-                <Badge variant="outline" className="capitalize text-xs border-[#91BEAD] text-[#29696B]">
-                  {product.categoria}
+                <Badge 
+                  className={`
+                    ${product.estado === 'activo' 
+                      ? 'bg-green-100 text-green-800 border-green-200' 
+                      : product.estado === 'discontinuado'
+                        ? 'bg-gray-100 text-gray-800 border-gray-200'
+                        : 'bg-red-100 text-red-800 border-red-200'
+                    }
+                  `}
+                >
+                  {product.estado || 'activo'}
                 </Badge>
               </div>
             </CardHeader>
@@ -1896,11 +1998,11 @@ const InventorySection = () => {
                       <PackageOpen className="w-4 h-4 text-[#91BEAD] mr-1" />
                       <span className={`font-medium ${product.stock <= 0
                         ? 'text-red-600'
-                        : product.stock <= LOW_STOCK_THRESHOLD
+                        : product.alertaStockBajo
                           ? 'text-yellow-600 flex items-center gap-1'
                           : 'text-[#29696B]'
                         }`}>
-                        {product.stock <= LOW_STOCK_THRESHOLD && product.stock > 0 && (
+                        {product.alertaStockBajo && product.stock > 0 && (
                           <AlertTriangle className="w-3 h-3 text-yellow-500 animate-pulse" />
                         )}
                         {product.stock <= 0 ? 'Sin stock' : `${product.stock} unid.`}
@@ -1908,8 +2010,30 @@ const InventorySection = () => {
                     </div>
                   </div>
                   <div className="mt-2 text-xs text-[#7AA79C]">
-                    <span className="block">Subcategoría: <span className="capitalize">{product.subCategoria}</span></span>
-                    <span className="block">Vendidos: {product.vendidos || 0}</span>
+                    <div className="flex justify-between">
+                      <span className="block">
+                        <Badge variant="outline" className="capitalize text-xs border-[#91BEAD] text-[#29696B]">
+                          {product.categoria}
+                        </Badge>
+                      </span>
+                      <span className="block">Vendidos: {product.vendidos || 0}</span>
+                    </div>
+                    
+                    <div className="flex justify-between items-center mt-1">
+                      <span className="capitalize">{product.subCategoria}</span>
+                      {product.marca && (
+                        <span className="flex items-center">
+                          <Tag className="w-3 h-3 mr-1" /> {product.marca}
+                        </span>
+                      )}
+                    </div>
+                    
+                    {product.proveedor?.nombre && (
+                      <div className="mt-1 flex items-center">
+                        <Building className="w-3 h-3 mr-1" />
+                        {product.proveedor.nombre}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -2090,6 +2214,42 @@ const InventorySection = () => {
                 </div>
               </div>
 
+              {/* Nuevos campos */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="marca" className="text-sm text-[#29696B]">Marca</Label>
+                  <Input
+                    id="marca"
+                    value={formData.marca}
+                    onChange={(e) => setFormData({ ...formData, marca: e.target.value })}
+                    className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="estado" className="text-sm text-[#29696B]">Estado</Label>
+                  <Select
+                    value={formData.estado}
+                    onValueChange={(value) => {
+                      setFormData(prevState => ({
+                        ...prevState,
+                        estado: value
+                      }));
+                    }}
+                  >
+                    <SelectTrigger id="estado" className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
+                      <SelectValue placeholder="Seleccionar estado" />
+                    </SelectTrigger>
+                    <SelectContent className="border-[#91BEAD]">
+                    {estadosProducto.map((estado) => (
+                        <SelectItem key={estado.value} value={estado.value}>
+                          {estado.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label htmlFor="precio" className="text-sm text-[#29696B]">Precio</Label>
@@ -2166,14 +2326,82 @@ const InventorySection = () => {
                 </div>
               </div>
 
+              {/* Campo de stock mínimo */}
               <div>
-                <Label htmlFor="proovedorInfo" className="text-sm text-[#29696B]">Información del Proveedor</Label>
+                <Label htmlFor="stockMinimo" className="text-sm text-[#29696B]">Stock Mínimo</Label>
                 <Input
-                  id="proovedorInfo"
-                  value={formData.proovedorInfo}
-                  onChange={(e) => setFormData({ ...formData, proovedorInfo: e.target.value })}
+                  id="stockMinimo"
+                  type="number"
+                  min="0"
+                  value={formData.stockMinimo}
+                  onChange={(e) => setFormData({ ...formData, stockMinimo: e.target.value })}
                   className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
                 />
+                <p className="text-xs text-[#7AA79C] mt-1">
+                  El sistema alertará cuando el stock sea igual o menor a este valor
+                </p>
+              </div>
+
+              {/* Información del proveedor */}
+              <div className="border rounded-md p-3 border-[#91BEAD]/30 bg-[#DFEFE6]/10">
+                <Label className="text-sm font-medium text-[#29696B] block mb-2">Información del Proveedor</Label>
+                
+                <div className="space-y-3">
+                  <div>
+                    <Label htmlFor="proveedorNombre" className="text-xs text-[#7AA79C]">Nombre del Proveedor</Label>
+                    <Input
+                      id="proveedorNombre"
+                      value={formData.proveedor.nombre}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        proveedor: { ...formData.proveedor, nombre: e.target.value } 
+                      })}
+                      className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="proveedorContacto" className="text-xs text-[#7AA79C]">Persona de Contacto</Label>
+                      <Input
+                        id="proveedorContacto"
+                        value={formData.proveedor.contacto}
+                        onChange={(e) => setFormData({ 
+                          ...formData, 
+                          proveedor: { ...formData.proveedor, contacto: e.target.value } 
+                        })}
+                        className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
+                      />
+                    </div>
+                    
+                    <div>
+                      <Label htmlFor="proveedorTelefono" className="text-xs text-[#7AA79C]">Teléfono</Label>
+                      <Input
+                        id="proveedorTelefono"
+                        value={formData.proveedor.telefono}
+                        onChange={(e) => setFormData({ 
+                          ...formData, 
+                          proveedor: { ...formData.proveedor, telefono: e.target.value } 
+                        })}
+                        className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="proveedorEmail" className="text-xs text-[#7AA79C]">Email</Label>
+                    <Input
+                      id="proveedorEmail"
+                      type="email"
+                      value={formData.proveedor.email}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        proveedor: { ...formData.proveedor, email: e.target.value } 
+                      })}
+                      className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Sección de selección de productos para el combo */}
@@ -2357,7 +2585,7 @@ const InventorySection = () => {
                               <span>•</span>
                               <span className={`inline-flex px-1 py-0.5 text-xs rounded-full ${product.stock <= 0
                                 ? 'bg-red-100 text-red-800'
-                                : product.stock <= LOW_STOCK_THRESHOLD
+                                : product.alertaStockBajo
                                   ? 'bg-yellow-100 text-yellow-800'
                                   : 'bg-[#DFEFE6] text-[#29696B]'
                                 }`}>
@@ -2406,7 +2634,10 @@ const InventorySection = () => {
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleUpdateComboItemQuantity(String(item.productoId), 0)}
+                                onClick={() => handleUpdateComboItemQuantity(
+                                  typeof item.productoId === 'string' ? item.productoId : item.productoId._id, 
+                                  0
+                                )}
                                 className="h-7 w-7 p-0 text-red-500 hover:bg-red-50"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -2422,7 +2653,10 @@ const InventorySection = () => {
                                   type="button"
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => handleUpdateComboItemQuantity(String(item.productoId), item.cantidad - 1)}
+                                  onClick={() => handleUpdateComboItemQuantity(
+                                    typeof item.productoId === 'string' ? item.productoId : item.productoId._id, 
+                                    item.cantidad - 1
+                                  )}
                                   className="h-7 w-7 p-0 text-[#29696B] hover:bg-[#DFEFE6]/30"
                                 >
                                   <Minus className="w-3 h-3" />
@@ -2432,7 +2666,10 @@ const InventorySection = () => {
                                   type="button"
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => handleUpdateComboItemQuantity(String(item.productoId), item.cantidad + 1)}
+                                  onClick={() => handleUpdateComboItemQuantity(
+                                    typeof item.productoId === 'string' ? item.productoId : item.productoId._id, 
+                                    item.cantidad + 1
+                                  )}
                                   className="h-7 w-7 p-0 text-[#29696B] hover:bg-[#DFEFE6]/30"
                                 >
                                   <Plus className="w-3 h-3" />

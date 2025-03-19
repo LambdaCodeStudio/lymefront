@@ -11,7 +11,6 @@ import {
 } from 'lucide-react';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { getApiUrl } from '@/utils/apiUtils';
 
 // Importar estilos globales
 import '@/styles/shop-global.css';
@@ -131,7 +130,7 @@ const ApproveOrdersWrapper: React.FC = () => {
         }
         
         // Obtener información del usuario
-        const userResponse = await fetch('/api/auth/me', {
+        const userResponse = await fetch('http://localhost:3000/api/auth/me', {
           headers: {
             'Authorization': `Bearer ${token}`
           }

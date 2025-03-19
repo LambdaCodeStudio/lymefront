@@ -1,16 +1,10 @@
-/**
- * Componente de tabla para mostrar usuarios en pantallas medianas y grandes
- * Incluye todas las acciones disponibles para administración de usuarios
- * Actualizado para la nueva estructura de roles y mejorar visualización de "Creado por"
- * Optimización para roles largos con textos más compactos
- */
 import React from 'react';
 import { UserCog, Trash2, CheckCircle, XCircle, Clock, ShieldAlert, Shield } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import type { AdminUser } from '../services/userService';
-import { rolesDisplayNames } from '../shared/UserRolesConfig';
+import { User } from '@/types/users';
+import { rolesDisplayNames } from '@/types/UserRolesConfig';
 
 // Constante con roles para usar en el componente
 const ROLES = {
@@ -21,7 +15,7 @@ const ROLES = {
 };
 
 // Función para verificar si el usuario tiene fecha de expiración
-const hasExpiration = (user: AdminUser) => {
+const hasExpiration = (user: User) => {
   return user.role === ROLES.OPERARIO && user.expiresAt;
 };
 
@@ -43,7 +37,7 @@ const canModifyUser = (currentUserRole: string, targetUserRole: string) => {
 const canDeleteOrDeactivate = (userRole: string) => userRole !== ROLES.ADMIN;
 
 // Función para obtener el nombre del creador de un usuario
-const getCreatorName = (user: AdminUser): string => {
+const getCreatorName = (user: User): string => {
   if (!user.createdBy) return '-';
   
   // Priorizar el nombre completo
@@ -61,12 +55,12 @@ const getCreatorName = (user: AdminUser): string => {
 };
 
 interface UserTableProps {
-  users: AdminUser[];
-  onEdit: (user: AdminUser) => void;
+  users: User[];
+  onEdit: (user: User) => void;
   onDelete: (userId: string) => void;
   onToggleStatus: (userId: string, activate: boolean) => void;
-  getUserIdentifier: (user: AdminUser) => string;
-  getFullName: (user: AdminUser) => string | null;
+  getUserIdentifier: (user: User) => string;
+  getFullName: (user: User) => string | null;
   currentUserRole: string;
 }
 

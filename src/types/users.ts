@@ -1,47 +1,85 @@
-// src/types/users.d.ts
+/**
+ * Tipos para definir estructura de usuarios basada en el modelo de backend
+ */
+import { ROLES } from './UserRolesConfig';
 
-// Roles actualizados según la nueva jerarquía
 export type UserRole = 
-  | 'admin'                    // Sin cambios
-  | 'supervisor_de_supervisores' // Antes era 'supervisor'
-  | 'supervisor'               // Antes era 'basic'
-  | 'operario'                 // Nuevo rol
-  | 'temporario';              // Antes era 'temporal'
+  | 'admin'
+  | 'supervisor_de_supervisores'
+  | 'supervisor'
+  | 'operario';
+
+export type UserSection = 'limpieza' | 'mantenimiento' | 'ambos';
+
+export interface CreatedByUser {
+  _id: string;
+  usuario?: string;
+  nombre?: string;
+  apellido?: string;
+}
 
 export interface User {
   _id: string;
-  usuario?: string;           // Cambiado de email a usuario
+  usuario: string;
   nombre?: string;
   apellido?: string;
   role: UserRole;
-  secciones?: 'limpieza' | 'mantenimiento' | 'ambos'; // Nueva propiedad de secciones
-  isActive?: boolean;
-  expiresAt?: string | Date;  // Para usuarios temporales
+  secciones: UserSection;
+  celular?: string;
+  email?: string;
+  isActive: boolean;
+  createdBy?: CreatedByUser;
+  createdAt?: Date;
+  updatedAt?: Date;
+  expiresAt?: Date | null;
+  expirationInfo?: {
+    expired: boolean;
+    expirationDate: Date;
+    minutesRemaining: number;
+  };
 }
 
 export interface LoginResponse {
+  success: boolean;
   token: string;
-  role: UserRole;
-  user?: User;
+  user: {
+    id: string;
+    usuario: string;
+    nombre?: string;
+    role: UserRole;
+    secciones: UserSection;
+  };
 }
 
 export interface CreateUserDTO {
-  usuario: string;            // Cambiado de email a usuario
+  usuario: string;
   password: string;
-  role: UserRole;
   nombre?: string;
   apellido?: string;
-  secciones?: 'limpieza' | 'mantenimiento' | 'ambos';
-  isTemporary?: boolean;      // Nuevo campo para indicar si un operario es temporal
+  role: UserRole;
+  secciones: UserSection;
+  celular?: string;
+  isTemporary?: boolean;
+  expirationMinutes?: number;
+  supervisorId?: string;
 }
 
 export interface UpdateUserDTO {
-  usuario?: string;           // Cambiado de email a usuario
-  password?: string;
-  role?: UserRole;
+  usuario?: string;
   nombre?: string;
   apellido?: string;
-  secciones?: 'limpieza' | 'mantenimiento' | 'ambos';
+  password?: string;
+  role?: UserRole;
+  secciones?: UserSection;
+  celular?: string;
   isActive?: boolean;
-  isTemporary?: boolean;      // Para activar/desactivar temporalidad en operarios
+  isTemporary?: boolean;
+  expirationMinutes?: number;
+  supervisorId?: string;
+}
+
+export interface ApiResponse<T> {
+  success: boolean;
+  message?: string;
+  [key: string]: any;
 }

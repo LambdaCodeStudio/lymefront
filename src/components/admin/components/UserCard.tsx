@@ -1,9 +1,3 @@
-/**
- * Componente para mostrar tarjetas de usuario en dispositivos móviles
- * Muestra información compacta de usuarios con acciones
- * Actualizado para la nueva estructura de roles y mejorar visualización de "Creado por"
- * Optimizado para móviles con texto responsive para roles largos
- */
 import React from 'react';
 import { UserCog, Trash2, CheckCircle, XCircle, Clock, ShieldAlert, Shield } from 'lucide-react';
 import { Button } from "@/components/ui/button";
@@ -17,16 +11,15 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import type { AdminUser } from '../services/userService';
-import { rolesDisplayNames } from '../shared/UserRolesConfig';
+import { User } from '@/types/users';
+import { rolesDisplayNames } from '@/types/UserRolesConfig';
 
 // Constante con roles para usar en el componente
 const ROLES = {
   ADMIN: 'admin',
   SUPERVISOR_DE_SUPERVISORES: 'supervisor_de_supervisores',
   SUPERVISOR: 'supervisor',
-  OPERARIO: 'operario',
-  TEMPORARIO: 'temporario'
+  OPERARIO: 'operario'
 };
 
 // Nombres cortos para roles en pantallas muy pequeñas
@@ -34,14 +27,12 @@ const shortRoleNames = {
   [ROLES.ADMIN]: 'Admin',
   [ROLES.SUPERVISOR_DE_SUPERVISORES]: 'Sup. de Sups.',
   [ROLES.SUPERVISOR]: 'Supervisor',
-  [ROLES.OPERARIO]: 'Operario',
-  [ROLES.TEMPORARIO]: 'Temporal'
+  [ROLES.OPERARIO]: 'Operario'
 };
 
 // Función para verificar si el usuario tiene fecha de expiración
-const hasExpiration = (user: AdminUser) => {
-  return user.role === ROLES.TEMPORARIO || 
-    (user.role === ROLES.OPERARIO && user.expiresAt);
+const hasExpiration = (user: User) => {
+  return user.role === ROLES.OPERARIO && user.expiresAt;
 };
 
 // Función para verificar si un usuario puede modificar a otro según jerarquía
@@ -62,7 +53,7 @@ const canModifyUser = (currentUserRole: string, targetUserRole: string) => {
 const canDeleteOrDeactivate = (userRole: string) => userRole !== ROLES.ADMIN;
 
 // Función para obtener el nombre del creador de un usuario
-const getCreatorName = (user: AdminUser): string => {
+const getCreatorName = (user: User): string => {
   if (!user.createdBy) return '-';
   
   // Priorizar el nombre completo
@@ -80,12 +71,12 @@ const getCreatorName = (user: AdminUser): string => {
 };
 
 interface UserCardProps {
-  user: AdminUser;
-  onEdit: (user: AdminUser) => void;
+  user: User;
+  onEdit: (user: User) => void;
   onDelete: (userId: string) => void;
   onToggleStatus: (userId: string, activate: boolean) => void;
-  getUserIdentifier: (user: AdminUser) => string;
-  getFullName: (user: AdminUser) => string | null;
+  getUserIdentifier: (user: User) => string;
+  getFullName: (user: User) => string | null;
   currentUserRole: string;
 }
 
@@ -144,7 +135,6 @@ const UserCard: React.FC<UserCardProps> = ({
                   ${user.role === ROLES.SUPERVISOR_DE_SUPERVISORES ? 'border-blue-500 text-blue-700 bg-blue-50' : ''}
                   ${user.role === ROLES.SUPERVISOR ? 'border-cyan-500 text-cyan-700 bg-cyan-50' : ''}
                   ${user.role === ROLES.OPERARIO ? 'border-green-500 text-green-700 bg-green-50' : ''}
-                  ${user.role === ROLES.TEMPORARIO ? 'border-yellow-500 text-yellow-700 bg-yellow-50' : ''}
                 `}
               >
                 {/* Mostrar sólo el icono en pantallas muy pequeñas */}

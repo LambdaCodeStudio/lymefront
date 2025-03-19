@@ -1,7 +1,7 @@
 // src/hooks/useAuth.ts
 import { useState, useEffect, useCallback } from 'react';
 import userService from '@/services/userService';
-import type { User, LoginResponse, UserRole, CreateUserDTO } from '@/types/users';
+import { User, UserRole, UserSection, LoginResponse, CreateUserDTO, ApiResponse } from '@/types/users';
 
 interface AuthState {
   user: User | null;
@@ -52,7 +52,8 @@ const formatErrorMessage = (error: any): string => {
     case 500:
       return 'Error en el servidor. Por favor, intente de nuevo más tarde.';
     default:
-      return error.response.data?.msg || error.message || 'Error desconocido';
+      const serverMessage = error.response.data?.message || error.response.data?.msg;
+      return serverMessage || error.message || 'Error desconocido';
   }
 };
 
@@ -64,7 +65,7 @@ export const useAuth = () => {
     error: null
   });
 
-  // Funciones para manejar el token en localStorage
+  // Funciones para manejar el almacenamiento en localStorage
   const getStoredToken = (): string | null => {
     return localStorage.getItem('token');
   };
@@ -73,9 +74,27 @@ export const useAuth = () => {
     localStorage.setItem('token', token);
   };
 
-  const removeStoredToken = () => {
+  const setUserData = (user: User) => {
+    // Almacenar información importante del usuario
+    if (user.role) {
+      localStorage.setItem('userRole', user.role);
+    }
+    if (user.secciones) {
+      localStorage.setItem('userSecciones', user.secciones);
+    }
+    if (user.expiresAt) {
+      localStorage.setItem('expiresAt', user.expiresAt);
+    }
+    // Guardar ID de usuario para referencia
+    localStorage.setItem('userId', user.id);
+  };
+
+  const removeStoredData = () => {
     localStorage.removeItem('token');
-    localStorage.removeItem('userRole'); // También eliminar el rol al cerrar sesión
+    localStorage.removeItem('userRole');
+    localStorage.removeItem('userSecciones');
+    localStorage.removeItem('expiresAt');
+    localStorage.removeItem('userId');
   };
 
   // Verificar autenticación al iniciar con manejo de reintentos
@@ -89,23 +108,30 @@ export const useAuth = () => {
       }
 
       // Usar withRetry para manejar posibles errores 429
-      const user = await withRetry(
+      const response = await withRetry(
         () => userService.getCurrentUser(),
         2, // Menos reintentos para esta operación
         1000
       );
       
-      setAuth({
-        user,
-        isAuthenticated: true,
-        loading: false,
-        error: null
-      });
-      
-      return true;
+      if (response.success && response.user) {
+        setAuth({
+          user: response.user,
+          isAuthenticated: true,
+          loading: false,
+          error: null
+        });
+        
+        // Actualizar datos almacenados con la información más reciente
+        setUserData(response.user);
+        
+        return true;
+      } else {
+        throw new Error('Respuesta de autenticación inválida');
+      }
     } catch (error: any) {
       console.error('Error checking auth:', error);
-      removeStoredToken();
+      removeStoredData();
       setAuth({
         user: null,
         isAuthenticated: false,
@@ -121,72 +147,33 @@ export const useAuth = () => {
     checkAuth();
   }, [checkAuth]);
 
-  // Función de login actualizada para manejar la respuesta de la API con reintentos
-  const login = async (email: string, password: string): Promise<LoginResponse> => {
+  // Función de login actualizada
+  const login = async (usuario: string, password: string): Promise<LoginResponse> => {
     try {
       setAuth(prev => ({ ...prev, loading: true, error: null }));
       
       // Usar withRetry para manejar errores 429 en el login
       const response = await withRetry(
-        () => userService.login(email, password),
+        () => userService.login(usuario, password),
         3, // Máximo 3 reintentos
         1000 // Empezar con 1 segundo de espera
       );
       
-      // Verificar si tenemos token
-      if (!response.token) {
-        throw new Error('Respuesta sin token de autenticación');
-      }
-
       // Guardar token
       setStoredToken(response.token);
       
-      // Guardar rol en localStorage
-      if (response.role) {
-        localStorage.setItem('userRole', response.role);
-        console.log('Rol guardado en localStorage:', response.role);
-      }
-
-      // Si la respuesta no tiene user pero tiene role, creamos un user mínimo
-      let userData: User;
-      
-      if (response.user) {
-        userData = response.user;
-      } else {
-        // Crear un objeto user básico con el rol de la respuesta
-        userData = {
-          _id: '', // Se completará cuando obtengamos los datos completos
-          role: response.role
-        };
-        
-        // Intentar obtener los datos completos del usuario (con reintentos)
-        try {
-          const fullUserData = await withRetry(
-            () => userService.getCurrentUser(),
-            2,
-            1000
-          );
-          userData = fullUserData;
-        } catch (userError) {
-          console.warn('No se pudieron cargar los datos completos del usuario:', userError);
-          // Continuamos con los datos básicos
-        }
-      }
+      // Guardar información del usuario
+      setUserData(response.user);
 
       // Actualizar estado
       setAuth({
-        user: userData,
+        user: response.user,
         isAuthenticated: true,
         loading: false,
         error: null
       });
 
-      // Asegurar que la respuesta tenga user para compatibilidad con el código existente
-      return {
-        token: response.token,
-        role: response.role,
-        user: userData
-      };
+      return response;
     } catch (error: any) {
       // Actualizar estado con el error formateado
       console.error('Error detallado del login:', error);
@@ -202,7 +189,7 @@ export const useAuth = () => {
 
   // Función de logout
   const logout = () => {
-    removeStoredToken();
+    removeStoredData();
     setAuth({
       user: null,
       isAuthenticated: false,
@@ -212,15 +199,13 @@ export const useAuth = () => {
     window.location.href = '/login';
   };
 
-  // Función para registrar nuevo usuario (con reintentos)
-  const register = async (email: string, password: string, role: UserRole = 'basic'): Promise<User> => {
+  // Función para registrar nuevo usuario
+  const register = async (userData: CreateUserDTO): Promise<ApiResponse<User>> => {
     try {
       setAuth(prev => ({ ...prev, loading: true, error: null }));
       
-      const userData: CreateUserDTO = { email, password, role };
-      
       // Usar withRetry para manejar posibles errores 429
-      const user = await withRetry(
+      const response = await withRetry(
         () => userService.register(userData),
         3,
         1000
@@ -229,7 +214,7 @@ export const useAuth = () => {
       // No autenticamos automáticamente tras el registro
       setAuth(prev => ({ ...prev, loading: false }));
 
-      return user;
+      return response;
     } catch (error: any) {
       setAuth(prev => ({ 
         ...prev, 
@@ -252,12 +237,47 @@ export const useAuth = () => {
     return auth.user.role === requiredRole;
   };
 
+  // Verificar si el usuario tiene acceso a una sección específica
+  const hasSection = (requiredSection: UserSection): boolean => {
+    if (!auth.user) return false;
+    
+    // Si el usuario tiene acceso a "ambos", siempre retornar true
+    if (auth.user.secciones === 'ambos') return true;
+    
+    // Verificar sección específica
+    return auth.user.secciones === requiredSection;
+  };
+
+  // Verificar si un operario es temporal
+  const isTemporaryOperator = (): boolean => {
+    if (!auth.user) return false;
+    
+    return auth.user.role === 'operario' && !!auth.user.expiresAt;
+  };
+
+  // Obtener tiempo de expiración para operarios temporales
+  const getExpirationInfo = () => {
+    if (!auth.user || !auth.user.expiresAt) return null;
+    
+    const expiresAt = new Date(auth.user.expiresAt);
+    const now = new Date();
+    
+    return {
+      expiresAt,
+      expired: now > expiresAt,
+      minutesRemaining: Math.max(0, Math.ceil((expiresAt.getTime() - now.getTime()) / (1000 * 60)))
+    };
+  };
+
   return {
     ...auth,
     login,
     logout,
     register,
     checkAuth,
-    hasRole
+    hasRole,
+    hasSection,
+    isTemporaryOperator,
+    getExpirationInfo
   };
 };

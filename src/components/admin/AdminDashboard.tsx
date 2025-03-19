@@ -12,7 +12,7 @@ import AdminUserManagement from './AdminUserManagement';
 import ClientsSection from './ClientSection';
 import OrdersSection from './OrdersSection';
 import { DashboardContext, useDashboardState } from '@/hooks/useDashboard';
-import DashboardSection from './shared/DashboardSection';
+import DashboardSection from '../../shared/DashboardSection';
 import { useAuth } from '@/hooks/useAuth';
 import { InventoryProvider } from '@/context/InventoryProvider';
 import { NotificationProvider } from '@/context/NotificationContext';

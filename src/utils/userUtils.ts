@@ -3,7 +3,7 @@
  * Actualizado para reflejar el nuevo esquema de usuario
  */
 import type { AdminUser } from '../services/userService';
-import { ROLES } from '../shared/UserRolesConfig';
+import { ROLES } from '../types/UserRolesConfig';
 
 /**
  * Obtener identificador principal del usuario para mostrar

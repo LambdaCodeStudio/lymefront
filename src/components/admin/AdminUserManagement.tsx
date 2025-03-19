@@ -23,8 +23,8 @@ import UserFilters from './components/UserFilters';
 import EnhancedPagination from './components/Pagination'; 
 
 // Importar hooks y utilidades
-import { useUserManagement } from './hooks/useUserManagement';
-import { getUserIdentifier, getFullName } from './utils/userUtils';
+import { useUserManagement } from '../../hooks/useUserManagement';
+import { getUserIdentifier, getFullName } from '@/utils/userUtils';
 
 // Función de filtrado actualizada para incluir el filtro por rol
 export const filterUsers = (

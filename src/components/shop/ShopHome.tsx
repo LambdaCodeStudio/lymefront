@@ -137,7 +137,7 @@ export const ShopHome: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('/api/auth/me', {
+      const response = await fetch('http://localhost:3000/api/auth/me', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -178,7 +178,7 @@ export const ShopHome: React.FC = () => {
     // Usar un límite grande para intentar obtener todos los productos
     // Nota: esto podría necesitar ajustes dependiendo de la capacidad del servidor
     const limit = 1000;
-    const url = `/api/producto?page=1&limit=${limit}${categoryFilter}`;
+    const url = `http://localhost:3000/api/producto?page=1&limit=${limit}${categoryFilter}`;
     
     console.log(`Fetching all products from: ${url}`);
     

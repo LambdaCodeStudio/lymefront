@@ -16,7 +16,8 @@ import {
   Filter,
   RefreshCw,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  Store
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from "@/components/ui/button";
@@ -83,15 +84,36 @@ interface DateRange {
   to: Date | undefined;
 }
 
+interface SubUbicacion {
+  _id: string;
+  nombre: string;
+  descripcion?: string;
+}
+
+interface SubServicio {
+  _id: string;
+  nombre: string;
+  descripcion?: string;
+  subUbicaciones: SubUbicacion[];
+}
+
 interface Cliente {
   _id: string;
+  nombre: string;
+  descripcion?: string;
   servicio: string;
   seccionDelServicio: string;
   userId: {
     _id: string;
     nombre?: string;
     email?: string;
+    isActive?: boolean;
   } | string;
+  subServicios: SubServicio[];
+  direccion?: string;
+  telefono?: string;
+  email?: string;
+  activo: boolean;
 }
 
 interface Usuario {
@@ -101,7 +123,6 @@ interface Usuario {
   usuario: string;
   role: string;
   isActive: boolean;
-  // Display name for UI
   displayName?: string;
 }
 
@@ -116,6 +137,16 @@ interface Producto {
 interface ProductoEnPedido {
   productoId: string | Producto;
   cantidad: number;
+  precioUnitario?: number;
+}
+
+interface ClienteEnPedido {
+  clienteId: string;
+  subServicioId?: string;
+  subUbicacionId?: string;
+  nombreCliente: string;
+  nombreSubServicio?: string;
+  nombreSubUbicacion?: string;
 }
 
 interface Pedido {
@@ -125,10 +156,12 @@ interface Pedido {
   numero?: string;  // Campo de compatibilidad anterior
   servicio: string;
   seccionDelServicio: string;
+  cliente?: ClienteEnPedido;
   productos: ProductoEnPedido[];
   total?: number;
   displayNumber?: string; // Campo para mostrar consistentemente
   userId?: string | Usuario; // Supervisor/Usuario asignado
+  supervisorId?: string | Usuario;
   clienteId?: string;
 }
 
@@ -139,6 +172,8 @@ interface FilterOptions {
   productoId: string;
   supervisorId: string;
   clienteId: string;
+  subServicioId: string;
+  subUbicacionId: string;
 }
 
 interface CacheState {
@@ -178,6 +213,8 @@ const DownloadsManagement: React.FC = () => {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [selectedCliente, setSelectedCliente] = useState<string>('');
+  const [selectedSubServicio, setSelectedSubServicio] = useState<string>('');
+  const [selectedSubUbicacion, setSelectedSubUbicacion] = useState<string>('');
   const [selectedPedido, setSelectedPedido] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -229,7 +266,9 @@ const DownloadsManagement: React.FC = () => {
     fechaFin: '',
     productoId: '',
     supervisorId: '',
-    clienteId: ''
+    clienteId: '',
+    subServicioId: '',
+    subUbicacionId: ''
   });
   
   // Estado temporal para formulario de filtros
@@ -239,7 +278,9 @@ const DownloadsManagement: React.FC = () => {
     fechaFin: '',
     productoId: '',
     supervisorId: '',
-    clienteId: ''
+    clienteId: '',
+    subServicioId: '',
+    subUbicacionId: ''
   });
   
   // Estado para controlar el diálogo de filtros
@@ -410,9 +451,9 @@ const DownloadsManagement: React.FC = () => {
       
       let filteredUsers: Usuario[] = [];
       
-      if (response.data && Array.isArray(response.data)) {
+      if (response.data && response.data.users && Array.isArray(response.data.users)) {
         // Filtrar solo usuarios activos con roles relevantes (supervisor, admin, etc.)
-        filteredUsers = response.data
+        filteredUsers = response.data.users
           .filter((user: any) => user.isActive)
           .map((user: any) => ({
             _id: user._id,
@@ -458,20 +499,30 @@ const DownloadsManagement: React.FC = () => {
       const response = await api.getClient().get('/cliente');
       
       if (response.data && Array.isArray(response.data)) {
-        setAllClientes(response.data);
-        setClientes(response.data);
+        const clientesData = response.data.map((cliente: any) => {
+          // Asegurar que todos los campos necesarios estén presentes
+          return {
+            ...cliente,
+            servicio: cliente.servicio || cliente.nombre, // Mantener compatibilidad
+            seccionDelServicio: cliente.seccionDelServicio || '',
+            subServicios: cliente.subServicios || []
+          };
+        });
+        
+        setAllClientes(clientesData);
+        setClientes(clientesData);
         
         // Actualizar caché
         setCacheState(prev => ({
           ...prev,
-          clientes: response.data,
+          clientes: clientesData,
           lastRefreshed: {
             ...prev.lastRefreshed,
             clientes: Date.now()
           }
         }));
         
-        return response.data;
+        return clientesData;
       }
       
       return [];
@@ -502,7 +553,10 @@ const DownloadsManagement: React.FC = () => {
           let total = 0;
           if (pedido.productos && Array.isArray(pedido.productos)) {
             total = pedido.productos.reduce((sum: number, prod: any) => {
-              const precio = prod.productoId?.precio || 0;
+              // Primero usar precioUnitario (si está disponible) o el precio del producto
+              const precio = prod.precioUnitario || 
+                (prod.productoId && typeof prod.productoId === 'object' ? 
+                 prod.productoId.precio : 0);
               const cantidad = prod.cantidad || 0;
               return sum + (precio * cantidad);
             }, 0);
@@ -534,7 +588,9 @@ const DownloadsManagement: React.FC = () => {
           fechaFin: '',
           productoId: '',
           supervisorId: '',
-          clienteId: ''
+          clienteId: '',
+          subServicioId: '',
+          subUbicacionId: ''
         });
         
         return pedidosConTotal;
@@ -550,16 +606,34 @@ const DownloadsManagement: React.FC = () => {
     }
   }, [cacheState.pedidos, isCacheValid]);
 
-  // Cargar pedidos específicos por cliente
-  const loadPedidosByCliente = useCallback(async (clienteId: string) => {
+  // Función para limpiar los filtros de estructura jerárquica cuando cambia el cliente
+  const resetJerarquiaSelections = useCallback(() => {
+    setSelectedSubServicio('');
+    setSelectedSubUbicacion('');
+  }, []);
+
+  // Cargar pedidos específicos por cliente (y opcionalmente subServicio y subUbicacion)
+  const loadPedidosByCliente = useCallback(async (clienteId: string, subServicioId?: string, subUbicacionId?: string) => {
     if (!clienteId) {
       setPedidos([]);
       return [];
     }
     
+    let url = `/pedido/cliente/${clienteId}`;
+    const params: Record<string, string> = {};
+    
+    // Añadir parámetros opcionales para la estructura jerárquica
+    if (subServicioId) {
+      params.subServicioId = subServicioId;
+      
+      if (subUbicacionId) {
+        params.subUbicacionId = subUbicacionId;
+      }
+    }
+    
     try {
       setError('');
-      const pedidosResponse = await api.getClient().get(`/pedido/cliente/${clienteId}`);
+      const pedidosResponse = await api.getClient().get(url, { params });
       
       if (pedidosResponse.data && Array.isArray(pedidosResponse.data)) {
         // Procesar los pedidos para asegurar que displayNumber esté definido
@@ -584,12 +658,12 @@ const DownloadsManagement: React.FC = () => {
     }
   }, []);
 
-  // Efecto para cargar pedidos cuando se selecciona un cliente
+  // Efecto para cargar pedidos cuando se selecciona un cliente o estructura jerárquica
   useEffect(() => {
     if (selectedCliente) {
-      loadPedidosByCliente(selectedCliente);
+      loadPedidosByCliente(selectedCliente, selectedSubServicio, selectedSubUbicacion);
     }
-  }, [selectedCliente, loadPedidosByCliente]);
+  }, [selectedCliente, selectedSubServicio, selectedSubUbicacion, loadPedidosByCliente]);
 
   // Cargar datos iniciales solo una vez al montar el componente
   useEffect(() => {
@@ -643,7 +717,7 @@ const DownloadsManagement: React.FC = () => {
       
       // Si hay un cliente seleccionado, actualizar sus pedidos también
       if (selectedCliente) {
-        loadPedidosByCliente(selectedCliente);
+        loadPedidosByCliente(selectedCliente, selectedSubServicio, selectedSubUbicacion);
       }
     });
     
@@ -652,7 +726,7 @@ const DownloadsManagement: React.FC = () => {
       unsubscribeInventory();
       unsubscribePedidos();
     };
-  }, [loadProductos, loadAllPedidos, loadPedidosByCliente, selectedCliente]);
+  }, [loadProductos, loadAllPedidos, loadPedidosByCliente, selectedCliente, selectedSubServicio, selectedSubUbicacion]);
 
   // Función para forzar la recarga de todos los datos (usada solo en casos especiales)
   const forceRefreshAllData = useCallback(() => {
@@ -665,7 +739,7 @@ const DownloadsManagement: React.FC = () => {
     ]).then(() => {
       // Si hay un cliente seleccionado, actualizar sus pedidos también
       if (selectedCliente) {
-        return loadPedidosByCliente(selectedCliente);
+        return loadPedidosByCliente(selectedCliente, selectedSubServicio, selectedSubUbicacion);
       }
     }).finally(() => {
       setLoadingCacheData(false);
@@ -673,7 +747,7 @@ const DownloadsManagement: React.FC = () => {
       setSuccessMessage('Datos actualizados correctamente');
       setTimeout(() => setSuccessMessage(''), 3000);
     });
-  }, [loadProductos, loadSupervisores, loadAllClientes, loadAllPedidos, loadPedidosByCliente, selectedCliente]);
+  }, [loadProductos, loadSupervisores, loadAllClientes, loadAllPedidos, loadPedidosByCliente, selectedCliente, selectedSubServicio, selectedSubUbicacion]);
 
   // Función para aplicar filtros
   const applyFilters = useCallback(() => {
@@ -727,7 +801,14 @@ const DownloadsManagement: React.FC = () => {
     // Filtrar por supervisor
     if (filterOptions.supervisorId) {
       filtered = filtered.filter(pedido => {
-        // Manejar casos donde userId es objeto o string
+        // Primero buscar en el campo supervisorId (nuevo)
+        if (typeof pedido.supervisorId === 'object') {
+          return pedido.supervisorId && pedido.supervisorId._id === filterOptions.supervisorId;
+        } else if (pedido.supervisorId) {
+          return pedido.supervisorId === filterOptions.supervisorId;
+        }
+        
+        // Si no, buscar en userId (compatibilidad)
         if (typeof pedido.userId === 'object') {
           return pedido.userId && pedido.userId._id === filterOptions.supervisorId;
         } else {
@@ -736,34 +817,43 @@ const DownloadsManagement: React.FC = () => {
       });
     }
     
-    // Filtrar por cliente
+    // Filtrar por cliente (ahora usando la estructura jerárquica)
     if (filterOptions.clienteId) {
-      // Primero debemos buscar el cliente seleccionado
-      const selectedCliente = allClientes.find(c => c._id === filterOptions.clienteId);
-      
-      if (selectedCliente) {
-        filtered = filtered.filter(pedido => {
-          // Un pedido coincide con un cliente si:
-          // 1. Mismo servicio
-          const servicioMatch = pedido.servicio === selectedCliente.servicio;
-          
-          // 2. Misma sección de servicio (si está especificada)
-          const seccionMatch = !selectedCliente.seccionDelServicio || 
-                            pedido.seccionDelServicio === selectedCliente.seccionDelServicio;
-          
-          // 3. Mismo userId (si está asignado)
-          let userMatch = true;
-          if (typeof selectedCliente.userId === 'object' && selectedCliente.userId && selectedCliente.userId._id) {
-            if (typeof pedido.userId === 'object') {
-              userMatch = pedido.userId && pedido.userId._id === selectedCliente.userId._id;
-            } else {
-              userMatch = pedido.userId === selectedCliente.userId._id;
-            }
+      filtered = filtered.filter(pedido => {
+        // Primero revisar la nueva estructura cliente
+        if (pedido.cliente && pedido.cliente.clienteId === filterOptions.clienteId) {
+          // Si hay subServicioId en el filtro, también filtrar por eso
+          if (filterOptions.subServicioId && 
+              pedido.cliente.subServicioId !== filterOptions.subServicioId) {
+            return false;
           }
           
-          return servicioMatch && seccionMatch && userMatch;
-        });
-      }
+          // Si hay subUbicacionId en el filtro, también filtrar por eso
+          if (filterOptions.subUbicacionId && 
+              pedido.cliente.subUbicacionId !== filterOptions.subUbicacionId) {
+            return false;
+          }
+          
+          return true;
+        }
+        
+        // Para compatibilidad con la estructura antigua
+        // Buscar el cliente seleccionado
+        const selectedCliente = allClientes.find(c => c._id === filterOptions.clienteId);
+        
+        if (selectedCliente) {
+          // Un pedido coincide con un cliente si tiene el mismo servicio
+          const servicioMatch = pedido.servicio === selectedCliente.servicio;
+          
+          // Y la misma sección de servicio (si está especificada)
+          const seccionMatch = !selectedCliente.seccionDelServicio || 
+                          pedido.seccionDelServicio === selectedCliente.seccionDelServicio;
+                          
+          return servicioMatch && seccionMatch;
+        }
+        
+        return false;
+      });
     }
     
     setFilteredPedidos(filtered);
@@ -941,7 +1031,9 @@ const DownloadsManagement: React.FC = () => {
       fechaFin: '',
       productoId: '',
       supervisorId: '',
-      clienteId: ''
+      clienteId: '',
+      subServicioId: '',
+      subUbicacionId: ''
     };
     setTempFilterOptions(emptyFilters);
     setFilterOptions(emptyFilters);
@@ -952,18 +1044,22 @@ const DownloadsManagement: React.FC = () => {
       supervisor: '',
       cliente: ''
     });
+    
+    // Limpiar selecciones jerárquicas
+    resetJerarquiaSelections();
   };
 
-  // Función para obtener el nombre del cliente
+  // Función para obtener el nombre completo del cliente según la nueva estructura
   const getClientName = (cliente: Cliente): string => {
     if (!cliente) return "Cliente no disponible";
     
-    // Mostrar el servicio y la sección si está disponible
-    const servicioCompleto = cliente.seccionDelServicio 
-      ? `${cliente.servicio} - ${cliente.seccionDelServicio}` 
-      : cliente.servicio;
-    
-    return servicioCompleto;
+    // Usar el nombre (campo principal) o mantener compatibilidad con servicio
+    return cliente.nombre || cliente.servicio;
+  };
+
+  // Función para obtener la sección del cliente (para compatibilidad)
+  const getClientSection = (cliente: Cliente): string => {
+    return cliente.seccionDelServicio || '';
   };
 
   // Filtrar clientes por búsqueda
@@ -971,18 +1067,41 @@ const DownloadsManagement: React.FC = () => {
     // Verificar que cliente tenga la estructura esperada
     if (!cliente || typeof cliente !== 'object') return false;
     
-    // Obtener el nombre completo del cliente (servicio + sección)
-    const nombreCompleto = getClientName(cliente);
+    // Obtener el nombre del cliente
+    const nombreCliente = getClientName(cliente);
     
     // Filtrar si el término de búsqueda está en el nombre
-    return nombreCompleto.toLowerCase().includes(searchTerm.toLowerCase());
+    return nombreCliente.toLowerCase().includes(searchTerm.toLowerCase());
   });
+  
+  // Obtener subservicios del cliente seleccionado
+  const getSubServicios = () => {
+    if (!selectedCliente) return [];
+    
+    const cliente = clientes.find(c => c._id === selectedCliente);
+    if (!cliente) return [];
+    
+    return cliente.subServicios || [];
+  };
+  
+  // Obtener sububicaciones del subservicio seleccionado
+  const getSubUbicaciones = () => {
+    if (!selectedCliente || !selectedSubServicio) return [];
+    
+    const cliente = clientes.find(c => c._id === selectedCliente);
+    if (!cliente) return [];
+    
+    const subServicio = cliente.subServicios.find(s => s._id === selectedSubServicio);
+    if (!subServicio) return [];
+    
+    return subServicio.subUbicaciones || [];
+  };
   
   // Obtener clientes filtrados para el selector de filtros
   const getFilteredClientesForSelector = () => {
     return allClientes.filter(cliente => {
-      const nombreCompleto = getClientName(cliente);
-      return nombreCompleto.toLowerCase().includes(filterSearch.cliente.toLowerCase());
+      const nombreCliente = getClientName(cliente);
+      return nombreCliente.toLowerCase().includes(filterSearch.cliente.toLowerCase());
     });
   };
   
@@ -1002,7 +1121,9 @@ const DownloadsManagement: React.FC = () => {
   };
   
   // Obtener servicios únicos para filtro
-  const serviciosUnicos = [...new Set(allPedidos.map(p => p.servicio).filter(Boolean))];
+  const serviciosUnicos = [...new Set(allPedidos
+    .filter(p => p.servicio) // Filtrar pedidos que tengan servicio definido
+    .map(p => p.servicio))];
 
   // Calcular paginación
   const indexOfLastPedido = currentPage * itemsPerPage;
@@ -1024,7 +1145,9 @@ const DownloadsManagement: React.FC = () => {
     filterOptions.fechaFin !== '' ||
     filterOptions.productoId !== '' ||
     filterOptions.supervisorId !== '' ||
-    filterOptions.clienteId !== '';
+    filterOptions.clienteId !== '' ||
+    filterOptions.subServicioId !== '' ||
+    filterOptions.subUbicacionId !== '';
   
   // Obtener conteo de filtros activos
   const getActiveFilterCount = () => {
@@ -1035,6 +1158,8 @@ const DownloadsManagement: React.FC = () => {
     if (filterOptions.productoId !== '') count++;
     if (filterOptions.supervisorId !== '') count++;
     if (filterOptions.clienteId !== '') count++;
+    if (filterOptions.subServicioId !== '') count++;
+    if (filterOptions.subUbicacionId !== '') count++;
     return count;
   };
   
@@ -1052,6 +1177,30 @@ const DownloadsManagement: React.FC = () => {
   const getSelectedClienteName = () => {
     const cliente = allClientes.find(c => c._id === filterOptions.clienteId);
     return cliente ? getClientName(cliente) : 'Cliente no encontrado';
+  };
+  
+  const getSelectedSubServicioName = () => {
+    if (!filterOptions.clienteId || !filterOptions.subServicioId) return '';
+    
+    const cliente = allClientes.find(c => c._id === filterOptions.clienteId);
+    if (!cliente) return 'Subservicio no encontrado';
+    
+    const subServicio = cliente.subServicios.find(s => s._id === filterOptions.subServicioId);
+    return subServicio ? subServicio.nombre : 'Subservicio no encontrado';
+  };
+  
+  const getSelectedSubUbicacionName = () => {
+    if (!filterOptions.clienteId || !filterOptions.subServicioId || !filterOptions.subUbicacionId) 
+      return '';
+    
+    const cliente = allClientes.find(c => c._id === filterOptions.clienteId);
+    if (!cliente) return 'Sububicación no encontrada';
+    
+    const subServicio = cliente.subServicios.find(s => s._id === filterOptions.subServicioId);
+    if (!subServicio) return 'Sububicación no encontrada';
+    
+    const subUbicacion = subServicio.subUbicaciones.find(u => u._id === filterOptions.subUbicacionId);
+    return subUbicacion ? subUbicacion.nombre : 'Sububicación no encontrada';
   };
 
   return (
@@ -1217,7 +1366,13 @@ const DownloadsManagement: React.FC = () => {
                 {/* Selector de cliente */}
                 <div className="space-y-2">
                   <Label className="text-[#29696B]">Seleccionar Cliente</Label>
-                  <Select value={selectedCliente} onValueChange={setSelectedCliente}>
+                  <Select 
+                    value={selectedCliente} 
+                    onValueChange={(value) => {
+                      setSelectedCliente(value);
+                      resetJerarquiaSelections();
+                    }}
+                  >
                     <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
                       <SelectValue placeholder="Selecciona un cliente" />
                     </SelectTrigger>
@@ -1236,6 +1391,61 @@ const DownloadsManagement: React.FC = () => {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Selector de subservicio (si el cliente está seleccionado) */}
+                {selectedCliente && getSubServicios().length > 0 && (
+                  <div className="space-y-2">
+                    <Label className="text-[#29696B] flex items-center gap-2">
+                      <Store className="w-4 h-4" />
+                      Seleccionar Subservicio
+                    </Label>
+                    <Select 
+                      value={selectedSubServicio} 
+                      onValueChange={(value) => {
+                        setSelectedSubServicio(value);
+                        setSelectedSubUbicacion('');
+                      }}
+                    >
+                      <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
+                        <SelectValue placeholder="Todos los subservicios" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Todos los subservicios</SelectItem>
+                        {getSubServicios().map((subservicio) => (
+                          <SelectItem key={subservicio._id} value={subservicio._id}>
+                            {subservicio.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Selector de sububicación (si el subservicio está seleccionado) */}
+                {selectedSubServicio && getSubUbicaciones().length > 0 && (
+                  <div className="space-y-2">
+                    <Label className="text-[#29696B] flex items-center gap-2">
+                      <MapPin className="w-4 h-4" />
+                      Seleccionar Ubicación
+                    </Label>
+                    <Select 
+                      value={selectedSubUbicacion} 
+                      onValueChange={setSelectedSubUbicacion}
+                    >
+                      <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
+                        <SelectValue placeholder="Todas las ubicaciones" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Todas las ubicaciones</SelectItem>
+                        {getSubUbicaciones().map((sububicacion) => (
+                          <SelectItem key={sububicacion._id} value={sububicacion._id}>
+                            {sububicacion.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 {/* Selector de pedido */}
                 {selectedCliente && (
@@ -1583,7 +1793,7 @@ const DownloadsManagement: React.FC = () => {
                           </Dialog>
                         </div>
                         
-                        {/* Cliente - Selector con búsqueda */}
+                        {/* Cliente Jerárquico - Selector con búsqueda */}
                         <div className="space-y-2">
                           <Label className="text-[#29696B] flex items-center gap-2">
                             <Building className="w-4 h-4" />
@@ -1601,7 +1811,11 @@ const DownloadsManagement: React.FC = () => {
                               >
                                 {tempFilterOptions.clienteId ? (
                                   <span className="truncate">
-                                    {getClientName(allClientes.find(c => c._id === tempFilterOptions.clienteId) as Cliente)}
+                                    {getSelectedClienteName()}
+                                    {tempFilterOptions.subServicioId && 
+                                      ` > ${getSelectedSubServicioName()}`}
+                                    {tempFilterOptions.subUbicacionId && 
+                                      ` > ${getSelectedSubUbicacionName()}`}
                                   </span>
                                 ) : (
                                   <span className="text-muted-foreground">Seleccionar cliente</span>
@@ -1615,7 +1829,12 @@ const DownloadsManagement: React.FC = () => {
                                     className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      setTempFilterOptions({...tempFilterOptions, clienteId: ''});
+                                      setTempFilterOptions({
+                                        ...tempFilterOptions, 
+                                        clienteId: '',
+                                        subServicioId: '',
+                                        subUbicacionId: ''
+                                      });
                                     }}
                                   >
                                     <X className="h-3 w-3" />
@@ -1631,6 +1850,7 @@ const DownloadsManagement: React.FC = () => {
                                 </DialogDescription>
                               </DialogHeader>
                               <div className="py-4 space-y-4">
+                                {/* Búsqueda de cliente */}
                                 <div className="relative">
                                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
                                   <Input
@@ -1640,6 +1860,8 @@ const DownloadsManagement: React.FC = () => {
                                     className="pl-10 border-[#91BEAD]"
                                   />
                                 </div>
+                                
+                                {/* Lista de clientes */}
                                 <div className="max-h-60 overflow-y-auto border rounded-md">
                                   {getFilteredClientesForSelector().length === 0 ? (
                                     <div className="p-4 text-center text-[#7AA79C]">
@@ -1656,15 +1878,19 @@ const DownloadsManagement: React.FC = () => {
                                               : 'hover:bg-[#DFEFE6]/40'
                                           }`}
                                           onClick={() => {
-                                            setTempFilterOptions({...tempFilterOptions, clienteId: cliente._id});
-                                            setActiveFilterSelector(null);
+                                            setTempFilterOptions({
+                                              ...tempFilterOptions, 
+                                              clienteId: cliente._id,
+                                              subServicioId: '',
+                                              subUbicacionId: ''
+                                            });
                                           }}
                                         >
                                           <div>
-                                            <div>{cliente.servicio}</div>
-                                            {cliente.seccionDelServicio && (
+                                            <div>{getClientName(cliente)}</div>
+                                            {getClientSection(cliente) && (
                                               <div className="text-xs opacity-70">
-                                                {cliente.seccionDelServicio}
+                                                {getClientSection(cliente)}
                                               </div>
                                             )}
                                           </div>
@@ -1676,8 +1902,88 @@ const DownloadsManagement: React.FC = () => {
                                     </div>
                                   )}
                                 </div>
+                                
+                                {/* Si hay un cliente seleccionado y tiene subservicios, mostrar selector */}
+                                {tempFilterOptions.clienteId && (() => {
+                                  const cliente = allClientes.find(c => c._id === tempFilterOptions.clienteId);
+                                  if (cliente && cliente.subServicios && cliente.subServicios.length > 0) {
+                                    return (
+                                      <div className="mt-4 space-y-2">
+                                        <Label className="text-[#29696B] flex items-center gap-2">
+                                          <Store className="w-4 h-4" />
+                                          Seleccionar Subservicio (opcional)
+                                        </Label>
+                                        <Select 
+                                          value={tempFilterOptions.subServicioId} 
+                                          onValueChange={(value) => {
+                                            setTempFilterOptions({
+                                              ...tempFilterOptions, 
+                                              subServicioId: value,
+                                              subUbicacionId: ''
+                                            });
+                                          }}
+                                        >
+                                          <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
+                                            <SelectValue placeholder="Todos los subservicios" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="">Todos los subservicios</SelectItem>
+                                            {cliente.subServicios.map(subservicio => (
+                                              <SelectItem key={subservicio._id} value={subservicio._id}>
+                                                {subservicio.nombre}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+                                
+                                {/* Si hay un subservicio seleccionado y tiene sububicaciones, mostrar selector */}
+                                {tempFilterOptions.clienteId && tempFilterOptions.subServicioId && (() => {
+                                  const cliente = allClientes.find(c => c._id === tempFilterOptions.clienteId);
+                                  if (!cliente) return null;
+                                  
+                                  const subservicio = cliente.subServicios.find(s => s._id === tempFilterOptions.subServicioId);
+                                  if (!subservicio) return null;
+                                  
+                                  if (subservicio.subUbicaciones && subservicio.subUbicaciones.length > 0) {
+                                    return (
+                                      <div className="mt-4 space-y-2">
+                                        <Label className="text-[#29696B] flex items-center gap-2">
+                                          <MapPin className="w-4 h-4" />
+                                          Seleccionar Ubicación (opcional)
+                                        </Label>
+                                        <Select 
+                                          value={tempFilterOptions.subUbicacionId} 
+                                          onValueChange={(value) => {
+                                            setTempFilterOptions({
+                                              ...tempFilterOptions, 
+                                              subUbicacionId: value
+                                            });
+                                          }}
+                                        >
+                                          <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
+                                            <SelectValue placeholder="Todas las ubicaciones" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="">Todas las ubicaciones</SelectItem>
+                                            {subservicio.subUbicaciones.map(ubicacion => (
+                                              <SelectItem key={ubicacion._id} value={ubicacion._id}>
+                                                {ubicacion.nombre}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                })()}
                               </div>
-                              <DialogFooter>
+                              <DialogFooter className="flex justify-between">
                                 <Button
                                   variant="outline"
                                   onClick={() => {
@@ -1686,6 +1992,12 @@ const DownloadsManagement: React.FC = () => {
                                   }}
                                 >
                                   Cancelar
+                                </Button>
+                                <Button
+                                  onClick={() => setActiveFilterSelector(null)}
+                                  className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
+                                >
+                                  Aceptar
                                 </Button>
                               </DialogFooter>
                             </DialogContent>

@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCartContext } from '@/providers/CartProvider';
-import { getApiUrl } from '@/utils/apiUtils';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
@@ -54,7 +53,7 @@ export const ShopNavbar: React.FC = () => {
         const token = localStorage.getItem('token');
         if (!token) return;
 
-        const response = await fetch('/api/auth/me', {
+        const response = await fetch('http://localhost:3000/api/auth/me', {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -105,7 +104,7 @@ export const ShopNavbar: React.FC = () => {
       const token = localStorage.getItem('token');
       if (!token) return;
       
-      const response = await fetch('/api/pedido', {
+      const response = await fetch('http://localhost:3000/api/pedido', {
         headers: {
           'Authorization': `Bearer ${token}`
         }

@@ -140,19 +140,32 @@ export const LoginForm: React.FC<LoginFormProps> = ({ redirectPath }) => {
     }
   };
 
-  // Determinar la ruta de redirección según el rol
-  const getRedirectPath = (role: string) => {
+  // Determinar la ruta de redirección según el rol y secciones
+  const getRedirectPath = (role: string, secciones?: string) => {
     if (redirectPath) return redirectPath;
     
+    // Mapear los roles del backend a rutas de la aplicación
     const rolePaths: Record<string, string> = {
       'admin': '/admin',
       'supervisor_de_supervisores': '/admin',
       'supervisor': '/shop',
-      'operario': '/shop',
-      'temporario': '/shop'
+      'operario': '/shop'
     };
     
-    return rolePaths[role] || '/shop';
+    // Usar el rol para determinar la ruta base
+    let basePath = rolePaths[role.toLowerCase()] || '/shop';
+    
+    // Si es necesario, usar secciones para rutas más específicas
+    if (role.toLowerCase() === 'operario' && secciones) {
+      // Por ejemplo, redireccionar a diferentes dashboards según la sección
+      if (secciones === 'limpieza') {
+        return `${basePath}/limpieza`;
+      } else if (secciones === 'mantenimiento') {
+        return `${basePath}/mantenimiento`;
+      }
+    }
+    
+    return basePath;
   };
 
   // Manejar envío del formulario
@@ -173,12 +186,30 @@ export const LoginForm: React.FC<LoginFormProps> = ({ redirectPath }) => {
         localStorage.removeItem('rememberedUsuario');
       }
 
-      // Obtener el rol desde response.role o response.user.role
-      const userRole = response.role || (response.user && response.user.role) || 'operario';
-      
-      // Redireccionar según el rol
-      const redirectPath = getRedirectPath(userRole);
-      window.location.href = redirectPath;
+      // Verificar la estructura de respuesta del backend actualizado
+      // El backend ahora devuelve: { success, token, user: { id, usuario, nombre, role, secciones } }
+      if (response.success && response.user) {
+        // Obtener el rol y secciones del usuario
+        const userRole = response.user.role;
+        const userSecciones = response.user.secciones;
+        
+        // Almacenar información adicional del usuario si es necesario
+        localStorage.setItem('userSecciones', userSecciones);
+        
+        // Verificar si es un operario temporal
+        const isTemporary = userRole === 'operario' && response.user.expiresAt;
+        if (isTemporary) {
+          // Guardar información sobre expiración para mostrar alertas
+          localStorage.setItem('expiresAt', response.user.expiresAt);
+        }
+        
+        // Redireccionar según el rol y secciones
+        const redirectPath = getRedirectPath(userRole, userSecciones);
+        window.location.href = redirectPath;
+      } else {
+        console.error('Respuesta de autenticación inválida:', response);
+        throw new Error('Error de autenticación: respuesta inválida del servidor');
+      }
     } catch (err) {
       // El error ya es manejado por el hook
       console.error('Error en login:', err);

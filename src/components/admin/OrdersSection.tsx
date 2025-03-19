@@ -76,7 +76,7 @@ import Pagination from "@/components/ui/pagination";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { getAuthToken } from '@/utils/inventoryUtils';
 
-// ======== TIPOS E INTERFACES ========
+// ======== TYPES & INTERFACES ========
 
 export interface User {
   _id: string;
@@ -89,11 +89,32 @@ export interface User {
   expiresAt?: string | Date;
 }
 
+// Updated interfaces for hierarchical structure
+interface SubUbicacion {
+  _id: string;
+  nombre: string;
+  descripcion?: string;
+}
+
+interface SubServicio {
+  _id: string;
+  nombre: string;
+  descripcion?: string;
+  supervisorId?: string | User;
+  subUbicaciones: SubUbicacion[];
+}
+
 interface Client {
   _id: string;
+  nombre: string;
   servicio: string;
   seccionDelServicio: string;
   userId: string | User;
+  subServicios: SubServicio[];
+  direccion?: string;
+  telefono?: string;
+  email?: string;
+  activo?: boolean;
   requiereAsignacion?: boolean;
 }
 
@@ -114,24 +135,47 @@ interface OrderProduct {
   cantidad: number;
   nombre?: string;
   precio?: number;
+  precioUnitario?: number;
+}
+
+// Updated client structure in order
+interface OrderClient {
+  clienteId: string;
+  subServicioId?: string;
+  subUbicacionId?: string;
+  nombreCliente: string;
+  nombreSubServicio?: string;
+  nombreSubUbicacion?: string;
 }
 
 interface Order {
   _id: string;
   nPedido: number;
-  servicio: string;
-  seccionDelServicio: string;
+  cliente: OrderClient;
+  servicio: string; // Compatibility field
+  seccionDelServicio: string; // Compatibility field
   userId: string | User;
+  supervisorId?: string | User;
   fecha: string;
   productos: OrderProduct[];
   detalle?: string;
   estado?: 'pendiente' | 'aprobado' | 'rechazado';
+  aprobadoPor?: string | User;
+  fechaAprobacion?: string;
+  observaciones?: string;
 }
 
 interface OrderForm {
-  servicio: string;
-  seccionDelServicio: string;
+  clienteId: string;
+  subServicioId?: string;
+  subUbicacionId?: string;
+  nombreCliente: string;
+  nombreSubServicio?: string;
+  nombreSubUbicacion?: string;
+  servicio: string; // Keep for compatibility
+  seccionDelServicio: string; // Keep for compatibility
   userId: string;
+  supervisorId?: string;
   productos: OrderProduct[];
   detalle?: string;
   estado?: 'pendiente' | 'aprobado' | 'rechazado';
@@ -144,270 +188,436 @@ interface FilterParams {
   supervisor?: string;
   servicio?: string;
   estado?: string;
+  clienteId?: string;
+  subServicioId?: string;
+  subUbicacionId?: string;
 }
 
-const apiUrl = "/api"
+// ======== API SERVICE ========
 
-// ======== FUNCIONES API ========
+/**
+ * API Service for Orders
+ * Centralizes all API calls to maintain consistent error handling and request formatting
+ */
+const OrdersService = {
+  // API base URL
+  apiUrl: 'http://localhost:3000/api',
 
-// Función para obtener pedidos con filtros
-const fetchOrders = async (filters: FilterParams = {}) => {
-  const token = getAuthToken();
-  if (!token) throw new Error("No hay token de autenticación");
+  // Fetch orders with filters
+  async fetchOrders(filters: FilterParams = {}): Promise<Order[]> {
+    const token = getAuthToken();
+    if (!token) throw new Error("No authentication token");
 
+    // Build base URL
+    let url = `${this.apiUrl}/pedido`;
+    let queryParams = new URLSearchParams();
 
-  // Construir URL base
-  let url = `${apiUrl}/pedido`;
-
-  // Aplicar filtros de fecha si existen
-  if (filters.from && filters.to) {
-    url = `${apiUrl}/pedido/fecha?fechaInicio=${encodeURIComponent(filters.from)}&fechaFin=${encodeURIComponent(filters.to)}`;
-  }
-
-  // Aplicar filtro por supervisor si existe (esto requeriría endpoint adicional en el backend)
-  if (filters.supervisor && !filters.from && !filters.to) {
-    url = `${apiUrl}/pedido/user/${filters.supervisor}`;
-  }
-
-  // Aplicar filtro por servicio si existe
-  if (filters.servicio && !filters.from && !filters.to && !filters.supervisor) {
-    url = `${apiUrl}/pedido/servicio/${encodeURIComponent(filters.servicio)}`;
-  }
-
-  // Aplicar filtro por estado si existe (requiere endpoint adicional en el backend)
-  if (filters.estado && filters.estado !== 'todos' && !filters.from && !filters.to && !filters.supervisor && !filters.servicio) {
-    url = `${apiUrl}/pedido/estado/${filters.estado}`;
-  }
-
-  const response = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Cache-Control': 'no-cache'
+    // Apply date filters
+    if (filters.from && filters.to) {
+      queryParams.append('fechaInicio', filters.from);
+      queryParams.append('fechaFin', filters.to);
+      url = `${this.apiUrl}/pedido/fecha?${queryParams.toString()}`;
     }
-  });
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('userRole');
-      window.location.href = '/login';
-      return [];
+    // Filter by supervisor
+    else if (filters.supervisor) {
+      url = `${this.apiUrl}/pedido/supervisor/${filters.supervisor}`;
     }
-    throw new Error(`Error al obtener pedidos: ${response.status}`);
-  }
+    // Filter by client
+    else if (filters.clienteId) {
+      url = `${this.apiUrl}/pedido/cliente/${filters.clienteId}`;
+      
+      // Add subServicioId if exists
+      if (filters.subServicioId) {
+        queryParams.append('subServicioId', filters.subServicioId);
+        
+        // Add subUbicacionId if exists
+        if (filters.subUbicacionId) {
+          queryParams.append('subUbicacionId', filters.subUbicacionId);
+        }
+        
+        // Add parameters to URL
+        if (queryParams.toString()) {
+          url += `?${queryParams.toString()}`;
+        }
+      }
+    }
+    // Filter by service (compatibility)
+    else if (filters.servicio) {
+      url = `${this.apiUrl}/pedido/servicio/${encodeURIComponent(filters.servicio)}`;
+    }
+    // Filter by status
+    else if (filters.estado && filters.estado !== 'todos') {
+      url = `${this.apiUrl}/pedido/estado/${filters.estado}`;
+    }
 
-  return await response.json();
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Cache-Control': 'no-cache'
+      }
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('userRole');
+        window.location.href = '/login';
+        return [];
+      }
+      throw new Error(`Error fetching orders: ${response.status}`);
+    }
+
+    return await response.json();
+  },
+
+  // Fetch order by ID
+  async fetchOrderById(id: string): Promise<Order> {
+    const token = getAuthToken();
+    if (!token) throw new Error("No authentication token");
+
+    const response = await fetch(`${this.apiUrl}/pedido/${id}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Cache-Control': 'no-cache'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error fetching order: ${response.status}`);
+    }
+
+    return await response.json();
+  },
+
+  // Fetch supervisors
+  async fetchSupervisors(): Promise<User[]> {
+    const token = getAuthToken();
+    if (!token) throw new Error("No authentication token");
+
+    const response = await fetch(`${this.apiUrl}/auth/supervisors`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Cache-Control': 'no-cache'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error fetching supervisors: ${response.status}`);
+    }
+
+    const result = await response.json();
+    return result.supervisors || [];
+  },
+
+  // Fetch products
+  async fetchProducts(): Promise<Product[]> {
+    const token = getAuthToken();
+    if (!token) throw new Error("No authentication token");
+
+    const response = await fetch(`${this.apiUrl}/producto`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Cache-Control': 'no-cache'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error fetching products: ${response.status}`);
+    }
+
+    const responseData = await response.json();
+    return responseData.items || responseData;
+  },
+
+  // Fetch single product by ID
+  async fetchProductById(productId: string): Promise<Product | null> {
+    const token = getAuthToken();
+    if (!token) throw new Error("No authentication token");
+
+    const response = await fetch(`${this.apiUrl}/producto/${productId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Cache-Control': 'no-cache'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error fetching product: ${response.status}`);
+    }
+
+    return await response.json();
+  },
+
+  // Fetch all clients
+  async fetchClients(): Promise<Client[]> {
+    const token = getAuthToken();
+    if (!token) throw new Error("No authentication token");
+
+    const response = await fetch(`${this.apiUrl}/cliente`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Cache-Control': 'no-cache'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error fetching clients: ${response.status}`);
+    }
+
+    return await response.json();
+  },
+
+  // Fetch clients by supervisor
+  async fetchClientsBySupervisor(supervisorId: string): Promise<Client[]> {
+    const token = getAuthToken();
+    if (!token) throw new Error("No authentication token");
+
+    const response = await fetch(`${this.apiUrl}/cliente/user/${supervisorId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Cache-Control': 'no-cache'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error fetching clients: ${response.status}`);
+    }
+
+    return await response.json();
+  },
+
+  // Create order
+  async createOrder(data: any): Promise<Order> {
+    const token = getAuthToken();
+    if (!token) throw new Error("No authentication token");
+
+    // Create complete structure for backend
+    const orderData = {
+      // User information
+      userId: data.userId,
+      supervisorId: data.supervisorId,
+      
+      // Hierarchical client structure
+      cliente: {
+        clienteId: data.clienteId,
+        subServicioId: data.subServicioId || undefined,
+        subUbicacionId: data.subUbicacionId || undefined,
+        nombreCliente: data.nombreCliente,
+        nombreSubServicio: data.nombreSubServicio || undefined,
+        nombreSubUbicacion: data.nombreSubUbicacion || undefined
+      },
+      
+      // Compatibility fields
+      servicio: data.servicio,
+      seccionDelServicio: data.seccionDelServicio || "",
+      
+      // Products and details
+      productos: data.productos.map(p => ({
+        productoId: typeof p.productoId === 'object' && p.productoId ? p.productoId._id : p.productoId,
+        cantidad: p.cantidad,
+        precioUnitario: p.precio || p.precioUnitario // Send current price
+      })),
+      
+      detalle: data.detalle || "",
+      estado: data.estado || 'pendiente'
+    };
+
+    const response = await fetch(`${this.apiUrl}/pedido`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(orderData)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.mensaje || `Error creating order: ${response.status}`);
+    }
+
+    return await response.json();
+  },
+
+  // Update order
+  async updateOrder(id: string, data: any): Promise<Order> {
+    const token = getAuthToken();
+    if (!token) throw new Error("No authentication token");
+
+    // Create complete structure for backend (similar to createOrder)
+    const orderData = {
+      // User information
+      userId: data.userId,
+      supervisorId: data.supervisorId,
+      
+      // Hierarchical client structure
+      cliente: {
+        clienteId: data.clienteId,
+        subServicioId: data.subServicioId || undefined,
+        subUbicacionId: data.subUbicacionId || undefined,
+        nombreCliente: data.nombreCliente,
+        nombreSubServicio: data.nombreSubServicio || undefined,
+        nombreSubUbicacion: data.nombreSubUbicacion || undefined
+      },
+      
+      // Compatibility fields
+      servicio: data.servicio,
+      seccionDelServicio: data.seccionDelServicio || "",
+      
+      // Products and details
+      productos: data.productos.map(p => ({
+        productoId: typeof p.productoId === 'object' && p.productoId ? p.productoId._id : p.productoId,
+        cantidad: p.cantidad,
+        precioUnitario: p.precio || p.precioUnitario
+      })),
+      
+      detalle: data.detalle || "",
+      estado: data.estado || 'pendiente'
+    };
+
+    const response = await fetch(`${this.apiUrl}/pedido/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(orderData)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.mensaje || `Error updating order: ${response.status}`);
+    }
+
+    return await response.json();
+  },
+
+  // Delete order
+  async deleteOrder(id: string): Promise<any> {
+    const token = getAuthToken();
+    if (!token) throw new Error("No authentication token");
+
+    const response = await fetch(`${this.apiUrl}/pedido/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.mensaje || `Error deleting order: ${response.status}`);
+    }
+
+    return await response.json();
+  },
+
+  // Fetch current user
+  async fetchCurrentUser(): Promise<User> {
+    const token = getAuthToken();
+    if (!token) throw new Error("No authentication token");
+
+    const response = await fetch(`${this.apiUrl}/auth/me`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Cache-Control': 'no-cache'
+      }
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('userRole');
+        window.location.href = '/login';
+        return null;
+      }
+      throw new Error(`Error fetching user data: ${response.status}`);
+    }
+
+    const result = await response.json();
+    return result.user;
+  },
+
+  // Update order status
+  async updateOrderStatus(id: string, status: string): Promise<Order> {
+    const token = getAuthToken();
+    if (!token) throw new Error("No authentication token");
+
+    // First get the current order
+    const orderResponse = await fetch(`${this.apiUrl}/pedido/${id}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Cache-Control': 'no-cache'
+      }
+    });
+
+    if (!orderResponse.ok) {
+      throw new Error(`Error fetching order: ${orderResponse.status}`);
+    }
+
+    const order = await orderResponse.json();
+    
+    // Update only the status field
+    const updateResponse = await fetch(`${this.apiUrl}/pedido/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        ...order,
+        estado: status
+      })
+    });
+
+    if (!updateResponse.ok) {
+      const errorData = await updateResponse.json();
+      throw new Error(errorData.mensaje || `Error updating status: ${updateResponse.status}`);
+    }
+
+    return await updateResponse.json();
+  },
+
+  // Download receipt
+  async downloadReceipt(id: string): Promise<void> {
+    const token = getAuthToken();
+    if (!token) throw new Error("No authentication token");
+
+    // Create request to get receipt with authentication token
+    const response = await fetch(`${this.apiUrl}/downloads/remito/${id}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error downloading receipt: ${response.status}`);
+    }
+
+    // Get the blob (PDF file)
+    const blob = await response.blob();
+    
+    // Create a temporary URL for the blob
+    const url = window.URL.createObjectURL(blob);
+    
+    // Create a temporary <a> element for download
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `remito_${id}.pdf`;
+    
+    // Temporarily add to DOM and click
+    document.body.appendChild(link);
+    link.click();
+    
+    // Clean up
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(link);
+  }
 };
 
-// Función para obtener un pedido por ID
-const fetchOrderById = async (id: string) => {
-  const token = getAuthToken();
-  if (!token) throw new Error("No hay token de autenticación");
+// ======== HELPER COMPONENTS ========
 
-  const response = await fetch(`${apiUrl}/pedido/${id}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Cache-Control': 'no-cache'
-    }
-  });
-
-  if (!response.ok) {
-    throw new Error(`Error al obtener pedido: ${response.status}`);
-  }
-
-  return await response.json();
-};
-
-// Función para obtener usuarios (supervisores)
-const fetchSupervisors = async () => {
-  const token = getAuthToken();
-  if (!token) throw new Error("No hay token de autenticación");
-
-  const response = await fetch(`${apiUrl}/auth/supervisors`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Cache-Control': 'no-cache'
-    }
-  });
-
-  if (!response.ok) {
-    throw new Error(`Error al obtener supervisores: ${response.status}`);
-  }
-
-  return await response.json();
-};
-
-// Función para obtener productos
-const fetchProducts = async () => {
-  const token = getAuthToken();
-  if (!token) throw new Error("No hay token de autenticación");
-
-  const response = await fetch(`${apiUrl}/producto`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Cache-Control': 'no-cache'
-    }
-  });
-
-  if (!response.ok) {
-    throw new Error(`Error al obtener productos: ${response.status}`);
-  }
-
-  const responseData = await response.json();
-  return responseData.items || responseData;
-};
-
-// Función para obtener clientes por supervisor
-const fetchClientsBySupervisor = async (supervisorId: string) => {
-  const token = getAuthToken();
-  if (!token) throw new Error("No hay token de autenticación");
-
-  const response = await fetch(`${apiUrl}/cliente/user/${supervisorId}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Cache-Control': 'no-cache'
-    }
-  });
-
-  if (!response.ok) {
-    throw new Error(`Error al obtener clientes: ${response.status}`);
-  }
-
-  return await response.json();
-};
-
-// Función para crear un pedido
-const createOrder = async (data: any) => {
-  const token = getAuthToken();
-  if (!token) throw new Error("No hay token de autenticación");
-
-  const response = await fetch(`${apiUrl}/pedido`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify(data)
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.mensaje || `Error al crear pedido: ${response.status}`);
-  }
-
-  return await response.json();
-};
-
-// Función para actualizar un pedido
-const updateOrder = async ({ id, data }: { id: string; data: any }) => {
-  const token = getAuthToken();
-  if (!token) throw new Error("No hay token de autenticación");
-
-  const response = await fetch(`${apiUrl}/pedido/${id}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify(data)
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.mensaje || `Error al actualizar pedido: ${response.status}`);
-  }
-
-  return await response.json();
-};
-
-// Función para eliminar un pedido
-const deleteOrder = async (id: string) => {
-  const token = getAuthToken();
-  if (!token) throw new Error("No hay token de autenticación");
-
-  const response = await fetch(`${apiUrl}/pedido/${id}`, {
-    method: 'DELETE',
-    headers: {
-      'Authorization': `Bearer ${token}`
-    }
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.mensaje || `Error al eliminar pedido: ${response.status}`);
-  }
-
-  return await response.json();
-};
-
-// Función para obtener usuario actual
-const fetchCurrentUser = async () => {
-  const token = getAuthToken();
-  if (!token) throw new Error("No hay token de autenticación");
-
-  const response = await fetch(`${apiUrl}/auth/me`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Cache-Control': 'no-cache'
-    }
-  });
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('userRole');
-      window.location.href = '/login';
-      return null;
-    }
-    throw new Error(`Error al obtener datos del usuario: ${response.status}`);
-  }
-
-  return await response.json();
-};
-
-// Función para cambiar estado del pedido
-const updateOrderStatus = async ({ id, status }: { id: string; status: string }) => {
-  const token = getAuthToken();
-  if (!token) throw new Error("No hay token de autenticación");
-
-  // Obtener primero el pedido actual
-  const orderResponse = await fetch(`${apiUrl}/pedido/${id}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Cache-Control': 'no-cache'
-    }
-  });
-
-  if (!orderResponse.ok) {
-    throw new Error(`Error al obtener pedido: ${orderResponse.status}`);
-  }
-
-  const order = await orderResponse.json();
-  
-  // Actualizar solo el campo estado
-  const updateResponse = await fetch(`${apiUrl}/pedido/${id}`, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({
-      ...order,
-      estado: status
-    })
-  });
-
-  if (!updateResponse.ok) {
-    const errorData = await updateResponse.json();
-    throw new Error(errorData.mensaje || `Error al actualizar estado: ${updateResponse.status}`);
-  }
-
-  return await updateResponse.json();
-};
-
-// ======== COMPONENTES AUXILIARES ========
-
-// Esqueleto de carga para los pedidos
+// Loading skeleton for orders
 const OrdersSkeleton = ({ count = 3 }) => (
   <div className="space-y-4">
     {Array(count).fill(0).map((_, i) => (
@@ -431,7 +641,7 @@ const OrdersSkeleton = ({ count = 3 }) => (
   </div>
 );
 
-// Componente para detalles de un producto en un pedido
+// Component for product details in an order
 const ProductDetail = React.memo(({
   item,
   productsMap,
@@ -446,7 +656,7 @@ const ProductDetail = React.memo(({
     precio: number;
     loaded: boolean;
   }>({
-    nombre: "Cargando...",
+    nombre: "Loading...",
     precio: 0,
     loaded: false
   });
@@ -455,7 +665,7 @@ const ProductDetail = React.memo(({
 
   useEffect(() => {
     const fetchProductDetails = async () => {
-      // Extraer el ID del producto de forma segura
+      // Extract product ID safely
       const productId = typeof item.productoId === 'object' && item.productoId
         ? item.productoId._id
         : (typeof item.productoId === 'string' ? item.productoId : '');
@@ -463,7 +673,7 @@ const ProductDetail = React.memo(({
       if (!productId) {
         if (mountedRef.current) {
           setProductDetail({
-            nombre: "ID de producto no válido",
+            nombre: "Invalid product ID",
             precio: 0,
             loaded: true
           });
@@ -471,51 +681,51 @@ const ProductDetail = React.memo(({
         return;
       }
 
-      // Si ya tenemos información directamente en el item
-      if (item.nombre && typeof item.precio === 'number') {
+      // If we already have information directly in the item
+      if (item.nombre && (typeof item.precio === 'number' || typeof item.precioUnitario === 'number')) {
         if (mountedRef.current) {
           setProductDetail({
             nombre: item.nombre,
-            precio: item.precio,
+            precio: item.precio || item.precioUnitario || 0,
             loaded: true
           });
         }
         return;
       }
 
-      // Si el producto está en el mapa de productos
+      // If the product is in the products map
       if (productsMap[productId]) {
         if (mountedRef.current) {
           setProductDetail({
             nombre: productsMap[productId].nombre,
-            precio: productsMap[productId].precio,
+            precio: item.precioUnitario || productsMap[productId].precio,
             loaded: true
           });
         }
         return;
       }
 
-      // Si no lo tenemos, cargar del servidor
+      // If we don't have it, load from server
       try {
         const product = await onProductLoad(productId);
         if (mountedRef.current && product) {
           setProductDetail({
             nombre: product.nombre,
-            precio: product.precio,
+            precio: item.precioUnitario || product.precio,
             loaded: true
           });
         } else if (mountedRef.current) {
           setProductDetail({
-            nombre: "Producto no encontrado",
+            nombre: "Product not found",
             precio: 0,
             loaded: true
           });
         }
       } catch (error) {
-        console.error("Error cargando detalles del producto:", error);
+        console.error("Error loading product details:", error);
         if (mountedRef.current) {
           setProductDetail({
-            nombre: "Error al cargar",
+            nombre: "Error loading",
             precio: 0,
             loaded: true
           });
@@ -563,7 +773,7 @@ const ProductDetail = React.memo(({
   );
 });
 
-// Componente para detalles de un producto en la vista móvil
+// Component for product details in mobile view
 const ProductDetailMobile = React.memo(({
   item,
   productsMap,
@@ -578,7 +788,7 @@ const ProductDetailMobile = React.memo(({
     precio: number;
     loaded: boolean;
   }>({
-    nombre: "Cargando...",
+    nombre: "Loading...",
     precio: 0,
     loaded: false
   });
@@ -587,7 +797,7 @@ const ProductDetailMobile = React.memo(({
 
   useEffect(() => {
     const fetchProductDetails = async () => {
-      // Extraer el ID del producto de forma segura
+      // Extract product ID safely
       const productId = typeof item.productoId === 'object' && item.productoId
         ? item.productoId._id
         : (typeof item.productoId === 'string' ? item.productoId : '');
@@ -595,7 +805,7 @@ const ProductDetailMobile = React.memo(({
       if (!productId) {
         if (mountedRef.current) {
           setProductDetail({
-            nombre: "ID de producto no válido",
+            nombre: "Invalid product ID",
             precio: 0,
             loaded: true
           });
@@ -603,51 +813,51 @@ const ProductDetailMobile = React.memo(({
         return;
       }
 
-      // Si ya tenemos información directamente en el item
-      if (item.nombre && typeof item.precio === 'number') {
+      // If we already have information directly in the item
+      if (item.nombre && (typeof item.precio === 'number' || typeof item.precioUnitario === 'number')) {
         if (mountedRef.current) {
           setProductDetail({
             nombre: item.nombre,
-            precio: item.precio,
+            precio: item.precio || item.precioUnitario || 0,
             loaded: true
           });
         }
         return;
       }
 
-      // Si el producto está en el mapa de productos
+      // If the product is in the products map
       if (productsMap[productId]) {
         if (mountedRef.current) {
           setProductDetail({
             nombre: productsMap[productId].nombre,
-            precio: productsMap[productId].precio,
+            precio: item.precioUnitario || productsMap[productId].precio,
             loaded: true
           });
         }
         return;
       }
 
-      // Si no lo tenemos, cargar del servidor
+      // If we don't have it, load from server
       try {
         const product = await onProductLoad(productId);
         if (mountedRef.current && product) {
           setProductDetail({
             nombre: product.nombre,
-            precio: product.precio,
+            precio: item.precioUnitario || product.precio,
             loaded: true
           });
         } else if (mountedRef.current) {
           setProductDetail({
-            nombre: "Producto no encontrado",
+            nombre: "Product not found",
             precio: 0,
             loaded: true
           });
         }
       } catch (error) {
-        console.error("Error cargando detalles del producto:", error);
+        console.error("Error loading product details:", error);
         if (mountedRef.current) {
           setProductDetail({
-            nombre: "Error al cargar",
+            nombre: "Error loading",
             precio: 0,
             loaded: true
           });
@@ -691,7 +901,7 @@ const ProductDetailMobile = React.memo(({
   );
 });
 
-// Componente para calcular el total de un pedido
+// Component to calculate order total
 const OrderTotal = React.memo(({
   order,
   productsMap,
@@ -714,7 +924,7 @@ const OrderTotal = React.memo(({
       let sum = 0;
       let pendingProducts = [];
 
-      // Primero calcular con los datos que ya tenemos
+      // First calculate with the data we already have
       for (const item of order.productos) {
         const productId = typeof item.productoId === 'object' && item.productoId
           ? item.productoId._id
@@ -722,25 +932,25 @@ const OrderTotal = React.memo(({
 
         if (!productId) continue;
 
-        // Si el item ya tiene precio, usarlo
-        if (typeof item.precio === 'number') {
-          sum += item.precio * (typeof item.cantidad === 'number' ? item.cantidad : 0);
+        // If the item already has price or unit price, use it
+        if (typeof item.precio === 'number' || typeof item.precioUnitario === 'number') {
+          sum += (item.precio || item.precioUnitario || 0) * (typeof item.cantidad === 'number' ? item.cantidad : 0);
           continue;
         }
 
-        // Si el producto está en el mapa, usar su precio
+        // If the product is in the map, use its price
         if (productsMap[productId]) {
           sum += productsMap[productId].precio * (typeof item.cantidad === 'number' ? item.cantidad : 0);
           continue;
         }
 
-        // Si no tenemos el precio, agregar a pendientes
+        // If we don't have the price, add to pending
         pendingProducts.push(productId);
       }
 
-      // Si hay productos pendientes, cargarlos
+      // If there are pending products, load them
       if (pendingProducts.length > 0) {
-        // Cargamos en paralelo, pero con un límite de 5 a la vez
+        // Load in parallel, but with a limit of 5 at a time
         const batchSize = 5;
         for (let i = 0; i < pendingProducts.length; i += batchSize) {
           const batch = pendingProducts.slice(i, i + batchSize);
@@ -749,13 +959,13 @@ const OrderTotal = React.memo(({
           try {
             const products = await Promise.all(productPromises);
 
-            // Actualizar suma con productos cargados
+            // Update sum with loaded products
             for (let j = 0; j < products.length; j++) {
               const product = products[j];
               const productId = batch[j];
 
               if (product) {
-                // Encontrar el item correspondiente
+                // Find the corresponding item
                 const item = order.productos.find(p => {
                   const itemId = typeof p.productoId === 'object' && p.productoId
                     ? p.productoId._id
@@ -764,12 +974,14 @@ const OrderTotal = React.memo(({
                 });
 
                 if (item) {
-                  sum += product.precio * (typeof item.cantidad === 'number' ? item.cantidad : 0);
+                  // Use the product's unit price if it exists, or the catalog price
+                  const precio = item.precioUnitario || product.precio;
+                  sum += precio * (typeof item.cantidad === 'number' ? item.cantidad : 0);
                 }
               }
             }
           } catch (error) {
-            console.error("Error cargando productos para cálculo:", error);
+            console.error("Error loading products for calculation:", error);
           }
         }
       }
@@ -791,45 +1003,28 @@ const OrderTotal = React.memo(({
   return <span>${total.toFixed(2)}</span>;
 });
 
-// Componente para mostrar el estado del pedido
+// Component to display order status
 const OrderStatusBadge = ({ status, onStatusChange, orderId }) => {
-  const { addNotification } = useNotification();
-  const queryClient = useQueryClient();
-  
-  // Mutación para actualizar estado
-  const statusMutation = useMutation(
-    updateOrderStatus,
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(['orders']);
-        addNotification("Estado actualizado correctamente", "success");
-      },
-      onError: (error) => {
-        addNotification(`Error al actualizar estado: ${error.message}`, "error");
-      }
-    }
-  );
-
-  // Definir colores y etiquetas según el estado
+  // Define colors and labels based on status
   const getStatusConfig = (status) => {
     switch(status) {
       case 'aprobado':
         return {
           color: 'bg-green-100 text-green-800 border-green-300',
           icon: <CheckCircle className="w-3.5 h-3.5 mr-1" />,
-          label: 'Aprobado'
+          label: 'Approved'
         };
       case 'rechazado':
         return {
           color: 'bg-red-100 text-red-800 border-red-300',
           icon: <XCircle className="w-3.5 h-3.5 mr-1" />,
-          label: 'Rechazado'
+          label: 'Rejected'
         };
       default:
         return {
           color: 'bg-yellow-100 text-yellow-800 border-yellow-300',
           icon: <Clock className="w-3.5 h-3.5 mr-1" />,
-          label: 'Pendiente'
+          label: 'Pending'
         };
     }
   };
@@ -848,68 +1043,78 @@ const OrderStatusBadge = ({ status, onStatusChange, orderId }) => {
   );
 };
 
-// ======== COMPONENTE PRINCIPAL ========
+// ======== MAIN COMPONENT ========
 
 const OrdersSection = () => {
-  const apiUrl = '/api';
   const { addNotification } = useNotification();
   const queryClient = useQueryClient();
 
-  // Estado para filtros
+  // Filter state
   const [searchTerm, setSearchTerm] = useState('');
   const [dateFilter, setDateFilter] = useState({ from: '', to: '' });
   const [statusFilter, setStatusFilter] = useState('todos');
   const [supervisorFilter, setSupervisorFilter] = useState('');
   const [serviceFilter, setServiceFilter] = useState('');
+  const [clientFilter, setClientFilter] = useState<{
+    clienteId?: string;
+    subServicioId?: string;
+    subUbicacionId?: string;
+  }>({});
 
-  // Estado UI 
+  // UI state
   const [currentPage, setCurrentPage] = useState(1);
   const [orderDetailsOpen, setOrderDetailsOpen] = useState({});
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
-  // Estado modales
+  // Modal state
   const [createOrderModalOpen, setCreateOrderModalOpen] = useState(false);
   const [selectProductModalOpen, setSelectProductModalOpen] = useState(false);
-  const [selectSectionModalOpen, setSelectSectionModalOpen] = useState(false);
+  const [selectClientModalOpen, setSelectClientModalOpen] = useState(false);
+  const [selectSubServiceModalOpen, setSelectSubServiceModalOpen] = useState(false);
+  const [selectSubLocationModalOpen, setSelectSubLocationModalOpen] = useState(false);
   const [deleteConfirmModalOpen, setDeleteConfirmModalOpen] = useState(false);
   const [orderToDelete, setOrderToDelete] = useState(null);
   const [supervisorSelectOpen, setSupervisorSelectOpen] = useState(false);
 
-  // Estado de formulario
+  // Form state
   const [currentOrderId, setCurrentOrderId] = useState(null);
-  const [orderForm, setOrderForm] = useState({
+  const [orderForm, setOrderForm] = useState<OrderForm>({
+    clienteId: '',
+    nombreCliente: '',
     servicio: '',
     seccionDelServicio: '',
     userId: '',
     productos: [],
-    detalle: '',
-    estado: 'pendiente'
+    detalle: ''
   });
   const [selectedProduct, setSelectedProduct] = useState('');
   const [productQuantity, setProductQuantity] = useState(1);
   const [selectedSupervisor, setSelectedSupervisor] = useState(null);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [selectedSubService, setSelectedSubService] = useState<SubServicio | null>(null);
+  const [selectedSubLocation, setSelectedSubLocation] = useState<SubUbicacion | null>(null);
 
-  // Referencias
+  // References
   const mobileListRef = useRef(null);
   const productLoadQueue = useRef(new Set());
   const isProcessingQueue = useRef(false);
 
   // ======== REACT QUERY HOOKS ========
 
-  // Cargar usuario actual
+  // Load current user
   const { 
     data: currentUser,
     isLoading: isLoadingUser
-  } = useQuery('currentUser', fetchCurrentUser, {
+  } = useQuery('currentUser', OrdersService.fetchCurrentUser, {
     refetchOnWindowFocus: false,
     onSuccess: (data) => {
-      // Si es admin o supervisor de supervisores, cargar la lista de supervisores
+      // If admin or supervisor of supervisors, load supervisors list
       if (data?.role === 'admin' || data?.role === 'supervisor_de_supervisores') {
-        queryClient.prefetchQuery('supervisors', fetchSupervisors);
+        queryClient.prefetchQuery('supervisors', OrdersService.fetchSupervisors);
       }
       
-      // Actualizar ID de usuario en formulario si no hay supervisor seleccionado
+      // Update user ID in form if no supervisor selected
       if (!selectedSupervisor) {
         setOrderForm(prev => ({
           ...prev,
@@ -919,130 +1124,139 @@ const OrdersSection = () => {
     }
   });
 
-  // Determinar si el usuario actual es admin o supervisor de supervisores
+  // Determine if current user is admin or supervisor of supervisors
   const isAdminOrSuperSupervisor = currentUser?.role === 'admin' || currentUser?.role === 'supervisor_de_supervisores';
 
-  // Cargar supervisores
+  // Load supervisors
   const { 
     data: supervisors = [],
     isLoading: isLoadingSupervisors
-  } = useQuery('supervisors', fetchSupervisors, {
+  } = useQuery('supervisors', OrdersService.fetchSupervisors, {
     enabled: isAdminOrSuperSupervisor,
     refetchOnWindowFocus: false
   });
 
-  // Cargar pedidos
+  // Load orders
   const {
     data: orders = [],
     isLoading: isLoadingOrders,
     isRefetching: isRefreshingOrders,
     refetch: refetchOrders
   } = useQuery(
-    ['orders', dateFilter, statusFilter, supervisorFilter, serviceFilter],
-    () => fetchOrders({
+    ['orders', dateFilter, statusFilter, supervisorFilter, serviceFilter, clientFilter],
+    () => OrdersService.fetchOrders({
       from: dateFilter.from,
       to: dateFilter.to,
       estado: statusFilter !== 'todos' ? statusFilter : undefined,
       supervisor: supervisorFilter || undefined,
-      servicio: serviceFilter || undefined
+      servicio: serviceFilter || undefined,
+      clienteId: clientFilter.clienteId,
+      subServicioId: clientFilter.subServicioId,
+      subUbicacionId: clientFilter.subUbicacionId
     }),
     {
       refetchOnWindowFocus: false,
       onError: (error) => {
-        addNotification(`Error al cargar pedidos: ${error.message}`, "error");
+        addNotification(`Error loading orders: ${error.message}`, "error");
       }
     }
   );
 
-  // Cargar productos
+  // Load products
   const {
     data: products = [],
     isLoading: isLoadingProducts
-  } = useQuery('products', fetchProducts, {
+  } = useQuery('products', OrdersService.fetchProducts, {
     refetchOnWindowFocus: false,
     onError: (error) => {
-      addNotification(`Error al cargar productos: ${error.message}`, "warning");
+      addNotification(`Error loading products: ${error.message}`, "warning");
     }
   });
 
-  // Cargar clientes por supervisor
+  // Load all clients
+  const {
+    data: allClients = [],
+    isLoading: isLoadingAllClients
+  } = useQuery('allClients', OrdersService.fetchClients, {
+    refetchOnWindowFocus: false,
+    onError: (error) => {
+      addNotification(`Error loading all clients: ${error.message}`, "warning");
+    }
+  });
+
+  // Load clients by supervisor
   const {
     data: clients = [],
     isLoading: isLoadingClients
   } = useQuery(
     ['clients', selectedSupervisor || currentUser?._id],
-    () => fetchClientsBySupervisor(selectedSupervisor || currentUser?._id),
+    () => OrdersService.fetchClientsBySupervisor(selectedSupervisor || currentUser?._id),
     {
       enabled: !!selectedSupervisor || !!currentUser?._id,
       refetchOnWindowFocus: false,
       onError: (error) => {
-        addNotification(`Error al cargar clientes: ${error.message}`, "warning");
+        addNotification(`Error loading clients: ${error.message}`, "warning");
       }
     }
   );
 
-  // Mutaciones para CRUD
-  const createOrderMutation = useMutation(createOrder, {
+  // CRUD Mutations
+  const createOrderMutation = useMutation(OrdersService.createOrder, {
     onSuccess: () => {
       queryClient.invalidateQueries(['orders']);
       resetOrderForm();
       setCreateOrderModalOpen(false);
-      addNotification("Pedido creado correctamente", "success");
+      addNotification("Order created successfully", "success");
     },
     onError: (error) => {
-      addNotification(`Error al crear pedido: ${error.message}`, "error");
+      addNotification(`Error creating order: ${error.message}`, "error");
     }
   });
 
   const updateOrderMutation = useMutation(
-    ({ id, data }) => updateOrder({ id, data }),
+    ({ id, data }) => OrdersService.updateOrder(id, data),
     {
       onSuccess: () => {
         queryClient.invalidateQueries(['orders']);
         resetOrderForm();
         setCreateOrderModalOpen(false);
-        addNotification("Pedido actualizado correctamente", "success");
+        addNotification("Order updated successfully", "success");
       },
       onError: (error) => {
-        addNotification(`Error al actualizar pedido: ${error.message}`, "error");
+        addNotification(`Error updating order: ${error.message}`, "error");
       }
     }
   );
 
-  const deleteOrderMutation = useMutation(deleteOrder, {
+  const deleteOrderMutation = useMutation(OrdersService.deleteOrder, {
     onSuccess: () => {
       queryClient.invalidateQueries(['orders']);
       setOrderToDelete(null);
       setDeleteConfirmModalOpen(false);
-      addNotification("Pedido eliminado correctamente", "success");
+      addNotification("Order deleted successfully", "success");
     },
     onError: (error) => {
-      addNotification(`Error al eliminar pedido: ${error.message}`, "error");
+      addNotification(`Error deleting order: ${error.message}`, "error");
     }
   });
 
-  // ======== EFECTOS ========
+  const downloadReceiptMutation = useMutation(OrdersService.downloadReceipt, {
+    onSuccess: () => {
+      addNotification("Download started", "success");
+    },
+    onError: (error) => {
+      addNotification(`Error downloading receipt: ${error.message}`, "error");
+    }
+  });
 
-  // Efecto para cargar producto concreto
+  // ======== EFFECTS ========
+
+  // Effect to load specific product
   const fetchProductById = useCallback(async (productId) => {
     try {
-      const token = getAuthToken();
-      if (!token) throw new Error("No hay token de autenticación");
-
-      const response = await fetch(`${apiUrl}/producto/${productId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Cache-Control': 'no-cache'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error al obtener producto: ${response.status}`);
-      }
-
-      const product = await response.json();
+      const product = await OrdersService.fetchProductById(productId);
       
-      // Actualizar el mapa de productos
+      // Update products map
       queryClient.setQueryData('products', (oldData) => {
         const newProducts = [...(oldData || [])];
         const existingIndex = newProducts.findIndex(p => p._id === productId);
@@ -1058,12 +1272,12 @@ const OrdersSection = () => {
 
       return product;
     } catch (error) {
-      console.error(`Error cargando producto ${productId}:`, error);
+      console.error(`Error loading product ${productId}:`, error);
       return null;
     }
-  }, [apiUrl, queryClient]);
+  }, [queryClient]);
 
-  // Procesar cola de productos
+  // Process product queue
   const processProductQueue = useCallback(async () => {
     if (isProcessingQueue.current || productLoadQueue.current.size === 0) {
       return;
@@ -1076,7 +1290,7 @@ const OrdersSection = () => {
       const productIds = Array.from(productLoadQueue.current);
       productLoadQueue.current.clear();
 
-      // Obtener productos actuales del queryClient
+      // Get current products from queryClient
       const currentProducts = queryClient.getQueryData('products') || [];
       const productsMap = {};
       currentProducts.forEach(p => {
@@ -1085,34 +1299,34 @@ const OrdersSection = () => {
         }
       });
 
-      // Procesar en lotes
+      // Process in batches
       for (let i = 0; i < productIds.length; i += batchSize) {
         const batch = productIds.slice(i, i + batchSize);
         const filteredBatch = batch.filter(id => !productsMap[id]);
 
         if (filteredBatch.length === 0) continue;
 
-        // Cargar productos en paralelo
+        // Load products in parallel
         const productsPromises = filteredBatch.map(id => fetchProductById(id));
         await Promise.all(productsPromises);
       }
     } catch (error) {
-      console.error("Error procesando cola de productos:", error);
+      console.error("Error processing product queue:", error);
     } finally {
       isProcessingQueue.current = false;
 
-      // Si quedan productos en la cola, procesarlos
+      // If there are products left in the queue, process them
       if (productLoadQueue.current.size > 0) {
         setTimeout(processProductQueue, 100);
       }
     }
   }, [fetchProductById, queryClient]);
 
-  // Precarga de productos
+  // Prefetch products from orders
   const prefetchProductsFromOrders = useCallback((ordersData) => {
     if (!Array.isArray(ordersData) || ordersData.length === 0) return;
 
-    // Obtener productos actuales
+    // Get current products
     const currentProducts = queryClient.getQueryData('products') || [];
     const productsMap = {};
     currentProducts.forEach(p => {
@@ -1121,7 +1335,7 @@ const OrdersSection = () => {
       }
     });
 
-    // Limitar a los primeros 20 pedidos para no sobrecargar
+    // Limit to first 20 orders to avoid overloading
     const ordersToProcess = ordersData.slice(0, 20);
 
     ordersToProcess.forEach(order => {
@@ -1143,7 +1357,7 @@ const OrdersSection = () => {
     }
   }, [queryClient, processProductQueue]);
 
-  // Efecto para detectar cambios de tamaño de ventana
+  // Effect to detect window size changes
   useEffect(() => {
     const handleResize = () => {
       setWindowWidth(window.innerWidth);
@@ -1155,30 +1369,30 @@ const OrdersSection = () => {
     }
   }, []);
 
-  // Efecto para cargar productos de pedidos cuando se montan
+  // Effect to load products from orders when mounted
   useEffect(() => {
     if (orders && orders.length > 0) {
       prefetchProductsFromOrders(orders);
     }
   }, [orders, prefetchProductsFromOrders]);
 
-  // ======== FUNCIONES DE MANEJO ========
+  // ======== HANDLER FUNCTIONS ========
 
-  // Obtener información de usuario
+  // Get user information
   const getUserInfo = useCallback((userId) => {
-    // Si es un objeto con usuario y nombre
+    // If it's an object with username and name
     if (typeof userId === 'object' && userId) {
       return {
-        usuario: userId.usuario || "Usuario no disponible",
+        usuario: userId.usuario || "User not available",
         name: userId.usuario || (userId.nombre
           ? `${userId.nombre} ${userId.apellido || ''}`
-          : "Usuario no disponible")
+          : "User not available")
       };
     }
     
-    // Si es un string (ID), buscar en supervisores
+    // If it's a string (ID), look it up in supervisors
     if (typeof userId === 'string') {
-      // Buscar en supervisores
+      // Look in supervisors
       const supervisorMatch = supervisors.find(s => s._id === userId);
       if (supervisorMatch) {
         return {
@@ -1189,128 +1403,102 @@ const OrdersSection = () => {
         };
       }
       
-      // Si es el usuario actual
+      // If it's the current user
       if (currentUser && currentUser._id === userId) {
         return {
-          usuario: currentUser.usuario || "Usuario actual",
+          usuario: currentUser.usuario || "Current user",
           name: currentUser.usuario || (currentUser.nombre
             ? `${currentUser.nombre} ${currentUser.apellido || ''}`
-            : "Usuario actual")
+            : "Current user")
         };
       }
     }
     
-    // Si no se encuentra información
-    return { usuario: "Usuario no disponible", name: "Usuario no disponible" };
+    // If no information is found
+    return { usuario: "User not available", name: "User not available" };
   }, [supervisors, currentUser]);
 
-  // Crear un nuevo pedido
+  // Create a new order
   const handleCreateOrder = async () => {
-    // Validaciones
-    if (!orderForm.servicio) {
-      addNotification("Debe seleccionar un cliente", "warning");
+    // Validate basic structure
+    if (!orderForm.clienteId || !orderForm.nombreCliente) {
+      addNotification("You must select a client", "warning");
       return;
     }
 
     if (!orderForm.productos || orderForm.productos.length === 0) {
-      addNotification("Debe agregar al menos un producto", "warning");
+      addNotification("You must add at least one product", "warning");
       return;
     }
 
-    // Validar que haya un usuario asignado (supervisor seleccionado o usuario actual)
+    // Validate that there is an assigned user (selected supervisor or current user)
     if (!orderForm.userId) {
-      addNotification("Error: No hay usuario asignado", "error");
+      addNotification("Error: No user assigned", "error");
       return;
     }
 
-    // Preparar datos del pedido
-    const orderData = {
-      userId: orderForm.userId,
-      servicio: orderForm.servicio,
-      seccionDelServicio: orderForm.seccionDelServicio || "",
-      detalle: orderForm.detalle || " ",
-      productos: orderForm.productos.map(p => ({
-        productoId: typeof p.productoId === 'object' && p.productoId ? p.productoId._id : p.productoId,
-        cantidad: p.cantidad
-      })),
-      estado: orderForm.estado || 'pendiente'
-    };
-
-    // Crear pedido con mutación
-    createOrderMutation.mutate(orderData);
+    // Create order with mutation
+    createOrderMutation.mutate(orderForm);
   };
 
-  // Actualizar un pedido existente
+  // Update an existing order
   const handleUpdateOrder = async () => {
     if (!currentOrderId) {
-      addNotification("No se ha seleccionado un pedido para actualizar", "error");
+      addNotification("No order selected for update", "error");
       return;
     }
 
-    // Preparar datos de actualización
-    const updateData = {
-      userId: orderForm.userId, // Ahora incluimos el userId para poder cambiar supervisor
-      servicio: orderForm.servicio,
-      seccionDelServicio: orderForm.seccionDelServicio || "",
-      detalle: orderForm.detalle || " ",
-      productos: orderForm.productos.map(p => ({
-        productoId: typeof p.productoId === 'object' && p.productoId ? p.productoId._id : p.productoId,
-        cantidad: p.cantidad
-      })),
-      estado: orderForm.estado || 'pendiente'
-    };
-
-    // Actualizar pedido con mutación
-    updateOrderMutation.mutate({ id: currentOrderId, data: updateData });
+    // Update order with mutation
+    updateOrderMutation.mutate({ id: currentOrderId, data: orderForm });
   };
 
-  // Preparar eliminar pedido
+  // Prepare to delete order
   const confirmDeleteOrder = (orderId) => {
     setOrderToDelete(orderId);
     setDeleteConfirmModalOpen(true);
   };
 
-  // Eliminar pedido (llamada en diálogo de confirmación)
+  // Delete order
   const handleDeleteOrder = () => {
     if (!orderToDelete) return;
     deleteOrderMutation.mutate(orderToDelete);
   };
 
-  // Preparar editar pedido
+  // Prepare to edit order
   const handleEditOrder = async (order) => {
     setCurrentOrderId(order._id);
 
     try {
-      // Determinar userId de forma segura
+      // Determine userId safely
       const userId = typeof order.userId === 'object' && order.userId
         ? order.userId._id
         : (typeof order.userId === 'string' ? order.userId : '');
 
-      // Si es un pedido de supervisor y no es el usuario actual, cargar sus clientes
+      // If it's a supervisor's order and not the current user, load their clients
       if (userId && userId !== currentUser?._id && isAdminOrSuperSupervisor) {
-        console.log(`Cargando clientes del supervisor ${userId} para edición`);
+        console.log(`Loading clients for supervisor ${userId} for editing`);
         setSelectedSupervisor(userId);
         
-        // Forzar recarga de clientes
+        // Force reload clients
         queryClient.invalidateQueries(['clients', userId]);
       }
 
-      // Preparar productos con nombres y precios
+      // Prepare products with names and prices
       const productos = order.productos.map(p => {
         const productId = typeof p.productoId === 'object' && p.productoId
           ? p.productoId._id
           : (typeof p.productoId === 'string' ? p.productoId : '');
 
         let nombre = p.nombre;
-        let precio = p.precio;
+        let precio = p.precio || p.precioUnitario;
 
-        // Si es un producto poblado, extraer datos
+        // If it's a populated product, extract data
         if (typeof p.productoId === 'object' && p.productoId) {
           nombre = nombre || p.productoId.nombre;
           precio = typeof precio === 'number' ? precio : p.productoId.precio;
         }
 
-        // Producto desde el catálogo
+        // Product from catalog
         const productsData = queryClient.getQueryData('products') || [];
         const productsCatalog = {};
         productsData.forEach(prod => {
@@ -1325,91 +1513,168 @@ const OrdersSection = () => {
         return {
           productoId: productId,
           cantidad: typeof p.cantidad === 'number' ? p.cantidad : 0,
-          nombre: nombre || "Producto no encontrado",
+          nombre: nombre || "Product not found",
           precio: typeof precio === 'number' ? precio : 0
         };
       });
 
-      // Actualizar formulario
+      // Find current client
+      let clienteData = null;
+      let subServicioData = null;
+      let subUbicacionData = null;
+
+      // If it has complete hierarchical structure
+      if (order.cliente && order.cliente.clienteId) {
+        // Find the client in the complete list
+        const clienteObject = typeof order.cliente.clienteId === 'string' 
+          ? allClients.find(c => c._id === order.cliente.clienteId)
+          : order.cliente.clienteId;
+          
+        clienteData = clienteObject || null;
+        
+        // Find the subservice if it exists
+        if (clienteData && order.cliente.subServicioId) {
+          const subServicioId = typeof order.cliente.subServicioId === 'string' 
+            ? order.cliente.subServicioId 
+            : order.cliente.subServicioId._id;
+            
+          subServicioData = clienteData.subServicios?.find(ss => ss._id === subServicioId) || null;
+          
+          // Find the sublocation if it exists
+          if (subServicioData && order.cliente.subUbicacionId) {
+            const subUbicacionId = typeof order.cliente.subUbicacionId === 'string' 
+              ? order.cliente.subUbicacionId 
+              : order.cliente.subUbicacionId._id;
+              
+            subUbicacionData = subServicioData.subUbicaciones?.find(su => su._id === subUbicacionId) || null;
+          }
+        }
+      }
+
+      // Update form with complete structure
       setOrderForm({
+        // Hierarchical client
+        clienteId: order.cliente?.clienteId?._id || order.cliente?.clienteId || '',
+        subServicioId: order.cliente?.subServicioId?._id || order.cliente?.subServicioId || undefined,
+        subUbicacionId: order.cliente?.subUbicacionId?._id || order.cliente?.subUbicacionId || undefined,
+        nombreCliente: order.cliente?.nombreCliente || order.servicio || '',
+        nombreSubServicio: order.cliente?.nombreSubServicio || order.seccionDelServicio || undefined,
+        nombreSubUbicacion: order.cliente?.nombreSubUbicacion || undefined,
+        
+        // Compatibility fields
         servicio: order.servicio || '',
         seccionDelServicio: order.seccionDelServicio || '',
+        
+        // User information
         userId: userId,
+        supervisorId: typeof order.supervisorId === 'object' ? order.supervisorId._id : order.supervisorId,
+        
+        // Products and status
         productos: productos,
         detalle: order.detalle || " ",
         estado: order.estado || 'pendiente'
       });
 
-      // Abrir modal
+      // Update selections
+      setSelectedClient(clienteData);
+      setSelectedSubService(subServicioData);
+      setSelectedSubLocation(subUbicacionData);
+
+      // Open modal
       setCreateOrderModalOpen(true);
     } catch (error) {
-      console.error("Error preparando edición de pedido:", error);
-      addNotification(`Error al preparar la edición del pedido: ${error.message}`, "error");
+      console.error("Error preparing order for editing:", error);
+      addNotification(`Error preparing the order for editing: ${error.message}`, "error");
     }
   };
 
-  // Seleccionar cliente
-  const handleClientChange = (clientId) => {
-    if (!clientId || clientId === "none") return;
+  // Select client
+  const handleClientSelect = (client) => {
+    if (!client) return;
 
-    const selectedClient = clients.find(c => c._id === clientId);
-    if (!selectedClient) {
-      console.error(`Cliente no encontrado: ${clientId}`);
-      addNotification("Cliente seleccionado no encontrado", "warning");
-      return;
-    }
+    // Update selected client state
+    setSelectedClient(client);
+    setSelectedSubService(null);
+    setSelectedSubLocation(null);
 
-    // Agrupar clientes por servicio
-    const clientSections = {};
-    clients.forEach(client => {
-      if (client && client.servicio) {
-        if (!clientSections[client.servicio]) {
-          clientSections[client.servicio] = [];
-        }
-        clientSections[client.servicio].push(client);
-      }
-    });
-
-    // Actualizar formulario con cliente seleccionado
+    // Update form
     setOrderForm(prev => ({
       ...prev,
-      servicio: selectedClient.servicio || '',
+      clienteId: client._id,
+      nombreCliente: client.nombre,
+      servicio: client.servicio || client.nombre,
       seccionDelServicio: '',
-      userId: selectedSupervisor || currentUser?._id || ''
+      subServicioId: undefined,
+      nombreSubServicio: undefined,
+      subUbicacionId: undefined,
+      nombreSubUbicacion: undefined
     }));
 
-    // Verificar si hay varias secciones para este servicio
-    const sections = clientSections[selectedClient.servicio] || [];
-
-    if (sections.length === 1) {
-      // Si solo hay una sección, usarla directamente
-      setOrderForm(prev => ({
-        ...prev,
-        seccionDelServicio: sections[0].seccionDelServicio || ''
-      }));
-    } else if (sections.length > 1) {
-      // Si hay múltiples secciones, abrir modal para seleccionar
-      setSelectSectionModalOpen(true);
+    // If there are subservices, show modal to select
+    if (client.subServicios && client.subServicios.length > 0) {
+      setSelectSubServiceModalOpen(true);
+    } else {
+      // If no subservices, close current modal
+      setSelectClientModalOpen(false);
     }
   };
 
-  // Seleccionar sección
-  const handleSectionSelect = (section) => {
+  // Select subservice
+  const handleSubServiceSelect = (subService) => {
+    if (!subService) return;
+
+    // Update selected subservice state
+    setSelectedSubService(subService);
+    setSelectedSubLocation(null);
+
+    // Update form
     setOrderForm(prev => ({
       ...prev,
-      seccionDelServicio: section
+      subServicioId: subService._id,
+      nombreSubServicio: subService.nombre,
+      seccionDelServicio: subService.nombre, // For compatibility
+      subUbicacionId: undefined,
+      nombreSubUbicacion: undefined
     }));
-    setSelectSectionModalOpen(false);
+
+    // If there are sublocations, show modal to select
+    if (subService.subUbicaciones && subService.subUbicaciones.length > 0) {
+      setSelectSubLocationModalOpen(true);
+      setSelectSubServiceModalOpen(false);
+    } else {
+      // If no sublocations, close modals
+      setSelectSubServiceModalOpen(false);
+      setSelectClientModalOpen(false);
+    }
   };
 
-  // Agregar producto al pedido
+  // Select sublocation
+  const handleSubLocationSelect = (subLocation) => {
+    if (!subLocation) return;
+
+    // Update selected sublocation state
+    setSelectedSubLocation(subLocation);
+
+    // Update form
+    setOrderForm(prev => ({
+      ...prev,
+      subUbicacionId: subLocation._id,
+      nombreSubUbicacion: subLocation.nombre
+    }));
+
+    // Close modals
+    setSelectSubLocationModalOpen(false);
+    setSelectClientModalOpen(false);
+  };
+
+  // Add product to order
   const handleAddProduct = () => {
     if (!selectedProduct || selectedProduct === "none" || productQuantity <= 0) {
-      addNotification("Seleccione un producto y una cantidad válida", "warning");
+      addNotification("Select a product and a valid quantity", "warning");
       return;
     }
 
-    // Buscar el producto en los datos
+    // Find product in data
     const productsData = queryClient.getQueryData('products') || [];
     const productsMap = {};
     productsData.forEach(p => {
@@ -1418,29 +1683,29 @@ const OrdersSection = () => {
 
     const product = productsMap[selectedProduct];
     if (!product) {
-      addNotification("Producto no encontrado", "warning");
+      addNotification("Product not found", "warning");
       return;
     }
 
-    // Verificar stock
+    // Check stock
     if (product.stock < productQuantity) {
-      addNotification(`Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`, "warning");
+      addNotification(`Insufficient stock. Only ${product.stock} units available.`, "warning");
       return;
     }
 
-    // Buscar si el producto ya está en el pedido
+    // Check if product is already in order
     const existingIndex = orderForm.productos.findIndex(p => {
       const id = typeof p.productoId === 'object' && p.productoId ? p.productoId._id : p.productoId;
       return id === selectedProduct;
     });
 
     if (existingIndex >= 0) {
-      // Actualizar cantidad
+      // Update quantity
       const newQuantity = orderForm.productos[existingIndex].cantidad + productQuantity;
 
-      // Verificar stock para la cantidad total
+      // Check stock for total quantity
       if (product.stock < newQuantity) {
-        addNotification(`Stock insuficiente. Solo hay ${product.stock} unidades disponibles.`, "warning");
+        addNotification(`Insufficient stock. Only ${product.stock} units available.`, "warning");
         return;
       }
 
@@ -1455,9 +1720,9 @@ const OrdersSection = () => {
         productos: updatedProducts
       }));
 
-      addNotification(`Cantidad actualizada: ${product.nombre} (${newQuantity})`, "success");
+      addNotification(`Quantity updated: ${product.nombre} (${newQuantity})`, "success");
     } else {
-      // Agregar nuevo producto
+      // Add new product
       setOrderForm(prev => ({
         ...prev,
         productos: [
@@ -1471,19 +1736,19 @@ const OrdersSection = () => {
         ]
       }));
 
-      addNotification(`Producto agregado: ${product.nombre} (${productQuantity})`, "success");
+      addNotification(`Product added: ${product.nombre} (${productQuantity})`, "success");
     }
 
-    // Resetear selección
+    // Reset selection
     setSelectedProduct("none");
     setProductQuantity(1);
     setSelectProductModalOpen(false);
   };
 
-  // Eliminar producto del pedido
+  // Remove product from order
   const handleRemoveProduct = (index) => {
     if (index < 0 || index >= orderForm.productos.length) {
-      console.error(`Índice de producto inválido: ${index}`);
+      console.error(`Invalid product index: ${index}`);
       return;
     }
 
@@ -1492,7 +1757,7 @@ const OrdersSection = () => {
       ? productToRemove.productoId._id
       : (typeof productToRemove.productoId === 'string' ? productToRemove.productoId : '');
 
-    // Obtener el nombre del producto
+    // Get product name
     const productsData = queryClient.getQueryData('products') || [];
     const productsMap = {};
     productsData.forEach(p => {
@@ -1500,7 +1765,7 @@ const OrdersSection = () => {
     });
 
     const productName = productToRemove.nombre ||
-      (productId && productsMap[productId] ? productsMap[productId].nombre : "Producto desconocido");
+      (productId && productsMap[productId] ? productsMap[productId].nombre : "Unknown product");
 
     const updatedProducts = [...orderForm.productos];
     updatedProducts.splice(index, 1);
@@ -1510,55 +1775,47 @@ const OrdersSection = () => {
       productos: updatedProducts
     }));
 
-    addNotification(`Producto eliminado: ${productName}`, "info");
+    addNotification(`Product removed: ${productName}`, "info");
   };
 
-  // Resetear formulario de pedido
+  // Reset order form
   const resetOrderForm = () => {
-    if (isAdminOrSuperSupervisor && selectedSupervisor) {
-      // Si es admin y hay un supervisor seleccionado, mantener el userId del supervisor
-      setOrderForm({
-        servicio: '',
-        seccionDelServicio: '',
-        userId: selectedSupervisor,
-        productos: [],
-        detalle: ' ',
-        estado: 'pendiente'
-      });
-    } else {
-      // Reseteo normal
-      setOrderForm({
-        servicio: '',
-        seccionDelServicio: '',
-        userId: currentUser?._id || '',
-        productos: [],
-        detalle: ' ',
-        estado: 'pendiente'
-      });
-    }
+    setOrderForm({
+      clienteId: '',
+      nombreCliente: '',
+      servicio: '',
+      seccionDelServicio: '',
+      userId: currentUser?._id || '',
+      supervisorId: selectedSupervisor || undefined,
+      productos: [],
+      detalle: ''
+    });
 
     setCurrentOrderId(null);
     setSelectedProduct("none");
     setProductQuantity(1);
+    setSelectedClient(null);
+    setSelectedSubService(null);
+    setSelectedSubLocation(null);
   };
 
-  // Limpiar supervisor seleccionado
+  // Clear selected supervisor
   const clearSelectedSupervisor = () => {
     if (isAdminOrSuperSupervisor) {
       setSelectedSupervisor(null);
       
-      // Volver a cargar los clientes del usuario actual
+      // Reload clients for current user
       if (currentUser?._id) {
         queryClient.invalidateQueries(['clients', currentUser._id]);
       }
     }
   };
 
-  // Calcular total de un pedido
+  // Calculate order total
   const calculateOrderTotal = useCallback((productos) => {
     if (!productos || !Array.isArray(productos)) return 0;
 
-    // Obtener productos del catálogo
+    // Get products from catalog
     const productsData = queryClient.getQueryData('products') || [];
     const productsMap = {};
     productsData.forEach(p => {
@@ -1569,9 +1826,11 @@ const OrdersSection = () => {
       let precio = 0;
       let cantidad = 0;
 
-      // Extraer precio de forma segura
+      // Extract price safely
       if (typeof item.precio === 'number') {
         precio = item.precio;
+      } else if (typeof item.precioUnitario === 'number') {
+        precio = item.precioUnitario;
       } else {
         const productId = typeof item.productoId === 'object' && item.productoId
           ? item.productoId._id
@@ -1582,17 +1841,17 @@ const OrdersSection = () => {
         }
       }
 
-      // Extraer cantidad de forma segura
+      // Extract quantity safely
       cantidad = typeof item.cantidad === 'number' ? item.cantidad : 0;
 
       return total + (precio * cantidad);
     }, 0);
   }, [queryClient]);
 
-  // Filtrar pedidos por fecha
+  // Filter orders by date
   const handleDateFilter = async () => {
     if (!dateFilter.from || !dateFilter.to) {
-      addNotification("Seleccione ambas fechas para filtrar", "warning");
+      addNotification("Select both dates to filter", "warning");
       return;
     }
 
@@ -1600,35 +1859,36 @@ const OrdersSection = () => {
     setShowMobileFilters(false);
   };
 
-  // Limpiar todos los filtros
+  // Clear all filters
   const clearAllFilters = () => {
     setSearchTerm('');
     setDateFilter({ from: '', to: '' });
     setStatusFilter('todos');
     setSupervisorFilter('');
     setServiceFilter('');
+    setClientFilter({});
     refetchOrders();
     setShowMobileFilters(false);
     setCurrentPage(1);
 
-    addNotification("Filtros eliminados", "info");
+    addNotification("Filters cleared", "info");
   };
 
-  // Alternar vista de detalles del pedido
+  // Toggle order details view
   const toggleOrderDetails = useCallback((orderId) => {
     setOrderDetailsOpen(prev => ({
       ...prev,
       [orderId]: !prev[orderId]
     }));
 
-    // Obtener productos actuales
+    // Get current products
     const productsData = queryClient.getQueryData('products') || [];
     const productsMap = {};
     productsData.forEach(p => {
       if (p && p._id) productsMap[p._id] = p;
     });
 
-    // Cargar productos faltantes
+    // Load missing products
     const order = orders.find(o => o._id === orderId);
     if (order && Array.isArray(order.productos)) {
       order.productos.forEach(item => {
@@ -1644,64 +1904,72 @@ const OrdersSection = () => {
     }
   }, [orders, queryClient, processProductQueue]);
 
-  // Seleccionar supervisor
+  // Select supervisor
   const handleSupervisorSelect = async (supervisorId) => {
-    // Encontrar el supervisor en la lista
+    // Find supervisor in list
     const supervisor = supervisors.find(s => s._id === supervisorId);
   
     setSelectedSupervisor(supervisorId);
     setOrderForm(prev => ({
       ...prev,
       userId: supervisorId,
+      supervisorId: undefined, // Clear supervisorId if it existed
+      clienteId: '',
+      nombreCliente: '',
       servicio: '',
       seccionDelServicio: '',
       productos: []
     }));
   
-    // Cerrar modal de selección
+    // Close selection modal
     setSupervisorSelectOpen(false);
   
-    // Cargar clientes del supervisor seleccionado
+    // Load clients for selected supervisor
     try {
       await queryClient.invalidateQueries(['clients', supervisorId]);
   
-      // Abrir el modal de creación después de cargar los clientes
+      // Open creation modal after loading clients
       setCreateOrderModalOpen(true);
     } catch (error) {
-      console.error("Error cargando clientes del supervisor:", error);
-      addNotification("Error al cargar clientes del supervisor", "error");
+      console.error("Error loading supervisor's clients:", error);
+      addNotification("Error loading supervisor's clients", "error");
     }
   };
 
-  // Crear nuevo pedido
+  // Create new order
   const handleNewOrderClick = () => {
     resetOrderForm();
 
-    // Si es admin o supervisor de supervisores, mostrar primero el selector de supervisor
+    // If admin or supervisor of supervisors, first show supervisor selector
     if (isAdminOrSuperSupervisor) {
       setSupervisorSelectOpen(true);
     } else {
-      // Para usuarios normales, abrir directamente el modal de creación
+      // For normal users, open creation modal directly
       setCreateOrderModalOpen(true);
     }
   };
 
-  // Cambiar página de la tabla
+  // Download receipt
+  const handleDownloadReceipt = (orderId) => {
+    downloadReceiptMutation.mutate(orderId);
+  };
+
+  // Change table page
   const handlePageChange = (pageNumber) => {
     setCurrentPage(pageNumber);
 
-    // Scroll al inicio
+    // Scroll to top
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    // En móvil, scroll al inicio de la lista
+    // On mobile, scroll to top of list
     if (windowWidth < 640 && mobileListRef.current) {
       mobileListRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   };
 
-  // ======== FILTRADO Y PAGINACIÓN ========
+  // ======== FILTERING AND PAGINATION ========
 
-  // Productos en un mapa para acceso rápido
+  // Products in a map for quick access
   const productsMap = useMemo(() => {
     const map = {};
     products.forEach(product => {
@@ -1712,7 +1980,7 @@ const OrdersSection = () => {
     return map;
   }, [products]);
 
-  // Filtrar pedidos según términos de búsqueda local
+  // Filter orders by local search terms
   const filteredOrders = useMemo(() => {
     if (!Array.isArray(orders)) return [];
 
@@ -1722,24 +1990,35 @@ const OrdersSection = () => {
       const searchLower = searchTerm.toLowerCase();
       const userInfo = getUserInfo(order.userId);
 
+      // Search in order data
       return (
+        // Search in service or order number
         (order.servicio || '').toLowerCase().includes(searchLower) ||
         String(order.nPedido || '').includes(searchTerm) ||
+        
+        // Search in section
         (order.seccionDelServicio || '').toLowerCase().includes(searchLower) ||
+        
+        // Search in hierarchical structure
+        (order.cliente?.nombreCliente || '').toLowerCase().includes(searchLower) ||
+        (order.cliente?.nombreSubServicio || '').toLowerCase().includes(searchLower) ||
+        (order.cliente?.nombreSubUbicacion || '').toLowerCase().includes(searchLower) ||
+        
+        // Search by user
         userInfo.usuario.toLowerCase().includes(searchLower) ||
         userInfo.name.toLowerCase().includes(searchLower)
       );
     });
   }, [orders, searchTerm, getUserInfo]);
 
-  // Configuración de items por página según tamaño de pantalla
+  // Items per page configuration based on screen size
   const itemsPerPage = useMemo(() => {
-    if (windowWidth < 640) return 4; // Móvil
+    if (windowWidth < 640) return 4; // Mobile
     if (windowWidth < 1024) return 8; // Tablet
     return 12; // Desktop
   }, [windowWidth]);
 
-  // Calcular paginación
+  // Calculate pagination
   const paginatedOrders = useMemo(() => {
     if (!Array.isArray(filteredOrders)) return [];
 
@@ -1748,12 +2027,12 @@ const OrdersSection = () => {
     return filteredOrders.slice(startIndex, endIndex);
   }, [filteredOrders, currentPage, itemsPerPage]);
 
-  // Calcular total de páginas
+  // Calculate total pages
   const totalPages = useMemo(() => {
     return Math.ceil(filteredOrders.length / itemsPerPage);
   }, [filteredOrders.length, itemsPerPage]);
 
-  // Información de paginación
+  // Pagination information
   const paginationInfo = useMemo(() => {
     const total = filteredOrders.length;
     const start = (currentPage - 1) * itemsPerPage + 1;
@@ -1763,35 +2042,35 @@ const OrdersSection = () => {
       total,
       start: total > 0 ? start : 0,
       end: total > 0 ? end : 0,
-      range: total > 0 ? `${start}-${end} de ${total}` : "0 de 0"
+      range: total > 0 ? `${start}-${end} of ${total}` : "0 of 0"
     };
   }, [filteredOrders.length, currentPage, itemsPerPage]);
 
-  // ======== RENDERIZADO ========
+  // ======== RENDERING ========
 
-  // Mostrar pantalla de carga
+  // Show loading screen
   const isLoading = isLoadingUser || (isLoadingOrders && orders.length === 0);
   if (isLoading) {
     return (
       <div className="p-4 md:p-6 bg-[#DFEFE6]/30 min-h-[300px] flex flex-col items-center justify-center">
         <Loader2 className="w-10 h-10 text-[#29696B] animate-spin mb-4" />
-        <p className="text-[#29696B]">Cargando pedidos...</p>
+        <p className="text-[#29696B]">Loading orders...</p>
       </div>
     );
   }
 
   return (
     <div className="p-4 md:p-6 bg-[#DFEFE6]/30">
-      {/* Alertas manejadas por el contexto de notificaciones */}
+      {/* Alerts handled by notification context */}
 
-      {/* Barra de filtros y acciones para escritorio */}
+      {/* Filters and actions bar for desktop */}
       <div className="mb-6 space-y-4 hidden md:block bg-white p-4 rounded-xl shadow-sm border border-[#91BEAD]/20">
         <div className="flex flex-wrap gap-4 items-center justify-between">
           <div className="relative flex-1 min-w-[280px]">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
             <Input
               type="text"
-              placeholder="Buscar por cliente, sección, usuario o número..."
+              placeholder="Search by client, section, user or number..."
               className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -1806,7 +2085,7 @@ const OrdersSection = () => {
               className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50"
             >
               <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshingOrders ? 'animate-spin' : ''}`} />
-              Actualizar
+              Refresh
             </Button>
 
             <Button
@@ -1815,15 +2094,15 @@ const OrdersSection = () => {
               disabled={products.length === 0 || (isAdminOrSuperSupervisor ? supervisors.length === 0 : clients.length === 0)}
             >
               <ShoppingCart className="w-4 h-4 mr-2" />
-              Nuevo Pedido
+              New Order
             </Button>
           </div>
         </div>
 
         <div className="flex flex-wrap gap-4 items-end">
-          {/* Filtro de fechas */}
+          {/* Date filters */}
           <div>
-            <Label htmlFor="fechaInicio" className="text-[#29696B]">Fecha Inicio</Label>
+            <Label htmlFor="fechaInicio" className="text-[#29696B]">Start Date</Label>
             <Input
               id="fechaInicio"
               type="date"
@@ -1834,7 +2113,7 @@ const OrdersSection = () => {
           </div>
 
           <div>
-            <Label htmlFor="fechaFin" className="text-[#29696B]">Fecha Fin</Label>
+            <Label htmlFor="fechaFin" className="text-[#29696B]">End Date</Label>
             <Input
               id="fechaFin"
               type="date"
@@ -1844,26 +2123,26 @@ const OrdersSection = () => {
             />
           </div>
 
-          {/* Filtro de estado */}
+          {/* Status filter */}
           <div>
-            <Label htmlFor="estado" className="text-[#29696B]">Estado</Label>
+            <Label htmlFor="estado" className="text-[#29696B]">Status</Label>
             <Select 
               value={statusFilter} 
               onValueChange={setStatusFilter}
             >
               <SelectTrigger id="estado" className="border-[#91BEAD] focus:ring-[#29696B]/20">
-                <SelectValue placeholder="Todos los estados" />
+                <SelectValue placeholder="All statuses" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="todos">Todos</SelectItem>
-                <SelectItem value="pendiente">Pendientes</SelectItem>
-                <SelectItem value="aprobado">Aprobados</SelectItem>
-                <SelectItem value="rechazado">Rechazados</SelectItem>
+                <SelectItem value="todos">All</SelectItem>
+                <SelectItem value="pendiente">Pending</SelectItem>
+                <SelectItem value="aprobado">Approved</SelectItem>
+                <SelectItem value="rechazado">Rejected</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          {/* Filtro de supervisor (solo para admin) */}
+          {/* Supervisor filter (admin only) */}
           {isAdminOrSuperSupervisor && (
             <div>
               <Label htmlFor="supervisor" className="text-[#29696B]">Supervisor</Label>
@@ -1872,13 +2151,13 @@ const OrdersSection = () => {
                 onValueChange={setSupervisorFilter}
               >
                 <SelectTrigger id="supervisor" className="border-[#91BEAD] focus:ring-[#29696B]/20">
-                  <SelectValue placeholder="Todos los supervisores" />
+                  <SelectValue placeholder="All supervisors" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
                   {supervisors.map(supervisor => (
                     <SelectItem key={supervisor._id} value={supervisor._id}>
-                      {supervisor.usuario || (supervisor.nombre ? `${supervisor.nombre} ${supervisor.apellido || ''}` : 'Sin nombre')}
+                      {supervisor.usuario || (supervisor.nombre ? `${supervisor.nombre} ${supervisor.apellido || ''}` : 'No name')}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1886,35 +2165,64 @@ const OrdersSection = () => {
             </div>
           )}
 
+          {/* Client filter */}
+          <div>
+            <Label htmlFor="cliente" className="text-[#29696B]">Client</Label>
+            <Select 
+              value={clientFilter.clienteId || ''} 
+              onValueChange={(value) => {
+                if (value) {
+                  // Find complete client
+                  const cliente = allClients.find(c => c._id === value);
+                  setClientFilter({ clienteId: value });
+                } else {
+                  setClientFilter({});
+                }
+              }}
+            >
+              <SelectTrigger id="cliente" className="border-[#91BEAD] focus:ring-[#29696B]/20">
+                <SelectValue placeholder="All clients" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                {allClients.map(cliente => (
+                  <SelectItem key={cliente._id} value={cliente._id}>
+                    {cliente.nombre || cliente.servicio}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <Button
             variant="outline"
             onClick={handleDateFilter}
             className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50"
           >
             <Filter className="w-4 h-4 mr-2" />
-            Aplicar Filtros
+            Apply Filters
           </Button>
 
-          {(dateFilter.from || dateFilter.to || searchTerm || statusFilter !== 'todos' || supervisorFilter) && (
+          {(dateFilter.from || dateFilter.to || searchTerm || statusFilter !== 'todos' || supervisorFilter || clientFilter.clienteId) && (
             <Button
               variant="ghost"
               onClick={clearAllFilters}
               className="text-[#7AA79C] hover:text-[#29696B] hover:bg-[#DFEFE6]/30"
             >
-              Limpiar filtros
+              Clear filters
             </Button>
           )}
         </div>
       </div>
 
-      {/* Barra de filtros y acciones para móvil */}
+      {/* Filters and actions bar for mobile */}
       <div className="mb-6 space-y-4 md:hidden">
         <div className="flex items-center gap-2 bg-white p-3 rounded-xl shadow-sm border border-[#91BEAD]/20">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
             <Input
               type="text"
-              placeholder="Buscar pedidos..."
+              placeholder="Search orders..."
               className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -1942,14 +2250,13 @@ const OrdersSection = () => {
 
         {showMobileFilters && (
           <div className="p-4 bg-[#DFEFE6]/30 rounded-lg border border-[#91BEAD]/20 space-y-4">
-            <h3 className="font-medium text-sm text-[#29696B]">Filtros avanzados</h3>
+            <h3 className="font-medium text-sm text-[#29696B]">Advanced Filters</h3>
 
-            {/* Filtro de fechas */}
+            {/* Date filters */}
             <div className="space-y-2">
               <div>
-                <Label htmlFor="mFechaInicio" className="text-xs text-[#29696B]">Fecha Inicio</Label>
-                <Input
-                  id="mFechaInicio"
+                <Label htmlFor="mFechaInicio" className="text-xs text-[#29696B]">Start Date</Label>
+                <Input id="mFechaInicio"
                   type="date"
                   value={dateFilter.from}
                   onChange={(e) => setDateFilter({ ...dateFilter, from: e.target.value })}
@@ -1958,7 +2265,7 @@ const OrdersSection = () => {
               </div>
 
               <div>
-                <Label htmlFor="mFechaFin" className="text-xs text-[#29696B]">Fecha Fin</Label>
+                <Label htmlFor="mFechaFin" className="text-xs text-[#29696B]">End Date</Label>
                 <Input
                   id="mFechaFin"
                   type="date"
@@ -1968,26 +2275,26 @@ const OrdersSection = () => {
                 />
               </div>
               
-              {/* Filtro de estado */}
+              {/* Status filter */}
               <div>
-                <Label htmlFor="mEstado" className="text-xs text-[#29696B]">Estado</Label>
+                <Label htmlFor="mEstado" className="text-xs text-[#29696B]">Status</Label>
                 <Select 
                   value={statusFilter} 
                   onValueChange={setStatusFilter}
                 >
                   <SelectTrigger id="mEstado" className="text-sm border-[#91BEAD] focus:ring-[#29696B]/20">
-                    <SelectValue placeholder="Todos los estados" />
+                    <SelectValue placeholder="All statuses" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="todos">Todos</SelectItem>
-                    <SelectItem value="pendiente">Pendientes</SelectItem>
-                    <SelectItem value="aprobado">Aprobados</SelectItem>
-                    <SelectItem value="rechazado">Rechazados</SelectItem>
+                    <SelectItem value="todos">All</SelectItem>
+                    <SelectItem value="pendiente">Pending</SelectItem>
+                    <SelectItem value="aprobado">Approved</SelectItem>
+                    <SelectItem value="rechazado">Rejected</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               
-              {/* Filtro de supervisor (solo para admin) */}
+              {/* Supervisor filter (admin only) */}
               {isAdminOrSuperSupervisor && (
                 <div>
                   <Label htmlFor="mSupervisor" className="text-xs text-[#29696B]">Supervisor</Label>
@@ -1996,19 +2303,46 @@ const OrdersSection = () => {
                     onValueChange={setSupervisorFilter}
                   >
                     <SelectTrigger id="mSupervisor" className="text-sm border-[#91BEAD] focus:ring-[#29696B]/20">
-                      <SelectValue placeholder="Todos los supervisores" />
+                      <SelectValue placeholder="All supervisors" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="all">All</SelectItem>
                       {supervisors.map(supervisor => (
                         <SelectItem key={supervisor._id} value={supervisor._id}>
-                          {supervisor.usuario || (supervisor.nombre ? `${supervisor.nombre} ${supervisor.apellido || ''}` : 'Sin nombre')}
+                          {supervisor.usuario || (supervisor.nombre ? `${supervisor.nombre} ${supervisor.apellido || ''}` : 'No name')}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
               )}
+
+              {/* Client filter */}
+              <div>
+                <Label htmlFor="mCliente" className="text-xs text-[#29696B]">Client</Label>
+                <Select 
+                  value={clientFilter.clienteId || ''} 
+                  onValueChange={(value) => {
+                    if (value) {
+                      setClientFilter({ clienteId: value });
+                    } else {
+                      setClientFilter({});
+                    }
+                  }}
+                >
+                  <SelectTrigger id="mCliente" className="text-sm border-[#91BEAD] focus:ring-[#29696B]/20">
+                    <SelectValue placeholder="All clients" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    {allClients.map(cliente => (
+                      <SelectItem key={cliente._id} value={cliente._id}>
+                        {cliente.nombre || cliente.servicio}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="flex gap-2 pt-2">
@@ -2018,7 +2352,7 @@ const OrdersSection = () => {
                 onClick={clearAllFilters}
                 className="text-xs border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50"
               >
-                Limpiar
+                Clear
               </Button>
 
               <Button
@@ -2026,14 +2360,14 @@ const OrdersSection = () => {
                 onClick={handleDateFilter}
                 className="text-xs bg-[#29696B] hover:bg-[#29696B]/90 text-white"
               >
-                Aplicar Filtros
+                Apply Filters
               </Button>
             </div>
           </div>
         )}
 
-        {/* Indicador de filtros activos */}
-        {(dateFilter.from || dateFilter.to || statusFilter !== 'todos' || supervisorFilter) && (
+        {/* Active filters indicator */}
+        {(dateFilter.from || dateFilter.to || statusFilter !== 'todos' || supervisorFilter || clientFilter.clienteId) && (
           <div className="px-3 py-2 bg-[#DFEFE6]/50 rounded-md text-xs text-[#29696B] flex items-center justify-between border border-[#91BEAD]/20">
             <div className="flex items-center space-x-2">
               {(dateFilter.from || dateFilter.to) && (
@@ -2060,6 +2394,13 @@ const OrdersSection = () => {
                   {supervisors.find(s => s._id === supervisorFilter)?.usuario || 'Supervisor'}
                 </span>
               )}
+
+              {clientFilter.clienteId && (
+                <span className="flex items-center">
+                  <Building className="w-3 h-3 mr-1" />
+                  {allClients.find(c => c._id === clientFilter.clienteId)?.nombre || 'Client'}
+                </span>
+              )}
             </div>
 
             <Button
@@ -2074,15 +2415,15 @@ const OrdersSection = () => {
         )}
       </div>
 
-      {/* Indicador de carga o refresco */}
+      {/* Loading or refresh indicator */}
       {isRefreshingOrders && (
         <div className="bg-[#DFEFE6]/30 rounded-lg p-2 mb-4 flex items-center justify-center">
           <Loader2 className="w-4 h-4 text-[#29696B] animate-spin mr-2" />
-          <span className="text-sm text-[#29696B]">Actualizando datos...</span>
+          <span className="text-sm text-[#29696B]">Updating data...</span>
         </div>
       )}
 
-      {/* Sin resultados */}
+      {/* No results */}
       {!isLoading && filteredOrders.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm p-8 text-center text-[#7AA79C] border border-[#91BEAD]/20">
           <div className="inline-flex items-center justify-center w-12 h-12 bg-[#DFEFE6] rounded-full mb-4">
@@ -2090,53 +2431,54 @@ const OrdersSection = () => {
           </div>
 
           <p>
-            No se encontraron pedidos
-            {searchTerm && ` que coincidan con "${searchTerm}"`}
-            {(dateFilter.from || dateFilter.to) && " en el rango de fechas seleccionado"}
-            {statusFilter !== 'todos' && ` con estado ${statusFilter}`}
-            {supervisorFilter && " para el supervisor seleccionado"}
+            No orders found
+            {searchTerm && ` that match "${searchTerm}"`}
+            {(dateFilter.from || dateFilter.to) && " in the selected date range"}
+            {statusFilter !== 'todos' && ` with status ${statusFilter}`}
+            {supervisorFilter && " for the selected supervisor"}
+            {clientFilter.clienteId && " for the selected client"}
           </p>
 
           {(clients.length === 0 || products.length === 0) && (
             <p className="mt-4 text-sm text-red-500 flex items-center justify-center">
               <Info className="w-4 h-4 mr-2" />
               {clients.length === 0
-                ? "No tiene clientes asignados. Contacte a un administrador."
-                : "No hay productos disponibles para crear pedidos."}
+                ? "You have no assigned clients. Contact an administrator."
+                : "No products available to create orders."}
             </p>
           )}
         </div>
       ) : (
         <>
-          {/* Tabla de pedidos para pantallas medianas y grandes */}
+          {/* Orders table for medium and large screens */}
           <div className="bg-white rounded-xl shadow-sm overflow-hidden hidden md:block border border-[#91BEAD]/20">
-            <div className="overflow-x-auto">
-              <table className="w-full">
+            <div className="w-full">
+              <table className="w-full table-auto">
                 <thead className="bg-[#DFEFE6]/30">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
-                      Nº Pedido
+                      Order #
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
-                      Fecha
+                      Date
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
-                      Cliente
+                      Client
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
-                      Sección
+                      Section
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
-                      Usuario
+                      User
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
-                      Estado
+                      Status
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
-                      Productos
+                      Products
                     </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-[#29696B] uppercase tracking-wider">
-                      Acciones
+                      Actions
                     </th>
                   </tr>
                 </thead>
@@ -2167,21 +2509,26 @@ const OrdersSection = () => {
                           <div className="flex items-center">
                             <Building className="w-4 h-4 text-[#7AA79C] mr-2" />
                             <div className="text-sm font-medium text-[#29696B]">
-                              {order.servicio || "Sin cliente"}
+                              {order.cliente?.nombreCliente || order.servicio || "No client"}
                             </div>
                           </div>
                         </td>
 
                         <td className="px-6 py-4 whitespace-nowrap">
-                          {order.seccionDelServicio ? (
+                          {(order.cliente?.nombreSubServicio || order.seccionDelServicio) ? (
                             <div className="flex items-center">
                               <MapPin className="w-4 h-4 text-[#7AA79C] mr-2" />
                               <div className="text-sm text-[#29696B]">
-                                {order.seccionDelServicio}
+                                {order.cliente?.nombreSubServicio || order.seccionDelServicio}
+                                {order.cliente?.nombreSubUbicacion && (
+                                  <span className="text-xs text-[#7AA79C] ml-1">
+                                    ({order.cliente.nombreSubUbicacion})
+                                  </span>
+                                )}
                               </div>
                             </div>
                           ) : (
-                            <span className="text-xs text-[#7AA79C]">Sin sección</span>
+                            <span className="text-xs text-[#7AA79C]">No section</span>
                           )}
                         </td>
 
@@ -2202,8 +2549,8 @@ const OrdersSection = () => {
                           <div className="flex items-center gap-2">
                             <Badge variant="outline" className="border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/30">
                               {order.productos && Array.isArray(order.productos)
-                                ? `${order.productos.length} producto${order.productos.length !== 1 ? 's' : ''}`
-                                : '0 productos'}
+                                ? `${order.productos.length} product${order.productos.length !== 1 ? 's' : ''}`
+                                : '0 products'}
                             </Badge>
 
                             <Button
@@ -2229,14 +2576,19 @@ const OrdersSection = () => {
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => window.open(`${apiUrl}/downloads/remito/${order._id}`, '_blank')}
+                                    onClick={() => handleDownloadReceipt(order._id)}
                                     className="text-[#29696B] hover:bg-[#DFEFE6]/30"
+                                    disabled={downloadReceiptMutation.isLoading}
                                   >
-                                    <Download className="w-4 h-4" />
+                                    {downloadReceiptMutation.isLoading ? (
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      <Download className="w-4 h-4" />
+                                    )}
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p>Descargar Remito</p>
+                                  <p>Download Receipt</p>
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
@@ -2259,7 +2611,7 @@ const OrdersSection = () => {
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p>Editar Pedido</p>
+                                  <p>Edit Order</p>
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
@@ -2282,7 +2634,7 @@ const OrdersSection = () => {
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p>Eliminar Pedido</p>
+                                  <p>Delete Order</p>
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
@@ -2290,20 +2642,20 @@ const OrdersSection = () => {
                         </td>
                       </tr>
 
-                      {/* Detalles del pedido expandibles */}
+                      {/* Expandable order details */}
                       {orderDetailsOpen[order._id] && (
                         <tr>
                           <td colSpan={8} className="px-6 py-4 bg-[#DFEFE6]/20">
                             <div className="space-y-3">
-                              <div className="font-medium text-[#29696B]">Detalles del Pedido</div>
+                              <div className="font-medium text-[#29696B]">Order Details</div>
 
                               <div className="overflow-x-auto rounded-md border border-[#91BEAD]/30">
                                 <table className="min-w-full divide-y divide-[#91BEAD]/20">
                                   <thead className="bg-[#DFEFE6]/50">
                                     <tr>
-                                      <th className="px-4 py-2 text-left text-xs font-medium text-[#29696B]">Producto</th>
-                                      <th className="px-4 py-2 text-center text-xs font-medium text-[#29696B]">Cantidad</th>
-                                      <th className="px-4 py-2 text-right text-xs font-medium text-[#29696B]">Precio Unit.</th>
+                                      <th className="px-4 py-2 text-left text-xs font-medium text-[#29696B]">Product</th>
+                                      <th className="px-4 py-2 text-center text-xs font-medium text-[#29696B]">Quantity</th>
+                                      <th className="px-4 py-2 text-right text-xs font-medium text-[#29696B]">Unit Price</th>
                                       <th className="px-4 py-2 text-right text-xs font-medium text-[#29696B]">Subtotal</th>
                                     </tr>
                                   </thead>
@@ -2321,7 +2673,7 @@ const OrdersSection = () => {
 
                                     {/* Total */}
                                     <tr className="bg-[#DFEFE6]/40 font-medium">
-                                      <td colSpan={3} className="px-4 py-2 text-right text-[#29696B]">Total del Pedido:</td>
+                                      <td colSpan={3} className="px-4 py-2 text-right text-[#29696B]">Order Total:</td>
                                       <td className="px-4 py-2 text-right font-bold text-[#29696B]">
                                         <OrderTotal
                                           order={order}
@@ -2338,11 +2690,16 @@ const OrdersSection = () => {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => window.open(`${apiUrl}/downloads/remito/${order._id}`, '_blank')}
+                                  onClick={() => handleDownloadReceipt(order._id)}
                                   className="text-xs h-8 border-[#29696B] text-[#29696B] hover:bg-[#DFEFE6]/30"
+                                  disabled={downloadReceiptMutation.isLoading}
                                 >
-                                  <Download className="w-3 h-3 mr-1" />
-                                  Descargar Remito
+                                  {downloadReceiptMutation.isLoading ? (
+                                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                  ) : (
+                                    <Download className="w-3 h-3 mr-1" />
+                                  )}
+                                  Download Receipt
                                 </Button>
                               </div>
                             </div>
@@ -2355,11 +2712,11 @@ const OrdersSection = () => {
               </table>
             </div>
 
-            {/* Paginación para la tabla */}
+            {/* Pagination for table */}
             {filteredOrders.length > itemsPerPage && (
               <div className="py-4 border-t border-[#91BEAD]/20 px-6 flex flex-col sm:flex-row justify-between items-center gap-2">
                 <div className="text-sm text-[#7AA79C]">
-                  Mostrando {paginationInfo.range}
+                  Showing {paginationInfo.range}
                 </div>
 
                 <Pagination
@@ -2372,9 +2729,9 @@ const OrdersSection = () => {
             )}
           </div>
 
-          {/* Vista de tarjetas para móviles */}
+          {/* Card view for mobile */}
           <div ref={mobileListRef} id="mobile-orders-list" className="md:hidden grid grid-cols-1 gap-4">
-            {/* Paginación superior en móvil */}
+            {/* Top pagination on mobile */}
             {filteredOrders.length > itemsPerPage && (
               <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20">
                 <Pagination
@@ -2398,25 +2755,26 @@ const OrdersSection = () => {
                       <div>
                         <CardTitle className="text-sm font-medium flex items-center text-[#29696B]">
                           <Building className="w-4 h-4 text-[#7AA79C] mr-1" />
-                          {order.servicio || "Sin cliente"}
+                          {order.cliente?.nombreCliente || order.servicio || "No client"}
                         </CardTitle>
 
-                        {order.seccionDelServicio && (
+                        {(order.cliente?.nombreSubServicio || order.seccionDelServicio) && (
                           <div className="text-xs text-[#7AA79C] flex items-center mt-1">
                             <MapPin className="w-3 h-3 mr-1" />
-                            {order.seccionDelServicio}
+                            {order.cliente?.nombreSubServicio || order.seccionDelServicio}
+                            {order.cliente?.nombreSubUbicacion && ` (${order.cliente.nombreSubUbicacion})`}
                           </div>
                         )}
                       </div>
 
                       <div className="flex flex-col items-end gap-1">
-                        {/* Badge para el número de pedido */}
+                        {/* Badge for order number */}
                         <Badge variant="outline" className="text-xs border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/20">
                           <Hash className="w-3 h-3 mr-1" />
                           {order.nPedido}
                         </Badge>
 
-                        {/* Badge para la fecha */}
+                        {/* Badge for date */}
                         <Badge variant="outline" className="text-xs border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/20">
                           <Calendar className="w-3 h-3 mr-1" />
                           {new Date(order.fecha).toLocaleDateString()}
@@ -2432,13 +2790,13 @@ const OrdersSection = () => {
                         <span className="text-[#29696B]">{getUserInfo(order.userId).usuario}</span>
                       </div>
 
-                      {/* Estado del pedido */}
+                      {/* Order status */}
                       <div className="flex items-center">
                         {order.estado === 'aprobado' && <CheckCircle className="w-3 h-3 text-green-600 mr-1" />}
                         {order.estado === 'rechazado' && <XCircle className="w-3 h-3 text-red-600 mr-1" />}
                         {(!order.estado || order.estado === 'pendiente') && <Clock className="w-3 h-3 text-yellow-600 mr-1" />}
                         <span className={`text-[#29696B] flex items-center`}>
-                          Estado: 
+                          Status: 
                           <span 
                             className={`ml-1 ${
                               order.estado === 'aprobado' 
@@ -2449,10 +2807,10 @@ const OrdersSection = () => {
                             }`}
                           >
                             {order.estado === 'aprobado' 
-                              ? 'Aprobado' 
+                              ? 'Approved' 
                               : order.estado === 'rechazado' 
-                              ? 'Rechazado' 
-                              : 'Pendiente'
+                              ? 'Rejected' 
+                              : 'Pending'
                             }
                           </span>
                         </span>
@@ -2462,13 +2820,13 @@ const OrdersSection = () => {
                         <ShoppingCart className="w-3 h-3 text-[#7AA79C] mr-1" />
                         <span className="text-[#29696B]">
                           {Array.isArray(order.productos)
-                            ? `${order.productos.length} producto${order.productos.length !== 1 ? 's' : ''}`
-                            : '0 productos'}
+                            ? `${order.productos.length} product${order.productos.length !== 1 ? 's' : ''}`
+                            : '0 products'}
                         </span>
                       </div>
                     </div>
 
-                    {/* Detalles expandibles en móvil con Accordion */}
+                    {/* Expandable details on mobile with Accordion */}
                     <Accordion
                       type="single"
                       collapsible
@@ -2480,12 +2838,12 @@ const OrdersSection = () => {
                           onClick={() => toggleOrderDetails(order._id)}
                           className="py-1 text-xs font-medium text-[#29696B]"
                         >
-                          Ver detalles
+                          View details
                         </AccordionTrigger>
 
                         <AccordionContent>
                           <div className="text-xs pt-2 pb-1">
-                            <div className="font-medium mb-2 text-[#29696B]">Productos:</div>
+                            <div className="font-medium mb-2 text-[#29696B]">Products:</div>
 
                             <div className="space-y-1 max-h-60 overflow-y-auto pr-1">
                               {Array.isArray(order.productos) && order.productos.map((item, index) => (
@@ -2515,11 +2873,16 @@ const OrdersSection = () => {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => window.open(`${apiUrl}/downloads/remito/${order._id}`, '_blank')}
+                              onClick={() => handleDownloadReceipt(order._id)}
                               className="w-full text-xs h-8 border-[#29696B] text-[#29696B] hover:bg-[#DFEFE6]/30"
+                              disabled={downloadReceiptMutation.isLoading}
                             >
-                              <Download className="w-3 h-3 mr-1" />
-                              Descargar Remito
+                              {downloadReceiptMutation.isLoading ? (
+                                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                              ) : (
+                                <Download className="w-3 h-3 mr-1" />
+                              )}
+                              Download Receipt
                             </Button>
                           </div>
                         </AccordionContent>
@@ -2528,42 +2891,46 @@ const OrdersSection = () => {
                   </CardContent>
 
                   <CardFooter className="py-2 px-4 bg-[#DFEFE6]/10 flex justify-end gap-2 border-t border-[#91BEAD]/20">
-                    {/* Menú desplegable para cambiar estado */}
+                    {/* Dropdown menu to change status */}
                     <Select
                       value={order.estado || 'pendiente'}
                       onValueChange={(value) => {
-                        // Actualizar estado del pedido
-                        queryClient.invalidateQueries(['orders']);
-                        const updateData = {
-                          id: order._id,
-                          status: value
-                        };
-                        // Optimistic update
+                        // Update order status
                         queryClient.setQueryData(['orders'], (oldData) => {
                           return oldData?.map(o => o._id === order._id ? {...o, estado: value} : o);
                         });
+                        // Call API to update status
+                        OrdersService.updateOrderStatus(order._id, value)
+                          .then(() => {
+                            queryClient.invalidateQueries(['orders']);
+                          })
+                          .catch((error) => {
+                            addNotification(`Error updating status: ${error.message}`, "error");
+                            // Revert optimistic update
+                            queryClient.invalidateQueries(['orders']);
+                          });
                       }}
                     >
                       <SelectTrigger className="h-8 px-2 text-xs border-[#91BEAD] focus:ring-[#29696B]/20 w-[100px]">
-                        <SelectValue placeholder="Estado" />
+                        <SelectValue placeholder="Status" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="pendiente" className="text-xs">
                           <div className="flex items-center">
                             <Clock className="w-3 h-3 mr-1 text-yellow-600" />
-                            Pendiente
+                            Pending
                           </div>
                         </SelectItem>
                         <SelectItem value="aprobado" className="text-xs">
                           <div className="flex items-center">
                             <CheckCircle className="w-3 h-3 mr-1 text-green-600" />
-                            Aprobado
+                            Approved
                           </div>
                         </SelectItem>
                         <SelectItem value="rechazado" className="text-xs">
                           <div className="flex items-center">
                             <XCircle className="w-3 h-3 mr-1 text-red-600" />
-                            Rechazado
+                            Rejected
                           </div>
                         </SelectItem>
                       </SelectContent>
@@ -2601,16 +2968,16 @@ const OrdersSection = () => {
               ))
             )}
 
-            {/* Mensaje que muestra la página actual y el total */}
+            {/* Message showing current page and total */}
             {filteredOrders.length > itemsPerPage && (
               <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm">
                 <span className="text-[#29696B] font-medium">
-                  Página {currentPage} de {totalPages}
+                  Page {currentPage} of {totalPages}
                 </span>
               </div>
             )}
 
-            {/* Paginación inferior para móvil */}
+            {/* Bottom pagination for mobile */}
             {filteredOrders.length > itemsPerPage && (
               <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20 mt-2">
                 <Pagination
@@ -2626,15 +2993,15 @@ const OrdersSection = () => {
         </>
       )}
 
-      {/* ======== MODALES ======== */}
+      {/* ======== MODALS ======== */}
 
-      {/* Modal para crear/editar pedido */}
+      {/* Create/Edit Order Modal */}
       <Dialog
         open={createOrderModalOpen}
         onOpenChange={(open) => {
           setCreateOrderModalOpen(open);
           if (!open) {
-            // Limpiar supervisor seleccionado al cerrar modal
+            // Clear selected supervisor when closing modal
             clearSelectedSupervisor();
           }
         }}
@@ -2643,39 +3010,39 @@ const OrdersSection = () => {
           <DialogHeader>
             <DialogTitle className="text-[#29696B]">
               {currentOrderId
-                ? `Editar Pedido #${orders.find(o => o._id === currentOrderId)?.nPedido || ''}`
+                ? `Edit Order #${orders.find(o => o._id === currentOrderId)?.nPedido || ''}`
                 : isAdminOrSuperSupervisor && selectedSupervisor
-                  ? `Nuevo Pedido (Para: ${supervisors.find(s => s._id === selectedSupervisor)?.usuario || 'Supervisor'})`
-                  : 'Nuevo Pedido'
+                  ? `New Order (For: ${supervisors.find(s => s._id === selectedSupervisor)?.usuario || 'Supervisor'})`
+                  : 'New Order'
               }
             </DialogTitle>
             {currentOrderId && (
               <DialogDescription className="text-[#7AA79C]">
-                Modificar los detalles del pedido
+                Modify the order details
               </DialogDescription>
             )}
             {isAdminOrSuperSupervisor && selectedSupervisor && !currentOrderId && (
               <DialogDescription className="text-[#7AA79C]">
-                Creando pedido para el supervisor: {
+                Creating order for supervisor: {
                   supervisors.find(s => s._id === selectedSupervisor)?.usuario ||
-                  'Supervisor seleccionado'
+                  'Selected supervisor'
                 }
               </DialogDescription>
             )}
           </DialogHeader>
 
-          {/* Indicador de supervisor seleccionado */}
+          {/* Selected supervisor indicator */}
           {isAdminOrSuperSupervisor && selectedSupervisor && (
             <div className="bg-[#DFEFE6]/30 p-3 rounded-md border border-[#91BEAD]/30 mb-4">
               <div className="flex items-center text-[#29696B]">
                 <User className="w-4 h-4 text-[#7AA79C] mr-2" />
                 <span className="font-medium">
                   {(() => {
-                    // Buscar el supervisor en la lista de supervisores
+                    // Find supervisor in the supervisors list
                     const supervisor = supervisors.find(s => s._id === selectedSupervisor);
-                    if (!supervisor) return "Supervisor seleccionado";
+                    if (!supervisor) return "Selected supervisor";
 
-                    return supervisor.usuario || "Supervisor seleccionado";
+                    return supervisor.usuario || "Selected supervisor";
                   })()}
                 </span>
               </div>
@@ -2683,35 +3050,42 @@ const OrdersSection = () => {
           )}
 
           <div className="py-4 space-y-6">
-            {/* Sección para cambiar el supervisor (solo para admin y cuando está editando) */}
+            {/* Section to change supervisor (admin only and when editing) */}
             {isAdminOrSuperSupervisor && currentOrderId && (
               <div>
                 <h2 className="text-lg font-medium mb-4 flex items-center text-[#29696B]">
                   <User className="w-5 h-5 mr-2 text-[#7AA79C]" />
-                  Supervisor Asignado
+                  Assigned Supervisor
                 </h2>
                 
                 <Select
                   value={orderForm.userId}
                   onValueChange={(value) => {
-                    // Cambiar supervisor y recargar sus clientes
+                    // Change supervisor and reload their clients
                     setOrderForm(prev => ({
                       ...prev,
                       userId: value,
+                      clienteId: '',
+                      nombreCliente: '',
                       servicio: '',
-                      seccionDelServicio: ''
+                      seccionDelServicio: '',
+                      subServicioId: undefined,
+                      subUbicacionId: undefined
                     }));
                     setSelectedSupervisor(value);
+                    setSelectedClient(null);
+                    setSelectedSubService(null);
+                    setSelectedSubLocation(null);
                     queryClient.invalidateQueries(['clients', value]);
                   }}
                 >
                   <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
-                    <SelectValue placeholder="Seleccionar supervisor" />
+                    <SelectValue placeholder="Select supervisor" />
                   </SelectTrigger>
                   <SelectContent>
                     {supervisors.map(supervisor => (
                       <SelectItem key={supervisor._id} value={supervisor._id}>
-                        {supervisor.usuario || "Supervisor sin nombre"}
+                        {supervisor.usuario || "Supervisor without name"}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -2719,11 +3093,11 @@ const OrdersSection = () => {
               </div>
             )}
 
-            {/* Sección de Cliente */}
+            {/* Client Section */}
             <div>
               <h2 className="text-lg font-medium mb-4 flex items-center text-[#29696B]">
                 <Building className="w-5 h-5 mr-2 text-[#7AA79C]" />
-                Selección de Cliente
+                Client Selection
               </h2>
 
               {isLoadingClients ? (
@@ -2734,59 +3108,71 @@ const OrdersSection = () => {
                 <Alert className="bg-[#DFEFE6]/30 border border-[#91BEAD] text-[#29696B]">
                   <AlertDescription>
                     {isAdminOrSuperSupervisor && selectedSupervisor
-                      ? "El supervisor seleccionado no tiene clientes asignados."
-                      : "No tiene clientes asignados. Contacte a un administrador para que le asigne clientes."
+                      ? "The selected supervisor has no assigned clients."
+                      : "You have no assigned clients. Contact an administrator to get clients assigned to you."
                     }
                   </AlertDescription>
                 </Alert>
               ) : (
                 <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="cliente" className="text-[#29696B]">Cliente</Label>
-                    <Select
-                      value={
-                        clients.find(c => c.servicio === orderForm.servicio)?._id ||
-                        "none"
-                      }
-                      onValueChange={handleClientChange}
-                    >
-                      <SelectTrigger id="cliente" className="border-[#91BEAD] focus:ring-[#29696B]/20">
-                        <SelectValue placeholder="Seleccionar cliente" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none" disabled>Seleccione un cliente</SelectItem>
-                        {Array.isArray(clients) && clients.length > 0 ? (
-                          clients.map(client => (
-                            <SelectItem
-                              key={client._id}
-                              value={client._id}
-                            >
-                              {client.servicio}
-                              {client.seccionDelServicio ? ` - ${client.seccionDelServicio}` : ''}
-                            </SelectItem>
-                          ))
-                        ) : (
-                          <SelectItem value="no-clients" disabled>No hay clientes disponibles</SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {orderForm.seccionDelServicio && (
-                    <div className="flex items-center p-3 bg-[#DFEFE6]/30 rounded-md border border-[#91BEAD]/30">
-                      <MapPin className="w-4 h-4 text-[#7AA79C] mr-2" />
-                      <span className="text-[#29696B]">Sección: {orderForm.seccionDelServicio || 'Principal'}</span>
+                  {/* Currently selected client */}
+                  {selectedClient && (
+                    <div className="p-3 bg-[#DFEFE6]/30 rounded-md border border-[#91BEAD]/30">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <div className="font-medium text-[#29696B] flex items-center">
+                            <Building className="w-4 h-4 text-[#7AA79C] mr-2" />
+                            {selectedClient.nombre || selectedClient.servicio || 'Selected client'}
+                          </div>
+                          
+                          {/* Show subservice if selected */}
+                          {selectedSubService && (
+                            <div className="text-sm text-[#7AA79C] flex items-center mt-1">
+                              <MapPin className="w-3 h-3 text-[#7AA79C] mr-1" />
+                              {selectedSubService.nombre}
+                              
+                              {/* Show sublocation if selected */}
+                              {selectedSubLocation && (
+                                <span className="ml-1">
+                                  ({selectedSubLocation.nombre})
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSelectClientModalOpen(true)}
+                          className="text-xs text-[#29696B] hover:bg-[#DFEFE6]/40"
+                        >
+                          Change
+                        </Button>
+                      </div>
                     </div>
+                  )}
+
+                  {/* Button to select client if none is selected */}
+                  {!selectedClient && (
+                    <Button
+                      variant="outline"
+                      onClick={() => setSelectClientModalOpen(true)}
+                      className="w-full border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
+                    >
+                      <Building className="w-4 h-4 mr-2 text-[#7AA79C]" />
+                      Select Client
+                    </Button>
                   )}
                 </div>
               )}
             </div>
 
-            {/* Estado del Pedido */}
+            {/* Order Status */}
             <div>
               <h2 className="text-lg font-medium mb-4 flex items-center text-[#29696B]">
                 <Clock className="w-5 h-5 mr-2 text-[#7AA79C]" />
-                Estado del Pedido
+                Order Status
               </h2>
               
               <Select
@@ -2794,53 +3180,53 @@ const OrdersSection = () => {
                 onValueChange={(value) => setOrderForm(prev => ({ ...prev, estado: value }))}
               >
                 <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
-                  <SelectValue placeholder="Seleccionar estado" />
+                  <SelectValue placeholder="Select status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="pendiente">
                     <div className="flex items-center">
                       <Clock className="w-4 h-4 mr-2 text-yellow-600" />
-                      Pendiente
+                      Pending
                     </div>
                   </SelectItem>
                   <SelectItem value="aprobado">
                     <div className="flex items-center">
                       <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
-                      Aprobado
+                      Approved
                     </div>
                   </SelectItem>
                   <SelectItem value="rechazado">
                     <div className="flex items-center">
                       <XCircle className="w-4 h-4 mr-2 text-red-600" />
-                      Rechazado
+                      Rejected
                     </div>
                   </SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            {/* Productos del Pedido */}
+            {/* Order Products */}
             <div>
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg font-medium flex items-center text-[#29696B]">
                   <ShoppingCart className="w-5 h-5 mr-2 text-[#7AA79C]" />
-                  Productos
+                  Products
                 </h2>
 
                 <Button
                   variant="outline"
                   onClick={() => setSelectProductModalOpen(true)}
-                  disabled={!orderForm.servicio || products.length === 0}
+                  disabled={!selectedClient || products.length === 0}
                   className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30 disabled:bg-gray-100 disabled:text-gray-400"
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Agregar Producto
+                  Add Product
                 </Button>
               </div>
 
               {!orderForm.productos || orderForm.productos.length === 0 ? (
                 <div className="text-center py-8 text-[#7AA79C] border border-dashed border-[#91BEAD]/40 rounded-md bg-[#DFEFE6]/10">
-                  No hay productos en el pedido
+                  No products in the order
                 </div>
               ) : (
                 <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
@@ -2850,8 +3236,10 @@ const OrdersSection = () => {
                       : (typeof item.productoId === 'string' ? item.productoId : '');
 
                     const product = productId ? productsMap[productId] : undefined;
-                    const nombre = item.nombre || (product?.nombre || 'Producto no encontrado');
-                    const precio = typeof item.precio === 'number' ? item.precio : (product?.precio || 0);
+                    const nombre = item.nombre || (product?.nombre || 'Product not found');
+                    const precio = typeof item.precio === 'number' ? item.precio : 
+                                   (typeof item.precioUnitario === 'number' ? item.precioUnitario : 
+                                   (product?.precio || 0));
                     const cantidad = typeof item.cantidad === 'number' ? item.cantidad : 0;
 
                     return (
@@ -2862,7 +3250,7 @@ const OrdersSection = () => {
                         <div>
                           <div className="font-medium text-[#29696B]">{nombre}</div>
                           <div className="text-sm text-[#7AA79C]">
-                            Cantidad: {cantidad} x ${precio.toFixed(2)}
+                            Quantity: {cantidad} x ${precio.toFixed(2)}
                           </div>
                         </div>
 
@@ -2895,16 +3283,16 @@ const OrdersSection = () => {
               )}
             </div>
 
-            {/* Observaciones */}
+            {/* Notes */}
             <div>
-              <Label htmlFor="detalle" className="text-[#29696B]">Observaciones (opcional)</Label>
+              <Label htmlFor="detalle" className="text-[#29696B]">Notes (optional)</Label>
               <textarea
                 id="detalle"
                 value={orderForm.detalle === ' ' ? '' : orderForm.detalle}
                 onChange={(e) => setOrderForm(prev => ({ ...prev, detalle: e.target.value }))}
                 className="w-full border-[#91BEAD] rounded-md p-2 mt-1 focus:ring-[#29696B]/20 focus:border-[#29696B]"
                 rows={3}
-                placeholder="Agregue notas adicionales aquí..."
+                placeholder="Add additional notes here..."
               />
             </div>
           </div>
@@ -2921,7 +3309,7 @@ const OrdersSection = () => {
               }}
               className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
             >
-              Cancelar
+              Cancel
             </Button>
 
             <Button
@@ -2931,28 +3319,28 @@ const OrdersSection = () => {
                 updateOrderMutation.isLoading ||
                 !orderForm.productos ||
                 orderForm.productos.length === 0 ||
-                !orderForm.servicio
+                !orderForm.clienteId
               }
               className="bg-[#29696B] hover:bg-[#29696B]/90 text-white disabled:bg-[#8DB3BA] disabled:text-white/70"
             >
               {createOrderMutation.isLoading || updateOrderMutation.isLoading ? (
                 <span className="flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Procesando...
+                  Processing...
                 </span>
-              ) : currentOrderId ? 'Actualizar Pedido' : 'Crear Pedido'}
+              ) : currentOrderId ? 'Update Order' : 'Create Order'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal para seleccionar supervisor */}
+      {/* Supervisor Selection Modal */}
       <Dialog open={supervisorSelectOpen} onOpenChange={setSupervisorSelectOpen}>
         <DialogContent className="sm:max-w-md bg-white border border-[#91BEAD]/20">
           <DialogHeader>
-            <DialogTitle className="text-[#29696B]">Seleccionar Supervisor</DialogTitle>
+            <DialogTitle className="text-[#29696B]">Select Supervisor</DialogTitle>
             <DialogDescription className="text-[#7AA79C]">
-              Elija el supervisor para el cual desea crear el pedido.
+              Choose the supervisor for whom you want to create the order.
             </DialogDescription>
           </DialogHeader>
 
@@ -2964,7 +3352,7 @@ const OrdersSection = () => {
             ) : supervisors.length === 0 ? (
               <Alert className="bg-[#DFEFE6]/30 border border-[#91BEAD] text-[#29696B]">
                 <AlertDescription>
-                  No hay supervisores disponibles. Contacte al administrador del sistema.
+                  No supervisors available. Contact the system administrator.
                 </AlertDescription>
               </Alert>
             ) : (
@@ -2993,91 +3381,261 @@ const OrdersSection = () => {
               onClick={() => setSupervisorSelectOpen(false)}
               className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
             >
-              Cancelar
+              Cancel
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal para seleccionar sección */}
-      <Dialog open={selectSectionModalOpen} onOpenChange={setSelectSectionModalOpen}>
+      {/* Client Selection Modal */}
+      <Dialog open={selectClientModalOpen} onOpenChange={setSelectClientModalOpen}>
         <DialogContent className="sm:max-w-md bg-white border border-[#91BEAD]/20">
           <DialogHeader>
-            <DialogTitle className="text-[#29696B]">Seleccionar Sección</DialogTitle>
+            <DialogTitle className="text-[#29696B]">Select Client</DialogTitle>
             <DialogDescription className="text-[#7AA79C]">
-              Seleccione la sección específica para este cliente.
+              Select the client for this order.
             </DialogDescription>
           </DialogHeader>
 
           <div className="py-4">
+            {/* Client search */}
+            <div className="relative mb-4">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
+              <Input
+                type="text"
+                placeholder="Search clients..."
+                className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
+              />
+            </div>
+
             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-              {orderForm.servicio && clients
-                .filter(c => c.servicio === orderForm.servicio)
-                .map((client) => (
-                  <div
-                    key={client._id}
-                    className="p-3 border border-[#91BEAD] rounded-md hover:bg-[#DFEFE6]/30 cursor-pointer transition-colors"
-                    onClick={() => handleSectionSelect(client.seccionDelServicio || "")}
-                  >
-                    <div className="flex items-center">
-                      <MapPin className="w-4 h-4 text-[#7AA79C] mr-2" />
-                      <span className="text-[#29696B]">{client.seccionDelServicio || 'Principal'}</span>
+              {clients.map((cliente) => (
+                <div
+                  key={cliente._id}
+                  className="p-3 border border-[#91BEAD] rounded-md hover:bg-[#DFEFE6]/30 cursor-pointer transition-colors"
+                  onClick={() => handleClientSelect(cliente)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium text-[#29696B]">
+                        {cliente.nombre || cliente.servicio}
+                      </div>
+                      {cliente.subServicios?.length > 0 && (
+                        <div className="text-xs text-[#7AA79C]">
+                          {cliente.subServicios.length} 
+                          {cliente.subServicios.length === 1 ? ' subservice' : ' subservices'}
+                        </div>
+                      )}
                     </div>
+                    <MapPin className="w-4 h-4 text-[#7AA79C]" />
                   </div>
-                ))}
+                </div>
+              ))}
             </div>
           </div>
 
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setSelectSectionModalOpen(false)}
+              onClick={() => setSelectClientModalOpen(false)}
               className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
             >
-              Cancelar
+              Cancel
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal para agregar producto */}
+      {/* Subservice Selection Modal */}
+      <Dialog open={selectSubServiceModalOpen} onOpenChange={setSelectSubServiceModalOpen}>
+        <DialogContent className="sm:max-w-md bg-white border border-[#91BEAD]/20">
+          <DialogHeader>
+            <DialogTitle className="text-[#29696B]">Select Subservice</DialogTitle>
+            <DialogDescription className="text-[#7AA79C]">
+              Select the subservice for {selectedClient?.nombre || selectedClient?.servicio || 'this client'}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {/* Option for "no subservice" */}
+              <div
+                className="p-3 border border-[#91BEAD] rounded-md hover:bg-[#DFEFE6]/30 cursor-pointer transition-colors"
+                onClick={() => {
+                  // Update form without subservice
+                  setOrderForm(prev => ({
+                    ...prev,
+                    subServicioId: undefined,
+                    nombreSubServicio: undefined,
+                    seccionDelServicio: '',
+                    subUbicacionId: undefined,
+                    nombreSubUbicacion: undefined
+                  }));
+                  
+                  setSelectedSubService(null);
+                  setSelectedSubLocation(null);
+                  setSelectSubServiceModalOpen(false);
+                  setSelectClientModalOpen(false);
+                }}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="font-medium text-[#29696B]">
+                    No specific subservice
+                  </div>
+                  <Check className="w-4 h-4 text-[#7AA79C]" />
+                </div>
+              </div>
+              
+              {/* Subservices list */}
+              {selectedClient?.subServicios?.map((subServicio) => (
+                <div
+                  key={subServicio._id}
+                  className="p-3 border border-[#91BEAD] rounded-md hover:bg-[#DFEFE6]/30 cursor-pointer transition-colors"
+                  onClick={() => handleSubServiceSelect(subServicio)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium text-[#29696B]">
+                        {subServicio.nombre}
+                      </div>
+                      {subServicio.subUbicaciones?.length > 0 && (
+                        <div className="text-xs text-[#7AA79C]">
+                          {subServicio.subUbicaciones.length} 
+                          {subServicio.subUbicaciones.length === 1 ? ' sublocation' : ' sublocations'}
+                        </div>
+                      )}
+                    </div>
+                    <MapPin className="w-4 h-4 text-[#7AA79C]" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSelectSubServiceModalOpen(false);
+                // If cancelled, return to client modal
+                setSelectClientModalOpen(true);
+              }}
+              className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
+            >
+              Back
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Sublocation Selection Modal */}
+      <Dialog open={selectSubLocationModalOpen} onOpenChange={setSelectSubLocationModalOpen}>
+        <DialogContent className="sm:max-w-md bg-white border border-[#91BEAD]/20">
+          <DialogHeader>
+            <DialogTitle className="text-[#29696B]">Select Sublocation</DialogTitle>
+            <DialogDescription className="text-[#7AA79C]">
+              Select the sublocation for {selectedSubService?.nombre || 'this subservice'}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {/* Option for "no sublocation" */}
+              <div
+                className="p-3 border border-[#91BEAD] rounded-md hover:bg-[#DFEFE6]/30 cursor-pointer transition-colors"
+                onClick={() => {
+                  // Update form without sublocation
+                  setOrderForm(prev => ({
+                    ...prev,
+                    subUbicacionId: undefined,
+                    nombreSubUbicacion: undefined
+                  }));
+                  
+                  setSelectedSubLocation(null);
+                  setSelectSubLocationModalOpen(false);
+                  setSelectClientModalOpen(false);
+                }}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="font-medium text-[#29696B]">
+                    No specific sublocation
+                  </div>
+                  <Check className="w-4 h-4 text-[#7AA79C]" />
+                </div>
+              </div>
+              
+              {/* Sublocations list */}
+              {selectedSubService?.subUbicaciones?.map((subUbicacion) => (
+                <div
+                  key={subUbicacion._id}
+                  className="p-3 border border-[#91BEAD] rounded-md hover:bg-[#DFEFE6]/30 cursor-pointer transition-colors"
+                  onClick={() => handleSubLocationSelect(subUbicacion)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="font-medium text-[#29696B]">
+                      {subUbicacion.nombre}
+                    </div>
+                    <MapPin className="w-4 h-4 text-[#7AA79C]" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSelectSubLocationModalOpen(false);
+                // If cancelled, return to subservice modal
+                setSelectSubServiceModalOpen(true);
+              }}
+              className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
+            >
+              Back
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Product Selection Modal */}
       <Dialog open={selectProductModalOpen} onOpenChange={setSelectProductModalOpen}>
         <DialogContent className="sm:max-w-md bg-white border border-[#91BEAD]/20">
           <DialogHeader>
-            <DialogTitle className="text-[#29696B]">Agregar Producto</DialogTitle>
+            <DialogTitle className="text-[#29696B]">Add Product</DialogTitle>
             <DialogDescription className="text-[#7AA79C]">
-              Seleccione el producto y la cantidad que desea agregar.
+              Select the product and quantity you want to add.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {/* Búsqueda de productos */}
+            {/* Product search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
               <Input
                 type="text"
-                placeholder="Buscar productos..."
+                placeholder="Search products..."
                 className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
                 onChange={(e) => {
                   const searchTerm = e.target.value.toLowerCase();
-                  // Implementaríamos aquí lógica para filtrar productos
+                  // We would implement product filtering logic here
                 }}
               />
             </div>
 
             <div>
-              <Label htmlFor="producto" className="text-[#29696B]">Producto</Label>
+              <Label htmlFor="producto" className="text-[#29696B]">Product</Label>
               <Select
                 value={selectedProduct || "none"}
                 onValueChange={setSelectedProduct}
               >
                 <SelectTrigger id="producto" className="border-[#91BEAD] focus:ring-[#29696B]/20">
-                  <SelectValue placeholder="Seleccionar producto" />
+                  <SelectValue placeholder="Select product" />
                 </SelectTrigger>
                 <SelectContent className="max-h-80">
-                  <SelectItem value="none" disabled>Seleccione un producto</SelectItem>
+                  <SelectItem value="none" disabled>Select a product</SelectItem>
                   {isLoadingProducts ? (
-                    <SelectItem value="loading" disabled>Cargando productos...</SelectItem>
+                    <SelectItem value="loading" disabled>Loading products...</SelectItem>
                   ) : products.length > 0 ? (
                     products.map(product => (
                       <SelectItem
@@ -3085,18 +3643,18 @@ const OrdersSection = () => {
                         value={product._id}
                         disabled={product.stock <= 0}
                       >
-                        {product.nombre} - ${product.precio.toFixed(2)} {product.stock <= 0 ? '(Sin stock)' : `(Stock: ${product.stock})`}
+                        {product.nombre} - ${product.precio.toFixed(2)} {product.stock <= 0 ? '(Out of stock)' : `(Stock: ${product.stock})`}
                       </SelectItem>
                     ))
                   ) : (
-                    <SelectItem value="no-products" disabled>No hay productos disponibles</SelectItem>
+                    <SelectItem value="no-products" disabled>No products available</SelectItem>
                   )}
                 </SelectContent>
               </Select>
             </div>
 
             <div>
-              <Label htmlFor="cantidad" className="text-[#29696B]">Cantidad</Label>
+              <Label htmlFor="cantidad" className="text-[#29696B]">Quantity</Label>
               <Input
                 id="cantidad"
                 type="number"
@@ -3110,19 +3668,19 @@ const OrdersSection = () => {
               />
             </div>
 
-            {/* Información del producto seleccionado */}
+            {/* Selected product information */}
             {selectedProduct && selectedProduct !== "none" && productsMap[selectedProduct] && (
               <div className="p-3 bg-[#DFEFE6]/20 rounded-md border border-[#91BEAD]/30">
                 <div className="flex justify-between">
-                  <span className="text-sm font-medium text-[#29696B]">Producto seleccionado:</span>
+                  <span className="text-sm font-medium text-[#29696B]">Selected product:</span>
                   <span className="text-sm text-[#29696B]">{productsMap[selectedProduct].nombre}</span>
                 </div>
                 <div className="flex justify-between mt-1">
-                  <span className="text-sm font-medium text-[#29696B]">Precio:</span>
+                  <span className="text-sm font-medium text-[#29696B]">Price:</span>
                   <span className="text-sm text-[#29696B]">${productsMap[selectedProduct].precio.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between mt-1">
-                  <span className="text-sm font-medium text-[#29696B]">Stock disponible:</span>
+                  <span className="text-sm font-medium text-[#29696B]">Available stock:</span>
                   <span className="text-sm text-[#29696B]">{productsMap[selectedProduct].stock}</span>
                 </div>
                 <div className="flex justify-between mt-1">
@@ -3141,7 +3699,7 @@ const OrdersSection = () => {
               onClick={() => setSelectProductModalOpen(false)}
               className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
             >
-              Cancelar
+              Cancel
             </Button>
 
             <Button
@@ -3149,20 +3707,20 @@ const OrdersSection = () => {
               className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
               disabled={!selectedProduct || selectedProduct === "none" || productQuantity <= 0}
             >
-              Agregar
+              Add
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal de confirmación para eliminar */}
+      {/* Delete Confirmation Modal */}
       <ConfirmationDialog
         open={deleteConfirmModalOpen}
         onOpenChange={setDeleteConfirmModalOpen}
-        title="¿Eliminar Pedido?"
-        description="¿Estás seguro de que deseas eliminar este pedido? Esta acción no se puede deshacer y devolverá el stock a inventario."
-        confirmText="Eliminar"
-        cancelText="Cancelar"
+        title="Delete Order?"
+        description="Are you sure you want to delete this order? This action cannot be undone and will return stock to inventory."
+        confirmText="Delete"
+        cancelText="Cancel"
         onConfirm={handleDeleteOrder}
         variant="destructive"
       />

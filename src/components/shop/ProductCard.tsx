@@ -294,7 +294,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               <div className="absolute inset-0 flex items-center justify-center">
                 {product.hasImage ? (
                   <img
-                    src={`/api/producto/${product._id}/imagen?width=${compact ? 200 : 300}&height=${compact ? 200 : 300}&quality=${compact ? 60 : 75}&${Date.now()}`}
+                    src={`http://localhost:3000/api/producto/${product._id}/imagen?width=${compact ? 200 : 300}&height=${compact ? 200 : 300}&quality=${compact ? 60 : 75}&${Date.now()}`}
                     alt={product.nombre}
                     className="w-full h-full object-contain"
                     loading="lazy"

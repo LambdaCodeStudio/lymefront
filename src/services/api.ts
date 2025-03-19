@@ -1,5 +1,4 @@
 // src/services/api.ts
-import { getApiUrl } from '@/utils/apiUtils';
 import axios, { type AxiosInstance, AxiosError, type AxiosRequestConfig, type AxiosResponse } from 'axios';
 
 // Configuración del API base

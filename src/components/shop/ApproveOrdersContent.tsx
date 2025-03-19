@@ -65,7 +65,6 @@ import {
 import type { OrderDetailsDialog } from './OrderDetailsDialog';
 import ApprovalConfirmDialog  from './ApprovalConfirmDialog';
 import { Label } from "@/components/ui/label";
-import { getApiUrl } from '@/utils/apiUtils';
 
 // Importar estilos globales
 import '@/styles/shop-global.css';
@@ -237,7 +236,7 @@ export const ApproveOrdersContent: React.FC = () => {
       
       // Obtener los pedidos que deben ser aprobados por este supervisor
       // Primero obtenemos el ID del usuario actual
-      const userResponse = await fetch('/api/auth/me', {
+      const userResponse = await fetch('http://localhost:3000/api/auth/me', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -253,7 +252,7 @@ export const ApproveOrdersContent: React.FC = () => {
       }
       
       // Ahora obtenemos los pedidos pendientes para este supervisor
-      const response = await fetch(`/api/pedido/supervisor/${userId}`, {
+      const response = await fetch(`http://localhost:3000/api/pedido/supervisor/${userId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -321,8 +320,8 @@ export const ApproveOrdersContent: React.FC = () => {
       }
       
       const endpoint = action === 'approve' 
-        ? `/api/pedido/${pedidoId}/aprobar` 
-        : `/api/pedido/${pedidoId}/rechazar`;
+        ? `http://localhost:3000/api/pedido/${pedidoId}/aprobar` 
+        : `http://localhost:3000/api/pedido/${pedidoId}/rechazar`;
       
       const response = await fetch(endpoint, {
         method: 'POST',

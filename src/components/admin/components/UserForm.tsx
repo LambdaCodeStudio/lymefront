@@ -21,9 +21,8 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { UserCircle } from 'lucide-react';
-import type { RoleOption } from '../shared/UserRolesConfig';
-import type { AdminUser, CreateUserData } from '../services/userService';
-import userService  from '../../../services/userService';
+import { User, CreateUserDTO, UpdateUserDTO } from '@/types/users';
+import userService from '@/services/userService';
 
 // Constante con roles para usar en el componente
 const ROLES = {
@@ -44,11 +43,11 @@ const shortRoleLabels = {
 interface UserFormProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (formData: CreateUserData) => Promise<void>;
-  availableRoles: RoleOption[];
-  formData: CreateUserData;
-  setFormData: React.Dispatch<React.SetStateAction<CreateUserData>>;
-  editingUser: AdminUser | null;
+  onSubmit: (formData: CreateUserDTO | UpdateUserDTO) => Promise<void>;
+  availableRoles: {value: string, label: string}[];
+  formData: CreateUserDTO | UpdateUserDTO;
+  setFormData: React.Dispatch<React.SetStateAction<CreateUserDTO | UpdateUserDTO>>;
+  editingUser: User | null;
   loading: boolean;
   error: string;
   currentUserRole: string;
@@ -73,7 +72,7 @@ const UserForm: React.FC<UserFormProps> = ({
   const [isTemporary, setIsTemporary] = useState(false);
   
   // Estado para almacenar lista de supervisores
-  const [availableSupervisors, setAvailableSupervisors] = useState<AdminUser[]>([]);
+  const [availableSupervisors, setAvailableSupervisors] = useState<User[]>([]);
   
   // Estado para manejar la carga de supervisores
   const [supervisorsLoading, setSupervisorsLoading] = useState(false);
@@ -104,7 +103,7 @@ const UserForm: React.FC<UserFormProps> = ({
         setSupervisorsLoading(true);
         setSupervisorsError('');
         try {
-          // Usar directamente la respuesta, no response.data
+          // Usar la respuesta actualizada según el nuevo formato de la API
           const supervisors = await userService.getSupervisors();
           
           console.log('Supervisores cargados:', supervisors);
@@ -177,7 +176,11 @@ const UserForm: React.FC<UserFormProps> = ({
     const submissionData = {
       ...formData,
       // Para operarios, agregar flag de temporal según corresponda
-      isTemporary: formData.role === ROLES.OPERARIO ? isTemporary : undefined
+      isTemporary: formData.role === ROLES.OPERARIO ? isTemporary : undefined,
+      // Tiempo de expiración solo si es temporal
+      expirationMinutes: formData.role === ROLES.OPERARIO && isTemporary 
+        ? formData.expirationMinutes || 30 
+        : undefined
     };
     
     await onSubmit(submissionData);
@@ -202,7 +205,7 @@ const UserForm: React.FC<UserFormProps> = ({
               <Input
                 id="usuario"
                 type="text"
-                value={formData.usuario}
+                value={formData.usuario || ''}
                 onChange={(e) => setFormData({ ...formData, usuario: e.target.value })}
                 placeholder="usuario123"
                 required
@@ -392,7 +395,7 @@ const UserForm: React.FC<UserFormProps> = ({
                   type="number"
                   min={1}
                   max={10080} // 7 días máximo
-                  value={formData.expirationMinutes}
+                  value={formData.expirationMinutes || 30}
                   onChange={(e) => setFormData({
                     ...formData,
                     expirationMinutes: parseInt(e.target.value)
@@ -431,7 +434,7 @@ const UserForm: React.FC<UserFormProps> = ({
             <div>
               <Label htmlFor="secciones">Secciones <span className="text-red-500">*</span></Label>
               <Select
-                value={formData.secciones}
+                value={formData.secciones || 'ambos'}
                 onValueChange={(value: 'limpieza' | 'mantenimiento' | 'ambos') => {
                   setFormData({
                     ...formData,

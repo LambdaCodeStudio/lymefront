@@ -8,7 +8,9 @@ export type RoleOption = {
   label: string;
 };
 
-// Constantes de roles
+export type UserSection = 'limpieza' | 'mantenimiento' | 'ambos';
+
+// Constantes de roles (alineadas con backend)
 export const ROLES = {
   ADMIN: 'admin',
   SUPERVISOR_DE_SUPERVISORES: 'supervisor_de_supervisores',
@@ -32,7 +34,7 @@ export const shortRolesDisplayNames = {
   [ROLES.OPERARIO]: 'Operario'
 };
 
-// Opciones de roles que cada rol puede crear
+// Opciones de roles que cada rol puede crear - alineado con lógica del backend
 export const roleOptions: Record<string, RoleOption[]> = {
   [ROLES.ADMIN]: [
     { value: ROLES.ADMIN, label: 'Administrador' },

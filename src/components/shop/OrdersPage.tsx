@@ -70,7 +70,6 @@ import {
   TabsTrigger 
 } from "@/components/ui/tabs";
 import { ShopNavbar } from './ShopNavbar';
-import { getApiUrl } from '@/utils/apiUtils';
 
 // Intentar usar el contexto de notificaciones de forma segura
 let useNotification;
@@ -202,7 +201,7 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No se encontró token de autenticación');
       }
 
-      const response = await fetch('/api/auth/me', {
+      const response = await fetch('http://localhost:3000/api/auth/me', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -238,7 +237,7 @@ export const OrdersPage: React.FC = () => {
     }
     
     // Obtener todos los pedidos
-    const response = await fetch('/api/pedido', {
+    const response = await fetch('http://localhost:3000/api/pedido', {
       headers: { 
         'Authorization': `Bearer ${token}`,
         'Cache-Control': 'no-cache'
@@ -427,7 +426,7 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
       
-      const response = await fetch(`/api/pedido/${orderId}/aprobar`, {
+      const response = await fetch(`http://localhost:3000/api/pedido/${orderId}/aprobar`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -465,7 +464,7 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
       
-      const response = await fetch(`/api/pedido/${orderId}/rechazar`, {
+      const response = await fetch(`http://localhost:3000/api/pedido/${orderId}/rechazar`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -510,7 +509,7 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No se encontró token de autenticación');
       }
 
-      const url = `/api/pedido/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
+      const url = `http://localhost:3000/api/pedido/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
       
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -609,7 +608,7 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No se encontró token de autenticación');
       }
       
-      const response = await fetch(`/api/downloads/remito/${orderId}`, {
+      const response = await fetch(`http://localhost:3000/api/downloads/remito/${orderId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },
