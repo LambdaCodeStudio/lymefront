@@ -12,9 +12,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from "@/components/ui/label";
 import { Loader2, CheckCircle2, XCircle, AlertTriangle, ClipboardList } from 'lucide-react';
 
-// Importar estilos globales
-import '@/styles/shop-global.css';
-
 interface ApprovalConfirmDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -42,23 +39,23 @@ const ApprovalConfirmDialog: React.FC<ApprovalConfirmDialogProps> = ({
   const getDialogStyles = () => {
     if (type === 'approve') {
       return {
-        icon: <CheckCircle2 className="h-6 w-6 text-[var(--state-success)]" />,
+        icon: <CheckCircle2 className="h-6 w-6 text-[--state-success]" />,
         title: 'Aprobar Pedido',
-        titleColor: 'text-[var(--state-success)]',
+        titleColor: 'text-[--state-success]',
         description: `¿Estás seguro de que deseas aprobar el pedido #${orderNumber}?`,
         buttonText: 'Confirmar Aprobación',
-        buttonClass: 'bg-[var(--state-success)] hover:bg-[var(--accent-tertiary)] text-white',
-        bgClass: 'bg-[var(--background-card)]'
+        buttonClass: 'bg-[--state-success] hover:bg-[--accent-tertiary] text-white',
+        bgClass: 'bg-[--background-card]'
       };
     } else {
       return {
-        icon: <XCircle className="h-6 w-6 text-[var(--state-error)]" />,
+        icon: <XCircle className="h-6 w-6 text-[--state-error]" />,
         title: 'Rechazar Pedido',
-        titleColor: 'text-[var(--state-error)]',
+        titleColor: 'text-[--state-error]',
         description: `¿Estás seguro de que deseas rechazar el pedido #${orderNumber}?`,
         buttonText: 'Confirmar Rechazo',
-        buttonClass: 'bg-[var(--state-error)] hover:bg-[var(--state-error)]/80 text-white',
-        bgClass: 'bg-[var(--background-card)]'
+        buttonClass: 'bg-[--state-error] hover:bg-[--state-error]/80 text-white',
+        bgClass: 'bg-[--background-card]'
       };
     }
   };
@@ -73,7 +70,15 @@ const ApprovalConfirmDialog: React.FC<ApprovalConfirmDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className={`shop-theme ${styles.bgClass} backdrop-blur-md border-[var(--accent-primary)]/30 text-[var(--text-primary)] max-w-md mx-auto`}>
+      <DialogContent 
+        className={`shop-theme 
+                    ${styles.bgClass} 
+                    backdrop-blur-md 
+                    border-[--accent-primary]/30 
+                    text-[--text-primary] 
+                    max-w-md 
+                    mx-auto`}
+      >
         <DialogHeader className="pb-2">
           <div className="flex items-center mb-2">
             {styles.icon}
@@ -81,42 +86,53 @@ const ApprovalConfirmDialog: React.FC<ApprovalConfirmDialogProps> = ({
               {styles.title}
             </DialogTitle>
           </div>
-          <DialogDescription className="text-[var(--text-secondary)]">
+          <DialogDescription className="text-[--text-secondary]">
             {styles.description}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
           {/* Información del pedido */}
-          <div className="bg-[var(--background-component)] rounded-md p-3 space-y-2 border border-[var(--accent-primary)]/20">
+          <div 
+            className="bg-[--background-component] 
+                       rounded-md p-3 
+                       space-y-2 
+                       border border-[--accent-primary]/20"
+          >
             <div className="flex justify-between items-center text-sm">
-              <span className="flex items-center text-[var(--text-primary)]">
+              <span className="flex items-center text-[--text-primary]">
                 <ClipboardList className="h-4 w-4 mr-1" />
                 Pedido #:
               </span>
-              <span className="font-medium text-[var(--text-primary)]">{orderNumber}</span>
+              <span className="font-medium text-[--text-primary]">{orderNumber}</span>
             </div>
             <div className="flex justify-between items-center text-sm">
-              <span className="text-[var(--text-primary)]">Total:</span>
-              <span className="font-medium text-[var(--accent-quaternary)]">${orderTotal}</span>
+              <span className="text-[--text-primary]">Total:</span>
+              <span className="font-medium text-[--accent-quaternary]">${orderTotal}</span>
             </div>
             <div className="flex justify-between items-center text-sm">
-              <span className="text-[var(--text-primary)]">Items:</span>
-              <span className="font-medium text-[var(--text-primary)]">{orderItems}</span>
+              <span className="text-[--text-primary]">Items:</span>
+              <span className="font-medium text-[--text-primary]">{orderItems}</span>
             </div>
           </div>
 
           {/* Campo para notas y comentarios */}
           <div className="space-y-2">
-            <Label htmlFor="notes" className="text-[var(--text-primary)] mb-2 block">
-              Notas {type === 'reject' && <span className="text-[var(--state-error)]/80">(requerido para rechazo)</span>}
+            <Label 
+              htmlFor="notes" 
+              className="text-[--text-primary] mb-2 block"
+            >
+              Notas {type === 'reject' && <span className="text-[--state-error]/80">(requerido para rechazo)</span>}
             </Label>
             <Textarea
               id="notes"
               placeholder={type === 'approve' 
                 ? "Comentarios adicionales (opcional)" 
                 : "Razón del rechazo (obligatorio)"}
-              className="bg-[var(--background-card)] border-[var(--accent-primary)]/30 text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)]"
+              className="bg-[--background-card] 
+                         border-[--accent-primary]/30 
+                         text-[--text-primary] 
+                         placeholder:text-[--text-tertiary]"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               required={type === 'reject'}
@@ -126,7 +142,15 @@ const ApprovalConfirmDialog: React.FC<ApprovalConfirmDialogProps> = ({
 
           {/* Alerta para rechazo */}
           {type === 'reject' && (
-            <div className="flex items-start space-x-2 text-[var(--state-warning)] text-sm bg-[var(--state-warning)]/10 p-2 rounded-md border border-[var(--state-warning)]/30">
+            <div 
+              className="flex items-start space-x-2 
+                         text-[--state-warning] 
+                         text-sm 
+                         bg-[--state-warning]/10 
+                         p-2 
+                         rounded-md 
+                         border border-[--state-warning]/30"
+            >
               <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
               <p>El pedido será rechazado y el operario será notificado con tu comentario. Esta acción no puede deshacerse.</p>
             </div>
@@ -137,7 +161,9 @@ const ApprovalConfirmDialog: React.FC<ApprovalConfirmDialogProps> = ({
               type="button"
               variant="outline"
               onClick={onClose}
-              className="border-[var(--accent-primary)]/30 text-[var(--text-primary)] hover:bg-[var(--accent-primary)]/20"
+              className="border-[--accent-primary]/30 
+                         text-[--text-primary] 
+                         hover:bg-[--accent-primary]/20"
               disabled={isProcessing}
             >
               Cancelar

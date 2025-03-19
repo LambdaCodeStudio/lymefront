@@ -5,46 +5,64 @@ import { QueryProvider } from '@/providers/QueryProvider';
 import { ShopHome } from './ShopHome';
 
 export const ShopWrapper: React.FC = () => {
+
   // Agregar clase shop-theme al body cuando se monta el componente
   useEffect(() => {
     // Definir variables CSS para la nueva paleta de colores
-    const applyTurquoiseTheme = () => {
-      // Variables de colores para la nueva paleta turquesa
-      document.documentElement.style.setProperty('--background-primary', '#F8FDFC');
-      document.documentElement.style.setProperty('--background-secondary', '#CFF2E4');
-      document.documentElement.style.setProperty('--background-component', '#E8F8F3');
+    const applyModernTheme = () => {
+      // Soft, sophisticated background colors
+      document.documentElement.style.setProperty('--background-primary', '#F4F7FA');
+      document.documentElement.style.setProperty('--background-secondary', '#E9EEF3');
+      document.documentElement.style.setProperty('--background-component', '#FFFFFF');
       document.documentElement.style.setProperty('--background-card', '#FFFFFF');
       
-      document.documentElement.style.setProperty('--accent-primary', '#1B9C96');
-      document.documentElement.style.setProperty('--accent-secondary', '#29696B');
-      document.documentElement.style.setProperty('--accent-tertiary', '#139692');
-      document.documentElement.style.setProperty('--accent-quaternary', '#F2A516');
+      // Modern, muted accent colors with depth
+      document.documentElement.style.setProperty('--accent-primary', '#3A7CA5');
+      document.documentElement.style.setProperty('--accent-secondary', '#2C5F8D');
+      document.documentElement.style.setProperty('--accent-tertiary', '#5B9DB3');
+      document.documentElement.style.setProperty('--accent-quaternary', '#E6A957');
       
-      document.documentElement.style.setProperty('--state-success', '#1B9C96');
-      document.documentElement.style.setProperty('--state-warning', '#F2A516');
-      document.documentElement.style.setProperty('--state-error', '#E74C3C');
-      document.documentElement.style.setProperty('--state-info', '#84D6C8');
+      // Refined state colors
+      document.documentElement.style.setProperty('--state-success', '#4CAF50');
+      document.documentElement.style.setProperty('--state-warning', '#FF9800');
+      document.documentElement.style.setProperty('--state-error', '#F44336');
+      document.documentElement.style.setProperty('--state-info', '#2196F3');
       
-      document.documentElement.style.setProperty('--text-primary', '#0D4E4B');
-      document.documentElement.style.setProperty('--text-secondary', '#29696B');
-      document.documentElement.style.setProperty('--text-tertiary', '#4A7C79');
-      document.documentElement.style.setProperty('--text-disabled', '#A0ABA9');
+      // Elegant text hierarchy
+      document.documentElement.style.setProperty('--text-primary', '#1F2937');
+      document.documentElement.style.setProperty('--text-secondary', '#4B5563');
+      document.documentElement.style.setProperty('--text-tertiary', '#6B7280');
+      document.documentElement.style.setProperty('--text-disabled', '#9CA3AF');
       
+      // Sophisticated gradients
       document.documentElement.style.setProperty('--gradient-main', 'linear-gradient(90deg, var(--accent-primary), var(--accent-tertiary))');
-      document.documentElement.style.setProperty('--gradient-promo', 'linear-gradient(90deg, var(--accent-quaternary), var(--accent-primary))');
+      document.documentElement.style.setProperty('--gradient-promo', 'linear-gradient(135deg, var(--accent-quaternary), var(--accent-secondary))');
       document.documentElement.style.setProperty('--gradient-featured', 'linear-gradient(90deg, var(--accent-tertiary), var(--state-info))');
-      document.documentElement.style.setProperty('--gradient-offers', 'linear-gradient(90deg, var(--accent-quaternary), var(--accent-secondary))');
+      document.documentElement.style.setProperty('--gradient-offers', 'linear-gradient(90deg, var(--accent-quaternary), #5A6B7D)');
     };
 
-    // Agregar la clase al body para aplicar estilos globales
-    document.body.classList.add('shop-theme');
-    
-    // Aplicar fondo claro y variables CSS de paleta turquesa
-    applyTurquoiseTheme();
-    document.body.style.backgroundColor = 'var(--background-primary)';
-    
-    // Agregar también clases para efectos especiales
-    document.body.classList.add('turquoise-theme');
+    // Verificar token en localStorage antes de renderizar
+    const checkAuth = () => {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        window.location.href = '/login';
+        return false;
+      }
+      return true;
+    };
+
+    // Solo continuar si está autenticado
+    if (checkAuth()) {
+      // Agregar la clase al body para aplicar estilos globales
+      document.body.classList.add('shop-theme');
+      
+      // Aplicar fondo claro y variables CSS de paleta turquesa
+      applyModernTheme();
+      document.body.style.backgroundColor = 'var(--background-primary)';
+      
+      // Agregar también clases para efectos especiales
+      document.body.classList.add('turquoise-theme');
+    }
     
     // Limpiar cuando se desmonte
     return () => {
@@ -65,6 +83,15 @@ export const ShopWrapper: React.FC = () => {
         document.documentElement.style.removeProperty(variable);
       });
     };
+  }, []);
+
+  // Verificar si hay secciones permitidas para el usuario
+  useEffect(() => {
+    const userSecciones = localStorage.getItem('userSecciones');
+    // Si no hay secciones definidas, configurar como 'ambos' por defecto para evitar problemas
+    if (!userSecciones) {
+      localStorage.setItem('userSecciones', 'ambos');
+    }
   }, []);
 
   return (

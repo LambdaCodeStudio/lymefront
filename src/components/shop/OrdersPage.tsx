@@ -726,42 +726,42 @@ export const OrdersPage: React.FC = () => {
     switch (status) {
       case OrderStatus.PENDING:
         return (
-          <Badge variant="outline" className="bg-[#FF6B35]/20 text-[#FFCC80] border-[#FF6B35]">
+          <Badge variant="outline" className="bg-[var(--state-warning)]/20 text-[var(--state-warning)] border-[var(--state-warning)]">
             <Clock className="w-3 h-3 mr-1" />
             Pendiente
           </Badge>
         );
       case OrderStatus.APPROVED:
         return (
-          <Badge variant="outline" className="bg-[#2E7D32]/20 text-[#AED581] border-[#2E7D32]">
+          <Badge variant="outline" className="bg-[var(--state-success)]/20 text-[var(--state-success)] border-[var(--state-success)]">
             <CheckSquare className="w-3 h-3 mr-1" />
             Aprobado
           </Badge>
         );
       case OrderStatus.REJECTED:
         return (
-          <Badge variant="outline" className="bg-[#D32F2F]/20 text-[#EF9A9A] border-[#D32F2F]">
+          <Badge variant="outline" className="bg-[var(--state-error)]/20 text-[var(--state-error)] border-[var(--state-error)]">
             <XSquare className="w-3 h-3 mr-1" />
             Rechazado
           </Badge>
         );
       case OrderStatus.DELIVERED:
         return (
-          <Badge variant="outline" className="bg-[#2A82C7]/20 text-[#90CAF9] border-[#2A82C7]">
+          <Badge variant="outline" className="bg-[var(--state-info)]/20 text-[var(--state-info)] border-[var(--state-info)]">
             <Package className="w-3 h-3 mr-1" />
             Entregado
           </Badge>
         );
       case OrderStatus.CANCELED:
         return (
-          <Badge variant="outline" className="bg-gray-100 text-gray-800 border-gray-300">
+          <Badge variant="outline" className="bg-[var(--background-secondary)] text-[var(--text-tertiary)] border-[var(--text-disabled)]">
             <X className="w-3 h-3 mr-1" />
             Cancelado
           </Badge>
         );
       default:
         return (
-          <Badge variant="outline" className="bg-gray-100 text-gray-800 border-gray-300">
+          <Badge variant="outline" className="bg-[var(--background-secondary)] text-[var(--text-tertiary)] border-[var(--text-disabled)]">
             Desconocido
           </Badge>
         );
@@ -772,7 +772,7 @@ export const OrdersPage: React.FC = () => {
   const renderOperarioBadge = (order: Order) => {
     if (order.metadata?.creadoPorOperario) {
       return (
-        <Badge variant="outline" className="bg-purple-100 text-purple-800 border-purple-300 ml-2">
+        <Badge variant="outline" className="bg-[var(--accent-tertiary)]/20 text-[var(--accent-tertiary)] border-[var(--accent-tertiary)] ml-2">
           <Users className="w-3 h-3 mr-1" />
           Operario: {order.metadata.operarioNombre || 'Desconocido'}
         </Badge>
@@ -799,16 +799,16 @@ export const OrdersPage: React.FC = () => {
       <ShopNavbar />
       <div className="container mx-auto px-4 py-8 shop-theme">
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-3xl font-bold mb-8 flex items-center text-white">
-            <ShoppingCart className="mr-3 h-8 w-8" />
+          <h1 className="text-3xl font-bold mb-8 flex items-center text-[var(--text-primary)]">
+            <ShoppingCart className="mr-3 h-8 w-8 text-[var(--accent-primary)]" />
             Mis Pedidos
           </h1>
           
           {/* Alertas */}
           {error && (
-            <Alert className="mb-6 bg-red-900/30 border border-red-500">
-              <AlertCircle className="h-4 w-4 text-red-400" />
-              <AlertDescription className="ml-2 text-white">
+            <Alert className="mb-6 bg-[var(--state-error)]/10 border border-[var(--state-error)]/30">
+              <AlertCircle className="h-4 w-4 text-[var(--state-error)]" />
+              <AlertDescription className="ml-2 text-[var(--text-primary)]">
                 {error instanceof Error ? error.message : 'Error al cargar pedidos'}
               </AlertDescription>
             </Alert>
@@ -817,10 +817,10 @@ export const OrdersPage: React.FC = () => {
           {/* Pestañas para filtrar por categorías principales */}
           <div className="mb-6">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="bg-[#00701A]/50 border border-[#00701A]/40 w-full">
+              <TabsList className="bg-[var(--background-secondary)] border border-[var(--accent-primary)]/20 w-full">
                 <TabsTrigger 
                   value="todos" 
-                  className="flex-1 data-[state=active]:bg-[#00701A] data-[state=active]:text-white text-white"
+                  className="flex-1 data-[state=active]:bg-[var(--accent-primary)] data-[state=active]:text-white text-[var(--text-primary)]"
                 >
                   Todos
                 </TabsTrigger>
@@ -829,12 +829,12 @@ export const OrdersPage: React.FC = () => {
                 {userRole === 'supervisor' && (
                   <TabsTrigger 
                     value="porAprobar" 
-                    className="flex-1 data-[state=active]:bg-[#00701A] data-[state=active]:text-white text-white relative"
+                    className="flex-1 data-[state=active]:bg-[var(--accent-primary)] data-[state=active]:text-white text-[var(--text-primary)] relative"
                   >
                     <FileCheck className="w-4 h-4 mr-1" />
                     Por aprobar
                     {getPendingApprovalCount() > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-[#FF6B35] text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                      <span className="absolute -top-1 -right-1 bg-[var(--state-warning)] text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
                         {getPendingApprovalCount()}
                       </span>
                     )}
@@ -843,7 +843,7 @@ export const OrdersPage: React.FC = () => {
                 
                 <TabsTrigger 
                   value="pendientes" 
-                  className="flex-1 data-[state=active]:bg-[#00701A] data-[state=active]:text-white text-white"
+                  className="flex-1 data-[state=active]:bg-[var(--accent-primary)] data-[state=active]:text-white text-[var(--text-primary)]"
                 >
                   <Clock className="w-4 h-4 mr-1" />
                   Pendientes
@@ -851,7 +851,7 @@ export const OrdersPage: React.FC = () => {
                 
                 <TabsTrigger 
                   value="aprobados" 
-                  className="flex-1 data-[state=active]:bg-[#00701A] data-[state=active]:text-white text-white"
+                  className="flex-1 data-[state=active]:bg-[var(--accent-primary)] data-[state=active]:text-white text-[var(--text-primary)]"
                 >
                   <CheckCircle2 className="w-4 h-4 mr-1" />
                   Aprobados
@@ -859,7 +859,7 @@ export const OrdersPage: React.FC = () => {
                 
                 <TabsTrigger 
                   value="rechazados" 
-                  className="flex-1 data-[state=active]:bg-[#00701A] data-[state=active]:text-white text-white"
+                  className="flex-1 data-[state=active]:bg-[var(--accent-primary)] data-[state=active]:text-white text-[var(--text-primary)]"
                 >
                   <XSquare className="w-4 h-4 mr-1" />
                   Rechazados
@@ -869,14 +869,14 @@ export const OrdersPage: React.FC = () => {
           </div>
 
           {/* Filtros y búsqueda */}
-          <div className="mb-6 space-y-4 bg-white/10 backdrop-blur-sm p-4 rounded-xl shadow-sm border border-[#00701A]/20">
+          <div className="mb-6 space-y-4 bg-[var(--background-component)] p-4 rounded-xl shadow-sm border border-[var(--accent-primary)]/10">
             <div className="flex flex-wrap gap-4 items-center justify-between">
               <div className="relative flex-1 min-w-[280px]">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#00701A] w-4 h-4" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[var(--accent-primary)] w-4 h-4" />
                 <Input
                   type="text"
                   placeholder="Buscar pedidos..."
-                  className="pl-10 bg-white/10 border-[#2A82C7] focus:border-[#7CB342] text-white placeholder:text-white/70"
+                  className="pl-10 bg-[var(--background-card)] border-[var(--accent-tertiary)] focus:border-[var(--accent-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)]"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
@@ -887,7 +887,7 @@ export const OrdersPage: React.FC = () => {
                 size="sm"
                 onClick={handleManualRefresh}
                 disabled={isLoading || approveMutation.isPending || rejectMutation.isPending}
-                className="border-[#2A82C7] text-white hover:bg-[#00701A]/20"
+                className="border-[var(--accent-tertiary)] text-[var(--text-primary)] hover:bg-[var(--accent-primary)]/10"
               >
                 {isLoading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -899,7 +899,7 @@ export const OrdersPage: React.FC = () => {
 
             <div className="flex flex-wrap gap-4 items-end">
               <div>
-                <label htmlFor="fechaInicio" className="text-white text-sm font-medium">
+                <label htmlFor="fechaInicio" className="text-[var(--text-primary)] text-sm font-medium">
                   Fecha Inicio
                 </label>
                 <Input
@@ -907,11 +907,11 @@ export const OrdersPage: React.FC = () => {
                   type="date"
                   value={dateFilter.fechaInicio}
                   onChange={(e) => setDateFilter({ ...dateFilter, fechaInicio: e.target.value })}
-                  className="w-full bg-white/10 border-[#2A82C7] focus:border-[#7CB342] text-white mt-1"
+                  className="w-full bg-[var(--background-card)] border-[var(--accent-tertiary)] focus:border-[var(--accent-primary)] text-[var(--text-primary)] mt-1"
                 />
               </div>
               <div>
-                <label htmlFor="fechaFin" className="text-white text-sm font-medium">
+                <label htmlFor="fechaFin" className="text-[var(--text-primary)] text-sm font-medium">
                   Fecha Fin
                 </label>
                 <Input
@@ -919,13 +919,13 @@ export const OrdersPage: React.FC = () => {
                   type="date"
                   value={dateFilter.fechaFin}
                   onChange={(e) => setDateFilter({ ...dateFilter, fechaFin: e.target.value })}
-                  className="w-full bg-white/10 border-[#2A82C7] focus:border-[#7CB342] text-white mt-1"
+                  className="w-full bg-[var(--background-card)] border-[var(--accent-tertiary)] focus:border-[var(--accent-primary)] text-[var(--text-primary)] mt-1"
                 />
               </div>
               <Button
                 variant="outline"
                 onClick={filterOrdersByDate}
-                className="border-[#2A82C7] text-white hover:bg-[#00701A]/50"
+                className="border-[var(--accent-tertiary)] text-[var(--text-primary)] hover:bg-[var(--accent-primary)]/10"
               >
                 <Filter className="w-4 h-4 mr-2" />
                 Filtrar por Fecha
@@ -934,7 +934,7 @@ export const OrdersPage: React.FC = () => {
                 <Button
                   variant="ghost"
                   onClick={clearAllFilters}
-                  className="text-[#6C757D] hover:text-white hover:bg-[#00701A]/30"
+                  className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--accent-primary)]/10"
                 >
                   Limpiar filtros
                 </Button>
@@ -946,20 +946,20 @@ export const OrdersPage: React.FC = () => {
           {isLoading && (
             <div className="flex justify-center items-center py-20">
               <div className="flex flex-col items-center">
-                <Loader2 className="h-10 w-10 animate-spin text-[#00701A]" />
-                <p className="mt-4 text-white">Cargando pedidos...</p>
+                <Loader2 className="h-10 w-10 animate-spin text-[var(--accent-primary)]" />
+                <p className="mt-4 text-[var(--text-primary)]">Cargando pedidos...</p>
               </div>
             </div>
           )}
 
           {/* Sin pedidos */}
           {!isLoading && filteredOrders.length === 0 && (
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl shadow-sm p-8 text-center border border-[#00701A]/20">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-[#00701A]/30 rounded-full mb-4">
-                <ShoppingCart className="w-8 h-8 text-white" />
+            <div className="bg-[var(--background-card)] rounded-xl shadow-sm p-8 text-center border border-[var(--accent-primary)]/10">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-[var(--accent-primary)]/10 rounded-full mb-4">
+                <ShoppingCart className="w-8 h-8 text-[var(--accent-primary)]" />
               </div>
-              <h2 className="text-xl font-bold mb-2 text-white">No se encontraron pedidos</h2>
-              <p className="text-[#E8F5E9] max-w-lg mx-auto">
+              <h2 className="text-xl font-bold mb-2 text-[var(--text-primary)]">No se encontraron pedidos</h2>
+              <p className="text-[var(--text-secondary)] max-w-lg mx-auto">
                 {searchTerm || dateFilter.fechaInicio || dateFilter.fechaFin || statusFilter !== 'all'
                   ? 'No hay pedidos que coincidan con los filtros seleccionados.' 
                   : activeTab === 'porAprobar'
@@ -975,7 +975,7 @@ export const OrdersPage: React.FC = () => {
               {(searchTerm || dateFilter.fechaInicio || dateFilter.fechaFin || statusFilter !== 'all' || activeTab !== 'todos') && (
                 <Button 
                   onClick={clearAllFilters}
-                  className="mt-4 bg-[#00701A] hover:bg-[#7CB342] text-white"
+                  className="mt-4 bg-[var(--accent-primary)] hover:bg-[var(--accent-tertiary)] text-white"
                 >
                   Mostrar todos los pedidos
                 </Button>
@@ -986,22 +986,22 @@ export const OrdersPage: React.FC = () => {
           {/* Lista de pedidos */}
           {!isLoading && filteredOrders.length > 0 && (
             <div className="space-y-6">
-              <h2 className="text-xl font-medium mb-4 flex items-center text-white">
+              <h2 className="text-xl font-medium mb-4 flex items-center text-[var(--text-primary)]">
                 {activeTab === 'todos' ? 'Todos los pedidos' : 
                  activeTab === 'porAprobar' ? 'Pedidos por aprobar' :
                  activeTab === 'pendientes' ? 'Pedidos pendientes' :
                  activeTab === 'aprobados' ? 'Pedidos aprobados' :
                  activeTab === 'rechazados' ? 'Pedidos rechazados' : 'Pedidos'}
-                <Badge variant="outline" className="ml-3 bg-white/10 text-white border-[#2A82C7]">
+                <Badge variant="outline" className="ml-3 bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] border-[var(--accent-tertiary)]">
                   {filteredOrders.length} pedidos
                 </Badge>
               </h2>
 
               {/* Vista para escritorio */}
               <div className="hidden md:block">
-                <div className="bg-white/10 backdrop-blur-sm rounded-xl shadow-sm overflow-hidden border border-[#00701A]/20">
+                <div className="bg-[var(--background-card)] rounded-xl shadow-sm overflow-hidden border border-[var(--accent-primary)]/10">
                   <table className="w-full">
-                    <thead className="bg-[#00701A]/30 text-white border-b border-[#00701A]/30">
+                    <thead className="bg-[var(--accent-primary)]/10 text-[var(--text-primary)] border-b border-[var(--accent-primary)]/20">
                       <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
                           Pedido #
@@ -1026,29 +1026,29 @@ export const OrdersPage: React.FC = () => {
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white/5 divide-y divide-[#2A82C7]/20">
+                    <tbody className="bg-white divide-y divide-[var(--accent-tertiary)]/10">
                       {filteredOrders.map((order) => (
                         <React.Fragment key={order._id}>
-                          <tr className="hover:bg-[#00701A]/20 transition-colors">
+                          <tr className="hover:bg-[var(--background-component)] transition-colors">
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex items-center font-medium text-white">
-                                <Hash className="w-4 h-4 text-[#E8F5E9] mr-2" />
+                              <div className="flex items-center font-medium text-[var(--text-primary)]">
+                                <Hash className="w-4 h-4 text-[var(--accent-primary)] mr-2" />
                                 {order.displayNumber}
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-white">{formatDate(order.fecha)}</div>
-                              <div className="text-xs text-[#E8F5E9]">
+                              <div className="text-[var(--text-primary)]">{formatDate(order.fecha)}</div>
+                              <div className="text-xs text-[var(--text-tertiary)]">
                                 {formatTime(order.fecha)}
                               </div>
                             </td>
                             <td className="px-6 py-4">
                               <div className="flex items-center">
-                                <Building className="w-4 h-4 text-[#E8F5E9] mr-2" />
+                                <Building className="w-4 h-4 text-[var(--accent-tertiary)] mr-2" />
                                 <div>
-                                  <div className="font-medium text-white">{order.servicio}</div>
+                                  <div className="font-medium text-[var(--text-primary)]">{order.servicio}</div>
                                   {order.seccionDelServicio && (
-                                    <div className="text-xs text-[#E8F5E9] flex items-center mt-1">
+                                    <div className="text-xs text-[var(--text-tertiary)] flex items-center mt-1">
                                       <MapPin className="w-3 h-3 mr-1" />
                                       {order.seccionDelServicio}
                                     </div>
@@ -1057,14 +1057,14 @@ export const OrdersPage: React.FC = () => {
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <Badge className="bg-[#00701A]/30 text-white border-[#2A82C7]/50">
+                              <Badge className="bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] border-[var(--accent-tertiary)]/50">
                                 {order.productos?.length || 0} items
                               </Badge>
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => toggleOrderDetails(order._id)}
-                                className="ml-2 text-[#E8F5E9] hover:text-white hover:bg-[#00701A]/20"
+                                className="ml-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--accent-primary)]/10"
                               >
                                 <Eye className="w-4 h-4" />
                               </Button>
@@ -1075,7 +1075,7 @@ export const OrdersPage: React.FC = () => {
                                 {renderOperarioBadge(order)}
                               </div>
                             </td>
-                            <td className="px-6 py-4 text-right whitespace-nowrap font-bold text-white">
+                            <td className="px-6 py-4 text-right whitespace-nowrap font-bold text-[var(--text-primary)]">
                               ${order.total?.toFixed(2) || '0.00'}
                             </td>
                             <td className="px-6 py-4 text-right whitespace-nowrap">
@@ -1086,7 +1086,7 @@ export const OrdersPage: React.FC = () => {
                                   size="sm"
                                   onClick={() => handleRemitoDownload(order._id)}
                                   disabled={isDownloadingRemito === order._id}
-                                  className="border-[#2A82C7] text-white hover:bg-[#00701A]/30"
+                                  className="border-[var(--accent-tertiary)] text-[var(--text-primary)] hover:bg-[var(--accent-primary)]/10"
                                 >
                                   {isDownloadingRemito === order._id ? (
                                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -1104,7 +1104,7 @@ export const OrdersPage: React.FC = () => {
                                       variant="outline"
                                       size="sm"
                                       onClick={() => openApprovalDialog(order._id)}
-                                      className="border-green-500 text-green-500 hover:bg-green-900/20 hover:text-green-400"
+                                      className="border-[var(--state-success)] text-[var(--state-success)] hover:bg-[var(--state-success)]/10"
                                       disabled={approveMutation.isPending || rejectMutation.isPending}
                                     >
                                       <CheckSquare className="h-4 w-4" />
@@ -1113,7 +1113,7 @@ export const OrdersPage: React.FC = () => {
                                       variant="outline"
                                       size="sm"
                                       onClick={() => openRejectionDialog(order._id)}
-                                      className="border-red-500 text-red-500 hover:bg-red-900/20 hover:text-red-400"
+                                      className="border-[var(--state-error)] text-[var(--state-error)] hover:bg-[var(--state-error)]/10"
                                       disabled={approveMutation.isPending || rejectMutation.isPending}
                                     >
                                       <XSquare className="h-4 w-4" />
@@ -1127,15 +1127,15 @@ export const OrdersPage: React.FC = () => {
                           {/* Detalles del pedido (expandido) */}
                           {orderDetailsOpen === order._id && (
                             <tr>
-                              <td colSpan={7} className="px-6 py-4 bg-[#00701A]/20">
+                              <td colSpan={7} className="px-6 py-4 bg-[var(--background-component)]">
                                 <div className="space-y-3">
                                   <div className="flex justify-between items-start">
-                                    <h3 className="font-medium text-white">Detalles del Pedido #{order.displayNumber}</h3>
+                                    <h3 className="font-medium text-[var(--text-primary)]">Detalles del Pedido #{order.displayNumber}</h3>
                                     
                                     {/* Mostrar información de operario (si aplica) */}
                                     {order.metadata?.creadoPorOperario && (
-                                      <div className="bg-white/10 rounded-md p-2 text-xs text-white border border-[#2A82C7]/50">
-                                        <div className="flex items-center mb-1 text-[#7CB342]">
+                                      <div className="bg-[var(--accent-tertiary)]/10 rounded-md p-2 text-xs text-[var(--text-primary)] border border-[var(--accent-tertiary)]/30">
+                                        <div className="flex items-center mb-1 text-[var(--accent-primary)]">
                                           <UserCheck className="h-3 w-3 mr-1" />
                                           <span className="font-medium">Pedido creado por operario</span>
                                         </div>
@@ -1149,34 +1149,34 @@ export const OrdersPage: React.FC = () => {
                                   
                                   {/* Mostrar motivo de rechazo si aplica */}
                                   {order.estado === OrderStatus.REJECTED && order.metadata?.motivoRechazo && (
-                                    <Alert className="bg-red-900/20 border border-red-400 mt-2">
-                                      <AlertTriangle className="h-4 w-4 text-red-400" />
-                                      <AlertDescription className="ml-2 text-red-100">
+                                    <Alert className="bg-[var(--state-error)]/10 border border-[var(--state-error)]/30 mt-2">
+                                      <AlertTriangle className="h-4 w-4 text-[var(--state-error)]" />
+                                      <AlertDescription className="ml-2 text-[var(--text-primary)]">
                                         <span className="font-bold">Motivo de rechazo:</span> {order.metadata.motivoRechazo}
                                       </AlertDescription>
                                     </Alert>
                                   )}
                                   
                                   {/* Productos del pedido */}
-                                  <div className="bg-white/5 rounded-md border border-[#2A82C7]/20 overflow-hidden">
+                                  <div className="bg-[var(--background-card)] rounded-md border border-[var(--accent-tertiary)]/20 overflow-hidden">
                                     <table className="min-w-full">
-                                      <thead className="bg-[#00701A]/30 border-b border-[#2A82C7]/20">
+                                      <thead className="bg-[var(--accent-primary)]/10 border-b border-[var(--accent-tertiary)]/20">
                                         <tr>
-                                          <th className="px-4 py-2 text-left text-xs font-medium text-white uppercase">
+                                          <th className="px-4 py-2 text-left text-xs font-medium text-[var(--text-primary)] uppercase">
                                             Producto
                                           </th>
-                                          <th className="px-4 py-2 text-left text-xs font-medium text-white uppercase">
+                                          <th className="px-4 py-2 text-left text-xs font-medium text-[var(--text-primary)] uppercase">
                                             Cantidad
                                           </th>
-                                          <th className="px-4 py-2 text-right text-xs font-medium text-white uppercase">
+                                          <th className="px-4 py-2 text-right text-xs font-medium text-[var(--text-primary)] uppercase">
                                             Precio
                                           </th>
-                                          <th className="px-4 py-2 text-right text-xs font-medium text-white uppercase">
+                                          <th className="px-4 py-2 text-right text-xs font-medium text-[var(--text-primary)] uppercase">
                                             Total
                                           </th>
                                         </tr>
                                       </thead>
-                                      <tbody className="divide-y divide-[#2A82C7]/20">
+                                      <tbody className="divide-y divide-[var(--accent-tertiary)]/10">
                                         {order.productos.map((item, index) => {
                                           // Extraer información del producto
                                           const productId = typeof item.productoId === 'object'
@@ -1192,17 +1192,17 @@ export const OrdersPage: React.FC = () => {
                                             : item.precio || 0;
                                           
                                           return (
-                                            <tr key={index} className="hover:bg-white/5">
-                                              <td className="px-4 py-3 text-white">
+                                            <tr key={index} className="hover:bg-[var(--background-component)]/50">
+                                              <td className="px-4 py-3 text-[var(--text-primary)]">
                                                 {productName}
                                               </td>
-                                              <td className="px-4 py-3 text-[#E8F5E9]">
+                                              <td className="px-4 py-3 text-[var(--text-secondary)]">
                                                 {item.cantidad}
                                               </td>
-                                              <td className="px-4 py-3 text-right text-[#E8F5E9]">
+                                              <td className="px-4 py-3 text-right text-[var(--text-secondary)]">
                                                 ${productPrice.toFixed(2)}
                                               </td>
-                                              <td className="px-4 py-3 text-right font-medium text-white">
+                                              <td className="px-4 py-3 text-right font-medium text-[var(--text-primary)]">
                                                 ${(productPrice * item.cantidad).toFixed(2)}
                                               </td>
                                             </tr>
@@ -1210,11 +1210,11 @@ export const OrdersPage: React.FC = () => {
                                         })}
                                         
                                         {/* Fila de total */}
-                                        <tr className="bg-[#00701A]/20">
-                                          <td colSpan={3} className="px-4 py-3 text-right font-medium text-white">
+                                        <tr className="bg-[var(--accent-primary)]/5">
+                                          <td colSpan={3} className="px-4 py-3 text-right font-medium text-[var(--text-primary)]">
                                             Total:
                                           </td>
-                                          <td className="px-4 py-3 text-right font-bold text-white">
+                                          <td className="px-4 py-3 text-right font-bold text-[var(--text-primary)]">
                                             ${order.total?.toFixed(2) || '0.00'}
                                           </td>
                                         </tr>
@@ -1225,8 +1225,8 @@ export const OrdersPage: React.FC = () => {
                                   {/* Sección de notas */}
                                   {order.detalle && order.detalle.trim() !== '' && (
                                     <div className="mt-3">
-                                      <h4 className="text-sm font-medium text-white">Notas:</h4>
-                                      <p className="text-sm text-[#E8F5E9] bg-white/5 p-3 rounded-md border border-[#2A82C7]/20 mt-1">
+                                      <h4 className="text-sm font-medium text-[var(--text-primary)]">Notas:</h4>
+                                      <p className="text-sm text-[var(--text-secondary)] bg-[var(--background-card)] p-3 rounded-md border border-[var(--accent-tertiary)]/20 mt-1">
                                         {order.detalle}
                                       </p>
                                     </div>
@@ -1245,22 +1245,22 @@ export const OrdersPage: React.FC = () => {
               {/* Vista para móvil */}
               <div className="md:hidden space-y-4">
                 {filteredOrders.map((order) => (
-                  <Card key={order._id} className="bg-white/10 backdrop-blur-sm border-[#2A82C7]/20 overflow-hidden">
-                    <CardHeader className="pb-2 bg-[#00701A]/20 border-b border-[#2A82C7]/20">
+                  <Card key={order._id} className="bg-[var(--background-card)] border-[var(--accent-tertiary)]/20 overflow-hidden">
+                    <CardHeader className="pb-2 bg-[var(--accent-primary)]/5 border-b border-[var(--accent-tertiary)]/20">
                       <div className="flex justify-between items-start">
                         <div>
-                          <CardTitle className="text-sm flex items-center text-white">
-                            <Hash className="w-4 h-4 text-[#E8F5E9] mr-1" />
+                          <CardTitle className="text-sm flex items-center text-[var(--text-primary)]">
+                            <Hash className="w-4 h-4 text-[var(--accent-primary)] mr-1" />
                             Pedido #{order.displayNumber}
                           </CardTitle>
-                          <p className="text-xs text-[#E8F5E9] mt-1">
+                          <p className="text-xs text-[var(--text-tertiary)] mt-1">
                             {formatDate(order.fecha)} - {formatTime(order.fecha)}
                           </p>
                         </div>
                         <div className="flex flex-col items-end">
                           {renderStatusBadge(order.estado)}
                           <div className="text-xs text-right mt-1">
-                            <span className="text-white font-medium">${order.total?.toFixed(2) || '0.00'}</span>
+                            <span className="text-[var(--text-primary)] font-medium">${order.total?.toFixed(2) || '0.00'}</span>
                           </div>
                         </div>
                       </div>
@@ -1269,11 +1269,11 @@ export const OrdersPage: React.FC = () => {
                       <div className="space-y-2">
                         {/* Datos de cliente */}
                         <div className="flex items-start gap-2">
-                          <Building className="w-4 h-4 text-[#E8F5E9] mt-0.5" />
+                          <Building className="w-4 h-4 text-[var(--accent-tertiary)] mt-0.5" />
                           <div>
-                            <p className="text-sm font-medium text-white">{order.servicio}</p>
+                            <p className="text-sm font-medium text-[var(--text-primary)]">{order.servicio}</p>
                             {order.seccionDelServicio && (
-                              <p className="text-xs text-[#E8F5E9] flex items-center mt-0.5">
+                              <p className="text-xs text-[var(--text-tertiary)] flex items-center mt-0.5">
                                 <MapPin className="w-3 h-3 mr-1" />
                                 {order.seccionDelServicio}
                               </p>
@@ -1286,17 +1286,17 @@ export const OrdersPage: React.FC = () => {
                         
                         {/* Mostrar motivo de rechazo si aplica */}
                         {order.estado === OrderStatus.REJECTED && order.metadata?.motivoRechazo && (
-                          <div className="mt-2 bg-red-900/20 border border-red-400 rounded-md p-2 text-xs text-red-100">
+                          <div className="mt-2 bg-[var(--state-error)]/10 border border-[var(--state-error)]/30 rounded-md p-2 text-xs text-[var(--text-primary)]">
                             <span className="font-bold">Motivo de rechazo:</span> {order.metadata.motivoRechazo}
                           </div>
                         )}
                         
                         <div className="flex justify-between items-center mt-2">
-                          <div className="text-sm text-[#E8F5E9] flex items-center">
+                          <div className="text-sm text-[var(--text-secondary)] flex items-center">
                             <DollarSign className="h-4 w-4 mr-1" />
                             Productos:
                           </div>
-                          <Badge className="bg-[#00701A]/30 text-white border-[#2A82C7]/50">
+                          <Badge className="bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] border-[var(--accent-tertiary)]/30">
                             {order.productos?.length || 0} items
                           </Badge>
                         </div>
@@ -1304,8 +1304,8 @@ export const OrdersPage: React.FC = () => {
                       
                       {/* Detalles expandibles del pedido */}
                       <Accordion type="single" collapsible className="mt-2">
-                        <AccordionItem value="details" className="border-t border-[#2A82C7]/20 pt-2">
-                          <AccordionTrigger className="py-2 text-xs text-white">
+                        <AccordionItem value="details" className="border-t border-[var(--accent-tertiary)]/20 pt-2">
+                          <AccordionTrigger className="py-2 text-xs text-[var(--accent-primary)]">
                             Ver detalles del pedido
                           </AccordionTrigger>
                           <AccordionContent>
@@ -1321,14 +1321,14 @@ export const OrdersPage: React.FC = () => {
                                   : item.precio || 0;
                                 
                                 return (
-                                  <div key={index} className="flex justify-between items-center py-1 border-b border-[#2A82C7]/10">
-                                    <div className="text-white">
+                                  <div key={index} className="flex justify-between items-center py-1 border-b border-[var(--accent-tertiary)]/10">
+                                    <div className="text-[var(--text-primary)]">
                                       <div className="text-sm font-medium">{productName}</div>
-                                      <div className="text-xs text-[#E8F5E9]">
+                                      <div className="text-xs text-[var(--text-tertiary)]">
                                         Cant: {item.cantidad} x ${productPrice.toFixed(2)}
                                       </div>
                                     </div>
-                                    <div className="text-sm font-medium text-white">
+                                    <div className="text-sm font-medium text-[var(--text-primary)]">
                                       ${(productPrice * item.cantidad).toFixed(2)}
                                     </div>
                                   </div>
@@ -1338,8 +1338,8 @@ export const OrdersPage: React.FC = () => {
                               {/* Notas */}
                               {order.detalle && order.detalle.trim() !== '' && (
                                 <div className="mt-3 pt-2">
-                                  <h4 className="text-xs font-medium text-white">Notas:</h4>
-                                  <p className="text-xs text-[#E8F5E9] bg-white/5 p-2 rounded border border-[#2A82C7]/20 mt-1">
+                                  <h4 className="text-xs font-medium text-[var(--text-primary)]">Notas:</h4>
+                                  <p className="text-xs text-[var(--text-secondary)] bg-[var(--background-component)] p-2 rounded border border-[var(--accent-tertiary)]/20 mt-1">
                                     {order.detalle}
                                   </p>
                                 </div>
@@ -1355,7 +1355,7 @@ export const OrdersPage: React.FC = () => {
                         size="sm"
                         onClick={() => handleRemitoDownload(order._id)}
                         disabled={isDownloadingRemito === order._id}
-                        className="border-[#2A82C7] text-white hover:bg-[#00701A]/30"
+                        className="border-[var(--accent-tertiary)] text-[var(--text-primary)] hover:bg-[var(--accent-primary)]/10"
                       >
                         {isDownloadingRemito === order._id ? (
                           <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -1374,7 +1374,7 @@ export const OrdersPage: React.FC = () => {
                             variant="outline"
                             size="sm"
                             onClick={() => openApprovalDialog(order._id)}
-                            className="border-green-500 text-green-500 hover:bg-green-900/20 hover:text-green-400"
+                            className="border-[var(--state-success)] text-[var(--state-success)] hover:bg-[var(--state-success)]/10"
                             disabled={approveMutation.isPending || rejectMutation.isPending}
                           >
                             <CheckSquare className="h-4 w-4 mr-1" />
@@ -1384,7 +1384,7 @@ export const OrdersPage: React.FC = () => {
                             variant="outline"
                             size="sm"
                             onClick={() => openRejectionDialog(order._id)}
-                            className="border-red-500 text-red-500 hover:bg-red-900/20 hover:text-red-400"
+                            className="border-[var(--state-error)] text-[var(--state-error)] hover:bg-[var(--state-error)]/10"
                             disabled={approveMutation.isPending || rejectMutation.isPending}
                           >
                             <XSquare className="h-4 w-4 mr-1" />
@@ -1403,24 +1403,24 @@ export const OrdersPage: React.FC = () => {
       
       {/* Diálogo de confirmación de aprobación */}
       <Dialog open={approvalDialogOpen} onOpenChange={setApprovalDialogOpen}>
-        <DialogContent className="sm:max-w-md bg-[#00701A] border-[#E8F5E9] text-white">
+        <DialogContent className="sm:max-w-md bg-[var(--background-card)] border-[var(--accent-tertiary)]">
           <DialogHeader>
-            <DialogTitle className="text-white flex items-center">
-              <CheckCircle2 className="mr-2 h-5 w-5 text-white" />
+            <DialogTitle className="text-[var(--text-primary)] flex items-center">
+              <CheckCircle2 className="mr-2 h-5 w-5 text-[var(--state-success)]" />
               Aprobar Pedido
             </DialogTitle>
-            <DialogDescription className="text-white/70">
+            <DialogDescription className="text-[var(--text-tertiary)]">
               Al aprobar este pedido, se generará la orden y se procesará para su entrega.
             </DialogDescription>
           </DialogHeader>
           
           <div className="py-4">
-            <p className="text-white">
+            <p className="text-[var(--text-primary)]">
               ¿Estás seguro de que deseas aprobar este pedido?
             </p>
             
-            <div className="mt-4 bg-white/10 p-3 rounded-md border border-white/20">
-              <p className="text-sm text-white/80">
+            <div className="mt-4 bg-[var(--accent-primary)]/5 p-3 rounded-md border border-[var(--accent-primary)]/20">
+              <p className="text-sm text-[var(--text-secondary)]">
                 Una vez aprobado, el pedido se enviará a logística para su procesamiento y entrega. 
                 El operario será notificado de que su pedido ha sido aprobado.
               </p>
@@ -1432,7 +1432,7 @@ export const OrdersPage: React.FC = () => {
               type="button" 
               variant="outline"
               onClick={() => setApprovalDialogOpen(false)}
-              className="border-white text-white"
+              className="border-[var(--accent-tertiary)] text-[var(--text-primary)]"
               disabled={approveMutation.isPending}
             >
               Cancelar
@@ -1441,7 +1441,7 @@ export const OrdersPage: React.FC = () => {
               type="button"
               onClick={handleApproveOrder}
               disabled={approveMutation.isPending}
-              className="bg-[#E8F5E9] hover:bg-white text-[#00701A] font-medium"
+              className="bg-[var(--state-success)] hover:bg-[var(--state-success)]/80 text-white font-medium"
             >
               {approveMutation.isPending ? (
                 <>
@@ -1461,19 +1461,19 @@ export const OrdersPage: React.FC = () => {
       
       {/* Diálogo de rechazo de pedido */}
       <Dialog open={rejectionDialogOpen} onOpenChange={setRejectionDialogOpen}>
-        <DialogContent className="sm:max-w-md bg-[#00701A] border-[#E8F5E9] text-white">
+        <DialogContent className="sm:max-w-md bg-[var(--background-card)] border-[var(--accent-tertiary)]">
           <DialogHeader>
-            <DialogTitle className="text-white flex items-center">
-              <XSquare className="mr-2 h-5 w-5 text-white" />
+            <DialogTitle className="text-[var(--text-primary)] flex items-center">
+              <XSquare className="mr-2 h-5 w-5 text-[var(--state-error)]" />
               Rechazar Pedido
             </DialogTitle>
-            <DialogDescription className="text-white/70">
+            <DialogDescription className="text-[var(--text-tertiary)]">
               Por favor, proporciona un motivo para el rechazo del pedido.
             </DialogDescription>
           </DialogHeader>
           
           <div className="py-4">
-            <Label htmlFor="rejectionReason" className="text-white mb-2 block">
+            <Label htmlFor="rejectionReason" className="text-[var(--text-primary)] mb-2 block">
               Motivo del rechazo *
             </Label>
             <Textarea
@@ -1481,12 +1481,12 @@ export const OrdersPage: React.FC = () => {
               value={rejectionReason}
               onChange={(e) => setRejectionReason(e.target.value)}
               placeholder="Explica por qué estás rechazando este pedido..."
-              className="min-h-[120px] bg-white/10 border-white/30 text-white placeholder:text-white/50"
+              className="min-h-[120px] bg-[var(--background-component)] border-[var(--accent-tertiary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)]"
               required
             />
             
-            <div className="mt-4 bg-red-900/20 p-3 rounded-md border border-red-500/40">
-              <p className="text-sm text-white/90">
+            <div className="mt-4 bg-[var(--state-error)]/10 p-3 rounded-md border border-[var(--state-error)]/20">
+              <p className="text-sm text-[var(--text-secondary)]">
                 Al rechazar un pedido, se notificará al operario con el motivo proporcionado. 
                 El pedido no se procesará y los productos volverán a estar disponibles.
               </p>
@@ -1498,7 +1498,7 @@ export const OrdersPage: React.FC = () => {
               type="button" 
               variant="outline"
               onClick={() => setRejectionDialogOpen(false)}
-              className="border-white text-white"
+              className="border-[var(--accent-tertiary)] text-[var(--text-primary)]"
               disabled={rejectMutation.isPending}
             >
               Cancelar
@@ -1507,7 +1507,7 @@ export const OrdersPage: React.FC = () => {
               type="button"
               onClick={handleRejectOrder}
               disabled={rejectMutation.isPending || !rejectionReason.trim()}
-              className="bg-red-600 hover:bg-red-700 text-white"
+              className="bg-[var(--state-error)] hover:bg-[var(--state-error)]/80 text-white"
             >
               {rejectMutation.isPending ? (
                 <>

@@ -12,7 +12,9 @@ import {
   Wrench,
   RefreshCw,
   Loader2,
-  ArrowUpDown
+  ArrowUpDown,
+  Filter,
+  X
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -24,6 +26,16 @@ import { ProductCard } from './ProductCard';
 import { useCartContext } from '@/providers/CartProvider';
 import { ShopNavbar } from './ShopNavbar';
 import EnhancedPagination from '../admin/components/Pagination';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
 
 // Importación segura de useNotification
 let useNotification;
@@ -55,6 +67,10 @@ interface Product {
   itemsCombo?: any[];
   createdAt?: string;
   updatedAt?: string;
+  marca?: string;
+  proveedor?: {
+    nombre: string;
+  };
 }
 
 // Componente principal
@@ -77,9 +93,19 @@ export const ShopHome: React.FC = () => {
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedSubcategory, setSelectedSubcategory] = useState('all');
   const [favorites, setFavorites] = useState<string[]>([]);
   const [showFavorites, setShowFavorites] = useState(false);
   const [sortOrder, setSortOrder] = useState<'price-asc' | 'price-desc' | 'name-asc' | 'name-desc' | 'newest'>('newest');
+  
+  // Estados para filtros avanzados
+  const [marcas, setMarcas] = useState<string[]>([]);
+  const [selectedMarcas, setSelectedMarcas] = useState<string[]>([]);
+  const [proveedores, setProveedores] = useState<string[]>([]);
+  const [selectedProveedores, setSelectedProveedores] = useState<string[]>([]);
+  const [precioRange, setPrecioRange] = useState<[number, number]>([0, 100000]);
+  const [maxPrecio, setMaxPrecio] = useState<number>(100000);
+  const [showOnlyStock, setShowOnlyStock] = useState<boolean>(false);
   
   // Estados para paginación local
   const [currentPage, setCurrentPage] = useState(1);
@@ -121,6 +147,11 @@ export const ShopHome: React.FC = () => {
     const categoryParam = params.get('category');
     if (categoryParam) {
       setSelectedCategory(categoryParam);
+    }
+
+    const subcategoryParam = params.get('subcategory');
+    if (subcategoryParam) {
+      setSelectedSubcategory(subcategoryParam);
     }
 
     const viewParam = params.get('view');
@@ -176,7 +207,6 @@ export const ShopHome: React.FC = () => {
     }
     
     // Usar un límite grande para intentar obtener todos los productos
-    // Nota: esto podría necesitar ajustes dependiendo de la capacidad del servidor
     const limit = 1000;
     const url = `http://localhost:3000/api/producto?page=1&limit=${limit}${categoryFilter}`;
     
@@ -221,6 +251,42 @@ export const ShopHome: React.FC = () => {
     refetchOnWindowFocus: false,
   });
 
+  // Extraer marcas y proveedores únicos para filtros
+  useEffect(() => {
+    if (allProducts.length) {
+      // Extraer marcas únicas
+      const uniqueMarcas = Array.from(
+        new Set(
+          allProducts
+            .filter(p => p.marca)
+            .map(p => p.marca)
+        )
+      ) as string[];
+      
+      setMarcas(uniqueMarcas.sort());
+      
+      // Extraer proveedores únicos
+      const uniqueProveedores = Array.from(
+        new Set(
+          allProducts
+            .filter(p => p.proveedor?.nombre)
+            .map(p => p.proveedor?.nombre)
+        )
+      ) as string[];
+      
+      setProveedores(uniqueProveedores.sort());
+      
+      // Determinar precio máximo para el slider
+      const maxPrice = Math.max(
+        ...allProducts.map(p => p.precio), 
+        100 // Valor mínimo por defecto
+      );
+      
+      setMaxPrecio(maxPrice);
+      setPrecioRange([0, maxPrice]);
+    }
+  }, [allProducts]);
+
   // Procesar productos según permisos
   const procesarProductos = (data: Product[]): Product[] => {
     // Filtrado por sección según permisos
@@ -243,19 +309,48 @@ export const ShopHome: React.FC = () => {
 
     // Filtrar por búsqueda
     if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
       result = result.filter(product =>
-        product.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.descripcion?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.subCategoria.toLowerCase().includes(searchTerm.toLowerCase())
+        product.nombre.toLowerCase().includes(searchLower) ||
+        (product.descripcion?.toLowerCase().includes(searchLower)) ||
+        (product.subCategoria.toLowerCase().includes(searchLower)) ||
+        (product.marca?.toLowerCase().includes(searchLower)) ||
+        (product.proveedor?.nombre?.toLowerCase().includes(searchLower))
       );
     }
 
     // Filtrar por categoría
     if (selectedCategory !== 'all') {
-      result = result.filter(product =>
-        product.categoria === selectedCategory ||
-        product.subCategoria === selectedCategory
+      result = result.filter(product => product.categoria === selectedCategory);
+    }
+    
+    // Filtrar por subcategoría
+    if (selectedSubcategory !== 'all') {
+      result = result.filter(product => product.subCategoria === selectedSubcategory);
+    }
+    
+    // Filtrar por marcas seleccionadas
+    if (selectedMarcas.length > 0) {
+      result = result.filter(product => 
+        product.marca && selectedMarcas.includes(product.marca)
       );
+    }
+    
+    // Filtrar por proveedores seleccionados
+    if (selectedProveedores.length > 0) {
+      result = result.filter(product => 
+        product.proveedor?.nombre && selectedProveedores.includes(product.proveedor.nombre)
+      );
+    }
+    
+    // Filtrar por rango de precio
+    result = result.filter(product => 
+      product.precio >= precioRange[0] && product.precio <= precioRange[1]
+    );
+    
+    // Filtrar por stock disponible
+    if (showOnlyStock) {
+      result = result.filter(product => product.stock > 0);
     }
 
     // Filtrar por favoritos
@@ -264,17 +359,31 @@ export const ShopHome: React.FC = () => {
     }
 
     // Solo productos con stock para limpieza, mantenimiento no tiene restricción
-    result = result.filter(product => 
-      // Para productos de mantenimiento, no filtramos por stock
-      product.categoria === 'mantenimiento' || product.stock > 0
-    );
+    if (!showOnlyStock) {
+      result = result.filter(product => 
+        // Para productos de mantenimiento, no filtramos por stock
+        product.categoria === 'mantenimiento' || product.stock > 0
+      );
+    }
     
     // Ordenar según el criterio seleccionado
     result = sortProducts(result, sortOrder);
 
     setFilteredProducts(result);
     setCurrentPage(1); // Reiniciar a la primera página al cambiar filtros
-  }, [allProducts, searchTerm, selectedCategory, showFavorites, favorites, sortOrder]);
+  }, [
+    allProducts, 
+    searchTerm, 
+    selectedCategory, 
+    selectedSubcategory,
+    selectedMarcas,
+    selectedProveedores,
+    precioRange,
+    showOnlyStock,
+    showFavorites, 
+    favorites, 
+    sortOrder
+  ]);
 
   // Función para ordenar productos
   const sortProducts = (items: Product[], order: string) => {
@@ -339,6 +448,19 @@ export const ShopHome: React.FC = () => {
       }
     }
   };
+  
+  // Limpiar todos los filtros
+  const clearAllFilters = () => {
+    setSelectedCategory('all');
+    setSelectedSubcategory('all');
+    setSelectedMarcas([]);
+    setSelectedProveedores([]);
+    setPrecioRange([0, maxPrecio]);
+    setShowOnlyStock(false);
+    setSearchTerm('');
+    setShowFavorites(false);
+    setSortOrder('newest');
+  };
 
   // Determinar qué categorías debemos mostrar según permisos
   const renderCategoriasDestacadas = () => {
@@ -349,14 +471,14 @@ export const ShopHome: React.FC = () => {
     // Categoría Limpieza (solo si tiene acceso)
     if (userSecciones === 'limpieza' || userSecciones === 'ambos') {
       categorias.push(
-        <Card key="limpieza" className="bg-gradient-to-br from-[#1B9C96] to-[#84D6C8] border-[#E8F8F3] hover:shadow-lg hover:shadow-[#1B9C96]/20 transition-all cursor-pointer group overflow-hidden text-white">
+        <Card key="limpieza" className="bg-gradient-to-br from-[var(--accent-primary)] to-[var(--accent-tertiary)] border-[var(--background-secondary)] hover:shadow-lg hover:shadow-[var(--accent-primary)]/20 transition-all cursor-pointer group overflow-hidden text-white">
           <CardContent className="p-6 flex items-center justify-between">
             <div>
               <h3 className="text-xl font-semibold mb-1">Limpieza</h3>
               <p className="text-white mb-4">Productos para mantener todo impecable</p>
               <Button
                 size="sm"
-                className="bg-white hover:bg-[#F8FDFC] text-[#ffffff] font-medium"
+                className="bg-white hover:bg-[var(--background-secondary)] text-[var(--accent-primary)] font-medium"
                 onClick={() => setSelectedCategory('limpieza')}
               >
                 Ver productos
@@ -373,14 +495,14 @@ export const ShopHome: React.FC = () => {
     // Categoría Mantenimiento (solo si tiene acceso)
     if (userSecciones === 'mantenimiento' || userSecciones === 'ambos') {
       categorias.push(
-        <Card key="mantenimiento" className="bg-gradient-to-br from-[#29696B] to-[#1B9C96] border-[#E8F8F3] hover:shadow-lg hover:shadow-[#29696B]/20 transition-all cursor-pointer group overflow-hidden text-white">
+        <Card key="mantenimiento" className="bg-gradient-to-br from-[var(--accent-secondary)] to-[var(--accent-tertiary)] border-[var(--background-secondary)] hover:shadow-lg hover:shadow-[var(--accent-secondary)]/20 transition-all cursor-pointer group overflow-hidden text-white">
           <CardContent className="p-6 flex items-center justify-between">
             <div>
               <h3 className="text-xl font-semibold mb-1">Mantenimiento</h3>
               <p className="text-white mb-4">Todo para reparaciones y proyectos</p>
               <Button
                 size="sm"
-                className="bg-white hover:bg-[#F8FDFC] text-[#ffffff] font-medium"
+                className="bg-white hover:bg-[var(--background-secondary)] text-[var(--accent-secondary)] font-medium"
                 onClick={() => setSelectedCategory('mantenimiento')}
               >
                 Ver productos
@@ -396,14 +518,14 @@ export const ShopHome: React.FC = () => {
     
     // Siempre mostrar carrito
     categorias.push(
-      <Card key="carrito" className="bg-gradient-to-br from-[#F2A516] to-[#1B9C96] border-[#E8F8F3] hover:shadow-lg hover:shadow-[#F2A516]/20 transition-all cursor-pointer group overflow-hidden text-white">
+      <Card key="carrito" className="bg-gradient-to-br from-[var(--accent-quaternary)] to-[var(--accent-tertiary)] border-[var(--background-secondary)] hover:shadow-lg hover:shadow-[var(--accent-quaternary)]/20 transition-all cursor-pointer group overflow-hidden text-white">
         <CardContent className="p-6 flex items-center justify-between">
           <div>
             <h3 className="text-xl font-semibold mb-1">Mi carrito</h3>
             <p className="text-white mb-4">Revisa tus productos seleccionados</p>
             <Button
               size="sm"
-              className="bg-white hover:bg-[#F8FDFC] text-[#f5f5f5] font-medium"
+              className="bg-white hover:bg-[var(--background-secondary)] text-[var(--accent-quaternary)] font-medium"
               onClick={() => window.location.href = '/cart'}
             >
               Ver carrito
@@ -428,6 +550,21 @@ export const ShopHome: React.FC = () => {
     );
   };
   
+  // Obtener subcategorías para la categoría seleccionada
+  const getSubcategories = () => {
+    if (selectedCategory === 'all') return [];
+    
+    const subcategories = Array.from(
+      new Set(
+        allProducts
+          .filter(p => p.categoria === selectedCategory)
+          .map(p => p.subCategoria)
+      )
+    );
+    
+    return subcategories.sort();
+  };
+  
   // Calcular productos para página actual (paginación local)
   const getCurrentPageItems = () => {
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -437,18 +574,29 @@ export const ShopHome: React.FC = () => {
 
   // Calcular total de páginas para los productos filtrados
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+  
+  // Número de filtros activos
+  const activeFiltersCount = [
+    selectedCategory !== 'all',
+    selectedSubcategory !== 'all',
+    selectedMarcas.length > 0,
+    selectedProveedores.length > 0,
+    precioRange[0] > 0 || precioRange[1] < maxPrecio,
+    showOnlyStock,
+    showFavorites,
+  ].filter(Boolean).length;
 
   return (
-    <>
+    <div className="shop-theme">
       <ShopNavbar />
-      <div className="container mx-auto px-4 py-8 shop-theme">
+      <div className="container mx-auto px-4 py-8">
         <div className="space-y-8">
 
           {/* Vista de error */}
           {error && (
-            <Alert variant="destructive" className="bg-[#E74C3C]/10 border border-[#E74C3C]">
-              <AlertCircle className="h-4 w-4 text-[#E74C3C]" />
-              <AlertDescription className="text-[#0D4E4B]">
+            <Alert variant="destructive" className="bg-[var(--state-error)]/10 border border-[var(--state-error)]">
+              <AlertCircle className="h-4 w-4 text-[var(--state-error)]" />
+              <AlertDescription className="text-[var(--text-primary)]">
                 {error instanceof Error ? error.message : 'Error al cargar productos'}
               </AlertDescription>
             </Alert>
@@ -457,8 +605,8 @@ export const ShopHome: React.FC = () => {
           {/* Vista de carga */}
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-20">
-              <div className="w-16 h-16 border-4 border-t-[#1B9C96] border-r-[#84D6C8] border-b-[#F2A516] border-l-white rounded-full animate-spin mb-4"></div>
-              <p className="text-[#0D4E4B]">Cargando productos...</p>
+              <div className="w-16 h-16 border-4 border-t-[var(--accent-primary)] border-r-[var(--accent-tertiary)] border-b-[var(--accent-quaternary)] border-l-[var(--background-card)] rounded-full animate-spin mb-4"></div>
+              <p className="text-[var(--text-primary)]">Cargando productos...</p>
             </div>
           ) : (
             <>
@@ -469,9 +617,9 @@ export const ShopHome: React.FC = () => {
                   className="relative h-40 sm:h-48 md:h-64 lg:h-80 flex items-center z-10 p-4 sm:p-6 md:p-8"
                 >
                   {/* Fondo con gradiente - mejorado para responsividad */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-[#1B9C96] to-[#84D6C8] overflow-hidden">
+                  <div className="absolute inset-0 bg-[var(--gradient-main)] overflow-hidden">
                     <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-5"></div>
-                    <div className="absolute -inset-[10px] bg-[#139692]/30 blur-3xl animate-pulse"></div>
+                    <div className="absolute -inset-[10px] bg-[var(--accent-primary)]/30 blur-3xl animate-pulse"></div>
                   </div>
 
                   <div className="relative z-10 w-full max-w-xs sm:max-w-lg md:max-w-2xl lg:max-w-3xl">
@@ -481,7 +629,7 @@ export const ShopHome: React.FC = () => {
                       transition={{ delay: 0.2 }}
                       className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-2 sm:mb-3 md:mb-4 text-white leading-tight"
                     >
-                      Bienvenido a la tienda de <span className="text-[#F2A516] font-bold">Lyme S.A</span>
+                      Bienvenido a la tienda de <span className="text-[var(--accent-quaternary)] font-bold">Lyme S.A</span>
                     </motion.h1>
                     <motion.p
                       initial={{ y: 20, opacity: 0 }}
@@ -503,67 +651,232 @@ export const ShopHome: React.FC = () => {
               <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
                 <div className="w-full md:w-auto flex-1 flex flex-col md:flex-row gap-4">
                   <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#1B9C96]" />
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[var(--accent-primary)]" />
                     <Input
                       type="text"
                       placeholder="Buscar productos..."
-                      className="pl-10 bg-white border-[#1B9C96] focus:border-[#139692] text-[#0D4E4B] placeholder:text-[#4A7C79]"
+                      className="pl-10 bg-[var(--background-card)] border-[var(--accent-primary)] focus:border-[var(--accent-tertiary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)]"
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
                   </div>
 
                   <div className="flex-shrink-0">
-                    <select
-                      className="w-full md:w-auto bg-white border-[#1B9C96] focus:border-[#139692] rounded-md text-[#0D4E4B] py-2 px-3"
+                    <Select
                       value={selectedCategory}
-                      onChange={(e) => setSelectedCategory(e.target.value)}
+                      onValueChange={(value) => {
+                        setSelectedCategory(value);
+                        setSelectedSubcategory('all'); // Reset subcategory when category changes
+                      }}
                     >
-                      <option value="all" className='bg-white text-[#0D4E4B]'>Todas las categorías</option>
-                      
-                      {/* Solo mostrar categorías según permisos */}
-                      {(userSecciones === 'limpieza' || userSecciones === 'ambos') && (
-                        <>
-                          <option value="limpieza" className='bg-white text-[#0D4E4B]'>Limpieza</option>
-                          <option value="aerosoles" className='bg-white text-[#0D4E4B]'>Aerosoles</option>
-                          <option value="liquidos" className='bg-white text-[#0D4E4B]'>Líquidos</option>
-                          <option value="papeles" className='bg-white text-[#0D4E4B]'>Papeles</option>
-                          <option value="accesorios" className='bg-white text-[#0D4E4B]'>Accesorios</option>
-                          <option value="indumentaria" className='bg-white text-[#0D4E4B]'>Indumentaria</option>
-                        </>
-                      )}
-                      
-                      {(userSecciones === 'mantenimiento' || userSecciones === 'ambos') && (
-                        <>
-                          <option value="mantenimiento" className='bg-white text-[#0D4E4B]'>Mantenimiento</option>
-                          <option value="iluminaria" className='bg-white text-[#0D4E4B]'>Iluminaria</option>
-                          <option value="electricidad" className='bg-white text-[#0D4E4B]'>Electricidad</option>
-                          <option value="cerraduraCortina" className='bg-white text-[#0D4E4B]'>Cerraduras</option>
-                          <option value="pintura" className='bg-white text-[#0D4E4B]'>Pintura</option>
-                        </>
-                      )}
-                    </select>
+                      <SelectTrigger className="w-full md:w-auto bg-[var(--background-card)] border-[var(--accent-primary)] text-[var(--text-primary)]">
+                        <SelectValue placeholder="Todas las categorías" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-[var(--background-card)] border-[var(--accent-primary)]">
+                        <SelectItem value="all" className="text-[var(--text-primary)]">Todas las categorías</SelectItem>
+                        
+                        {/* Solo mostrar categorías según permisos */}
+                        {(userSecciones === 'limpieza' || userSecciones === 'ambos') && (
+                          <SelectItem value="limpieza" className="text-[var(--text-primary)]">Limpieza</SelectItem>
+                        )}
+                        
+                        {(userSecciones === 'mantenimiento' || userSecciones === 'ambos') && (
+                          <SelectItem value="mantenimiento" className="text-[var(--text-primary)]">Mantenimiento</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
                   </div>
+                  
+                  {/* Solo mostrar subcategorías si hay una categoría seleccionada */}
+                  {selectedCategory !== 'all' && (
+                    <div className="flex-shrink-0">
+                      <Select
+                        value={selectedSubcategory}
+                        onValueChange={setSelectedSubcategory}
+                      >
+                        <SelectTrigger className="w-full md:w-auto bg-[var(--background-card)] border-[var(--accent-primary)] text-[var(--text-primary)]">
+                          <SelectValue placeholder="Subcategoría" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-[var(--background-card)] border-[var(--accent-primary)]">
+                          <SelectItem value="all" className="text-[var(--text-primary)]">Todas las subcategorías</SelectItem>
+                          
+                          {/* Listar subcategorías disponibles */}
+                          {getSubcategories().map((subcategory) => (
+                            <SelectItem 
+                              key={subcategory} 
+                              value={subcategory} 
+                              className="text-[var(--text-primary)]"
+                            >
+                              {subcategory}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {/* Trigger de filtros avanzados */}
+                  <Sheet>
+                    <SheetTrigger asChild>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="border-[var(--accent-primary)] text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/10"
+                      >
+                        <Filter className="w-4 h-4 mr-2" />
+                        Filtros
+                        {activeFiltersCount > 0 && (
+                          <Badge className="ml-2 bg-[var(--accent-primary)] text-white">
+                            {activeFiltersCount}
+                          </Badge>
+                        )}
+                      </Button>
+                    </SheetTrigger>
+                    <SheetContent className="bg-[var(--background-card)] border-[var(--accent-primary)]">
+                      <SheetHeader>
+                        <SheetTitle className="text-[var(--text-primary)]">Filtros avanzados</SheetTitle>
+                      </SheetHeader>
+                      
+                      <div className="py-4 space-y-6">
+                        {/* Filtro por marca */}
+                        {marcas.length > 0 && (
+                          <div className="space-y-2">
+                            <h3 className="text-[var(--text-primary)] font-medium">Marcas</h3>
+                            <div className="max-h-48 overflow-y-auto space-y-2">
+                              {marcas.map(marca => (
+                                <div key={marca} className="flex items-center space-x-2">
+                                  <Checkbox 
+                                    id={`marca-${marca}`}
+                                    checked={selectedMarcas.includes(marca)}
+                                    onCheckedChange={(checked) => {
+                                      if (checked) {
+                                        setSelectedMarcas(prev => [...prev, marca]);
+                                      } else {
+                                        setSelectedMarcas(prev => prev.filter(m => m !== marca));
+                                      }
+                                    }}
+                                    className="border-[var(--accent-primary)] data-[state=checked]:bg-[var(--accent-primary)]"
+                                  />
+                                  <Label 
+                                    htmlFor={`marca-${marca}`}
+                                    className="text-[var(--text-primary)] cursor-pointer"
+                                  >
+                                    {marca}
+                                  </Label>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Filtro por proveedor */}
+                        {proveedores.length > 0 && (
+                          <div className="space-y-2">
+                            <h3 className="text-[var(--text-primary)] font-medium">Proveedores</h3>
+                            <div className="max-h-48 overflow-y-auto space-y-2">
+                              {proveedores.map(proveedor => (
+                                <div key={proveedor} className="flex items-center space-x-2">
+                                  <Checkbox 
+                                    id={`proveedor-${proveedor}`}
+                                    checked={selectedProveedores.includes(proveedor)}
+                                    onCheckedChange={(checked) => {
+                                      if (checked) {
+                                        setSelectedProveedores(prev => [...prev, proveedor]);
+                                      } else {
+                                        setSelectedProveedores(prev => prev.filter(p => p !== proveedor));
+                                      }
+                                    }}
+                                    className="border-[var(--accent-primary)] data-[state=checked]:bg-[var(--accent-primary)]"
+                                  />
+                                  <Label 
+                                    htmlFor={`proveedor-${proveedor}`}
+                                    className="text-[var(--text-primary)] cursor-pointer"
+                                  >
+                                    {proveedor}
+                                  </Label>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Filtro por rango de precio */}
+                        <div className="space-y-4">
+                          <h3 className="text-[var(--text-primary)] font-medium">Rango de precio</h3>
+                          <Slider
+                            value={precioRange}
+                            min={0}
+                            max={maxPrecio}
+                            step={100}
+                            onValueChange={setPrecioRange}
+                            className="my-6"
+                          />
+                          <div className="flex justify-between">
+                            <span className="text-[var(--text-primary)]">
+                              ${precioRange[0].toLocaleString()}
+                            </span>
+                            <span className="text-[var(--text-primary)]">
+                              ${precioRange[1].toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        {/* Filtro por stock */}
+                        <div className="flex items-center space-x-2">
+                          <Checkbox 
+                            id="show-only-stock"
+                            checked={showOnlyStock}
+                            onCheckedChange={(checked) => setShowOnlyStock(!!checked)}
+                            className="border-[var(--accent-primary)] data-[state=checked]:bg-[var(--accent-primary)]"
+                          />
+                          <Label 
+                            htmlFor="show-only-stock"
+                            className="text-[var(--text-primary)] cursor-pointer"
+                          >
+                            Mostrar solo productos con stock
+                          </Label>
+                        </div>
+                        
+                        {/* Acciones de filtros */}
+                        <div className="flex justify-between pt-4">
+                          <Button
+                            variant="outline"
+                            onClick={clearAllFilters}
+                            className="border-[var(--state-error)] text-[var(--state-error)] hover:bg-[var(--state-error)]/10"
+                          >
+                            <X className="w-4 h-4 mr-2" />
+                            Limpiar filtros
+                          </Button>
+                          
+                          <SheetTrigger asChild>
+                            <Button className="bg-[var(--accent-primary)] hover:bg-[var(--accent-tertiary)] text-white">
+                              Aplicar filtros
+                            </Button>
+                          </SheetTrigger>
+                        </div>
+                      </div>
+                    </SheetContent>
+                  </Sheet>
+                  
                   {/* Selector de ordenamiento */}
                   <Select
                     value={sortOrder}
                     onValueChange={(value: any) => setSortOrder(value)}
                   >
-                    <SelectTrigger className="w-full md:w-44 bg-white border-[#1B9C96] text-[#0D4E4B]">
+                    <SelectTrigger className="w-full md:w-44 bg-[var(--background-card)] border-[var(--accent-primary)] text-[var(--text-primary)]">
                       <div className="flex items-center">
                         <ArrowUpDown className="w-4 h-4 mr-2" />
                         <span>Ordenar por</span>
                       </div>
                     </SelectTrigger>
-                    <SelectContent className="bg-white border-[#1B9C96]">
-                      <SelectItem value="newest" className="text-[#0D4E4B]">Más recientes</SelectItem>
-                      <SelectItem value="price-asc" className="text-[#0D4E4B]">Precio: menor a mayor</SelectItem>
-                      <SelectItem value="price-desc" className="text-[#0D4E4B]">Precio: mayor a menor</SelectItem>
-                      <SelectItem value="name-asc" className="text-[#0D4E4B]">Nombre: A-Z</SelectItem>
-                      <SelectItem value="name-desc" className="text-[#0D4E4B]">Nombre: Z-A</SelectItem>
+                    <SelectContent className="bg-[var(--background-card)] border-[var(--accent-primary)]">
+                      <SelectItem value="newest" className="text-[var(--text-primary)]">Más recientes</SelectItem>
+                      <SelectItem value="price-asc" className="text-[var(--text-primary)]">Precio: menor a mayor</SelectItem>
+                      <SelectItem value="price-desc" className="text-[var(--text-primary)]">Precio: mayor a menor</SelectItem>
+                      <SelectItem value="name-asc" className="text-[var(--text-primary)]">Nombre: A-Z</SelectItem>
+                      <SelectItem value="name-desc" className="text-[var(--text-primary)]">Nombre: Z-A</SelectItem>
                     </SelectContent>
                   </Select>
                   
@@ -572,7 +885,7 @@ export const ShopHome: React.FC = () => {
                     size="sm"
                     onClick={handleManualRefresh}
                     disabled={isLoading}
-                    className="border-[#1B9C96] text-[#1B9C96] hover:bg-[#1B9C96]/10"
+                    className="border-[var(--accent-primary)] text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/10"
                   >
                     {isLoading ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -585,8 +898,8 @@ export const ShopHome: React.FC = () => {
                     variant={showFavorites ? "default" : "outline"}
                     size="sm"
                     className={`${showFavorites
-                      ? "bg-[#F2A516] hover:bg-[#F2A516]/90 text-white"
-                      : "bg-white hover:bg-[#F2A516]/10 border-[#F2A516] text-[#F2A516]"
+                      ? "bg-[var(--accent-quaternary)] hover:bg-[var(--accent-quaternary)]/90 text-white"
+                      : "bg-[var(--background-card)] hover:bg-[var(--accent-quaternary)]/10 border-[var(--accent-quaternary)] text-[var(--accent-quaternary)]"
                       }`}
                     onClick={() => setShowFavorites(!showFavorites)}
                   >
@@ -603,64 +916,77 @@ export const ShopHome: React.FC = () => {
               <div>
                 {showFavorites && favorites.length === 0 ? (
                   <div className="text-center py-16">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-[#F2A516]/20 rounded-full mb-4">
-                      <Heart className="h-8 w-8 text-[#F2A516]" />
+                    <div className="inline-flex items-center justify-center w-16 h-16 bg-[var(--accent-quaternary)]/20 rounded-full mb-4">
+                      <Heart className="h-8 w-8 text-[var(--accent-quaternary)]" />
                     </div>
-                    <h3 className="text-xl font-medium mb-2 text-[#0D4E4B]">No tienes favoritos</h3>
-                    <p className="text-[#29696B] mb-6">
+                    <h3 className="text-xl font-medium mb-2 text-[var(--text-primary)]">No tienes favoritos</h3>
+                    <p className="text-[var(--text-secondary)] mb-6">
                       Agrega productos a tus favoritos para encontrarlos rápidamente
                     </p>
                   </div>
                 ) : filteredProducts.length === 0 ? (
                   <div className="text-center py-20">
-                    <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-[#1B9C96]/30 mb-6">
-                      <Package className="h-10 w-10 text-[#0D4E4B]" />
+                    <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-[var(--accent-primary)]/30 mb-6">
+                      <Package className="h-10 w-10 text-[var(--text-primary)]" />
                     </div>
-                    <h2 className="text-xl md:text-2xl font-bold mb-2 text-[#0D4E4B]">No se encontraron productos</h2>
-                    <p className="text-[#29696B] mb-6 max-w-lg mx-auto">
+                    <h2 className="text-xl md:text-2xl font-bold mb-2 text-[var(--text-primary)]">No se encontraron productos</h2>
+                    <p className="text-[var(--text-secondary)] mb-6 max-w-lg mx-auto">
                       {showFavorites
                         ? "No tienes productos favoritos guardados. Explora nuestra tienda y agrega algunos."
-                        : "No hay productos que coincidan con tu búsqueda. Intenta con otros términos o categorías."}
+                        : "No hay productos que coincidan con tu búsqueda. Intenta con otros términos o filtros."}
                     </p>
                     <Button
-                      onClick={() => {
-                        setSearchTerm('');
-                        setSelectedCategory('all');
-                        setShowFavorites(false);
-                        setSortOrder('newest');
-                      }}
-                      className="bg-[#1B9C96] hover:bg-[#139692] text-white"
+                      onClick={clearAllFilters}
+                      className="bg-[var(--accent-primary)] hover:bg-[var(--accent-tertiary)] text-white"
                     >
                       Ver todos los productos
                     </Button>
                   </div>
                 ) : (
                   <>
-                    <h2 className="text-2xl font-bold mb-6 flex items-center text-[#0D4E4B]">
+                    <h2 className="text-2xl font-bold mb-6 flex items-center text-[var(--text-primary)]">
                       {showFavorites ? (
                         <>
-                          <Heart className="w-5 h-5 mr-2 text-[#F2A516] fill-[#F2A516]" />
+                          <Heart className="w-5 h-5 mr-2 text-[var(--accent-quaternary)] fill-[var(--accent-quaternary)]" />
                           Tus Favoritos
                         </>
                       ) : selectedCategory !== 'all' ? (
                         <>
                           {selectedCategory === 'limpieza' ? (
-                            <Sparkles className="w-5 h-5 mr-2 text-[#1B9C96]" />
+                            <Sparkles className="w-5 h-5 mr-2 text-[var(--accent-primary)]" />
                           ) : selectedCategory === 'mantenimiento' ? (
-                            <Wrench className="w-5 h-5 mr-2 text-[#29696B]" />
+                            <Wrench className="w-5 h-5 mr-2 text-[var(--accent-secondary)]" />
                           ) : (
-                            <Package className="w-5 h-5 mr-2 text-[#F2A516]" />
+                            <Package className="w-5 h-5 mr-2 text-[var(--accent-quaternary)]" />
                           )}
                           Productos: {selectedCategory === 'limpieza' ? 'Limpieza' :
                             selectedCategory === 'mantenimiento' ? 'Mantenimiento' :
                               selectedCategory}
+                          
+                          {selectedSubcategory !== 'all' && (
+                            <span className="ml-2 text-[var(--text-tertiary)]">
+                              {' › '}{selectedSubcategory}
+                            </span>
+                          )}
                         </>
                       ) : (
                         <>Todos los Productos</>
                       )}
-                      <Badge variant="outline" className="ml-3 bg-[#1B9C96]/10 text-[#1B9C96] border-[#1B9C96]">
+                      <Badge variant="outline" className="ml-3 bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] border-[var(--accent-primary)]">
                         {filteredProducts.length} productos
                       </Badge>
+                      
+                      {activeFiltersCount > 0 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={clearAllFilters}
+                          className="ml-2 text-[var(--text-tertiary)] hover:text-[var(--state-error)]"
+                        >
+                          <X className="w-4 h-4 mr-1" />
+                          Limpiar filtros
+                        </Button>
+                      )}
                     </h2>
 
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 xs:gap-4 sm:gap-5 md:gap-6">
@@ -685,11 +1011,11 @@ export const ShopHome: React.FC = () => {
                           currentPage={currentPage}
                           onPageChange={setCurrentPage}
                           onItemsPerPageChange={setItemsPerPage}
-                          className="text-[#0D4E4B]"
+                          className="text-[var(--text-primary)]"
                         />
                         
                         {/* Información sobre la visualización */}
-                        <div className="mt-4 text-center text-sm text-[#4A7C79]">
+                        <div className="mt-4 text-center text-sm text-[var(--text-tertiary)]">
                           <p>
                             Mostrando {Math.min(filteredProducts.length, (currentPage - 1) * itemsPerPage + 1)} 
                             - {Math.min(filteredProducts.length, currentPage * itemsPerPage)} 
@@ -705,6 +1031,6 @@ export const ShopHome: React.FC = () => {
           )}
         </div>
       </div>
-    </>
+    </div>
   );
 };

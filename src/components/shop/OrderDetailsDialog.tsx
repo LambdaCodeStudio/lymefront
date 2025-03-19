@@ -31,7 +31,7 @@ import {
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
-// Tipo para productos en un pedido
+// Tipos de interfaces (sin cambios)
 interface OrderProduct {
   productoId: string | {
     _id: string;
@@ -44,7 +44,6 @@ interface OrderProduct {
   precio?: number;
 }
 
-// Tipo para los datos completos del pedido
 interface OrderDetails {
   _id: string;
   nPedido?: number;
@@ -184,28 +183,44 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     switch (pedido?.estado?.toLowerCase()) {
       case 'pendiente':
         return (
-          <Badge className="bg-[#FF6B35]/20 text-[#FFCC80] border border-[#FF6B35]">
+          <Badge 
+            className="bg-[--state-warning]/20 text-[--state-warning] 
+                       border border-[--state-warning] 
+                       text-sm px-2 py-1 rounded-full"
+          >
             <Clock className="w-3 h-3 mr-1" />
             Pendiente de aprobación
           </Badge>
         );
       case 'aprobado':
         return (
-          <Badge className="bg-[#2E7D32]/20 text-[#AED581] border border-[#2E7D32]">
+          <Badge 
+            className="bg-[--state-success]/20 text-[--state-success] 
+                       border border-[--state-success] 
+                       text-sm px-2 py-1 rounded-full"
+          >
             <ClipboardCheck className="w-3 h-3 mr-1" />
             Aprobado
           </Badge>
         );
       case 'rechazado':
         return (
-          <Badge className="bg-[#D32F2F]/20 text-[#EF9A9A] border border-[#D32F2F]">
+          <Badge 
+            className="bg-[--state-error]/20 text-[--state-error] 
+                       border border-[--state-error] 
+                       text-sm px-2 py-1 rounded-full"
+          >
             <Info className="w-3 h-3 mr-1" />
             Rechazado
           </Badge>
         );
       default:
         return (
-          <Badge className="bg-[#2A82C7]/20 text-[#90CAF9] border border-[#2A82C7]">
+          <Badge 
+            className="bg-[--state-info]/20 text-[--state-info] 
+                       border border-[--state-info] 
+                       text-sm px-2 py-1 rounded-full"
+          >
             <ClipboardList className="w-3 h-3 mr-1" />
             En procesamiento
           </Badge>
@@ -231,13 +246,20 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="shop-theme max-w-3xl max-h-[90vh] overflow-y-auto bg-gradient-to-r from-[#00701A]/90 to-[#0F172A]/90 backdrop-blur-md border border-[#2A82C7] text-white">
+      <DialogContent 
+        className="shop-theme max-w-3xl max-h-[90vh] overflow-y-auto 
+                   bg-[--background-component] 
+                   border border-[--accent-primary] 
+                   text-[--text-primary]"
+      >
         <DialogHeader>
-          <DialogTitle className="text-xl flex items-center text-[#F8F9FA]">
+          <DialogTitle 
+            className="text-xl flex items-center text-[--text-primary]"
+          >
             <ShoppingCart className="w-5 h-5 mr-2" />
             {!pedido ? 'Detalles del pedido' : `Pedido #${pedido.nPedido || 'Sin número'}`}
           </DialogTitle>
-          <DialogDescription className="text-[#CED4DA]">
+          <DialogDescription className="text-[--text-secondary]">
             {pedido?.metadata?.creadoPorOperario ? 
               `Creado por operario: ${pedido.metadata.operarioNombre || 'No disponible'}` : 
               'Revise los detalles completos del pedido'}
@@ -245,15 +267,22 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         </DialogHeader>
 
         {!pedido ? (
-          <div className="py-8 text-center text-[#CED4DA]">
+          <div className="py-8 text-center text-[--text-tertiary]">
             No se ha seleccionado ningún pedido para ver sus detalles.
           </div>
         ) : (
           <div className="space-y-6">
             {/* Información general del pedido */}
-            <div className="bg-white/10 rounded-lg p-4 space-y-3 border border-[#2A82C7]/30">
+            <div 
+              className="bg-[--background-card] 
+                         rounded-lg p-4 space-y-3 
+                         border border-[--accent-secondary]/30"
+            >
               <div className="flex justify-between items-start">
-                <h3 className="font-semibold text-[#F8F9FA] flex items-center">
+                <h3 
+                  className="font-semibold text-[--text-primary] 
+                             flex items-center"
+                >
                   <ClipboardList className="w-4 h-4 mr-2" />
                   Información del pedido
                 </h3>
@@ -263,27 +292,27 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <div className="flex items-start">
-                    <Calendar className="w-4 h-4 text-[#CED4DA] mt-0.5 mr-2" />
+                    <Calendar className="w-4 h-4 text-[--text-tertiary] mt-0.5 mr-2" />
                     <div>
-                      <p className="text-sm text-[#CED4DA]">Fecha de creación:</p>
-                      <p className="text-[#F8F9FA]">{formatDate(pedido.fecha)}</p>
+                      <p className="text-sm text-[--text-tertiary]">Fecha de creación:</p>
+                      <p className="text-[--text-primary]">{formatDate(pedido.fecha)}</p>
                     </div>
                   </div>
                   
                   <div className="flex items-start">
-                    <Building className="w-4 h-4 text-[#CED4DA] mt-0.5 mr-2" />
+                    <Building className="w-4 h-4 text-[--text-tertiary] mt-0.5 mr-2" />
                     <div>
-                      <p className="text-sm text-[#CED4DA]">Servicio:</p>
-                      <p className="text-[#F8F9FA]">{pedido.servicio}</p>
+                      <p className="text-sm text-[--text-tertiary]">Servicio:</p>
+                      <p className="text-[--text-primary]">{pedido.servicio}</p>
                     </div>
                   </div>
                   
                   {pedido.seccionDelServicio && (
                     <div className="flex items-start">
-                      <MapPin className="w-4 h-4 text-[#CED4DA] mt-0.5 mr-2" />
+                      <MapPin className="w-4 h-4 text-[--text-tertiary] mt-0.5 mr-2" />
                       <div>
-                        <p className="text-sm text-[#CED4DA]">Sección:</p>
-                        <p className="text-[#F8F9FA]">{pedido.seccionDelServicio}</p>
+                        <p className="text-sm text-[--text-tertiary]">Sección:</p>
+                        <p className="text-[--text-primary]">{pedido.seccionDelServicio}</p>
                       </div>
                     </div>
                   )}
@@ -292,10 +321,10 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                 <div className="space-y-2">
                   {typeof pedido.userId === 'object' && pedido.userId && (
                     <div className="flex items-start">
-                      <User className="w-4 h-4 text-[#CED4DA] mt-0.5 mr-2" />
+                      <User className="w-4 h-4 text-[--text-tertiary] mt-0.5 mr-2" />
                       <div>
-                        <p className="text-sm text-[#CED4DA]">Creado por:</p>
-                        <p className="text-[#F8F9FA]">
+                        <p className="text-sm text-[--text-tertiary]">Creado por:</p>
+                        <p className="text-[--text-primary]">
                           {pedido.userId.nombre || pedido.userId.email || 'Usuario desconocido'}
                         </p>
                       </div>
@@ -304,20 +333,20 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                   
                   {pedido.metadata?.creadoPorOperario && (
                     <div className="flex items-start">
-                      <User className="w-4 h-4 text-[#CED4DA] mt-0.5 mr-2" />
+                      <User className="w-4 h-4 text-[--text-tertiary] mt-0.5 mr-2" />
                       <div>
-                        <p className="text-sm text-[#CED4DA]">Operario:</p>
-                        <p className="text-[#F8F9FA]">{pedido.metadata.operarioNombre || 'No disponible'}</p>
+                        <p className="text-sm text-[--text-tertiary]">Operario:</p>
+                        <p className="text-[--text-primary]">{pedido.metadata.operarioNombre || 'No disponible'}</p>
                       </div>
                     </div>
                   )}
                   
                   {pedido.detalle && (
                     <div className="flex items-start">
-                      <Info className="w-4 h-4 text-[#CED4DA] mt-0.5 mr-2" />
+                      <Info className="w-4 h-4 text-[--text-tertiary] mt-0.5 mr-2" />
                       <div>
-                        <p className="text-sm text-[#CED4DA]">Notas:</p>
-                        <p className="text-[#F8F9FA]">{pedido.detalle}</p>
+                        <p className="text-sm text-[--text-tertiary]">Notas:</p>
+                        <p className="text-[--text-primary]">{pedido.detalle}</p>
                       </div>
                     </div>
                   )}
@@ -325,10 +354,10 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                   {/* Mostrar motivo de rechazo si aplica */}
                   {pedido.estado === 'rechazado' && pedido.metadata?.motivoRechazo && (
                     <div className="flex items-start">
-                      <AlertCircle className="w-4 h-4 text-[#EF9A9A] mt-0.5 mr-2" />
+                      <AlertCircle className="w-4 h-4 text-[--state-error] mt-0.5 mr-2" />
                       <div>
-                        <p className="text-sm text-[#EF9A9A]">Motivo de rechazo:</p>
-                        <p className="text-[#EF9A9A]/90">{pedido.metadata.motivoRechazo}</p>
+                        <p className="text-sm text-[--state-error]">Motivo de rechazo:</p>
+                        <p className="text-[--state-error]/90">{pedido.metadata.motivoRechazo}</p>
                       </div>
                     </div>
                   )}
@@ -337,23 +366,30 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             </div>
             
             {/* Lista de productos */}
-            <div className="bg-white/10 rounded-lg p-4 border border-[#2A82C7]/30">
-              <h3 className="font-semibold text-[#F8F9FA] flex items-center mb-3">
+            <div 
+              className="bg-[--background-card] 
+                         rounded-lg p-4 
+                         border border-[--accent-secondary]/30"
+            >
+              <h3 
+                className="font-semibold text-[--text-primary] 
+                           flex items-center mb-3"
+              >
                 <Package className="w-4 h-4 mr-2" />
                 Productos del pedido
               </h3>
               
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="border-b border-[#2A82C7]/30">
+                  <thead className="border-b border-[--accent-secondary]/30">
                     <tr>
-                      <th className="py-2 px-2 text-left text-xs text-[#CED4DA]">Producto</th>
-                      <th className="py-2 px-2 text-center text-xs text-[#CED4DA]">Cantidad</th>
-                      <th className="py-2 px-2 text-right text-xs text-[#CED4DA]">Precio</th>
-                      <th className="py-2 px-2 text-right text-xs text-[#CED4DA]">Subtotal</th>
+                      <th className="py-2 px-2 text-left text-xs text-[--text-tertiary]">Producto</th>
+                      <th className="py-2 px-2 text-center text-xs text-[--text-tertiary]">Cantidad</th>
+                      <th className="py-2 px-2 text-right text-xs text-[--text-tertiary]">Precio</th>
+                      <th className="py-2 px-2 text-right text-xs text-[--text-tertiary]">Subtotal</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#2A82C7]/20">
+                  <tbody className="divide-y divide-[--accent-secondary]/20">
                     {pedido.productos.map((item, index) => {
                       const productName = typeof item.productoId === 'object' && item.productoId?.nombre 
                         ? item.productoId.nombre 
@@ -369,17 +405,17 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                       
                       return (
                         <tr key={index}>
-                          <td className="py-3 px-2 text-[#F8F9FA]">{productName}</td>
-                          <td className="py-3 px-2 text-center text-[#F8F9FA]">{item.cantidad}</td>
-                          <td className="py-3 px-2 text-right text-[#F8F9FA]">${productPrice.toFixed(2)}</td>
-                          <td className="py-3 px-2 text-right font-medium text-[#F8F9FA]">${subtotal.toFixed(2)}</td>
+                          <td className="py-3 px-2 text-[--text-primary]">{productName}</td>
+                          <td className="py-3 px-2 text-center text-[--text-primary]">{item.cantidad}</td>
+                          <td className="py-3 px-2 text-right text-[--text-primary]">${productPrice.toFixed(2)}</td>
+                          <td className="py-3 px-2 text-right font-medium text-[--text-primary]">${subtotal.toFixed(2)}</td>
                         </tr>
                       );
                     })}
                     
-                    <tr className="bg-[#00701A]/20 font-semibold">
-                      <td colSpan={3} className="py-3 px-2 text-right text-[#F8F9FA]">Total:</td>
-                      <td className="py-3 px-2 text-right text-[#F8F9FA]">${calculateOrderTotal().toFixed(2)}</td>
+                    <tr className="bg-[--accent-primary]/20 font-semibold">
+                      <td colSpan={3} className="py-3 px-2 text-right text-[--text-primary]">Total:</td>
+                      <td className="py-3 px-2 text-right text-[--text-primary]">${calculateOrderTotal().toFixed(2)}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -395,7 +431,10 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                 variant="outline"
                 onClick={handleDownloadRemito}
                 disabled={isDownloadingRemito}
-                className="border-[#2A82C7] text-[#F8F9FA] hover:bg-[#00701A]/20"
+                className="border-[--accent-primary] 
+                           text-[--text-primary] 
+                           hover:bg-[--accent-primary]/10 
+                           hover:text-[--text-primary]"
               >
                 {isDownloadingRemito ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -411,7 +450,9 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             <Button
               variant="outline"
               onClick={onClose}
-              className="border-[#F8F9FA]/30 text-[#F8F9FA] hover:bg-white/10"
+              className="border-[--accent-secondary]/30 
+                         text-[--text-primary] 
+                         hover:bg-[--background-secondary]/20"
             >
               Cerrar
             </Button>
@@ -425,7 +466,9 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                     onReject(pedido._id);
                     onClose();
                   }}
-                  className="bg-[#D32F2F] hover:bg-[#D32F2F]/80"
+                  className="bg-[--state-error] 
+                             hover:bg-[--state-error]/80 
+                             text-white"
                 >
                   <XCircle className="w-4 h-4 mr-2" />
                   Rechazar
@@ -436,7 +479,9 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                     onApprove(pedido._id);
                     onClose();
                   }}
-                  className="bg-[#00701A] hover:bg-[#7CB342] text-white"
+                  className="bg-[--state-success] 
+                             hover:bg-[--state-success]/80 
+                             text-white"
                 >
                   <CheckCircle2 className="w-4 h-4 mr-2" />
                   Aprobar

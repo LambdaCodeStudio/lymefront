@@ -7,16 +7,21 @@ import { useCartContext } from '@/providers/CartProvider';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
-// Interfaz para el usuario
+// Interfaz para el usuario actualizada según el nuevo backend
 interface UserData {
-  _id?: string;
   id?: string;
+  _id?: string;
   role?: string;
   secciones?: string;
   nombre?: string;
   apellido?: string;
   usuario?: string;
   email?: string;
+  isActive?: boolean;
+  isAdmin?: boolean;
+  isSupervisorDeSupervisores?: boolean;
+  isSupervisor?: boolean;
+  isOperario?: boolean;
 }
 
 export const ShopNavbar: React.FC = () => {
@@ -37,6 +42,9 @@ export const ShopNavbar: React.FC = () => {
   const [pendingApprovals, setPendingApprovals] = useState(0);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  
+  // URL base para la API, ajustada para el nuevo backend
+  const API_BASE_URL = 'http://localhost:3000/api';
 
   // Obtener información del usuario del localStorage y API
   useEffect(() => {
@@ -53,7 +61,7 @@ export const ShopNavbar: React.FC = () => {
         const token = localStorage.getItem('token');
         if (!token) return;
 
-        const response = await fetch('http://localhost:3000/api/auth/me', {
+        const response = await fetch(`${API_BASE_URL}/auth/me`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -61,19 +69,30 @@ export const ShopNavbar: React.FC = () => {
 
         if (response.ok) {
           const data = await response.json();
-          setUserData(data);
           
-          // Actualizar localStorage con datos más recientes
-          if (data.role) localStorage.setItem('userRole', data.role);
-          if (data.secciones) localStorage.setItem('userSecciones', data.secciones);
-          
-          // Actualizar estados con datos frescos
-          setUserRole(data.role);
-          setUserSecciones(data.secciones);
-          
-          // Si es supervisor, obtener el número de pedidos pendientes
-          if (data.role === 'supervisor') {
-            fetchPendingApprovals();
+          if (data.success && data.user) {
+            // El nuevo backend devuelve la estructura {success: true, user: {...}}
+            setUserData(data.user);
+            
+            // Actualizar localStorage con datos más recientes
+            if (data.user.role) localStorage.setItem('userRole', data.user.role);
+            if (data.user.secciones) localStorage.setItem('userSecciones', data.user.secciones);
+            
+            // Actualizar estados con datos frescos
+            setUserRole(data.user.role);
+            setUserSecciones(data.user.secciones);
+            
+            // Si es supervisor, obtener el número de pedidos pendientes
+            if (data.user.role === 'supervisor') {
+              fetchPendingApprovals(data.user.id || data.user._id);
+            }
+          }
+        } else {
+          console.warn('Error al obtener datos del usuario:', response.status);
+          // Si hay un error de autenticación, redirigir al login
+          if (response.status === 401) {
+            localStorage.clear();
+            window.location.href = '/login';
           }
         }
       } catch (error) {
@@ -99,12 +118,13 @@ export const ShopNavbar: React.FC = () => {
   }, [userMenuRef]);
   
   // Obtener el número de pedidos pendientes para supervisores
-  const fetchPendingApprovals = async () => {
+  const fetchPendingApprovals = async (supervisorId: string) => {
     try {
       const token = localStorage.getItem('token');
       if (!token) return;
       
-      const response = await fetch('http://localhost:3000/api/pedido', {
+      // Usar el endpoint específico para pedidos por supervisor
+      const response = await fetch(`${API_BASE_URL}/pedido/supervisor/${supervisorId}?estado=pendiente`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -112,15 +132,8 @@ export const ShopNavbar: React.FC = () => {
       
       if (response.ok) {
         const data = await response.json();
-        
-        // Filtrar pedidos pendientes creados por operarios que este supervisor supervisa
-        const pendingCount = data.filter(order => 
-          order.estado === 'pendiente' && 
-          order.metadata?.creadoPorOperario &&
-          order.metadata?.supervisorId === (userData?._id || userData?.id)
-        ).length;
-        
-        setPendingApprovals(pendingCount);
+        // Actualizar con el conteo de pedidos pendientes
+        setPendingApprovals(Array.isArray(data) ? data.length : 0);
       }
     } catch (error) {
       console.error('Error al obtener pedidos pendientes:', error);
@@ -164,11 +177,24 @@ export const ShopNavbar: React.FC = () => {
     return 'US';
   };
 
-  // Conseguir gradiente actual basado en los colores del Footer
+  // Conseguir gradiente actual basado en los colores definidos en variables CSS
   const getNavbarGradient = () => {
     return scrolled 
-      ? 'bg-[#0D4E4B]' 
-      : 'bg-gradient-to-r from-[#1B9C96] to-[#139692]';
+      ? 'bg-[var(--accent-secondary)]' 
+      : 'bg-[var(--gradient-main)]';
+  };
+
+  // Manejar la búsqueda
+  const handleSearch = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const searchInput = form.querySelector('input') as HTMLInputElement;
+    const query = searchInput.value.trim();
+    
+    if (query) {
+      window.location.href = `/shop?search=${encodeURIComponent(query)}`;
+      setSearchOpen(false);
+    }
   };
 
   return (
@@ -184,7 +210,7 @@ export const ShopNavbar: React.FC = () => {
             <div className="flex items-center">
               <a href="/shop" className="flex items-center">
                 <span className="text-2xl font-bold text-white">
-                  LYME<span className="text-[#F2A516]"> S.A</span>
+                  LYME<span className="text-[var(--accent-quaternary)]"> S.A</span>
                 </span>
               </a>
             </div>
@@ -193,7 +219,7 @@ export const ShopNavbar: React.FC = () => {
             <nav className="hidden md:flex items-center space-x-6">
               <a 
                 href="/shop" 
-                className="text-white hover:text-[#F2A516] transition-colors text-sm font-medium uppercase tracking-wide"
+                className="text-white hover:text-[var(--accent-quaternary)] transition-colors text-sm font-medium uppercase tracking-wide"
               >
                 Inicio
               </a>
@@ -202,7 +228,7 @@ export const ShopNavbar: React.FC = () => {
               {(userSecciones === 'limpieza' || userSecciones === 'ambos') && (
                 <a 
                   href="/shop?category=limpieza" 
-                  className="text-white hover:text-[#CFF2E4] transition-colors text-sm font-medium uppercase tracking-wide"
+                  className="text-white hover:text-[var(--background-secondary)] transition-colors text-sm font-medium uppercase tracking-wide"
                 >
                   Limpieza
                 </a>
@@ -212,7 +238,7 @@ export const ShopNavbar: React.FC = () => {
               {(userSecciones === 'mantenimiento' || userSecciones === 'ambos') && (
                 <a 
                   href="/shop?category=mantenimiento" 
-                  className="text-white hover:text-[#84D6C8] transition-colors text-sm font-medium uppercase tracking-wide"
+                  className="text-white hover:text-[var(--accent-tertiary)] transition-colors text-sm font-medium uppercase tracking-wide"
                 >
                   Mantenimiento
                 </a>
@@ -220,7 +246,7 @@ export const ShopNavbar: React.FC = () => {
               
               <a 
                 href="/shop?view=favorites" 
-                className="text-white hover:text-[#F2A516] transition-colors text-sm font-medium uppercase tracking-wide"
+                className="text-white hover:text-[var(--accent-quaternary)] transition-colors text-sm font-medium uppercase tracking-wide"
               >
                 Favoritos
               </a>
@@ -229,7 +255,7 @@ export const ShopNavbar: React.FC = () => {
               {canViewOrders && (
                 <a 
                   href="/orders" 
-                  className="text-white hover:text-[#CFF2E4] transition-colors text-sm font-medium uppercase tracking-wide"
+                  className="text-white hover:text-[var(--background-secondary)] transition-colors text-sm font-medium uppercase tracking-wide"
                 >
                   Mis Pedidos
                 </a>
@@ -240,7 +266,7 @@ export const ShopNavbar: React.FC = () => {
             <div className="flex items-center space-x-4">
               <button 
                 onClick={() => setSearchOpen(!searchOpen)}
-                className="text-white hover:text-[#84D6C8] transition-colors"
+                className="text-white hover:text-[var(--accent-tertiary)] transition-colors"
                 aria-label="Buscar"
               >
                 <Search className="w-5 h-5" />
@@ -250,7 +276,7 @@ export const ShopNavbar: React.FC = () => {
               {canViewOrders && (
                 <a 
                   href="/orders" 
-                  className="hidden sm:flex text-white hover:text-[#F2A516] transition-colors"
+                  className="hidden sm:flex text-white hover:text-[var(--accent-quaternary)] transition-colors"
                   aria-label="Mis Pedidos"
                 >
                   <ClipboardList className="w-5 h-5" />
@@ -261,11 +287,11 @@ export const ShopNavbar: React.FC = () => {
               {isSupervisor && pendingApprovals > 0 && (
                 <a 
                   href="/orders?tab=porAprobar" 
-                  className="relative text-white hover:text-[#CFF2E4] transition-colors"
+                  className="relative text-white hover:text-[var(--background-secondary)] transition-colors"
                   aria-label="Pedidos por Aprobar"
                 >
                   <Bell className="w-5 h-5" />
-                  <span className="absolute -top-2 -right-2 bg-[#F2A516] text-[#0D4E4B] text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                  <span className="absolute -top-2 -right-2 bg-[var(--accent-quaternary)] text-[var(--text-primary)] text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
                     {pendingApprovals}
                   </span>
                 </a>
@@ -273,12 +299,12 @@ export const ShopNavbar: React.FC = () => {
 
               <a 
                 href="/cart" 
-                className="relative text-white hover:text-[#84D6C8] transition-colors"
+                className="relative text-white hover:text-[var(--accent-tertiary)] transition-colors"
                 aria-label="Carrito"
               >
                 <ShoppingCart className="w-5 h-5" />
                 {cartItemCount > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-[#F2A516] text-[#0D4E4B] text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                  <span className="absolute -top-2 -right-2 bg-[var(--accent-quaternary)] text-[var(--text-primary)] text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
                     {cartItemCount}
                   </span>
                 )}
@@ -290,8 +316,8 @@ export const ShopNavbar: React.FC = () => {
                   className="flex items-center cursor-pointer"
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
                 >
-                  <Avatar className="border-2 border-[#84D6C8] hover:border-white transition-colors">
-                    <AvatarFallback className="bg-[#F8FDFC] text-[#1B9C96] text-sm font-medium">
+                  <Avatar className="border-2 border-[var(--accent-tertiary)] hover:border-white transition-colors">
+                    <AvatarFallback className="bg-[var(--background-primary)] text-[var(--accent-primary)] text-sm font-medium">
                       {getUserInitials()}
                     </AvatarFallback>
                   </Avatar>
@@ -306,9 +332,9 @@ export const ShopNavbar: React.FC = () => {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 10 }}
                       transition={{ duration: 0.2 }}
-                      className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-[#1B9C96] ring-opacity-50 z-50"
+                      className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-[var(--accent-primary)] ring-opacity-50 z-50"
                     >
-                      <div className="py-2 bg-[#CFF2E4] text-[#0D4E4B] rounded-t-md px-4">
+                      <div className="py-2 bg-[var(--background-secondary)] text-[var(--text-primary)] rounded-t-md px-4">
                         <p className="text-sm font-medium">{userData?.nombre} {userData?.apellido}</p>
                         <p className="text-xs opacity-80">{userData?.usuario || userData?.email}</p>
                       </div>
@@ -316,7 +342,7 @@ export const ShopNavbar: React.FC = () => {
                         {canAccessAdmin && (
                           <a
                             href="/admin"
-                            className="flex items-center px-4 py-2 text-sm text-[#0D4E4B] hover:bg-[#1B9C96]/10 hover:text-[#1B9C96]"
+                            className="flex items-center px-4 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--accent-primary)]/10 hover:text-[var(--accent-primary)]"
                           >
                             <Settings className="w-4 h-4 mr-2" />
                             Panel Admin
@@ -324,7 +350,7 @@ export const ShopNavbar: React.FC = () => {
                         )}
                         <button
                           onClick={logout}
-                          className="flex w-full items-center px-4 py-2 text-sm text-[#0D4E4B] hover:bg-[#1B9C96]/10 hover:text-[#1B9C96]"
+                          className="flex w-full items-center px-4 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--accent-primary)]/10 hover:text-[var(--accent-primary)]"
                         >
                           <LogOut className="w-4 h-4 mr-2" />
                           Cerrar sesión
@@ -356,23 +382,24 @@ export const ShopNavbar: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.2 }}
-            className="fixed top-[60px] left-0 right-0 bg-[#0D4E4B] bg-opacity-95 backdrop-blur-lg z-40 p-4 border-b border-[#1B9C96]/50 shadow-lg"
+            className="fixed top-[60px] left-0 right-0 bg-[var(--accent-secondary)] bg-opacity-95 backdrop-blur-lg z-40 p-4 border-b border-[var(--accent-primary)]/50 shadow-lg"
           >
             <div className="container mx-auto">
-              <div className="flex items-center">
+              <form onSubmit={handleSearch} className="flex items-center">
                 <Input 
                   type="text" 
                   placeholder="Buscar productos..." 
-                  className="w-full focus:ring-2 focus:ring-[#1B9C96] bg-white border-[#1B9C96] text-[#0D4E4B] placeholder-[#4A7C79]"
+                  className="w-full focus:ring-2 focus:ring-[var(--accent-primary)] bg-white border-[var(--accent-primary)] text-[var(--text-primary)] placeholder-[var(--text-tertiary)]"
                   autoFocus
                 />
                 <Button 
+                  type="submit"
                   size="sm" 
-                  className="ml-2 bg-[#1B9C96] hover:bg-[#139692] text-white font-medium"
+                  className="ml-2 bg-[var(--accent-primary)] hover:bg-[var(--accent-tertiary)] text-white font-medium"
                 >
                   Buscar
                 </Button>
-              </div>
+              </form>
             </div>
           </motion.div>
         )}
@@ -386,27 +413,27 @@ export const ShopNavbar: React.FC = () => {
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.3 }}
-            className="fixed inset-x-0 top-[60px] bg-[#F8FDFC] bg-opacity-95 backdrop-blur-xl z-40 md:hidden border-b border-[#1B9C96]/50"
+            className="fixed inset-x-0 top-[60px] bg-[var(--background-primary)] bg-opacity-95 backdrop-blur-xl z-40 md:hidden border-b border-[var(--accent-primary)]/50"
           >
             <div className="container mx-auto px-4 py-6 flex flex-col space-y-4">
               {/* Usuario móvil */}
               {userData && (
-                <div className="flex items-center space-x-3 mb-4 pb-3 border-b border-[#1B9C96]/30">
-                  <Avatar className="border-2 border-[#1B9C96]">
-                    <AvatarFallback className="bg-[#CFF2E4] text-[#0D4E4B]">
+                <div className="flex items-center space-x-3 mb-4 pb-3 border-b border-[var(--accent-primary)]/30">
+                  <Avatar className="border-2 border-[var(--accent-primary)]">
+                    <AvatarFallback className="bg-[var(--background-secondary)] text-[var(--text-primary)]">
                       {getUserInitials()}
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="text-[#0D4E4B] font-medium">{userData.nombre} {userData.apellido}</p>
-                    <p className="text-[#4A7C79] text-sm opacity-80">{userData.usuario || userData.email}</p>
+                    <p className="text-[var(--text-primary)] font-medium">{userData.nombre} {userData.apellido}</p>
+                    <p className="text-[var(--text-tertiary)] text-sm opacity-80">{userData.usuario || userData.email}</p>
                   </div>
                 </div>
               )}
               
               <a 
                 href="/shop" 
-                className="text-[#0D4E4B] hover:text-[#1B9C96] transition-colors py-2 border-b border-[#1B9C96]/30 text-lg"
+                className="text-[var(--text-primary)] hover:text-[var(--accent-primary)] transition-colors py-2 border-b border-[var(--accent-primary)]/30 text-lg"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Inicio
@@ -416,7 +443,7 @@ export const ShopNavbar: React.FC = () => {
               {(userSecciones === 'limpieza' || userSecciones === 'ambos') && (
                 <a 
                   href="/shop?category=limpieza" 
-                  className="text-[#0D4E4B] hover:text-[#1B9C96] transition-colors py-2 border-b border-[#1B9C96]/30 text-lg"
+                  className="text-[var(--text-primary)] hover:text-[var(--accent-primary)] transition-colors py-2 border-b border-[var(--accent-primary)]/30 text-lg"
                   onClick={() => setIsMenuOpen(false)}
                 >
                   Limpieza
@@ -427,7 +454,7 @@ export const ShopNavbar: React.FC = () => {
               {(userSecciones === 'mantenimiento' || userSecciones === 'ambos') && (
                 <a 
                   href="/shop?category=mantenimiento" 
-                  className="text-[#0D4E4B] hover:text-[#29696B] transition-colors py-2 border-b border-[#1B9C96]/30 text-lg"
+                  className="text-[var(--text-primary)] hover:text-[var(--accent-secondary)] transition-colors py-2 border-b border-[var(--accent-primary)]/30 text-lg"
                   onClick={() => setIsMenuOpen(false)}
                 >
                   Mantenimiento
@@ -436,7 +463,7 @@ export const ShopNavbar: React.FC = () => {
               
               <a 
                 href="/shop?view=favorites" 
-                className="text-[#0D4E4B] hover:text-[#F2A516] transition-colors py-2 border-b border-[#1B9C96]/30 text-lg"
+                className="text-[var(--text-primary)] hover:text-[var(--accent-quaternary)] transition-colors py-2 border-b border-[var(--accent-primary)]/30 text-lg"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Favoritos
@@ -446,7 +473,7 @@ export const ShopNavbar: React.FC = () => {
               {canViewOrders && (
                 <a 
                   href="/orders" 
-                  className="text-[#0D4E4B] hover:text-[#1B9C96] transition-colors py-2 border-b border-[#1B9C96]/30 text-lg flex items-center"
+                  className="text-[var(--text-primary)] hover:text-[var(--accent-primary)] transition-colors py-2 border-b border-[var(--accent-primary)]/30 text-lg flex items-center"
                   onClick={() => setIsMenuOpen(false)}
                 >
                   <ClipboardList className="w-5 h-5 mr-2" />
@@ -458,13 +485,13 @@ export const ShopNavbar: React.FC = () => {
               {isSupervisor && (
                 <a 
                   href="/orders?tab=porAprobar" 
-                  className="text-[#0D4E4B] hover:text-[#1B9C96] transition-colors py-2 border-b border-[#1B9C96]/30 text-lg flex items-center relative"
+                  className="text-[var(--text-primary)] hover:text-[var(--accent-primary)] transition-colors py-2 border-b border-[var(--accent-primary)]/30 text-lg flex items-center relative"
                   onClick={() => setIsMenuOpen(false)}
                 >
                   <Bell className="w-5 h-5 mr-2" />
                   Pedidos por Aprobar
                   {pendingApprovals > 0 && (
-                    <Badge className="ml-2 bg-[#F2A516] text-[#0D4E4B]">{pendingApprovals}</Badge>
+                    <Badge className="ml-2 bg-[var(--accent-quaternary)] text-[var(--text-primary)]">{pendingApprovals}</Badge>
                   )}
                 </a>
               )}
@@ -473,7 +500,7 @@ export const ShopNavbar: React.FC = () => {
                 {canAccessAdmin && (
                   <a 
                     href="/admin"
-                    className="flex justify-center items-center py-2 text-white bg-[#1B9C96] hover:bg-[#29696B] rounded transition-colors font-medium"
+                    className="flex justify-center items-center py-2 text-white bg-[var(--accent-primary)] hover:bg-[var(--accent-secondary)] rounded transition-colors font-medium"
                     onClick={() => setIsMenuOpen(false)}
                   >
                     <Settings className="w-5 h-5 mr-2" />
@@ -482,7 +509,7 @@ export const ShopNavbar: React.FC = () => {
                 )}
                 <Button 
                   variant="ghost" 
-                  className="w-full justify-center text-[#0D4E4B] bg-[#1B9C96]/10 hover:bg-[#1B9C96]/20"
+                  className="w-full justify-center text-[var(--text-primary)] bg-[var(--accent-primary)]/10 hover:bg-[var(--accent-primary)]/20"
                   onClick={() => {
                     logout();
                     setIsMenuOpen(false);

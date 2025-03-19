@@ -15,7 +15,6 @@ import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import OptimizedProductImage from '@/components/admin/components/ProductImage';
 import {
   Tooltip,
   TooltipContent,
@@ -33,18 +32,28 @@ interface ComboItem {
   cantidad: number;
 }
 
+// Interfaz para el producto adaptada al modelo del backend
 interface Product {
   _id: string;
   nombre: string;
-  descripcion: string;
+  descripcion?: string;
   categoria: 'limpieza' | 'mantenimiento';
-  subCategoria: string;
+  subCategoria?: string;
+  marca?: string;
   precio: number;
   stock: number;
+  stockMinimo?: number;
+  alertaStockBajo?: boolean;
   hasImage?: boolean;
-  imageBase64?: string;
+  imageInfo?: {
+    mimetype?: string;
+    tamano?: number;
+    ultimaActualizacion?: string;
+  };
   esCombo?: boolean;
   itemsCombo?: ComboItem[];
+  estado?: 'activo' | 'discontinuado' | 'agotado';
+  vendidos?: number;
 }
 
 interface ProductCardProps {
@@ -62,7 +71,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   isFavorite,
   onToggleFavorite,
   onAddToCart,
-  useBase64 = true,
+  useBase64 = false, // Cambiado a false por defecto para usar API
   compact = false, // Por defecto, no usar modo compacto
   onShowDetails
 }) => {
@@ -70,41 +79,45 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const [showQuantitySelector, setShowQuantitySelector] = useState<boolean>(false);
   const [showDescription, setShowDescription] = useState<boolean>(false);
   const [expandedCombo, setExpandedCombo] = useState<boolean>(false);
+  
+  // URL base para la API
+  const API_URL = 'http://localhost:3000/api';
 
   // Función para truncar texto largo
   const truncateText = (text: string, maxLength: number) => {
+    if (!text) return '';
     if (text.length <= maxLength) return text;
     return text.slice(0, maxLength) + '...';
   };
 
-  // Determinar la clase de gradiente según la categoría - ACTUALIZADO con nueva paleta
+  // Determinar la clase de gradiente según la categoría - ACTUALIZADO con variables CSS
   const getGradientClass = () => {
     if (product.esCombo) {
-      return 'from-[#1B9C96]/80 to-[#84D6C8]/80'; // Degradado de turquesa a turquesa claro para combos
+      return 'from-[var(--accent-primary)]/80 to-[var(--accent-tertiary)]/80'; // Degradado para combos
     } else if (product.categoria === 'limpieza') {
-      return 'from-[#84D6C8]/80 to-[#CFF2E4]/80'; // Degradado de turquesa claro a verde menta para limpieza
+      return 'from-[var(--accent-tertiary)]/80 to-[var(--accent-quaternary)]/80'; // Degradado para limpieza
     }
-    return 'from-[#29696B]/80 to-[#1B9C96]/80'; // Degradado de turquesa oscuro a turquesa para mantenimiento
+    return 'from-[var(--accent-secondary)]/80 to-[var(--accent-primary)]/80'; // Degradado para mantenimiento
   };
 
   // Determinar el color de borde según la categoría
   const getBorderClass = () => {
     if (product.esCombo) {
-      return 'border-[#1B9C96]'; // Borde turquesa para combos
+      return 'border-[var(--accent-primary)]'; // Borde para combos
     } else if (product.categoria === 'limpieza') {
-      return 'border-[#84D6C8]'; // Borde turquesa claro para limpieza
+      return 'border-[var(--accent-tertiary)]'; // Borde para limpieza
     }
-    return 'border-[#29696B]'; // Borde turquesa oscuro para mantenimiento
+    return 'border-[var(--accent-secondary)]'; // Borde para mantenimiento
   };
 
   // Determinar el color del botón según la categoría
   const getButtonClass = () => {
     if (product.esCombo) {
-      return 'bg-[#1B9C96] hover:bg-[#139692]'; // Botón especial para combos
+      return 'bg-[var(--accent-primary)] hover:bg-[var(--accent-tertiary)]'; // Botón especial para combos
     } else if (product.categoria === 'limpieza') {
-      return 'bg-[#1B9C96] hover:bg-[#139692]'; // Botón turquesa para limpieza
+      return 'bg-[var(--accent-primary)] hover:bg-[var(--accent-tertiary)]'; // Botón para limpieza
     }
-    return 'bg-[#29696B] hover:bg-[#1B9C96]'; // Botón turquesa oscuro a turquesa para mantenimiento
+    return 'bg-[var(--accent-secondary)] hover:bg-[var(--accent-primary)]'; // Botón para mantenimiento
   };
 
   // Obtener colores y estilos para el indicador de stock
@@ -112,36 +125,36 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     // Para productos de mantenimiento, no mostramos stock específico
     if (product.categoria === 'mantenimiento') {
       return {
-        bg: 'bg-[#F8FDFC]',
-        text: 'text-[#1B9C96]',
-        border: 'border-[#1B9C96]',
+        bg: 'bg-[var(--background-primary)]',
+        text: 'text-[var(--accent-primary)]',
+        border: 'border-[var(--accent-primary)]',
         icon: <Check size={12} className="mr-1" />,
         label: 'Disponible'
       };
     }
     
-    // Para productos de limpieza
-    if (product.stock <= 5) {
+    // Para productos de limpieza - ahora usando alertaStockBajo del backend
+    if (product.stock === 0) {
       return {
-        bg: 'bg-[#E74C3C]/10',
-        text: 'text-[#E74C3C]',
-        border: 'border-[#E74C3C]',
+        bg: 'bg-[var(--state-error)]/10',
+        text: 'text-[var(--state-error)]',
+        border: 'border-[var(--state-error)]',
         icon: <AlertTriangle size={12} className="mr-1" />,
-        label: 'Stock bajo'
+        label: 'Sin stock'
       };
-    } else if (product.stock <= 15) {
+    } else if (product.alertaStockBajo) {
       return {
-        bg: 'bg-[#F2A516]/10',
-        text: 'text-[#F2A516]',
-        border: 'border-[#F2A516]',
+        bg: 'bg-[var(--state-warning)]/10',
+        text: 'text-[var(--state-warning)]',
+        border: 'border-[var(--state-warning)]',
         icon: <Package size={12} className="mr-1" />,
         label: `Stock: ${product.stock}`
       };
     } else {
       return {
-        bg: 'bg-[#CFF2E4]',
-        text: 'text-[#1B9C96]',
-        border: 'border-[#1B9C96]',
+        bg: 'bg-[var(--accent-quaternary)]',
+        text: 'text-[var(--accent-primary)]',
+        border: 'border-[var(--accent-primary)]',
         icon: <Check size={12} className="mr-1" />,
         label: `Stock: ${product.stock}`
       };
@@ -175,6 +188,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
   // Obtener estilo del indicador de stock
   const stockStyle = getStockBadgeStyle();
+
+  // Verificar si el producto está disponible para comprar
+  const isAvailable = product.categoria === 'mantenimiento' || product.stock > 0;
 
   // Extraer nombres de productos del combo para mostrar
   const getComboItems = () => {
@@ -214,32 +230,32 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     };
 
     return (
-      <div className="mt-2 text-[#0D4E4B] bg-[#CFF2E4]/70 rounded-md p-2 text-xs">
+      <div className="mt-2 text-[var(--text-primary)] bg-[var(--accent-quaternary)]/70 rounded-md p-2 text-xs">
         <div className="font-medium mb-1 flex items-center justify-between">
           <div className="flex items-center">
-            <PackagePlus size={14} className="mr-1 text-[#1B9C96]" />
+            <PackagePlus size={14} className="mr-1 text-[var(--accent-primary)]" />
             Incluye:
           </div>
           {hasMoreItems && (
             <Button
               variant="ghost"
-              className="h-5 px-1 py-0 text-[10px] text-[#0D4E4B] hover:bg-[#1B9C96]/20"
+              className="h-5 px-1 py-0 text-[10px] text-[var(--text-primary)] hover:bg-[var(--accent-primary)]/20"
               onClick={toggleExpand}
             >
               {expandedCombo ? 'Ver menos' : `Ver todos (${comboItems.length})`}
             </Button>
           )}
         </div>
-        <ul className={`space-y-1 ${expandedCombo ? 'max-h-48' : 'max-h-16'} overflow-y-auto transition-all duration-300 scrollbar-thin scrollbar-thumb-[#1B9C96]/40 scrollbar-track-transparent`}>
+        <ul className={`space-y-1 ${expandedCombo ? 'max-h-48' : 'max-h-16'} overflow-y-auto transition-all duration-300 scrollbar-thin scrollbar-thumb-[var(--accent-primary)]/40 scrollbar-track-transparent`}>
           {displayedItems.map((item, index) => (
             <li key={index} className="flex justify-between">
               <span className="truncate pr-2">{item.nombre}</span>
-              <span className="text-[#1B9C96]">x{item.cantidad}</span>
+              <span className="text-[var(--accent-primary)]">x{item.cantidad}</span>
             </li>
           ))}
         </ul>
         {!expandedCombo && hasMoreItems && (
-          <div className="mt-1 text-center text-[#4A7C79] text-[10px]">
+          <div className="mt-1 text-center text-[var(--text-tertiary)] text-[10px]">
             +{comboItems.length - initialItemsToShow} productos más
           </div>
         )}
@@ -253,6 +269,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     setShowDescription(!showDescription);
   };
 
+  // URL para imágenes actualizada para el nuevo backend
+  const getImageUrl = () => {
+    return `${API_URL}/producto/${product._id}/imagen?width=${compact ? 200 : 300}&height=${compact ? 200 : 300}&quality=${compact ? 60 : 75}&${Date.now()}`;
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -262,102 +283,90 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       className="h-full product-card"
     >
       <Card 
-        className={`h-full flex flex-col bg-gradient-to-br ${getGradientClass()} border ${getBorderClass()} hover:shadow-lg hover:shadow-[#1B9C96]/20 transition-all overflow-hidden`}
+        className={`h-full flex flex-col bg-gradient-to-br ${getGradientClass()} border ${getBorderClass()} hover:shadow-lg hover:shadow-[var(--accent-primary)]/20 transition-all overflow-hidden`}
         onClick={onShowDetails}
       >
         {/* Imagen del producto - Optimizada para responsividad */}
         <div className="pt-2 sm:pt-3 px-2 sm:px-3">
           <div className="aspect-square w-full rounded-lg overflow-hidden bg-white relative">
-            {useBase64 && product.imageBase64 ? (
+            {product.hasImage ? (
               <div className="absolute inset-0 flex items-center justify-center">
                 <img
-                  src={product.imageBase64}
+                  src={getImageUrl()}
                   alt={product.nombre}
                   className="w-full h-full object-contain"
                   loading="lazy"
                   onError={(e) => {
-                    // Si hay un error cargando la imagen base64, ocultar la imagen
+                    // Si hay un error cargando la imagen, ocultar y mostrar fallback
                     const target = e.target as HTMLImageElement;
                     target.style.display = 'none';
                     
-                    // Crear un elemento de fallback
-                    const fallbackDiv = document.createElement('div');
-                    fallbackDiv.className = "flex items-center justify-center w-full h-full text-[#4A7C79]";
-                    fallbackDiv.textContent = product.esCombo ? "Combo" : "Sin imagen";
+                    // Crear un elemento de fallback con el logo
                     if (e.currentTarget.parentElement) {
-                      e.currentTarget.parentElement.appendChild(fallbackDiv);
+                      const fallbackContainer = document.createElement('div');
+                      fallbackContainer.className = "flex items-center justify-center w-full h-full";
+                      
+                      const logoImg = document.createElement('img');
+                      logoImg.src = "/lyme.png";
+                      logoImg.alt = "Lyme Logo";
+                      logoImg.className = "h-3/4 w-3/4 object-contain";
+                      
+                      // Si el logo no carga, mostrar texto alternativo
+                      logoImg.onerror = () => {
+                        logoImg.style.display = 'none';
+                        const textSpan = document.createElement('span');
+                        textSpan.className = "text-[var(--text-tertiary)]";
+                        textSpan.textContent = product.esCombo ? "Combo" : "Sin imagen";
+                        fallbackContainer.appendChild(textSpan);
+                      };
+                      
+                      fallbackContainer.appendChild(logoImg);
+                      e.currentTarget.parentElement.appendChild(fallbackContainer);
                     }
                   }}
                 />
               </div>
             ) : (
-              <div className="absolute inset-0 flex items-center justify-center">
-                {product.hasImage ? (
-                  <img
-                    src={`http://localhost:3000/api/producto/${product._id}/imagen?width=${compact ? 200 : 300}&height=${compact ? 200 : 300}&quality=${compact ? 60 : 75}&${Date.now()}`}
-                    alt={product.nombre}
-                    className="w-full h-full object-contain"
-                    loading="lazy"
-                    onError={(e) => {
-                      // Si hay un error cargando la imagen, ocultar y mostrar fallback
-                      const target = e.target as HTMLImageElement;
-                      target.style.display = 'none';
-                      
-                      // Crear un elemento de fallback con el logo
-                      if (e.currentTarget.parentElement) {
-                        const fallbackContainer = document.createElement('div');
-                        fallbackContainer.className = "flex items-center justify-center w-full h-full";
-                        
-                        const logoImg = document.createElement('img');
-                        logoImg.src = "/lyme.png";
-                        logoImg.alt = "Lyme Logo";
-                        logoImg.className = "h-3/4 w-3/4 object-contain";
-                        
-                        // Si el logo no carga, mostrar texto alternativo
-                        logoImg.onerror = () => {
-                          logoImg.style.display = 'none';
-                          const textSpan = document.createElement('span');
-                          textSpan.className = "text-[#4A7C79]";
-                          textSpan.textContent = product.esCombo ? "Combo" : "Sin imagen";
-                          fallbackContainer.appendChild(textSpan);
-                        };
-                        
-                        fallbackContainer.appendChild(logoImg);
-                        e.currentTarget.parentElement.appendChild(fallbackContainer);
-                      }
-                    }}
-                  />
-                ) : (
-                  <div className="flex items-center justify-center w-full h-full">
-                    <img
-                      src="/lyme.png"
-                      alt="Lyme Logo"
-                      className="h-3/4 w-3/4 object-contain"
-                      onError={(e) => {
-                        // Si el logo no carga, mostrar texto alternativo
-                        const target = e.target as HTMLImageElement;
-                        target.style.display = 'none';
-                        
-                        if (e.currentTarget.parentElement) {
-                          const textSpan = document.createElement('span');
-                          textSpan.className = "text-[#4A7C79]";
-                          textSpan.textContent = product.esCombo ? "Combo" : "Sin imagen";
-                          e.currentTarget.parentElement.appendChild(textSpan);
-                        }
-                      }}
-                    />
-                  </div>
-                )}
+              <div className="flex items-center justify-center w-full h-full">
+                <img
+                  src="/lyme.png"
+                  alt="Lyme Logo"
+                  className="h-3/4 w-3/4 object-contain"
+                  onError={(e) => {
+                    // Si el logo no carga, mostrar texto alternativo
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = 'none';
+                    
+                    if (e.currentTarget.parentElement) {
+                      const textSpan = document.createElement('span');
+                      textSpan.className = "text-[var(--text-tertiary)]";
+                      textSpan.textContent = product.esCombo ? "Combo" : "Sin imagen";
+                      e.currentTarget.parentElement.appendChild(textSpan);
+                    }
+                  }}
+                />
               </div>
             )}
 
             {/* Badge de combo */}
             {product.esCombo && (
               <Badge 
-                className="absolute top-2 left-2 z-10 bg-[#ffffff] text-[#1B9C96] border border-[#1B9C96]"
+                className="absolute top-2 left-2 z-10 bg-[var(--background-card)] text-[var(--accent-primary)] border border-[var(--accent-primary)]"
               >
                 <PackagePlus size={12} className="mr-1" />
                 Combo
+              </Badge>
+            )}
+
+            {/* Badge de estado si está discontinuado o agotado */}
+            {product.estado && product.estado !== 'activo' && (
+              <Badge 
+                className={`absolute ${product.esCombo ? 'top-9' : 'top-2'} right-2 z-10 
+                  ${product.estado === 'discontinuado' 
+                    ? 'bg-[var(--state-error)]/10 text-[var(--state-error)] border-[var(--state-error)]' 
+                    : 'bg-[var(--state-warning)]/10 text-[var(--state-warning)] border-[var(--state-warning)]'}`}
+              >
+                {product.estado === 'discontinuado' ? 'Discontinuado' : 'Agotado'}
               </Badge>
             )}
 
@@ -381,9 +390,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             <Button
               variant="ghost"
               size="icon"
-              className={`absolute top-2 right-2 z-10 bg-white/70 hover:bg-[#F2A516]/20 rounded-full 
+              className={`absolute top-2 right-2 z-10 bg-white/70 hover:bg-[var(--accent-quaternary)]/20 rounded-full 
                 ${compact ? 'h-7 w-7 sm:h-8 sm:w-8' : 'h-8 w-8'} 
-                ${isFavorite ? 'text-[#F2A516]' : 'text-[#4A7C79]'} 
+                ${isFavorite ? 'text-[var(--accent-quaternary)]' : 'text-[var(--text-tertiary)]'} 
                 transition-all touch-manipulation`}
               onClick={(e) => {
                 e.stopPropagation();
@@ -400,14 +409,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {/* Badge de categoría - Responsivo */}
           <Badge 
             variant="outline" 
-            className={`mb-1 sm:mb-2 text-xs border-[#1B9C96] text-[#0D4E4B] bg-white/60
+            className={`mb-1 sm:mb-2 text-xs border-[var(--accent-primary)] text-[var(--text-primary)] bg-white/60
               ${compact ? 'hidden xs:inline-flex' : ''} category-badge ${product.categoria === 'mantenimiento' ? 'maintenance' : 'cleaning'}`}
           >
-            {product.subCategoria}
+            {product.subCategoria || product.categoria}
           </Badge>
 
           {/* Nombre del producto - Con tamaño adaptable */}
-          <h3 className={`font-medium line-clamp-1 text-[#0D4E4B] 
+          <h3 className={`font-medium line-clamp-1 text-[var(--text-primary)] 
             ${compact ? 'text-sm sm:text-base' : 'text-base sm:text-lg'} mb-1`}>
             {product.nombre}
           </h3>
@@ -415,14 +424,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {/* Descripción - Con expansión controlada */}
           {product.descripcion && (
             <div className="relative">
-              <p className={`text-sm text-[#29696B] ${showDescription ? '' : 'line-clamp-2'} 
+              <p className={`text-sm text-[var(--text-secondary)] ${showDescription ? '' : 'line-clamp-2'} 
                 ${compact ? 'text-xs sm:text-sm mb-1' : 'mb-1 sm:mb-2'}`}>
                 {product.descripcion}
               </p>
               {product.descripcion.length > 100 && (
                 <Button
                   variant="ghost"
-                  className="absolute bottom-0 right-0 h-6 px-1 py-0.5 text-xs text-[#4A7C79] hover:bg-[#1B9C96]/20 hover:text-[#0D4E4B]"
+                  className="absolute bottom-0 right-0 h-6 px-1 py-0.5 text-xs text-[var(--text-tertiary)] hover:bg-[var(--accent-primary)]/20 hover:text-[var(--text-primary)]"
                   onClick={toggleDescription}
                   aria-label={showDescription ? "Mostrar menos" : "Mostrar más"}
                 >
@@ -436,76 +445,88 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {product.esCombo && renderComboContent()}
 
           {/* Precio - Con formato adaptable */}
-          <div className={`font-bold text-[#F2A516] ${compact ? 'text-base sm:text-lg mt-1' : 'text-xl mt-2'}`}>
+          <div className={`font-bold text-[var(--accent-quaternary)] ${compact ? 'text-base sm:text-lg mt-1' : 'text-xl mt-2'}`}>
             ${product.precio.toFixed(2)}
           </div>
         </CardContent>
 
         <CardFooter className={compact ? "pt-1 pb-2 sm:pb-3 px-2 sm:px-3" : "pt-2 pb-3 sm:pb-4 px-3"}>
-          {showQuantitySelector ? (
-            <div className="w-full">
-              <div className="flex items-center justify-between mb-2 bg-white/80 rounded-md p-1">
+          {isAvailable ? (
+            showQuantitySelector ? (
+              <div className="w-full">
+                <div className="flex items-center justify-between mb-2 bg-white/80 rounded-md p-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={`${compact ? 'h-8 w-8 sm:h-8 sm:w-8' : 'h-8 w-8'} p-0 text-[var(--text-primary)] hover:text-[var(--accent-primary)] hover:bg-[var(--accent-quaternary)] touch-manipulation`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleQuantityChange(quantity - 1);
+                    }}
+                    aria-label="Disminuir cantidad"
+                  >
+                    <Minus className={`${compact ? 'h-3 w-3 sm:h-4 sm:w-4' : 'h-4 w-4'}`} />
+                  </Button>
+                  <Input
+                    type="number"
+                    min="1"
+                    max={product.categoria === 'mantenimiento' ? undefined : product.stock}
+                    value={quantity}
+                    onChange={(e) => handleQuantityChange(parseInt(e.target.value) || 1)}
+                    onClick={(e) => e.stopPropagation()}
+                    className={`${compact ? 'w-10 sm:w-14 h-8' : 'w-14 h-8'} text-center p-0 border-0 bg-transparent focus:ring-0 text-[var(--text-primary)]`}
+                    aria-label="Cantidad"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={`${compact ? 'h-8 w-8 sm:h-8 sm:w-8' : 'h-8 w-8'} p-0 text-[var(--text-primary)] hover:text-[var(--accent-primary)] hover:bg-[var(--accent-quaternary)] touch-manipulation`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleQuantityChange(quantity + 1);
+                    }}
+                    aria-label="Aumentar cantidad"
+                  >
+                    <Plus className={`${compact ? 'h-3 w-3 sm:h-4 sm:w-4' : 'h-4 w-4'}`} />
+                  </Button>
+                </div>
                 <Button
-                  variant="ghost"
-                  size="sm"
-                  className={`${compact ? 'h-8 w-8 sm:h-8 sm:w-8' : 'h-8 w-8'} p-0 text-[#0D4E4B] hover:text-[#1B9C96] hover:bg-[#CFF2E4] touch-manipulation`}
+                  className={`w-full ${getButtonClass()} text-white ${compact ? 'text-xs sm:text-sm py-1 h-8 sm:h-9' : 'h-9 sm:h-10'} touch-manipulation shadow-md hover:shadow-lg hover:shadow-[var(--accent-primary)]/30 transition-all duration-300`}
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleQuantityChange(quantity - 1);
+                    handleAddToCart();
                   }}
-                  aria-label="Disminuir cantidad"
+                  aria-label={`Añadir ${quantity} ${quantity > 1 ? 'unidades' : 'unidad'} al carrito`}
                 >
-                  <Minus className={`${compact ? 'h-3 w-3 sm:h-4 sm:w-4' : 'h-4 w-4'}`} />
-                </Button>
-                <Input
-                  type="number"
-                  min="1"
-                  max={product.categoria === 'mantenimiento' ? undefined : product.stock}
-                  value={quantity}
-                  onChange={(e) => handleQuantityChange(parseInt(e.target.value) || 1)}
-                  onClick={(e) => e.stopPropagation()}
-                  className={`${compact ? 'w-10 sm:w-14 h-8' : 'w-14 h-8'} text-center p-0 border-0 bg-transparent focus:ring-0 text-[#0D4E4B]`}
-                  aria-label="Cantidad"
-                />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={`${compact ? 'h-8 w-8 sm:h-8 sm:w-8' : 'h-8 w-8'} p-0 text-[#0D4E4B] hover:text-[#1B9C96] hover:bg-[#CFF2E4] touch-manipulation`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleQuantityChange(quantity + 1);
-                  }}
-                  aria-label="Aumentar cantidad"
-                >
-                  <Plus className={`${compact ? 'h-3 w-3 sm:h-4 sm:w-4' : 'h-4 w-4'}`} />
+                  <ShoppingCart size={compact ? 14 : 16} className="mr-1 sm:mr-2" />
+                  {compact ? 
+                    `Añadir (${quantity})` : 
+                    `Agregar ${quantity} ${quantity > 1 ? 'unidades' : 'unidad'}`}
                 </Button>
               </div>
+            ) : (
               <Button
-                className={`w-full ${getButtonClass()} text-white ${compact ? 'text-xs sm:text-sm py-1 h-8 sm:h-9' : 'h-9 sm:h-10'} touch-manipulation shadow-md hover:shadow-lg hover:shadow-[#1B9C96]/30 transition-all duration-300`}
+                className={`w-full ${getButtonClass()} group transition-all duration-300 text-white 
+                  ${compact ? 'text-xs sm:text-sm py-1 h-8 sm:h-9' : 'h-9 sm:h-10'} touch-manipulation shadow-md hover:shadow-lg hover:shadow-[var(--accent-primary)]/30`}
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleAddToCart();
+                  setShowQuantitySelector(true);
                 }}
-                aria-label={`Añadir ${quantity} ${quantity > 1 ? 'unidades' : 'unidad'} al carrito`}
+                aria-label="Agregar al carrito"
               >
-                <ShoppingCart size={compact ? 14 : 16} className="mr-1 sm:mr-2" />
-                {compact ? 
-                  `Añadir (${quantity})` : 
-                  `Agregar ${quantity} ${quantity > 1 ? 'unidades' : 'unidad'}`}
+                <ShoppingCart size={compact ? 14 : 16} className="mr-1 sm:mr-2 group-hover:animate-bounce" />
+                {compact ? 'Añadir' : 'Agregar al carrito'}
               </Button>
-            </div>
+            )
           ) : (
             <Button
-              className={`w-full ${getButtonClass()} group transition-all duration-300 text-white 
-                ${compact ? 'text-xs sm:text-sm py-1 h-8 sm:h-9' : 'h-9 sm:h-10'} touch-manipulation shadow-md hover:shadow-lg hover:shadow-[#1B9C96]/30`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowQuantitySelector(true);
-              }}
-              aria-label="Agregar al carrito"
+              disabled
+              className={`w-full bg-[var(--text-disabled)] text-white cursor-not-allowed 
+                ${compact ? 'text-xs sm:text-sm py-1 h-8 sm:h-9' : 'h-9 sm:h-10'}`}
+              aria-label="Sin stock disponible"
             >
-              <ShoppingCart size={compact ? 14 : 16} className="mr-1 sm:mr-2 group-hover:animate-bounce" />
-              {compact ? 'Añadir' : 'Agregar al carrito'}
+              <AlertTriangle size={compact ? 14 : 16} className="mr-1 sm:mr-2" />
+              Sin stock disponible
             </Button>
           )}
         </CardFooter>
@@ -518,7 +539,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="absolute bottom-2 right-2 h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-white/70 hover:bg-[#1B9C96]/60 text-[#1B9C96] hover:text-white touch-manipulation"
+                  className="absolute bottom-2 right-2 h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-white/70 hover:bg-[var(--accent-primary)]/60 text-[var(--accent-primary)] hover:text-white touch-manipulation"
                   onClick={(e) => {
                     e.stopPropagation();
                     onShowDetails();
@@ -528,7 +549,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                   <Info size={compact ? 14 : 16} />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent className="bg-white border-[#1B9C96] text-[#0D4E4B]">
+              <TooltipContent className="bg-white border-[var(--accent-primary)] text-[var(--text-primary)]">
                 <p>Ver detalles</p>
               </TooltipContent>
             </Tooltip>
