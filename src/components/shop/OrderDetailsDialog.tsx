@@ -99,42 +99,7 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     if (storedRole) {
       setUserRole(storedRole);
     }
-<<<<<<< HEAD
   }, []);
-=======
-  }, [isOpen, orderId]);
-
-  // Función para obtener detalles del pedido
-  const fetchOrderDetails = async (id: string) => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('No se encontró token de autenticación');
-      }
-
-      const response = await fetch(`http://179.43.118.101:3000/api/pedido/${id}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error al obtener detalles del pedido (${response.status})`);
-      }
-
-      const data = await response.json();
-      setOrderDetails(data);
-    } catch (err) {
-      console.error('Error al cargar detalles del pedido:', err);
-      setError(err instanceof Error ? err.message : 'Error al cargar detalles del pedido');
-    } finally {
-      setLoading(false);
-    }
-  };
->>>>>>> server
 
   // Función para descargar remito del pedido
   const handleDownloadRemito = async () => {
@@ -148,11 +113,7 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         throw new Error('No se encontró token de autenticación');
       }
       
-<<<<<<< HEAD
-      const response = await fetch(`http://localhost:4000/api/downloads/remito/${pedido._id}`, {
-=======
-      const response = await fetch(`http://179.43.118.101:3000/api/downloads/remito/${orderId}`, {
->>>>>>> server
+      const response = await fetch(`/api/downloads/remito/${pedido._id}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },

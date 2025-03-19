@@ -66,7 +66,7 @@ const hasImage = async (product: any): Promise<boolean> => {
     if (!token) throw new Error('No authentication token');
 
 <<<<<<< HEAD
-    const response = await fetch(`http://localhost:4000/api/producto/${product._id}/imagen`, {
+    const response = await fetch(`/api/producto/${product._id}/imagen`, {
 =======
     const response = await fetch(`http://179.43.118.101:3000/api/producto/${product._id}/imagen`, {
 >>>>>>> server
@@ -118,7 +118,7 @@ const batchCheckImages = async (productIds: string[]): Promise<{id: string, hasI
       const checks = await Promise.all(batch.map(async id => {
         try {
 <<<<<<< HEAD
-          const response = await fetch(`http://localhost:4000/api/producto/${id}/imagen`, {
+          const response = await fetch(`/api/producto/${id}/imagen`, {
 =======
           const response = await fetch(`http://179.43.118.101:3000/api/producto/${id}/imagen`, {
 >>>>>>> server
@@ -168,7 +168,7 @@ const uploadImageBase64 = async (productId: string, base64Data: string): Promise
   if (!token) throw new Error('No authentication token');
 
 <<<<<<< HEAD
-  const response = await fetch(`http://localhost:4000/api/producto/${productId}/imagen-base64`, {
+  const response = await fetch(`/api/producto/${productId}/imagen-base64`, {
 =======
   const response = await fetch(`http://179.43.118.101:3000/api/producto/${productId}/imagen-base64`, {
 >>>>>>> server
@@ -197,7 +197,7 @@ const deleteImage = async (productId: string): Promise<any> => {
   if (!token) throw new Error('No authentication token');
 
 <<<<<<< HEAD
-  const response = await fetch(`http://localhost:4000/api/producto/${productId}/imagen`, {
+  const response = await fetch(`/api/producto/${productId}/imagen`, {
 =======
   const response = await fetch(`http://179.43.118.101:3000/api/producto/${productId}/imagen`, {
 >>>>>>> server
@@ -221,7 +221,7 @@ const deleteImage = async (productId: string): Promise<any> => {
 // Función para obtener la URL de una imagen
 const getImageUrl = (productId: string, width = 80, height = 80, quality = 80): string => {
 <<<<<<< HEAD
-  return `http://localhost:4000/api/producto/${productId}/imagen?quality=${quality}&width=${width}&height=${height}&_=${new Date().getTime()}`;
+  return `/api/producto/${productId}/imagen?quality=${quality}&width=${width}&height=${height}&_=${new Date().getTime()}`;
 =======
   return `http://179.43.118.101:3000/api/producto/${productId}/imagen?quality=${quality}&width=${width}&height=${height}&_=${new Date().getTime()}`;
 >>>>>>> server

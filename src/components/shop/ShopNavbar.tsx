@@ -54,11 +54,7 @@ export const ShopNavbar: React.FC = () => {
         const token = localStorage.getItem('token');
         if (!token) return;
 
-<<<<<<< HEAD
-        const response = await fetch('http://localhost:4000/api/auth/me', {
-=======
-        const response = await fetch('http://179.43.118.101:3000/api/auth/me', {
->>>>>>> server
+        const response = await fetch('/api/auth/me', {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -109,7 +105,7 @@ export const ShopNavbar: React.FC = () => {
       const token = localStorage.getItem('token');
       if (!token) return;
       
-      const response = await fetch('http://localhost:4000/api/pedido', {
+      const response = await fetch('/api/pedido', {
         headers: {
           'Authorization': `Bearer ${token}`
         }

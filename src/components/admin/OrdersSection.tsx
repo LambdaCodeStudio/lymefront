@@ -146,7 +146,7 @@ interface FilterParams {
   estado?: string;
 }
 
-const apiUrl = "http://localhost:4000/api"
+const apiUrl = "/api"
 
 // ======== FUNCIONES API ========
 
@@ -851,13 +851,9 @@ const OrderStatusBadge = ({ status, onStatusChange, orderId }) => {
 // ======== COMPONENTE PRINCIPAL ========
 
 const OrdersSection = () => {
-  const apiUrl = 'http://localhost:4000/api';
+  const apiUrl = '/api';
   const { addNotification } = useNotification();
-<<<<<<< HEAD
   const queryClient = useQueryClient();
-=======
-  const apiUrl = 'http://179.43.118.101:3000/api'
->>>>>>> server
 
   // Estado para filtros
   const [searchTerm, setSearchTerm] = useState('');
