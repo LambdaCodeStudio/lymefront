@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { 
+import {
   Download,
   FileSpreadsheet,
   FileText,
   Calendar,
   Loader2,
   Search,
-  SlidersHorizontal,
   Hash,
   MapPin,
   Package,
@@ -60,11 +59,10 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import Pagination from "@/components/ui/pagination";
-import api from '../../services/api';
-// Importamos (o creamos) el observable para actualizaciones en tiempo real
+import api from '@/services/api';
 import { inventoryObservable } from '@/utils/inventoryUtils';
 
-// Creamos un observable específico para pedidos si no existe
+// Create an observable for order-related updates
 const pedidosObservable = {
   observers: [],
   subscribe(callback) {
@@ -94,6 +92,7 @@ interface SubServicio {
   _id: string;
   nombre: string;
   descripcion?: string;
+  supervisorId?: string;
   subUbicaciones: SubUbicacion[];
 }
 
@@ -152,17 +151,18 @@ interface ClienteEnPedido {
 interface Pedido {
   _id: string;
   fecha: string;
-  nPedido?: number; // Campo específico para número de pedido (backend)
-  numero?: string;  // Campo de compatibilidad anterior
+  nPedido?: number;
+  numero?: string;
   servicio: string;
   seccionDelServicio: string;
   cliente?: ClienteEnPedido;
   productos: ProductoEnPedido[];
   total?: number;
-  displayNumber?: string; // Campo para mostrar consistentemente
-  userId?: string | Usuario; // Supervisor/Usuario asignado
+  displayNumber?: string;
+  userId?: string | Usuario;
   supervisorId?: string | Usuario;
   clienteId?: string;
+  estado?: string;
 }
 
 interface FilterOptions {
@@ -195,21 +195,19 @@ interface CacheState {
   };
 }
 
-// Incrementamos el tiempo de caché (30 minutos) para reducir peticiones innecesarias
-const CACHE_EXPIRY_TIME = 30 * 60 * 1000;
-// Tiempo más corto para datos que cambian con más frecuencia como pedidos (5 minutos)
-const PEDIDOS_CACHE_EXPIRY_TIME = 5 * 60 * 1000;
-// Tiempo máximo sin actualizar, incluso si no hay eventos (1 hora)
-const MAX_TIME_WITHOUT_UPDATE = 60 * 60 * 1000;
+// Cache expiry time constants
+const CACHE_EXPIRY_TIME = 30 * 60 * 1000; // 30 minutes
+const PEDIDOS_CACHE_EXPIRY_TIME = 5 * 60 * 1000; // 5 minutes
+const MAX_TIME_WITHOUT_UPDATE = 60 * 60 * 1000; // 1 hour
 
 const DownloadsManagement: React.FC = () => {
-  // Estados para Excel
+  // Excel tab state
   const [dateRange, setDateRange] = useState<DateRange>({
     from: undefined,
     to: undefined
   });
   
-  // Estados para Remitos
+  // Remitos tab state
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [selectedCliente, setSelectedCliente] = useState<string>('');
@@ -218,25 +216,23 @@ const DownloadsManagement: React.FC = () => {
   const [selectedPedido, setSelectedPedido] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Estados para tabla de pedidos
+  // Orders table state
   const [allPedidos, setAllPedidos] = useState<Pedido[]>([]);
   const [filteredPedidos, setFilteredPedidos] = useState<Pedido[]>([]);
   const [loadingPedidos, setLoadingPedidos] = useState(false);
   const [loadingCacheData, setLoadingCacheData] = useState(false);
   
-  // Estados para los nuevos filtros
+  // Filter state
   const [productos, setProductos] = useState<Producto[]>([]);
   const [supervisores, setSupervisores] = useState<Usuario[]>([]);
   const [allClientes, setAllClientes] = useState<Cliente[]>([]);
-  
-  // Estado para la búsqueda en filtros
   const [filterSearch, setFilterSearch] = useState({
     producto: '',
     supervisor: '',
     cliente: ''
   });
   
-  // Estado para el cache mejorado
+  // Cache state
   const [cacheState, setCacheState] = useState<CacheState>({
     productos: [],
     supervisores: [],
@@ -256,10 +252,10 @@ const DownloadsManagement: React.FC = () => {
     }
   });
 
-  // Referencia para controlar si la pantalla ya ha sido inicializada
+  // Reference to track initial load
   const initialLoadDone = useRef(false);
   
-  // Filtros
+  // Filter options state
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({
     servicio: 'todos',
     fechaInicio: '',
@@ -271,7 +267,7 @@ const DownloadsManagement: React.FC = () => {
     subUbicacionId: ''
   });
   
-  // Estado temporal para formulario de filtros
+  // Temporary filter state for dialog
   const [tempFilterOptions, setTempFilterOptions] = useState<FilterOptions>({
     servicio: 'todos',
     fechaInicio: '',
@@ -283,28 +279,24 @@ const DownloadsManagement: React.FC = () => {
     subUbicacionId: ''
   });
   
-  // Estado para controlar el diálogo de filtros
+  // UI state
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
-  
-  // Estado para controlar qué selector de filtro está abierto
   const [activeFilterSelector, setActiveFilterSelector] = useState<string | null>(null);
-  
-  // Estado compartido
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  // Estados para paginación
+  // Pagination state
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
   const mobileListRef = useRef<HTMLDivElement>(null);
 
-  // IMPORTANTE: Tamaños fijos para cada tipo de dispositivo
+  // Pagination constants
   const ITEMS_PER_PAGE_MOBILE = 5;
   const ITEMS_PER_PAGE_DESKTOP = 10;
   const itemsPerPage = windowWidth < 768 ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP;
 
-  // Formatear fechas
+  // Helper functions
   const formatDate = (date: Date) => date.toISOString().split('T')[0];
   
   const formatDisplayDate = (dateString: string) => {
@@ -320,13 +312,12 @@ const DownloadsManagement: React.FC = () => {
     }
   };
 
-  // Efecto para detectar el tamaño de la ventana
+  // Window resize handling
   useEffect(() => {
     const handleResize = () => {
       const newWidth = window.innerWidth;
       setWindowWidth(newWidth);
       
-      // Si cambiamos entre móvil y escritorio, volvemos a la primera página
       if ((newWidth < 768 && windowWidth >= 768) || (newWidth >= 768 && windowWidth < 768)) {
         setCurrentPage(1);
       }
@@ -338,75 +329,71 @@ const DownloadsManagement: React.FC = () => {
     }
   }, [windowWidth]);
 
-  // Función para verificar si el caché está actualizado con lógica mejorada
+  // Cache validation
   const isCacheValid = useCallback((cacheType: 'productos' | 'supervisores' | 'clientes' | 'pedidos') => {
     const lastRefreshed = cacheState.lastRefreshed[cacheType];
     const lastUpdated = cacheState.lastUpdated[cacheType];
     const now = Date.now();
     
-    // Si nunca se ha refrescado, no es válido
     if (lastRefreshed === 0) return false;
     
-    // Tiempos de expiración diferentes según el tipo de dato
     const expiryTime = cacheType === 'pedidos' ? PEDIDOS_CACHE_EXPIRY_TIME : CACHE_EXPIRY_TIME;
     
-    // Si ha pasado demasiado tiempo sin actualizar, el caché ya no es válido
     if (now - lastRefreshed > MAX_TIME_WITHOUT_UPDATE) return false;
     
-    // Si ha habido una actualización reciente, el caché no es válido
     if (lastUpdated > lastRefreshed) return false;
     
-    // Si no ha pasado el tiempo de expiración, el caché sigue siendo válido
     return (now - lastRefreshed) < expiryTime;
   }, [cacheState.lastRefreshed, cacheState.lastUpdated]);
 
-  // Resetear la página actual cuando cambian los filtros
+  // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [filterOptions]);
 
-  // Función para cambiar de página
+  // Page change handler
   const handlePageChange = (pageNumber: number) => {
     setCurrentPage(pageNumber);
     
-    // Al cambiar de página, hacemos scroll hacia arriba
     window.scrollTo({ top: 0, behavior: 'smooth' });
     
-    // Hacer scroll al inicio de la lista en móvil
     if (windowWidth < 768 && mobileListRef.current) {
       mobileListRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   };
 
-  // Cargar datos de productos (con caché mejorado)
+  // Data fetching functions
   const loadProductos = useCallback(async (forceRefresh = false) => {
-    // Si ya tenemos productos en caché y no forzamos actualización, usamos el caché
     if (!forceRefresh && isCacheValid('productos') && cacheState.productos.length > 0) {
       setProductos(cacheState.productos);
       return cacheState.productos;
     }
     
     try {
-      // Indicamos que estamos cargando datos
       setLoadingCacheData(true);
       
-      // Llamada a la API para obtener todos los productos
-      const response = await api.getClient().get('/producto');
+      const token = localStorage.getItem('token'); // O donde almacenes tu token
+      const response = await fetch('http://localhost:3000/api/producto', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
+        }
+      });
+      
+      const data = await response.json();
       
       let processedProductos: Producto[] = [];
       
-      if (response.data && Array.isArray(response.data.items)) {
-        // Si estamos usando la estructura paginada
-        processedProductos = response.data.items.map((prod: any) => ({
+      if (data && Array.isArray(data.items)) {
+        processedProductos = data.items.map((prod: any) => ({
           _id: prod._id,
           nombre: prod.nombre,
           categoria: prod.categoria,
           precio: prod.precio,
           stock: prod.stock
         }));
-      } else if (response.data && Array.isArray(response.data)) {
-        // Si estamos usando la estructura de array simple
-        processedProductos = response.data.map((prod: any) => ({
+      } else if (data && Array.isArray(data)) {
+        processedProductos = data.map((prod: any) => ({
           _id: prod._id,
           nombre: prod.nombre,
           categoria: prod.categoria,
@@ -415,10 +402,8 @@ const DownloadsManagement: React.FC = () => {
         }));
       }
       
-      // Actualizar el estado y el caché
       setProductos(processedProductos);
       
-      // Actualizar caché con timestamp
       setCacheState(prev => ({
         ...prev,
         productos: processedProductos,
@@ -430,30 +415,34 @@ const DownloadsManagement: React.FC = () => {
       
       return processedProductos;
     } catch (error) {
-      console.error('Error al cargar productos:', error);
-      return cacheState.productos; // Devolver caché anterior en caso de error
+      console.error('Error loading products:', error);
+      return cacheState.productos;
     } finally {
       setLoadingCacheData(false);
     }
   }, [cacheState.productos, isCacheValid]);
 
-  // Cargar supervisores (usuarios con rol de supervisor)
   const loadSupervisores = useCallback(async (forceRefresh = false) => {
-    // Si ya tenemos supervisores en caché y no forzamos actualización, usamos el caché
     if (!forceRefresh && isCacheValid('supervisores') && cacheState.supervisores.length > 0) {
       setSupervisores(cacheState.supervisores);
       return cacheState.supervisores;
     }
     
     try {
-      // Llamada a la API para obtener todos los usuarios
-      const response = await api.getClient().get('/auth/users');
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:3000/api/auth/users', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
+        }
+      });
+      
+      const data = await response.json();
       
       let filteredUsers: Usuario[] = [];
       
-      if (response.data && response.data.users && Array.isArray(response.data.users)) {
-        // Filtrar solo usuarios activos con roles relevantes (supervisor, admin, etc.)
-        filteredUsers = response.data.users
+      if (data && data.users && Array.isArray(data.users)) {
+        filteredUsers = data.users
           .filter((user: any) => user.isActive)
           .map((user: any) => ({
             _id: user._id,
@@ -462,13 +451,11 @@ const DownloadsManagement: React.FC = () => {
             usuario: user.usuario,
             role: user.role,
             isActive: user.isActive,
-            // Crear un nombre para mostrar
             displayName: `${user.nombre || ''} ${user.apellido || ''}`.trim() || user.usuario
           }));
         
         setSupervisores(filteredUsers);
         
-        // Actualizar caché
         setCacheState(prev => ({
           ...prev,
           supervisores: filteredUsers,
@@ -481,14 +468,13 @@ const DownloadsManagement: React.FC = () => {
       
       return filteredUsers;
     } catch (error) {
-      console.error('Error al cargar supervisores:', error);
-      return cacheState.supervisores; // Devolver caché anterior en caso de error
+      console.error('Error loading supervisors:', error);
+      return cacheState.supervisores;
     }
   }, [cacheState.supervisores, isCacheValid]);
+  
 
-  // Cargar todos los clientes (con caché)
   const loadAllClientes = useCallback(async (forceRefresh = false) => {
-    // Si ya tenemos clientes en caché y no forzamos actualización, usamos el caché
     if (!forceRefresh && isCacheValid('clientes') && cacheState.clientes.length > 0) {
       setAllClientes(cacheState.clientes);
       setClientes(cacheState.clientes);
@@ -496,14 +482,21 @@ const DownloadsManagement: React.FC = () => {
     }
     
     try {
-      const response = await api.getClient().get('/cliente');
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:3000/api/cliente', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
+        }
+      });
       
-      if (response.data && Array.isArray(response.data)) {
-        const clientesData = response.data.map((cliente: any) => {
-          // Asegurar que todos los campos necesarios estén presentes
+      const data = await response.json();
+      
+      if (data && Array.isArray(data)) {
+        const clientesData = data.map((cliente: any) => {
           return {
             ...cliente,
-            servicio: cliente.servicio || cliente.nombre, // Mantener compatibilidad
+            servicio: cliente.servicio || cliente.nombre,
             seccionDelServicio: cliente.seccionDelServicio || '',
             subServicios: cliente.subServicios || []
           };
@@ -512,7 +505,6 @@ const DownloadsManagement: React.FC = () => {
         setAllClientes(clientesData);
         setClientes(clientesData);
         
-        // Actualizar caché
         setCacheState(prev => ({
           ...prev,
           clientes: clientesData,
@@ -527,15 +519,12 @@ const DownloadsManagement: React.FC = () => {
       
       return [];
     } catch (err) {
-      console.error('Error al cargar clientes:', err);
-      // Devolver caché anterior en caso de error
+      console.error('Error loading clients:', err);
       return cacheState.clientes;
     }
   }, [cacheState.clientes, isCacheValid]);
 
-  // Cargar todos los pedidos para la tabla (con caché optimizado)
   const loadAllPedidos = useCallback(async (forceRefresh = false) => {
-    // Verificar si podemos usar el caché
     if (!forceRefresh && isCacheValid('pedidos') && cacheState.pedidos.length > 0) {
       setAllPedidos(cacheState.pedidos);
       setFilteredPedidos(cacheState.pedidos);
@@ -544,16 +533,21 @@ const DownloadsManagement: React.FC = () => {
     
     setLoadingPedidos(true);
     try {
-      const response = await api.getClient().get('/pedido');
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:3000/api/pedido', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
+        }
+      });
       
-      // Verificar que response.data exista y sea un array
-      if (response.data && Array.isArray(response.data)) {
-        // Calcular total para cada pedido y agregar displayNumber
-        const pedidosConTotal = response.data.map((pedido: any) => {
+      const data = await response.json();
+      
+      if (data && Array.isArray(data)) {
+        const pedidosConTotal = data.map((pedido: any) => {
           let total = 0;
           if (pedido.productos && Array.isArray(pedido.productos)) {
             total = pedido.productos.reduce((sum: number, prod: any) => {
-              // Primero usar precioUnitario (si está disponible) o el precio del producto
               const precio = prod.precioUnitario || 
                 (prod.productoId && typeof prod.productoId === 'object' ? 
                  prod.productoId.precio : 0);
@@ -562,7 +556,6 @@ const DownloadsManagement: React.FC = () => {
             }, 0);
           }
           
-          // Añadir displayNumber que prioriza nPedido
           const displayNumber = pedido.nPedido?.toString() || pedido.numero || 'S/N';
           
           return { ...pedido, total, displayNumber };
@@ -571,7 +564,6 @@ const DownloadsManagement: React.FC = () => {
         setAllPedidos(pedidosConTotal);
         setFilteredPedidos(pedidosConTotal);
         
-        // Actualizar caché
         setCacheState(prev => ({
           ...prev,
           pedidos: pedidosConTotal,
@@ -581,7 +573,6 @@ const DownloadsManagement: React.FC = () => {
           }
         }));
         
-        // Inicializar las opciones de filtro temporales
         setTempFilterOptions({
           servicio: 'todos',
           fechaInicio: '',
@@ -596,48 +587,52 @@ const DownloadsManagement: React.FC = () => {
         return pedidosConTotal;
       }
       
-      // Si la respuesta no es un array, mantener el estado actual
       return cacheState.pedidos;
     } catch (err) {
-      console.error('Error al cargar todos los pedidos:', err);
-      return cacheState.pedidos; // Devolver caché anterior en caso de error
+      console.error('Error loading all orders:', err);
+      return cacheState.pedidos;
     } finally {
       setLoadingPedidos(false);
     }
   }, [cacheState.pedidos, isCacheValid]);
 
-  // Función para limpiar los filtros de estructura jerárquica cuando cambia el cliente
+  // Reset hierarchy selections
   const resetJerarquiaSelections = useCallback(() => {
     setSelectedSubServicio('');
     setSelectedSubUbicacion('');
   }, []);
 
-  // Cargar pedidos específicos por cliente (y opcionalmente subServicio y subUbicacion)
+  // Load orders by client
   const loadPedidosByCliente = useCallback(async (clienteId: string, subServicioId?: string, subUbicacionId?: string) => {
     if (!clienteId) {
       setPedidos([]);
       return [];
     }
     
-    let url = `/pedido/cliente/${clienteId}`;
-    const params: Record<string, string> = {};
+    let url = `http://localhost:3000/api/pedido/cliente/${clienteId}`;
     
-    // Añadir parámetros opcionales para la estructura jerárquica
-    if (subServicioId) {
-      params.subServicioId = subServicioId;
-      
-      if (subUbicacionId) {
-        params.subUbicacionId = subUbicacionId;
-      }
+    // Construir URL con query params
+    if (subServicioId || subUbicacionId) {
+      const params = new URLSearchParams();
+      if (subServicioId) params.append('subServicioId', subServicioId);
+      if (subUbicacionId) params.append('subUbicacionId', subUbicacionId);
+      url += `?${params.toString()}`;
     }
     
     try {
       setError('');
-      const pedidosResponse = await api.getClient().get(url, { params });
+      const token = localStorage.getItem('token');
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
+        }
+      });
       
-      if (pedidosResponse.data && Array.isArray(pedidosResponse.data)) {
-        // Procesar los pedidos para asegurar que displayNumber esté definido
-        const processedPedidos = pedidosResponse.data.map((pedido: any) => {
+      const data = await response.json();
+      
+      if (data && Array.isArray(data)) {
+        const processedPedidos = data.map((pedido: any) => {
           return {
             ...pedido,
             displayNumber: pedido.nPedido?.toString() || pedido.numero || 'S/N'
@@ -651,24 +646,23 @@ const DownloadsManagement: React.FC = () => {
         return [];
       }
     } catch (err) {
-      console.error('Error al cargar pedidos:', err);
+      console.error('Error loading orders:', err);
       setPedidos([]);
       setError('Error al cargar pedidos para este cliente');
       return [];
     }
   }, []);
 
-  // Efecto para cargar pedidos cuando se selecciona un cliente o estructura jerárquica
+  // Load orders when client selection changes
   useEffect(() => {
     if (selectedCliente) {
       loadPedidosByCliente(selectedCliente, selectedSubServicio, selectedSubUbicacion);
     }
   }, [selectedCliente, selectedSubServicio, selectedSubUbicacion, loadPedidosByCliente]);
 
-  // Cargar datos iniciales solo una vez al montar el componente
+  // Initial data loading
   useEffect(() => {
     if (!initialLoadDone.current) {
-      // Cargar datos iniciales
       Promise.all([
         loadProductos(),
         loadSupervisores(),
@@ -680,13 +674,11 @@ const DownloadsManagement: React.FC = () => {
     }
   }, [loadProductos, loadSupervisores, loadAllClientes, loadAllPedidos]);
 
-  // Suscribirse a eventos de actualización
+  // Subscribe to updates
   useEffect(() => {
-    // Suscribirse a actualizaciones de inventario (productos)
     const unsubscribeInventory = inventoryObservable.subscribe(() => {
-      console.log('DownloadsManagement: Actualización de inventario notificada');
+      console.log('DownloadsManagement: Inventory update notified');
       
-      // Marcar productos como actualizados
       setCacheState(prev => ({
         ...prev,
         lastUpdated: {
@@ -695,15 +687,12 @@ const DownloadsManagement: React.FC = () => {
         }
       }));
       
-      // Cargar los productos actualizados
       loadProductos(true);
     });
     
-    // Suscribirse a actualizaciones de pedidos
     const unsubscribePedidos = pedidosObservable.subscribe(() => {
-      console.log('DownloadsManagement: Actualización de pedidos notificada');
+      console.log('DownloadsManagement: Orders update notified');
       
-      // Marcar pedidos como actualizados
       setCacheState(prev => ({
         ...prev,
         lastUpdated: {
@@ -712,23 +701,20 @@ const DownloadsManagement: React.FC = () => {
         }
       }));
       
-      // Actualizar los pedidos
       loadAllPedidos(true);
       
-      // Si hay un cliente seleccionado, actualizar sus pedidos también
       if (selectedCliente) {
         loadPedidosByCliente(selectedCliente, selectedSubServicio, selectedSubUbicacion);
       }
     });
     
-    // Limpiar suscripciones al desmontar
     return () => {
       unsubscribeInventory();
       unsubscribePedidos();
     };
   }, [loadProductos, loadAllPedidos, loadPedidosByCliente, selectedCliente, selectedSubServicio, selectedSubUbicacion]);
 
-  // Función para forzar la recarga de todos los datos (usada solo en casos especiales)
+  // Force refresh all data
   const forceRefreshAllData = useCallback(() => {
     setLoadingCacheData(true);
     Promise.all([
@@ -737,32 +723,30 @@ const DownloadsManagement: React.FC = () => {
       loadAllClientes(true),
       loadAllPedidos(true)
     ]).then(() => {
-      // Si hay un cliente seleccionado, actualizar sus pedidos también
       if (selectedCliente) {
         return loadPedidosByCliente(selectedCliente, selectedSubServicio, selectedSubUbicacion);
       }
     }).finally(() => {
       setLoadingCacheData(false);
-      // Mostrar mensaje de éxito
       setSuccessMessage('Datos actualizados correctamente');
       setTimeout(() => setSuccessMessage(''), 3000);
     });
   }, [loadProductos, loadSupervisores, loadAllClientes, loadAllPedidos, loadPedidosByCliente, selectedCliente, selectedSubServicio, selectedSubUbicacion]);
 
-  // Función para aplicar filtros
+  // Apply filters
   const applyFilters = useCallback(() => {
     if (!allPedidos.length) return;
     
     let filtered = [...allPedidos];
     
-    // Filtrar por servicio
+    // Filter by service
     if (filterOptions.servicio && filterOptions.servicio !== 'todos') {
       filtered = filtered.filter(pedido => 
         pedido.servicio === filterOptions.servicio
       );
     }
     
-    // Filtrar por fecha inicio
+    // Filter by start date
     if (filterOptions.fechaInicio) {
       const fechaInicio = new Date(filterOptions.fechaInicio);
       fechaInicio.setHours(0, 0, 0, 0);
@@ -772,7 +756,7 @@ const DownloadsManagement: React.FC = () => {
       });
     }
     
-    // Filtrar por fecha fin
+    // Filter by end date
     if (filterOptions.fechaFin) {
       const fechaFin = new Date(filterOptions.fechaFin);
       fechaFin.setHours(23, 59, 59, 999);
@@ -782,13 +766,12 @@ const DownloadsManagement: React.FC = () => {
       });
     }
     
-    // Filtrar por producto
+    // Filter by product
     if (filterOptions.productoId) {
       filtered = filtered.filter(pedido => {
         if (!pedido.productos || !Array.isArray(pedido.productos)) return false;
         
         return pedido.productos.some(productoItem => {
-          // Manejar casos donde productoId es objeto o string
           if (typeof productoItem.productoId === 'object') {
             return productoItem.productoId && productoItem.productoId._id === filterOptions.productoId;
           } else {
@@ -798,17 +781,15 @@ const DownloadsManagement: React.FC = () => {
       });
     }
     
-    // Filtrar por supervisor
+    // Filter by supervisor
     if (filterOptions.supervisorId) {
       filtered = filtered.filter(pedido => {
-        // Primero buscar en el campo supervisorId (nuevo)
         if (typeof pedido.supervisorId === 'object') {
           return pedido.supervisorId && pedido.supervisorId._id === filterOptions.supervisorId;
         } else if (pedido.supervisorId) {
           return pedido.supervisorId === filterOptions.supervisorId;
         }
         
-        // Si no, buscar en userId (compatibilidad)
         if (typeof pedido.userId === 'object') {
           return pedido.userId && pedido.userId._id === filterOptions.supervisorId;
         } else {
@@ -817,18 +798,15 @@ const DownloadsManagement: React.FC = () => {
       });
     }
     
-    // Filtrar por cliente (ahora usando la estructura jerárquica)
+    // Filter by client (hierarchical structure)
     if (filterOptions.clienteId) {
       filtered = filtered.filter(pedido => {
-        // Primero revisar la nueva estructura cliente
         if (pedido.cliente && pedido.cliente.clienteId === filterOptions.clienteId) {
-          // Si hay subServicioId en el filtro, también filtrar por eso
           if (filterOptions.subServicioId && 
               pedido.cliente.subServicioId !== filterOptions.subServicioId) {
             return false;
           }
           
-          // Si hay subUbicacionId en el filtro, también filtrar por eso
           if (filterOptions.subUbicacionId && 
               pedido.cliente.subUbicacionId !== filterOptions.subUbicacionId) {
             return false;
@@ -837,15 +815,10 @@ const DownloadsManagement: React.FC = () => {
           return true;
         }
         
-        // Para compatibilidad con la estructura antigua
-        // Buscar el cliente seleccionado
         const selectedCliente = allClientes.find(c => c._id === filterOptions.clienteId);
         
         if (selectedCliente) {
-          // Un pedido coincide con un cliente si tiene el mismo servicio
           const servicioMatch = pedido.servicio === selectedCliente.servicio;
-          
-          // Y la misma sección de servicio (si está especificada)
           const seccionMatch = !selectedCliente.seccionDelServicio || 
                           pedido.seccionDelServicio === selectedCliente.seccionDelServicio;
                           
@@ -857,49 +830,57 @@ const DownloadsManagement: React.FC = () => {
     }
     
     setFilteredPedidos(filtered);
-    setCurrentPage(1); // Reset to first page when filters change
+    setCurrentPage(1);
   }, [allPedidos, allClientes, filterOptions]);
   
-  // Reaccionar a cambios en filterOptions
+  // Apply filters when they change
   useEffect(() => {
     applyFilters();
   }, [filterOptions, applyFilters]);
   
-  // Manejar confirmación de filtros
+  // Handle applying filters
   const handleApplyFilters = () => {
-    // Aplicar los filtros temporales
     setFilterOptions(tempFilterOptions);
-    // Cerrar el diálogo
     setIsFilterDialogOpen(false);
   };
 
-  // Función para descargar Excel
+  // Excel download handler
   const handleExcelDownload = async () => {
     if (!dateRange.from || !dateRange.to) {
       setError('Por favor selecciona un rango de fechas');
       return;
     }
-
+  
     try {
       setIsLoading(true);
       setError('');
-
-      const response = await api.getClient().get('/downloads/excel', {
-        params: {
-          from: dateRange.from.toISOString(),
-          to: dateRange.to.toISOString()
-        },
-        responseType: 'blob'
+  
+      const params = new URLSearchParams({
+        from: dateRange.from.toISOString(),
+        to: dateRange.to.toISOString()
       });
-
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+  
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:3000/api/downloads/excel?${params.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
+        }
+      });
+  
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.mensaje || 'Error al descargar el Excel');
+      }
+  
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', `reporte_${formatDate(dateRange.from)}_${formatDate(dateRange.to)}.xlsx`);
       document.body.appendChild(link);
       link.click();
       
-      // Limpiar
       setTimeout(() => {
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
@@ -909,13 +890,13 @@ const DownloadsManagement: React.FC = () => {
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err: any) {
       console.error('Error downloading Excel:', err);
-      setError(err.response?.data?.mensaje || 'Error al descargar el Excel');
+      setError(err.message || 'Error al descargar el Excel');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Función para descargar Remito
+  // Remito download handler
   const handleRemitoDownload = async (pedidoId = selectedPedido) => {
     if (!pedidoId) {
       setError('Por favor selecciona un pedido');
@@ -927,54 +908,45 @@ const DownloadsManagement: React.FC = () => {
       setError('');
       setSuccessMessage('');
   
-      console.log(`Iniciando descarga de remito para pedido: ${pedidoId}`);
+      console.log(`Starting remito download for order: ${pedidoId}`);
       
-      // Aumentar el timeout para dar tiempo al servidor
-      const response = await api.getClient().get(`/downloads/remito/${pedidoId}`, {
-        responseType: 'blob',
-        timeout: 60000 // Incrementar a 60 segundos
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:3000/api/downloads/remito/${pedidoId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
+        }
       });
+  
+      if (!response.ok) {
+        if (response.headers.get('content-type')?.includes('application/json')) {
+          const errorData = await response.json();
+          throw new Error(errorData.mensaje || 'Error al generar el PDF');
+        }
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
       
-      // Verificar que la respuesta sea válida
-      if (!response.data || response.data.size === 0) {
+      const blob = await response.blob();
+      
+      if (!blob || blob.size === 0) {
         throw new Error('La respuesta del servidor está vacía');
       }
-  
-      // Revisar el tipo de contenido
-      const contentType = response.headers['content-type'];
-      if (contentType && contentType.includes('application/json')) {
-        // Si el servidor envió un JSON en lugar de un PDF, probablemente sea un mensaje de error
-        const reader = new FileReader();
-        reader.onload = () => {
-          try {
-            const errorObj = JSON.parse(reader.result as string);
-            setError(errorObj.mensaje || 'Error al generar el PDF');
-          } catch (parseErr) {
-            setError('Error al procesar la respuesta del servidor');
-          }
-        };
-        reader.readAsText(response.data);
-        return;
-      }
       
-      // Todo bien, crear el blob y descargar
-      console.log(`PDF recibido: ${response.data.size} bytes`);
+      console.log(`PDF received: ${blob.size} bytes`);
       
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       
       const pedido = pedidos.find(p => p._id === pedidoId) || 
                     allPedidos.find(p => p._id === pedidoId);
                     
-      // Usar nPedido prioritariamente para el nombre del archivo
       const fileName = `remito_${pedido?.nPedido || pedido?.numero || pedidoId}.pdf`;
       link.setAttribute('download', fileName);
       
       document.body.appendChild(link);
       link.click();
       
-      // Limpiar
       setTimeout(() => {
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
@@ -985,36 +957,10 @@ const DownloadsManagement: React.FC = () => {
     } catch (err: any) {
       console.error('Error downloading remito:', err);
       
-      // Proporcionar mensaje de error más específico
       let errorMessage = 'Error al descargar el remito';
       
-      if (err.response) {
-        // El servidor respondió con error
-        if (err.response.data instanceof Blob) {
-          // Intentar leer el blob como texto
-          const reader = new FileReader();
-          reader.onload = () => {
-            try {
-              const errorObj = JSON.parse(reader.result as string);
-              setError(errorObj.mensaje || errorMessage);
-            } catch (parseErr) {
-              // No se puede parsear como JSON
-              setError(errorMessage);
-            }
-          };
-          reader.readAsText(err.response.data);
-          return;
-        } else if (err.response.status === 404) {
-          errorMessage = 'No se encontró el pedido solicitado';
-        } else if (err.response.status === 500) {
-          errorMessage = 'Error en el servidor al generar el PDF. Intente nuevamente.';
-        }
-      } else if (err.request) {
-        // No se recibió respuesta
-        errorMessage = 'No se recibió respuesta del servidor. Verifique su conexión.';
-      } else {
-        // Otro error
-        errorMessage = err.message || errorMessage;
+      if (err.message) {
+        errorMessage = err.message;
       }
       
       setError(errorMessage);
@@ -1023,7 +969,7 @@ const DownloadsManagement: React.FC = () => {
     }
   };
 
-  // Función para restablecer filtros
+  // Reset filters
   const resetFilters = () => {
     const emptyFilters = {
       servicio: 'todos',
@@ -1038,43 +984,34 @@ const DownloadsManagement: React.FC = () => {
     setTempFilterOptions(emptyFilters);
     setFilterOptions(emptyFilters);
     
-    // Limpiar búsquedas de filtros
     setFilterSearch({
       producto: '',
       supervisor: '',
       cliente: ''
     });
     
-    // Limpiar selecciones jerárquicas
     resetJerarquiaSelections();
   };
 
-  // Función para obtener el nombre completo del cliente según la nueva estructura
+  // Client name helper
   const getClientName = (cliente: Cliente): string => {
     if (!cliente) return "Cliente no disponible";
-    
-    // Usar el nombre (campo principal) o mantener compatibilidad con servicio
     return cliente.nombre || cliente.servicio;
   };
 
-  // Función para obtener la sección del cliente (para compatibilidad)
+  // Client section helper
   const getClientSection = (cliente: Cliente): string => {
     return cliente.seccionDelServicio || '';
   };
 
-  // Filtrar clientes por búsqueda
+  // Filtered clients
   const filteredClientes = clientes.filter(cliente => {
-    // Verificar que cliente tenga la estructura esperada
     if (!cliente || typeof cliente !== 'object') return false;
-    
-    // Obtener el nombre del cliente
     const nombreCliente = getClientName(cliente);
-    
-    // Filtrar si el término de búsqueda está en el nombre
     return nombreCliente.toLowerCase().includes(searchTerm.toLowerCase());
   });
   
-  // Obtener subservicios del cliente seleccionado
+  // Get subservices
   const getSubServicios = () => {
     if (!selectedCliente) return [];
     
@@ -1084,7 +1021,7 @@ const DownloadsManagement: React.FC = () => {
     return cliente.subServicios || [];
   };
   
-  // Obtener sububicaciones del subservicio seleccionado
+  // Get sublocations
   const getSubUbicaciones = () => {
     if (!selectedCliente || !selectedSubServicio) return [];
     
@@ -1097,7 +1034,7 @@ const DownloadsManagement: React.FC = () => {
     return subServicio.subUbicaciones || [];
   };
   
-  // Obtener clientes filtrados para el selector de filtros
+  // Filtered clients for selector
   const getFilteredClientesForSelector = () => {
     return allClientes.filter(cliente => {
       const nombreCliente = getClientName(cliente);
@@ -1105,14 +1042,14 @@ const DownloadsManagement: React.FC = () => {
     });
   };
   
-  // Obtener productos filtrados para el selector de filtros
+  // Filtered products for selector
   const getFilteredProductosForSelector = () => {
     return productos.filter(producto => 
       producto.nombre.toLowerCase().includes(filterSearch.producto.toLowerCase())
     );
   };
   
-  // Obtener supervisores filtrados para el selector de filtros
+  // Filtered supervisors for selector
   const getFilteredSupervisoresForSelector = () => {
     return supervisores.filter(supervisor => {
       const nombreCompleto = supervisor.displayName || '';
@@ -1120,25 +1057,21 @@ const DownloadsManagement: React.FC = () => {
     });
   };
   
-  // Obtener servicios únicos para filtro
+  // Unique services for filter
   const serviciosUnicos = [...new Set(allPedidos
-    .filter(p => p.servicio) // Filtrar pedidos que tengan servicio definido
+    .filter(p => p.servicio)
     .map(p => p.servicio))];
 
-  // Calcular paginación
+  // Pagination calculations
   const indexOfLastPedido = currentPage * itemsPerPage;
   const indexOfFirstPedido = indexOfLastPedido - itemsPerPage;
   const currentPedidos = filteredPedidos.slice(indexOfFirstPedido, indexOfLastPedido);
-  
-  // Calcular el total de páginas
   const totalPages = Math.ceil(filteredPedidos.length / itemsPerPage);
-
-  // Información de paginación
   const showingFromTo = filteredPedidos.length > 0 
     ? `${indexOfFirstPedido + 1}-${Math.min(indexOfLastPedido, filteredPedidos.length)} de ${filteredPedidos.length}`
     : '0 de 0';
     
-  // Calcular si hay filtros activos
+  // Check if filters are active
   const hasActiveFilters = 
     filterOptions.servicio !== 'todos' || 
     filterOptions.fechaInicio !== '' || 
@@ -1149,7 +1082,7 @@ const DownloadsManagement: React.FC = () => {
     filterOptions.subServicioId !== '' ||
     filterOptions.subUbicacionId !== '';
   
-  // Obtener conteo de filtros activos
+  // Count active filters
   const getActiveFilterCount = () => {
     let count = 0;
     if (filterOptions.servicio !== 'todos') count++;
@@ -1163,7 +1096,7 @@ const DownloadsManagement: React.FC = () => {
     return count;
   };
   
-  // Obtener nombres de los elementos seleccionados en filtros
+  // Get selected item names
   const getSelectedProductoName = () => {
     const producto = productos.find(p => p._id === filterOptions.productoId);
     return producto ? producto.nombre : 'Producto no encontrado';
@@ -1205,7 +1138,7 @@ const DownloadsManagement: React.FC = () => {
 
   return (
     <div className="space-y-6 bg-[#DFEFE6]/20 p-4 md:p-6 rounded-xl">
-      {/* Alertas */}
+      {/* Alerts */}
       {error && (
         <Alert className="mb-4 bg-red-50 border border-red-200 text-red-800 rounded-lg">
           <AlertCircle className="h-4 w-4 text-red-600 shrink-0" />
@@ -1220,7 +1153,7 @@ const DownloadsManagement: React.FC = () => {
         </Alert>
       )}
 
-      {/* Botón para refrescar solo cuando sea necesario */}
+      {/* Refresh button */}
       {(loadingCacheData || (!isCacheValid('productos') || !isCacheValid('supervisores') || !isCacheValid('clientes') || !isCacheValid('pedidos'))) && (
         <div className="flex justify-end">
           <Button
@@ -1239,10 +1172,9 @@ const DownloadsManagement: React.FC = () => {
         </div>
       )}
 
-      {/* NAVEGACIÓN MEJORADA: Espacio vertical fijo para las tabs */}
+      {/* Tab Navigation */}
       <div className="min-h-[60px]">
         <Tabs defaultValue="excel" className="w-full">
-          {/* Tabs mejoradas para ser más responsivas */}
           <TabsList className="w-full grid grid-cols-3 gap-1 bg-[#DFEFE6]/50 p-1 rounded-md">
             <TabsTrigger 
               value="excel" 
@@ -1267,7 +1199,7 @@ const DownloadsManagement: React.FC = () => {
             </TabsTrigger>
           </TabsList>
           
-          {/* Pestaña de Excel */}
+          {/* Excel Tab */}
           <TabsContent value="excel" className="mt-4 pt-4">
             <Card className="border border-[#91BEAD]/20 shadow-sm">
               <CardHeader className="bg-[#DFEFE6]/20 border-b border-[#91BEAD]/20">
@@ -1335,7 +1267,7 @@ const DownloadsManagement: React.FC = () => {
             </Card>
           </TabsContent>
           
-          {/* Pestaña de Remitos */}
+          {/* Remitos Tab */}
           <TabsContent value="remitos" className="mt-4 pt-4">
             <Card className="border border-[#91BEAD]/20 shadow-sm">
               <CardHeader className="bg-[#DFEFE6]/20 border-b border-[#91BEAD]/20">
@@ -1348,7 +1280,7 @@ const DownloadsManagement: React.FC = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 pt-6">
-                {/* Buscador de clientes */}
+                {/* Client search */}
                 <div className="space-y-2">
                   <Label className="text-[#29696B]">Buscar Cliente</Label>
                   <div className="relative">
@@ -1363,7 +1295,7 @@ const DownloadsManagement: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Selector de cliente */}
+                {/* Client selector */}
                 <div className="space-y-2">
                   <Label className="text-[#29696B]">Seleccionar Cliente</Label>
                   <Select 
@@ -1392,7 +1324,7 @@ const DownloadsManagement: React.FC = () => {
                   </Select>
                 </div>
 
-                {/* Selector de subservicio (si el cliente está seleccionado) */}
+                {/* Subservice selector */}
                 {selectedCliente && getSubServicios().length > 0 && (
                   <div className="space-y-2">
                     <Label className="text-[#29696B] flex items-center gap-2">
@@ -1421,7 +1353,7 @@ const DownloadsManagement: React.FC = () => {
                   </div>
                 )}
 
-                {/* Selector de sububicación (si el subservicio está seleccionado) */}
+                {/* Sublocation selector */}
                 {selectedSubServicio && getSubUbicaciones().length > 0 && (
                   <div className="space-y-2">
                     <Label className="text-[#29696B] flex items-center gap-2">
@@ -1447,7 +1379,7 @@ const DownloadsManagement: React.FC = () => {
                   </div>
                 )}
 
-                {/* Selector de pedido */}
+                {/* Order selector */}
                 {selectedCliente && (
                   <div className="space-y-2">
                     <Label className="text-[#29696B]">Seleccionar Pedido</Label>
@@ -1493,7 +1425,7 @@ const DownloadsManagement: React.FC = () => {
             </Card>
           </TabsContent>
           
-          {/* Pestaña de Tabla de Pedidos con filtros avanzados */}
+          {/* Orders Table Tab */}
           <TabsContent value="tabla" className="mt-4 pt-4">
             <Card className="border border-[#91BEAD]/20 shadow-sm">
               <CardHeader className="bg-[#DFEFE6]/20 border-b border-[#91BEAD]/20">
@@ -1505,7 +1437,7 @@ const DownloadsManagement: React.FC = () => {
                     </CardDescription>
                   </div>
                   
-                  {/* Botón de filtros con indicador de filtros activos */}
+                  {/* Filters button */}
                   <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
                     <DialogTrigger asChild>
                       <Button 
@@ -1530,7 +1462,7 @@ const DownloadsManagement: React.FC = () => {
                       </DialogHeader>
                       
                       <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
-                        {/* Servicio */}
+                        {/* Service filter */}
                         <div className="space-y-2">
                           <Label htmlFor="servicio-filter" className="text-[#29696B]">Servicio</Label>
                           <Select 
@@ -1554,7 +1486,7 @@ const DownloadsManagement: React.FC = () => {
                           </Select>
                         </div>
                         
-                        {/* Rango de fechas */}
+                        {/* Date range */}
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <Label htmlFor="fecha-inicio-filter" className="text-[#29696B]">Desde</Label>
@@ -1579,7 +1511,7 @@ const DownloadsManagement: React.FC = () => {
                           </div>
                         </div>
                         
-                        {/* Producto - Selector con búsqueda */}
+                        {/* Product filter */}
                         <div className="space-y-2">
                           <Label className="text-[#29696B] flex items-center gap-2">
                             <Package className="w-4 h-4" />
@@ -1686,7 +1618,7 @@ const DownloadsManagement: React.FC = () => {
                           </Dialog>
                         </div>
                         
-                        {/* Supervisor - Selector con búsqueda */}
+                        {/* Supervisor filter */}
                         <div className="space-y-2">
                           <Label className="text-[#29696B] flex items-center gap-2">
                             <User className="w-4 h-4" />
@@ -1793,7 +1725,7 @@ const DownloadsManagement: React.FC = () => {
                           </Dialog>
                         </div>
                         
-                        {/* Cliente Jerárquico - Selector con búsqueda */}
+                        {/* Client filter (hierarchical) */}
                         <div className="space-y-2">
                           <Label className="text-[#29696B] flex items-center gap-2">
                             <Building className="w-4 h-4" />
@@ -1850,7 +1782,7 @@ const DownloadsManagement: React.FC = () => {
                                 </DialogDescription>
                               </DialogHeader>
                               <div className="py-4 space-y-4">
-                                {/* Búsqueda de cliente */}
+                                {/* Client search */}
                                 <div className="relative">
                                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
                                   <Input
@@ -1861,7 +1793,7 @@ const DownloadsManagement: React.FC = () => {
                                   />
                                 </div>
                                 
-                                {/* Lista de clientes */}
+                                {/* Client list */}
                                 <div className="max-h-60 overflow-y-auto border rounded-md">
                                   {getFilteredClientesForSelector().length === 0 ? (
                                     <div className="p-4 text-center text-[#7AA79C]">
@@ -1903,7 +1835,7 @@ const DownloadsManagement: React.FC = () => {
                                   )}
                                 </div>
                                 
-                                {/* Si hay un cliente seleccionado y tiene subservicios, mostrar selector */}
+                                {/* Subservice selector if client is selected */}
                                 {tempFilterOptions.clienteId && (() => {
                                   const cliente = allClientes.find(c => c._id === tempFilterOptions.clienteId);
                                   if (cliente && cliente.subServicios && cliente.subServicios.length > 0) {
@@ -1941,7 +1873,7 @@ const DownloadsManagement: React.FC = () => {
                                   return null;
                                 })()}
                                 
-                                {/* Si hay un subservicio seleccionado y tiene sububicaciones, mostrar selector */}
+                                {/* Sublocation selector if subservice is selected */}
                                 {tempFilterOptions.clienteId && tempFilterOptions.subServicioId && (() => {
                                   const cliente = allClientes.find(c => c._id === tempFilterOptions.clienteId);
                                   if (!cliente) return null;
@@ -2025,7 +1957,7 @@ const DownloadsManagement: React.FC = () => {
                   </Dialog>
                 </div>
                 
-                {/* Barra de filtros activos */}
+                {/* Active filters bar */}
                 {hasActiveFilters && (
                   <div className="flex flex-wrap items-center gap-2 mt-2 p-2 bg-[#DFEFE6]/30 rounded-md border border-[#91BEAD]/20">
                     <span className="text-xs text-[#29696B] font-medium">Filtros activos:</span>
@@ -2144,7 +2076,7 @@ const DownloadsManagement: React.FC = () => {
                 )}
               </CardHeader>
               <CardContent className="p-0">
-                {/* Vista de tabla para escritorio */}
+                {/* Desktop table view */}
                 <div className="hidden md:block rounded-md border border-[#91BEAD]/20">
                   <Table>
                     <TableHeader className="bg-[#DFEFE6]/30">
@@ -2159,7 +2091,7 @@ const DownloadsManagement: React.FC = () => {
                     </TableHeader>
                     <TableBody>
                       {loadingPedidos ? (
-                        // Esqueleto de carga
+                        // Loading skeleton
                         Array.from({ length: 5 }).map((_, index) => (
                           <TableRow key={index}>
                             {Array.from({ length: 6 }).map((_, cellIndex) => (
@@ -2221,101 +2153,101 @@ const DownloadsManagement: React.FC = () => {
                   </Table>
                 </div>
 
-                {/* Vista de tarjetas para móvil */}
+                {/* Mobile card view */}
                 <div ref={mobileListRef} className="md:hidden space-y-3 p-3">
-                  {/* Información de paginación para móvil */}
+                  {/* Mobile pagination info */}
                   {!loadingPedidos && filteredPedidos.length > 0 && (
                     <div className="text-xs text-center text-[#7AA79C] py-1">
                       Mostrando {showingFromTo}
                     </div>
                   )}
 
-                  {loadingPedidos ? (
-                    // Esqueleto de carga para móvil
-                    Array.from({ length: 3 }).map((_, index) => (
-                      <div key={index} className="rounded-lg border border-[#91BEAD]/20 bg-white p-4 space-y-2">
-                        <div className="flex justify-between">
-                          <Skeleton className="h-5 w-24 bg-[#DFEFE6]/40" />
-                          <Skeleton className="h-5 w-14 bg-[#DFEFE6]/40" />
-                        </div>
-                        <Skeleton className="h-4 w-36 bg-[#DFEFE6]/40" />
-                        <div className="flex justify-between items-center pt-2">
-                          <Skeleton className="h-4 w-20 bg-[#DFEFE6]/40" />
-                          <Skeleton className="h-8 w-8 rounded-full bg-[#DFEFE6]/40" />
-                        </div>
-                      </div>
-                    ))
-                  ) : filteredPedidos.length === 0 ? (
-                    <div className="text-center py-8 text-[#7AA79C] bg-white rounded-lg border border-[#91BEAD]/20">
-                      No se encontraron pedidos con los filtros seleccionados
-                    </div>
-                  ) : (
-                    currentPedidos.map((pedido) => (
-                      <div key={pedido._id} className="rounded-lg border border-[#91BEAD]/20 bg-white overflow-hidden">
-                        <div className="p-3 bg-[#DFEFE6]/20 border-b border-[#91BEAD]/20 flex justify-between items-center">
-                          <div className="flex items-center">
-                            <Hash className="w-4 h-4 text-[#7AA79C] mr-1.5" />
-                            <span className="font-medium text-sm text-[#29696B]">
-                              Pedido #{pedido.nPedido || pedido.numero || 'S/N'}
-                            </span>
-                          </div>
-                          <Badge variant="outline" className="border-[#91BEAD] text-xs text-[#29696B] bg-[#DFEFE6]/10">
-                            {pedido.servicio || 'N/A'}
-                          </Badge>
-                        </div>
-                        <div className="p-3 space-y-1.5">
-                          <div className="text-xs text-[#7AA79C] flex items-center">
-                            <Calendar className="w-3.5 h-3.5 mr-1" />
-                            {formatDisplayDate(pedido.fecha)}
-                          </div>
-                          {pedido.seccionDelServicio && (
-                            <div className="text-xs text-[#7AA79C] flex items-center">
-                              <MapPin className="w-3.5 h-3.5 mr-1" />
-                              {pedido.seccionDelServicio}
-                            </div>
-                          )}
-                          <div className="pt-1.5 flex justify-between items-center">
-                            <div className="text-xs text-[#29696B]">
-                              <span className="font-medium">{pedido.productos?.length || 0}</span> productos
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemitoDownload(pedido._id)}
-                              disabled={isLoading}
-                              className="h-8 w-8 p-0 text-[#29696B] hover:bg-[#DFEFE6]/30"
-                            >
-                              {isLoading ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Download className="h-4 w-4" />
-                              )}
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
+{loadingPedidos ? (
+  // Loading skeleton for mobile
+  Array.from({ length: 3 }).map((_, index) => (
+    <div key={index} className="rounded-lg border border-[#91BEAD]/20 bg-white p-4 space-y-2">
+      <div className="flex justify-between">
+        <Skeleton className="h-5 w-24 bg-[#DFEFE6]/40" />
+        <Skeleton className="h-5 w-14 bg-[#DFEFE6]/40" />
+      </div>
+      <Skeleton className="h-4 w-36 bg-[#DFEFE6]/40" />
+      <div className="flex justify-between items-center pt-2">
+        <Skeleton className="h-4 w-20 bg-[#DFEFE6]/40" />
+        <Skeleton className="h-8 w-8 rounded-full bg-[#DFEFE6]/40" />
+      </div>
+    </div>
+  ))
+) : filteredPedidos.length === 0 ? (
+  <div className="text-center py-8 text-[#7AA79C] bg-white rounded-lg border border-[#91BEAD]/20">
+    No se encontraron pedidos con los filtros seleccionados
+  </div>
+) : (
+  currentPedidos.map((pedido) => (
+    <div key={pedido._id} className="rounded-lg border border-[#91BEAD]/20 bg-white overflow-hidden">
+      <div className="p-3 bg-[#DFEFE6]/20 border-b border-[#91BEAD]/20 flex justify-between items-center">
+        <div className="flex items-center">
+          <Hash className="w-4 h-4 text-[#7AA79C] mr-1.5" />
+          <span className="font-medium text-sm text-[#29696B]">
+            Pedido #{pedido.nPedido || pedido.numero || 'S/N'}
+          </span>
+        </div>
+        <Badge variant="outline" className="border-[#91BEAD] text-xs text-[#29696B] bg-[#DFEFE6]/10">
+          {pedido.servicio || 'N/A'}
+        </Badge>
+      </div>
+      <div className="p-3 space-y-1.5">
+        <div className="text-xs text-[#7AA79C] flex items-center">
+          <Calendar className="w-3.5 h-3.5 mr-1" />
+          {formatDisplayDate(pedido.fecha)}
+        </div>
+        {pedido.seccionDelServicio && (
+          <div className="text-xs text-[#7AA79C] flex items-center">
+            <MapPin className="w-3.5 h-3.5 mr-1" />
+            {pedido.seccionDelServicio}
+          </div>
+        )}
+        <div className="pt-1.5 flex justify-between items-center">
+          <div className="text-xs text-[#29696B]">
+            <span className="font-medium">{pedido.productos?.length || 0}</span> productos
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleRemitoDownload(pedido._id)}
+            disabled={isLoading}
+            className="h-8 w-8 p-0 text-[#29696B] hover:bg-[#DFEFE6]/30"
+          >
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+      </div>
+    </div>
+  ))
+)}
 
-                  {/* Paginación para móvil */}
-                  {!loadingPedidos && filteredPedidos.length > itemsPerPage && (
-                    <div className="mt-4">
-                      <Pagination
-                        totalItems={filteredPedidos.length}
-                        itemsPerPage={itemsPerPage}
-                        currentPage={currentPage}
-                        onPageChange={handlePageChange}
-                      />
-                    </div>
-                  )}
-                </div>
+{/* Mobile pagination */}
+{!loadingPedidos && filteredPedidos.length > itemsPerPage && (
+  <div className="mt-4">
+    <Pagination
+      totalItems={filteredPedidos.length}
+      itemsPerPage={itemsPerPage}
+      currentPage={currentPage}
+      onPageChange={handlePageChange}
+    />
+  </div>
+)}
+</div>
               </CardContent>
               <CardFooter className="bg-[#DFEFE6]/10 border-t border-[#91BEAD]/20 justify-between">
                 <div className="text-sm text-[#7AA79C]">
                   Mostrando {currentPedidos.length} de {filteredPedidos.length} pedidos
                 </div>
 
-                {/* Paginación para escritorio */}
+                {/* Desktop pagination */}
                 {!loadingPedidos && filteredPedidos.length > itemsPerPage && (
                   <div className="hidden md:block">
                     <Pagination

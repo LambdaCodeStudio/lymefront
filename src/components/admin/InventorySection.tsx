@@ -64,6 +64,8 @@ import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { useNotification } from '@/context/NotificationContext';
 import { inventoryObservable, getAuthToken } from '@/utils/inventoryUtils';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import OptimizedProductImage from './components/ProductImage';
+import ImageUpload from './components/ImageUpload';
 import { 
   Product, 
   ComboItemType, 
@@ -121,6 +123,8 @@ const InventorySection = () => {
   const [tempSelectedItems, setTempSelectedItems] = useState<ComboItemType[]>([]);
   const initialFetchDone = useRef(false);
   const [isAddingStock, setIsAddingStock] = useState(false);
+  const [hasStockIssues, setHasStockIssues] = useState(false);
+  const [stockWarnings, setStockWarnings] = useState<string[]>([]);
 
   // Estado para la paginación
   const [currentPage, setCurrentPage] = useState(1);
@@ -148,6 +152,9 @@ const InventorySection = () => {
 
   // Calculamos dinámicamente itemsPerPage basado en el ancho de la ventana
   const itemsPerPage = windowWidth < 768 ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP;
+
+  // Estado para almacenar todos los productos disponibles para combos
+  const [allAvailableProducts, setAllAvailableProducts] = useState<Product[]>([]);
 
   // Hook para paginación con lógica adaptada de AdminUserManagement
   const useMediaQuery = (query: string) => {
@@ -646,6 +653,44 @@ const InventorySection = () => {
     });
   };
 
+  // Verificar la disponibilidad de stock para un combo
+  const validateComboStock = (comboItems: ComboItemType[]): { valid: boolean; warnings: string[] } => {
+    const warnings: string[] = [];
+    let isValid = true;
+
+    // Si no hay items en el combo, es válido
+    if (!comboItems || comboItems.length === 0) {
+      return { valid: true, warnings: [] };
+    }
+
+    // Verificar cada item del combo
+    comboItems.forEach(item => {
+      // Buscar el producto en la lista de productos disponibles
+      const product = allAvailableProducts.find(p => 
+        typeof item.productoId === 'string' 
+          ? p._id === item.productoId 
+          : p._id === item.productoId._id
+      );
+
+      if (product) {
+        // Si el stock es menor que la cantidad requerida
+        if (product.stock < item.cantidad) {
+          isValid = false;
+          warnings.push(`No hay suficiente stock de "${product.nombre}". Disponible: ${product.stock}, Requerido: ${item.cantidad}`);
+        }
+        // Si el stock es bajo (pero suficiente)
+        else if (product.stock <= LOW_STOCK_THRESHOLD) {
+          warnings.push(`Stock bajo de "${product.nombre}". Disponible: ${product.stock}, Requerido: ${item.cantidad}`);
+        }
+      } else {
+        isValid = false;
+        warnings.push(`No se pudo encontrar el producto para validar su stock`);
+      }
+    });
+
+    return { valid: isValid, warnings };
+  };
+
   // Cargar productos al montar el componente, suscribirse al observable y contar productos
   useEffect(() => {
     console.log('InventorySection: Componente montado, iniciando carga de productos...');
@@ -738,9 +783,6 @@ const InventorySection = () => {
     });
   };
 
-  // Estado para almacenar todos los productos disponibles para combos
-  const [allAvailableProducts, setAllAvailableProducts] = useState<Product[]>([]);
-
   // Cargar todos los productos al abrir el modal de combos
   useEffect(() => {
     if (showComboSelectionModal) {
@@ -752,6 +794,18 @@ const InventorySection = () => {
       loadAllProducts();
     }
   }, [showComboSelectionModal]);
+
+  // Efecto para validar stock de combos cuando cambian los items seleccionados
+  useEffect(() => {
+    if (isCombo && tempSelectedItems.length > 0) {
+      const { valid, warnings } = validateComboStock(tempSelectedItems);
+      setHasStockIssues(!valid);
+      setStockWarnings(warnings);
+    } else {
+      setHasStockIssues(false);
+      setStockWarnings([]);
+    }
+  }, [tempSelectedItems, isCombo, allAvailableProducts]);
 
   // Función para filtrar productos para combos
   const getFilteredComboProducts = () => {
@@ -910,6 +964,50 @@ const InventorySection = () => {
     }
   };
 
+  // Función mejorada para manejar la imagen en base64
+  const handleImageUploadBase64 = async (productId: string) => {
+    if (!formData.imagenPreview || typeof formData.imagenPreview !== 'string') return true;
+
+    try {
+      setImageLoading(true);
+
+      const token = getAuthToken();
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
+
+      // Enviar la imagen en formato base64
+      const response = await fetch(`${API_URL}producto/${productId}/imagen-base64`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          base64Image: formData.imagenPreview
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error al subir imagen base64 (${response.status})`);
+      }
+
+      // Actualizar el producto específico en el estado
+      const updatedProduct = await fetchProductById(productId);
+      if (updatedProduct) {
+        updateProductInState(updatedProduct);
+      }
+
+      return true;
+    } catch (error: any) {
+      console.error('Error al subir imagen base64:', error);
+      addNotification(`Error al subir imagen: ${error.message}`, 'error');
+      return false;
+    } finally {
+      setImageLoading(false);
+    }
+  };
+
   // Agregar un ítem al combo
   const handleAddComboItem = (product: Product) => {
     // Verificar si ya existe
@@ -1025,6 +1123,18 @@ const InventorySection = () => {
         throw new Error('Debe seleccionar una subcategoría');
       }
 
+      // Si es un combo, validar que tenga items y que haya stock suficiente
+      if (isCombo) {
+        if (selectedComboItems.length === 0) {
+          throw new Error('Un combo debe tener al menos un producto');
+        }
+
+        const { valid, warnings } = validateComboStock(selectedComboItems);
+        if (!valid) {
+          throw new Error(`No hay suficiente stock para crear el combo: ${warnings.join(', ')}`);
+        }
+      }
+
       const url = editingProduct
         ? `${API_URL}producto/${editingProduct._id}`
         : `${API_URL}producto`;
@@ -1092,6 +1202,12 @@ const InventorySection = () => {
         const imageUploaded = await handleImageUpload(savedProduct._id);
         if (!imageUploaded) {
           console.log('Hubo un problema al subir la imagen, pero el producto se guardó correctamente');
+        }
+      } else if (formData.imagenPreview && typeof formData.imagenPreview === 'string' && formData.imagenPreview.startsWith('data:image')) {
+        // Si tenemos una imagen en base64 (no un objeto File)
+        const imageUploaded = await handleImageUploadBase64(savedProduct._id);
+        if (!imageUploaded) {
+          console.log('Hubo un problema al subir la imagen base64, pero el producto se guardó correctamente');
         }
       }
 
@@ -1249,15 +1365,15 @@ const InventorySection = () => {
         setSelectedComboItems([]);
       }
 
-      // Intentar cargar vista previa de la imagen si el producto tiene una
+      // Intentar cargar vista previa de la imagen
       let imagePreview = null;
+      
       if (product.hasImage) {
         try {
-          // Usar la URL de la imagen (sin cargar base64)
+          // Usar el componente de imagen optimizado
           imagePreview = `${API_URL}producto/${product._id}/imagen?cache=${Date.now()}`;
         } catch (error) {
           console.error('Error al preparar imagen:', error);
-          // No establecer imagen si hay error
           imagePreview = null;
         }
       }
@@ -1315,6 +1431,8 @@ const InventorySection = () => {
     setIsCombo(false);
     setSelectedComboItems([]);
     setIsAddingStock(false);
+    setHasStockIssues(false);
+    setStockWarnings([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -1745,43 +1863,38 @@ const InventorySection = () => {
                     <td className="px-6 py-4">
                       <div className="flex items-center">
                         <div className="flex-shrink-0 h-10 w-10 mr-3">
-                          <div className="h-10 w-10 rounded-full bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30 overflow-hidden">
+                          <div className="h-10 w-10 rounded-full flex items-center justify-center border border-[#91BEAD]/30 overflow-hidden">
                             {product.hasImage ? (
-                              <img
-                                src={`${API_URL}producto/${product._id}/imagen?width=40&height=40&quality=75&${Date.now()}`}
+                              <OptimizedProductImage
+                                productId={product._id}
                                 alt={product.nombre}
+                                width={40}
+                                height={40}
+                                quality={75}
                                 className="h-10 w-10 object-cover"
-                                loading="lazy"
-                                onError={(e) => {
-                                  const target = e.target as HTMLImageElement;
-                                  target.style.display = 'none';
-                                  const fallbackElement = target.parentNode?.querySelector('div:last-child');
-                                  if (fallbackElement) {
-                                    (fallbackElement as HTMLElement).style.display = 'flex';
-                                  }
-                                }}
                               />
-                            ) : null}
-                            <div className={`h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center text-xs text-[#29696B] ${product.hasImage ? 'hidden' : ''}`}>
-                              <img
-                                src="/lyme.png"
-                                alt="Lyme Logo"
-                                className="h-12 w-12 object-contain"
-                                onError={(e) => {
-                                  const target = e.target as HTMLImageElement;
-                                  target.style.display = 'none';
-                                  // Si la imagen falla, mostrar un ícono de fallback según el tipo de producto
-                                  if (product.esCombo) {
-                                    const parent = target.parentElement;
-                                    if (parent) {
-                                      const icon = document.createElement('div');
-                                      icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><path d="M12 22.08V12"></path><path d="M12 12 3.3 6.81"></path><path d="M12 12 20.7 6.8"></path><path d="M12 2v10"></path><path d="M3.3 6.8 12 12l8.7-5.2"></path></svg>';
-                                      parent.appendChild(icon);
+                            ) : (
+                              <div className="h-10 w-10 rounded-full bg-[#DFEFE6]/50 flex items-center justify-center text-xs text-[#29696B]">
+                                <img
+                                  src="/lyme.png"
+                                  alt="Lyme Logo"
+                                  className="h-8 w-8 object-contain"
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    target.style.display = 'none';
+                                    // Si la imagen falla, mostrar un ícono de fallback según el tipo de producto
+                                    if (product.esCombo) {
+                                      const parent = target.parentElement;
+                                      if (parent) {
+                                        const icon = document.createElement('div');
+                                        icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><path d="M12 22.08V12"></path><path d="M12 12 3.3 6.81"></path><path d="M12 12 20.7 6.8"></path><path d="M12 2v10"></path><path d="M3.3 6.8 12 12l8.7-5.2"></path></svg>';
+                                        parent.appendChild(icon);
+                                      }
                                     }
-                                  }
-                                }}
-                              />
-                            </div>
+                                  }}
+                                />
+                              </div>
+                            )}
                           </div>
                         </div>
                         <div>
@@ -1946,41 +2059,36 @@ const InventorySection = () => {
                 <div className="flex-shrink-0 h-16 w-16">
                   <div className="h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30 overflow-hidden">
                     {product.hasImage ? (
-                      <img
-                        src={`${API_URL}producto/${product._id}/imagen?width=64&height=64&quality=60&${Date.now()}`}
+                      <OptimizedProductImage
+                        productId={product._id}
                         alt={product.nombre}
+                        width={64}
+                        height={64}
+                        quality={60}
                         className="h-16 w-16 object-cover"
-                        loading="lazy"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = 'none';
-                          const fallbackElement = target.parentNode?.querySelector('div:last-child');
-                          if (fallbackElement) {
-                            (fallbackElement as HTMLElement).style.display = 'flex';
-                          }
-                        }}
                       />
-                    ) : null}
-                    <div className={`h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center text-xs text-[#29696B] ${product.hasImage ? 'hidden' : ''}`}>
-                      <img
-                        src="/lyme.png"
-                        alt="Lyme Logo"
-                        className="h-12 w-12 object-contain"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = 'none';
-                          // Si la imagen falla, mostrar un ícono de fallback según el tipo de producto
-                          if (product.esCombo) {
-                            const parent = target.parentElement;
-                            if (parent) {
-                              const icon = document.createElement('div');
-                              icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><path d="M12 22.08V12"></path><path d="M12 12 3.3 6.81"></path><path d="M12 12 20.7 6.8"></path><path d="M12 2v10"></path><path d="M3.3 6.8 12 12l8.7-5.2"></path></svg>';
-                              parent.appendChild(icon);
+                    ) : (
+                      <div className="h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center text-xs text-[#29696B]">
+                        <img
+                          src="/lyme.png"
+                          alt="Lyme Logo"
+                          className="h-12 w-12 object-contain"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                            // Si la imagen falla, mostrar un ícono de fallback según el tipo de producto
+                            if (product.esCombo) {
+                              const parent = target.parentElement;
+                              if (parent) {
+                                const icon = document.createElement('div');
+                                icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><path d="M12 22.08V12"></path><path d="M12 12 3.3 6.81"></path><path d="M12 12 20.7 6.8"></path><path d="M12 2v10"></path><path d="M3.3 6.8 12 12l8.7-5.2"></path></svg>';
+                                parent.appendChild(icon);
+                              }
                             }
-                          }
-                        }}
-                      />
-                    </div>
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="flex-1 min-w-0">
@@ -2449,6 +2557,20 @@ const InventorySection = () => {
                         <span>Precio total de los productos:</span>
                         <span>${calculateComboTotal(selectedComboItems).toFixed(2)}</span>
                       </div>
+                      
+                      {/* Alertas de stock para combos */}
+                      {stockWarnings.length > 0 && (
+                        <div className="mt-2 bg-yellow-50 border border-yellow-300 rounded-md p-2">
+                          <p className="text-xs font-medium text-yellow-800 mb-1">
+                            Advertencias de disponibilidad:
+                          </p>
+                          <ul className="text-xs text-yellow-700 list-disc pl-4 space-y-1">
+                            {stockWarnings.map((warning, index) => (
+                              <li key={index}>{warning}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2458,36 +2580,75 @@ const InventorySection = () => {
               <div>
                 <Label className="text-sm text-[#29696B] block mb-2">Imagen del Producto</Label>
 
-                <div className="mt-1 flex flex-col space-y-2">
-                  {formData.imagenPreview ? (
-                    <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
-                      <img
-                        src={formData.imagenPreview as string}
-                        alt="Vista previa"
-                        className="w-full h-full object-contain"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = 'none';
-                          if (target.nextSibling) {
-                            (target.nextSibling as HTMLElement).style.display = 'flex';
+                {/* Componente mejorado de subida de imágenes */}
+                {editingProduct ? (
+                  <div className="mt-1 flex flex-col space-y-2">
+                    {formData.imagenPreview ? (
+                      <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
+                        {typeof formData.imagenPreview === 'string' && formData.imagenPreview.startsWith('http') ? (
+                          <OptimizedProductImage
+                            productId={editingProduct._id}
+                            alt="Vista previa"
+                            width={320}
+                            height={180}
+                            quality={80}
+                            className="w-full h-full object-contain"
+                          />
+                        ) : (
+                          <img
+                            src={formData.imagenPreview as string}
+                            alt="Vista previa"
+                            className="w-full h-full object-contain"
+                          />
+                        )}
+                        
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => confirmDeleteImage(editingProduct._id)}
+                          className="absolute top-2 right-2 h-8 w-8 p-0 bg-red-500 hover:bg-red-600"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <ImageUpload 
+                        productId={editingProduct._id}
+                        onImageUploaded={(success) => {
+                          if (success) {
+                            // Refrescar el producto para mostrar la nueva imagen
+                            fetchProductById(editingProduct._id).then(product => {
+                              if (product) {
+                                updateProductInState(product);
+                                handleEdit(product); // Recargar el formulario con los datos actualizados
+                              }
+                            });
                           }
                         }}
                       />
-                      <div className="absolute inset-0 flex items-center justify-center text-sm text-[#7AA79C] hidden">
-                        No se pudo cargar la imagen
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center w-full">
+                    {formData.imagenPreview ? (
+                      <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
+                        <img
+                          src={formData.imagenPreview as string}
+                          alt="Vista previa"
+                          className="w-full h-full object-contain"
+                        />
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          onClick={handleRemoveImage}
+                          className="absolute top-2 right-2 h-8 w-8 p-0 bg-red-500 hover:bg-red-600"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        onClick={editingProduct ? () => confirmDeleteImage(editingProduct._id) : handleRemoveImage}
-                        className="absolute top-2 right-2 h-8 w-8 p-0 bg-red-500 hover:bg-red-600"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-center w-full">
+                    ) : (
                       <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#91BEAD]/30 border-dashed rounded-md cursor-pointer bg-[#DFEFE6]/20 hover:bg-[#DFEFE6]/40 transition-colors">
                         <div className="flex flex-col items-center justify-center pt-3 pb-4">
                           <ImageIcon className="w-8 h-8 text-[#7AA79C] mb-1" />
@@ -2506,9 +2667,9 @@ const InventorySection = () => {
                           onChange={handleImageChange}
                         />
                       </label>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             <DialogFooter className="sticky bottom-0 bg-white pt-2 pb-4 z-10 gap-2 mt-4">
@@ -2525,7 +2686,7 @@ const InventorySection = () => {
               <Button
                 type="submit"
                 className={`${isCombo ? 'bg-[#00888A] hover:bg-[#00888A]/90' : 'bg-[#29696B] hover:bg-[#29696B]/90'} text-white`}
-                disabled={imageLoading || (isCombo && selectedComboItems.length === 0) || !formData.categoria || !formData.subCategoria}
+                disabled={imageLoading || (isCombo && selectedComboItems.length === 0) || !formData.categoria || !formData.subCategoria || hasStockIssues}
               >
                 {imageLoading ? (
                   <>
@@ -2599,6 +2760,7 @@ const InventorySection = () => {
                             size="sm"
                             onClick={() => handleAddComboItem(product)}
                             className="h-8 text-[#29696B] border-[#91BEAD] hover:bg-[#DFEFE6]/30 whitespace-nowrap ml-2"
+                            disabled={product.stock <= 0}
                           >
                             <Plus className="w-3 h-3 mr-1" />
                             Agregar
@@ -2629,7 +2791,14 @@ const InventorySection = () => {
                         {tempSelectedItems.map((item, index) => (
                           <div key={index} className="p-3">
                             <div className="flex justify-between items-center mb-2">
-                              <div className="font-medium text-sm text-[#29696B] truncate max-w-[200px]">{item.nombre}</div>
+                              <div className="font-medium text-sm text-[#29696B] truncate max-w-[200px]">
+                                {item.nombre}
+                                {stockWarnings.some(w => w.includes(item.nombre)) && (
+                                  <span className="ml-2">
+                                    <AlertTriangle className="inline-block w-4 h-4 text-yellow-500" />
+                                  </span>
+                                )}
+                              </div>
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -2685,6 +2854,20 @@ const InventorySection = () => {
                         <span>Total:</span>
                         <span>${calculateComboTotal(tempSelectedItems).toFixed(2)}</span>
                       </div>
+                      
+                      {/* Alertas de stock para combos */}
+                      {stockWarnings.length > 0 && (
+                        <div className="mt-2 bg-yellow-50 border border-yellow-300 rounded-md p-2">
+                          <p className="text-xs font-medium text-yellow-800 mb-1">
+                            Advertencias de disponibilidad:
+                          </p>
+                          <ul className="text-xs text-yellow-700 list-disc pl-4 space-y-1">
+                            {stockWarnings.map((warning, index) => (
+                              <li key={index}>{warning}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -2705,7 +2888,7 @@ const InventorySection = () => {
               type="button"
               onClick={confirmComboSelection}
               className="bg-[#00888A] hover:bg-[#00888A]/90 text-white"
-              disabled={tempSelectedItems.length === 0}
+              disabled={tempSelectedItems.length === 0 || hasStockIssues}
             >
               Confirmar selección
             </Button>
@@ -2791,4 +2974,4 @@ const InventorySection = () => {
   );
 };
 
-export default InventorySection;
+export default InventorySection

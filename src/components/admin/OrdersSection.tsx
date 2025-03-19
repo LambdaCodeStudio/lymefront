@@ -209,32 +209,32 @@ const OrdersService = {
     if (!token) throw new Error("No authentication token");
 
     // Build base URL
-    let url = `${this.apiUrl}/pedido`;
+    let url = `http://localhost:3000/api/pedido`;
     let queryParams = new URLSearchParams();
 
     // Apply date filters
     if (filters.from && filters.to) {
       queryParams.append('fechaInicio', filters.from);
       queryParams.append('fechaFin', filters.to);
-      url = `${this.apiUrl}/pedido/fecha?${queryParams.toString()}`;
+      url = `http://localhost:3000/api/pedido/fecha?${queryParams.toString()}`;
     }
     // Filter by supervisor
     else if (filters.supervisor) {
-      url = `${this.apiUrl}/pedido/supervisor/${filters.supervisor}`;
+      url = `http://localhost:3000/api/pedido/supervisor/${filters.supervisor}`;
     }
     // Filter by client
     else if (filters.clienteId) {
-      url = `${this.apiUrl}/pedido/cliente/${filters.clienteId}`;
-      
+      url = `http://localhost:3000/api/pedido/cliente/${filters.clienteId}`;
+
       // Add subServicioId if exists
       if (filters.subServicioId) {
         queryParams.append('subServicioId', filters.subServicioId);
-        
+
         // Add subUbicacionId if exists
         if (filters.subUbicacionId) {
           queryParams.append('subUbicacionId', filters.subUbicacionId);
         }
-        
+
         // Add parameters to URL
         if (queryParams.toString()) {
           url += `?${queryParams.toString()}`;
@@ -243,11 +243,11 @@ const OrdersService = {
     }
     // Filter by service (compatibility)
     else if (filters.servicio) {
-      url = `${this.apiUrl}/pedido/servicio/${encodeURIComponent(filters.servicio)}`;
+      url = `http://localhost:3000/api/pedido/servicio/${encodeURIComponent(filters.servicio)}`;
     }
     // Filter by status
     else if (filters.estado && filters.estado !== 'todos') {
-      url = `${this.apiUrl}/pedido/estado/${filters.estado}`;
+      url = `http://localhost:3000/api/pedido/estado/${filters.estado}`;
     }
 
     const response = await fetch(url, {
@@ -275,7 +275,7 @@ const OrdersService = {
     const token = getAuthToken();
     if (!token) throw new Error("No authentication token");
 
-    const response = await fetch(`${this.apiUrl}/pedido/${id}`, {
+    const response = await fetch(`http://localhost:3000/api/pedido/${id}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Cache-Control': 'no-cache'
@@ -294,7 +294,7 @@ const OrdersService = {
     const token = getAuthToken();
     if (!token) throw new Error("No authentication token");
 
-    const response = await fetch(`${this.apiUrl}/auth/supervisors`, {
+    const response = await fetch(`http://localhost:3000/api/auth/supervisors`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Cache-Control': 'no-cache'
@@ -314,7 +314,7 @@ const OrdersService = {
     const token = getAuthToken();
     if (!token) throw new Error("No authentication token");
 
-    const response = await fetch(`${this.apiUrl}/producto`, {
+    const response = await fetch(`http://localhost:3000/api/producto`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Cache-Control': 'no-cache'
@@ -334,7 +334,7 @@ const OrdersService = {
     const token = getAuthToken();
     if (!token) throw new Error("No authentication token");
 
-    const response = await fetch(`${this.apiUrl}/producto/${productId}`, {
+    const response = await fetch(`http://localhost:3000/api/producto/${productId}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Cache-Control': 'no-cache'
@@ -353,7 +353,7 @@ const OrdersService = {
     const token = getAuthToken();
     if (!token) throw new Error("No authentication token");
 
-    const response = await fetch(`${this.apiUrl}/cliente`, {
+    const response = await fetch(`http://localhost:3000/api/cliente`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Cache-Control': 'no-cache'
@@ -372,7 +372,7 @@ const OrdersService = {
     const token = getAuthToken();
     if (!token) throw new Error("No authentication token");
 
-    const response = await fetch(`${this.apiUrl}/cliente/user/${supervisorId}`, {
+    const response = await fetch(`http://localhost:3000/api/cliente/user/${supervisorId}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Cache-Control': 'no-cache'
@@ -396,7 +396,7 @@ const OrdersService = {
       // User information
       userId: data.userId,
       supervisorId: data.supervisorId,
-      
+
       // Hierarchical client structure
       cliente: {
         clienteId: data.clienteId,
@@ -406,23 +406,23 @@ const OrdersService = {
         nombreSubServicio: data.nombreSubServicio || undefined,
         nombreSubUbicacion: data.nombreSubUbicacion || undefined
       },
-      
+
       // Compatibility fields
       servicio: data.servicio,
       seccionDelServicio: data.seccionDelServicio || "",
-      
+
       // Products and details
       productos: data.productos.map(p => ({
         productoId: typeof p.productoId === 'object' && p.productoId ? p.productoId._id : p.productoId,
         cantidad: p.cantidad,
         precioUnitario: p.precio || p.precioUnitario // Send current price
       })),
-      
+
       detalle: data.detalle || "",
       estado: data.estado || 'pendiente'
     };
 
-    const response = await fetch(`${this.apiUrl}/pedido`, {
+    const response = await fetch(`http://localhost:3000/api/pedido`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -449,7 +449,7 @@ const OrdersService = {
       // User information
       userId: data.userId,
       supervisorId: data.supervisorId,
-      
+
       // Hierarchical client structure
       cliente: {
         clienteId: data.clienteId,
@@ -459,23 +459,23 @@ const OrdersService = {
         nombreSubServicio: data.nombreSubServicio || undefined,
         nombreSubUbicacion: data.nombreSubUbicacion || undefined
       },
-      
+
       // Compatibility fields
       servicio: data.servicio,
       seccionDelServicio: data.seccionDelServicio || "",
-      
+
       // Products and details
       productos: data.productos.map(p => ({
         productoId: typeof p.productoId === 'object' && p.productoId ? p.productoId._id : p.productoId,
         cantidad: p.cantidad,
         precioUnitario: p.precio || p.precioUnitario
       })),
-      
+
       detalle: data.detalle || "",
       estado: data.estado || 'pendiente'
     };
 
-    const response = await fetch(`${this.apiUrl}/pedido/${id}`, {
+    const response = await fetch(`http://localhost:3000/api/pedido/${id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -497,7 +497,7 @@ const OrdersService = {
     const token = getAuthToken();
     if (!token) throw new Error("No authentication token");
 
-    const response = await fetch(`${this.apiUrl}/pedido/${id}`, {
+    const response = await fetch(`http://localhost:3000/api/pedido/${id}`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${token}`
@@ -517,7 +517,7 @@ const OrdersService = {
     const token = getAuthToken();
     if (!token) throw new Error("No authentication token");
 
-    const response = await fetch(`${this.apiUrl}/auth/me`, {
+    const response = await fetch(`http://localhost:3000/api/auth/me`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Cache-Control': 'no-cache'
@@ -544,7 +544,7 @@ const OrdersService = {
     if (!token) throw new Error("No authentication token");
 
     // First get the current order
-    const orderResponse = await fetch(`${this.apiUrl}/pedido/${id}`, {
+    const orderResponse = await fetch(`http://localhost:3000/api/pedido/${id}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Cache-Control': 'no-cache'
@@ -556,9 +556,9 @@ const OrdersService = {
     }
 
     const order = await orderResponse.json();
-    
+
     // Update only the status field
-    const updateResponse = await fetch(`${this.apiUrl}/pedido/${id}`, {
+    const updateResponse = await fetch(`http://localhost:3000/api/pedido/${id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -584,7 +584,7 @@ const OrdersService = {
     if (!token) throw new Error("No authentication token");
 
     // Create request to get receipt with authentication token
-    const response = await fetch(`${this.apiUrl}/downloads/remito/${id}`, {
+    const response = await fetch(`http://localhost:3000/api/downloads/remito/${id}`, {
       headers: {
         'Authorization': `Bearer ${token}`
       }
@@ -596,19 +596,19 @@ const OrdersService = {
 
     // Get the blob (PDF file)
     const blob = await response.blob();
-    
+
     // Create a temporary URL for the blob
     const url = window.URL.createObjectURL(blob);
-    
+
     // Create a temporary <a> element for download
     const link = document.createElement('a');
     link.href = url;
     link.download = `remito_${id}.pdf`;
-    
+
     // Temporarily add to DOM and click
     document.body.appendChild(link);
     link.click();
-    
+
     // Clean up
     window.URL.revokeObjectURL(url);
     document.body.removeChild(link);
@@ -1007,7 +1007,7 @@ const OrderTotal = React.memo(({
 const OrderStatusBadge = ({ status, onStatusChange, orderId }) => {
   // Define colors and labels based on status
   const getStatusConfig = (status) => {
-    switch(status) {
+    switch (status) {
       case 'aprobado':
         return {
           color: 'bg-green-100 text-green-800 border-green-300',
@@ -1103,7 +1103,7 @@ const OrdersSection = () => {
   // ======== REACT QUERY HOOKS ========
 
   // Load current user
-  const { 
+  const {
     data: currentUser,
     isLoading: isLoadingUser
   } = useQuery('currentUser', OrdersService.fetchCurrentUser, {
@@ -1113,7 +1113,7 @@ const OrdersSection = () => {
       if (data?.role === 'admin' || data?.role === 'supervisor_de_supervisores') {
         queryClient.prefetchQuery('supervisors', OrdersService.fetchSupervisors);
       }
-      
+
       // Update user ID in form if no supervisor selected
       if (!selectedSupervisor) {
         setOrderForm(prev => ({
@@ -1128,7 +1128,7 @@ const OrdersSection = () => {
   const isAdminOrSuperSupervisor = currentUser?.role === 'admin' || currentUser?.role === 'supervisor_de_supervisores';
 
   // Load supervisors
-  const { 
+  const {
     data: supervisors = [],
     isLoading: isLoadingSupervisors
   } = useQuery('supervisors', OrdersService.fetchSupervisors, {
@@ -1148,7 +1148,8 @@ const OrdersSection = () => {
       from: dateFilter.from,
       to: dateFilter.to,
       estado: statusFilter !== 'todos' ? statusFilter : undefined,
-      supervisor: supervisorFilter || undefined,
+      // Only include supervisorFilter if it exists AND isn't 'all'
+      supervisor: supervisorFilter && supervisorFilter !== 'all' ? supervisorFilter : undefined,
       servicio: serviceFilter || undefined,
       clienteId: clientFilter.clienteId,
       subServicioId: clientFilter.subServicioId,
@@ -1255,18 +1256,18 @@ const OrdersSection = () => {
   const fetchProductById = useCallback(async (productId) => {
     try {
       const product = await OrdersService.fetchProductById(productId);
-      
+
       // Update products map
       queryClient.setQueryData('products', (oldData) => {
         const newProducts = [...(oldData || [])];
         const existingIndex = newProducts.findIndex(p => p._id === productId);
-        
+
         if (existingIndex >= 0) {
           newProducts[existingIndex] = product;
         } else {
           newProducts.push(product);
         }
-        
+
         return newProducts;
       });
 
@@ -1389,7 +1390,7 @@ const OrdersSection = () => {
           : "User not available")
       };
     }
-    
+
     // If it's a string (ID), look it up in supervisors
     if (typeof userId === 'string') {
       // Look in supervisors
@@ -1402,7 +1403,7 @@ const OrdersSection = () => {
             : "Supervisor")
         };
       }
-      
+
       // If it's the current user
       if (currentUser && currentUser._id === userId) {
         return {
@@ -1413,7 +1414,7 @@ const OrdersSection = () => {
         };
       }
     }
-    
+
     // If no information is found
     return { usuario: "User not available", name: "User not available" };
   }, [supervisors, currentUser]);
@@ -1478,7 +1479,7 @@ const OrdersSection = () => {
       if (userId && userId !== currentUser?._id && isAdminOrSuperSupervisor) {
         console.log(`Loading clients for supervisor ${userId} for editing`);
         setSelectedSupervisor(userId);
-        
+
         // Force reload clients
         queryClient.invalidateQueries(['clients', userId]);
       }
@@ -1526,26 +1527,26 @@ const OrdersSection = () => {
       // If it has complete hierarchical structure
       if (order.cliente && order.cliente.clienteId) {
         // Find the client in the complete list
-        const clienteObject = typeof order.cliente.clienteId === 'string' 
+        const clienteObject = typeof order.cliente.clienteId === 'string'
           ? allClients.find(c => c._id === order.cliente.clienteId)
           : order.cliente.clienteId;
-          
+
         clienteData = clienteObject || null;
-        
+
         // Find the subservice if it exists
         if (clienteData && order.cliente.subServicioId) {
-          const subServicioId = typeof order.cliente.subServicioId === 'string' 
-            ? order.cliente.subServicioId 
+          const subServicioId = typeof order.cliente.subServicioId === 'string'
+            ? order.cliente.subServicioId
             : order.cliente.subServicioId._id;
-            
+
           subServicioData = clienteData.subServicios?.find(ss => ss._id === subServicioId) || null;
-          
+
           // Find the sublocation if it exists
           if (subServicioData && order.cliente.subUbicacionId) {
-            const subUbicacionId = typeof order.cliente.subUbicacionId === 'string' 
-              ? order.cliente.subUbicacionId 
+            const subUbicacionId = typeof order.cliente.subUbicacionId === 'string'
+              ? order.cliente.subUbicacionId
               : order.cliente.subUbicacionId._id;
-              
+
             subUbicacionData = subServicioData.subUbicaciones?.find(su => su._id === subUbicacionId) || null;
           }
         }
@@ -1560,15 +1561,15 @@ const OrdersSection = () => {
         nombreCliente: order.cliente?.nombreCliente || order.servicio || '',
         nombreSubServicio: order.cliente?.nombreSubServicio || order.seccionDelServicio || undefined,
         nombreSubUbicacion: order.cliente?.nombreSubUbicacion || undefined,
-        
+
         // Compatibility fields
         servicio: order.servicio || '',
         seccionDelServicio: order.seccionDelServicio || '',
-        
+
         // User information
         userId: userId,
         supervisorId: typeof order.supervisorId === 'object' ? order.supervisorId._id : order.supervisorId,
-        
+
         // Products and status
         productos: productos,
         detalle: order.detalle || " ",
@@ -1803,7 +1804,7 @@ const OrdersSection = () => {
   const clearSelectedSupervisor = () => {
     if (isAdminOrSuperSupervisor) {
       setSelectedSupervisor(null);
-      
+
       // Reload clients for current user
       if (currentUser?._id) {
         queryClient.invalidateQueries(['clients', currentUser._id]);
@@ -1908,7 +1909,7 @@ const OrdersSection = () => {
   const handleSupervisorSelect = async (supervisorId) => {
     // Find supervisor in list
     const supervisor = supervisors.find(s => s._id === supervisorId);
-  
+
     setSelectedSupervisor(supervisorId);
     setOrderForm(prev => ({
       ...prev,
@@ -1920,14 +1921,14 @@ const OrdersSection = () => {
       seccionDelServicio: '',
       productos: []
     }));
-  
+
     // Close selection modal
     setSupervisorSelectOpen(false);
-  
+
     // Load clients for selected supervisor
     try {
       await queryClient.invalidateQueries(['clients', supervisorId]);
-  
+
       // Open creation modal after loading clients
       setCreateOrderModalOpen(true);
     } catch (error) {
@@ -1995,15 +1996,15 @@ const OrdersSection = () => {
         // Search in service or order number
         (order.servicio || '').toLowerCase().includes(searchLower) ||
         String(order.nPedido || '').includes(searchTerm) ||
-        
+
         // Search in section
         (order.seccionDelServicio || '').toLowerCase().includes(searchLower) ||
-        
+
         // Search in hierarchical structure
         (order.cliente?.nombreCliente || '').toLowerCase().includes(searchLower) ||
         (order.cliente?.nombreSubServicio || '').toLowerCase().includes(searchLower) ||
         (order.cliente?.nombreSubUbicacion || '').toLowerCase().includes(searchLower) ||
-        
+
         // Search by user
         userInfo.usuario.toLowerCase().includes(searchLower) ||
         userInfo.name.toLowerCase().includes(searchLower)
@@ -2126,8 +2127,8 @@ const OrdersSection = () => {
           {/* Status filter */}
           <div>
             <Label htmlFor="estado" className="text-[#29696B]">Status</Label>
-            <Select 
-              value={statusFilter} 
+            <Select
+              value={statusFilter}
               onValueChange={setStatusFilter}
             >
               <SelectTrigger id="estado" className="border-[#91BEAD] focus:ring-[#29696B]/20">
@@ -2146,8 +2147,8 @@ const OrdersSection = () => {
           {isAdminOrSuperSupervisor && (
             <div>
               <Label htmlFor="supervisor" className="text-[#29696B]">Supervisor</Label>
-              <Select 
-                value={supervisorFilter} 
+              <Select
+                value={supervisorFilter}
                 onValueChange={setSupervisorFilter}
               >
                 <SelectTrigger id="supervisor" className="border-[#91BEAD] focus:ring-[#29696B]/20">
@@ -2168,23 +2169,23 @@ const OrdersSection = () => {
           {/* Client filter */}
           <div>
             <Label htmlFor="cliente" className="text-[#29696B]">Client</Label>
-            <Select 
-              value={clientFilter.clienteId || ''} 
+            <Select
+              value={clientFilter.clienteId || ''}
               onValueChange={(value) => {
-                if (value) {
-                  // Find complete client
-                  const cliente = allClients.find(c => c._id === value);
+                if (value && value !== 'all') {
+                  // Si selecciona un cliente específico
                   setClientFilter({ clienteId: value });
                 } else {
+                  // Si selecciona "Todos"
                   setClientFilter({});
                 }
               }}
             >
               <SelectTrigger id="cliente" className="border-[#91BEAD] focus:ring-[#29696B]/20">
-                <SelectValue placeholder="All clients" />
+                <SelectValue placeholder="Todos los clientes" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="all">Todos</SelectItem>
                 {allClients.map(cliente => (
                   <SelectItem key={cliente._id} value={cliente._id}>
                     {cliente.nombre || cliente.servicio}
@@ -2274,12 +2275,12 @@ const OrdersSection = () => {
                   className="w-full text-sm border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
                 />
               </div>
-              
+
               {/* Status filter */}
               <div>
                 <Label htmlFor="mEstado" className="text-xs text-[#29696B]">Status</Label>
-                <Select 
-                  value={statusFilter} 
+                <Select
+                  value={statusFilter}
                   onValueChange={setStatusFilter}
                 >
                   <SelectTrigger id="mEstado" className="text-sm border-[#91BEAD] focus:ring-[#29696B]/20">
@@ -2293,13 +2294,13 @@ const OrdersSection = () => {
                   </SelectContent>
                 </Select>
               </div>
-              
+
               {/* Supervisor filter (admin only) */}
               {isAdminOrSuperSupervisor && (
                 <div>
                   <Label htmlFor="mSupervisor" className="text-xs text-[#29696B]">Supervisor</Label>
-                  <Select 
-                    value={supervisorFilter} 
+                  <Select
+                    value={supervisorFilter}
                     onValueChange={setSupervisorFilter}
                   >
                     <SelectTrigger id="mSupervisor" className="text-sm border-[#91BEAD] focus:ring-[#29696B]/20">
@@ -2320,8 +2321,8 @@ const OrdersSection = () => {
               {/* Client filter */}
               <div>
                 <Label htmlFor="mCliente" className="text-xs text-[#29696B]">Client</Label>
-                <Select 
-                  value={clientFilter.clienteId || ''} 
+                <Select
+                  value={clientFilter.clienteId || ''}
                   onValueChange={(value) => {
                     if (value) {
                       setClientFilter({ clienteId: value });
@@ -2378,7 +2379,7 @@ const OrdersSection = () => {
                   {dateFilter.to && new Date(dateFilter.to).toLocaleDateString()}
                 </span>
               )}
-              
+
               {statusFilter !== 'todos' && (
                 <span className="flex items-center">
                   {statusFilter === 'pendiente' && <Clock className="w-3 h-3 mr-1 text-yellow-600" />}
@@ -2387,7 +2388,7 @@ const OrdersSection = () => {
                   {statusFilter}
                 </span>
               )}
-              
+
               {supervisorFilter && (
                 <span className="flex items-center">
                   <User className="w-3 h-3 mr-1" />
@@ -2539,7 +2540,7 @@ const OrdersSection = () => {
                         </td>
 
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <OrderStatusBadge 
+                          <OrderStatusBadge
                             status={order.estado || 'pendiente'}
                             orderId={order._id}
                           />
@@ -2796,21 +2797,20 @@ const OrdersSection = () => {
                         {order.estado === 'rechazado' && <XCircle className="w-3 h-3 text-red-600 mr-1" />}
                         {(!order.estado || order.estado === 'pendiente') && <Clock className="w-3 h-3 text-yellow-600 mr-1" />}
                         <span className={`text-[#29696B] flex items-center`}>
-                          Status: 
-                          <span 
-                            className={`ml-1 ${
-                              order.estado === 'aprobado' 
-                                ? 'text-green-600' 
-                                : order.estado === 'rechazado' 
-                                ? 'text-red-600' 
-                                : 'text-yellow-600'
-                            }`}
+                          Status:
+                          <span
+                            className={`ml-1 ${order.estado === 'aprobado'
+                                ? 'text-green-600'
+                                : order.estado === 'rechazado'
+                                  ? 'text-red-600'
+                                  : 'text-yellow-600'
+                              }`}
                           >
-                            {order.estado === 'aprobado' 
-                              ? 'Approved' 
-                              : order.estado === 'rechazado' 
-                              ? 'Rejected' 
-                              : 'Pending'
+                            {order.estado === 'aprobado'
+                              ? 'Approved'
+                              : order.estado === 'rechazado'
+                                ? 'Rejected'
+                                : 'Pending'
                             }
                           </span>
                         </span>
@@ -2897,7 +2897,7 @@ const OrdersSection = () => {
                       onValueChange={(value) => {
                         // Update order status
                         queryClient.setQueryData(['orders'], (oldData) => {
-                          return oldData?.map(o => o._id === order._id ? {...o, estado: value} : o);
+                          return oldData?.map(o => o._id === order._id ? { ...o, estado: value } : o);
                         });
                         // Call API to update status
                         OrdersService.updateOrderStatus(order._id, value)
@@ -3057,7 +3057,7 @@ const OrdersSection = () => {
                   <User className="w-5 h-5 mr-2 text-[#7AA79C]" />
                   Assigned Supervisor
                 </h2>
-                
+
                 <Select
                   value={orderForm.userId}
                   onValueChange={(value) => {
@@ -3124,13 +3124,13 @@ const OrdersSection = () => {
                             <Building className="w-4 h-4 text-[#7AA79C] mr-2" />
                             {selectedClient.nombre || selectedClient.servicio || 'Selected client'}
                           </div>
-                          
+
                           {/* Show subservice if selected */}
                           {selectedSubService && (
                             <div className="text-sm text-[#7AA79C] flex items-center mt-1">
                               <MapPin className="w-3 h-3 text-[#7AA79C] mr-1" />
                               {selectedSubService.nombre}
-                              
+
                               {/* Show sublocation if selected */}
                               {selectedSubLocation && (
                                 <span className="ml-1">
@@ -3140,7 +3140,7 @@ const OrdersSection = () => {
                             </div>
                           )}
                         </div>
-                        
+
                         <Button
                           variant="ghost"
                           size="sm"
@@ -3174,7 +3174,7 @@ const OrdersSection = () => {
                 <Clock className="w-5 h-5 mr-2 text-[#7AA79C]" />
                 Order Status
               </h2>
-              
+
               <Select
                 value={orderForm.estado || 'pendiente'}
                 onValueChange={(value) => setOrderForm(prev => ({ ...prev, estado: value }))}
@@ -3237,9 +3237,9 @@ const OrdersSection = () => {
 
                     const product = productId ? productsMap[productId] : undefined;
                     const nombre = item.nombre || (product?.nombre || 'Product not found');
-                    const precio = typeof item.precio === 'number' ? item.precio : 
-                                   (typeof item.precioUnitario === 'number' ? item.precioUnitario : 
-                                   (product?.precio || 0));
+                    const precio = typeof item.precio === 'number' ? item.precio :
+                      (typeof item.precioUnitario === 'number' ? item.precioUnitario :
+                        (product?.precio || 0));
                     const cantidad = typeof item.cantidad === 'number' ? item.cantidad : 0;
 
                     return (
@@ -3422,7 +3422,7 @@ const OrdersSection = () => {
                       </div>
                       {cliente.subServicios?.length > 0 && (
                         <div className="text-xs text-[#7AA79C]">
-                          {cliente.subServicios.length} 
+                          {cliente.subServicios.length}
                           {cliente.subServicios.length === 1 ? ' subservice' : ' subservices'}
                         </div>
                       )}
@@ -3471,7 +3471,7 @@ const OrdersSection = () => {
                     subUbicacionId: undefined,
                     nombreSubUbicacion: undefined
                   }));
-                  
+
                   setSelectedSubService(null);
                   setSelectedSubLocation(null);
                   setSelectSubServiceModalOpen(false);
@@ -3485,7 +3485,7 @@ const OrdersSection = () => {
                   <Check className="w-4 h-4 text-[#7AA79C]" />
                 </div>
               </div>
-              
+
               {/* Subservices list */}
               {selectedClient?.subServicios?.map((subServicio) => (
                 <div
@@ -3500,7 +3500,7 @@ const OrdersSection = () => {
                       </div>
                       {subServicio.subUbicaciones?.length > 0 && (
                         <div className="text-xs text-[#7AA79C]">
-                          {subServicio.subUbicaciones.length} 
+                          {subServicio.subUbicaciones.length}
                           {subServicio.subUbicaciones.length === 1 ? ' sublocation' : ' sublocations'}
                         </div>
                       )}
@@ -3550,7 +3550,7 @@ const OrdersSection = () => {
                     subUbicacionId: undefined,
                     nombreSubUbicacion: undefined
                   }));
-                  
+
                   setSelectedSubLocation(null);
                   setSelectSubLocationModalOpen(false);
                   setSelectClientModalOpen(false);
@@ -3563,7 +3563,7 @@ const OrdersSection = () => {
                   <Check className="w-4 h-4 text-[#7AA79C]" />
                 </div>
               </div>
-              
+
               {/* Sublocations list */}
               {selectedSubService?.subUbicaciones?.map((subUbicacion) => (
                 <div

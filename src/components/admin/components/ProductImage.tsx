@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, memo } from 'react';
 import { ImageIcon } from 'lucide-react';
+import { getAuthToken } from '@/utils/inventoryUtils';
 
 interface ProductImageProps {
   productId: string;
@@ -10,18 +11,22 @@ interface ProductImageProps {
   className?: string;
   fallbackClassName?: string;
   containerClassName?: string;
-  useBase64?: boolean;
   priority?: boolean;
   placeholderText?: string;
+  forceBase64?: boolean;
 }
 
 // Caché de memoria global para optimizar el rendimiento entre componentes
 // Evita volver a verificar imágenes que ya sabemos que existen o no
 const imageStatusCache = new Map<string, 'loading' | 'loaded' | 'error' | 'notExists'>();
+const imageBase64Cache = new Map<string, string>();
+
+// URL de la API
+const API_URL = "http://localhost:3000/api/";
 
 /**
- * Componente optimizado para mostrar imágenes de productos con carga diferida
- * y manejo eficiente de errores y caché.
+ * Componente optimizado para mostrar imágenes de productos con carga diferida,
+ * soporte para imágenes base64 y manejo eficiente de errores y caché.
  */
 const OptimizedProductImage: React.FC<ProductImageProps> = ({
   productId,
@@ -32,9 +37,9 @@ const OptimizedProductImage: React.FC<ProductImageProps> = ({
   className = '',
   fallbackClassName = '',
   containerClassName = '',
-  useBase64 = false,
   priority = false,
-  placeholderText
+  placeholderText,
+  forceBase64 = false, // Fuerza el uso de base64 incluso si la API directa está disponible
 }) => {
   // Usar el estado de la caché global si existe, o 'loading' por defecto
   const [loadState, setLoadState] = useState<'loading' | 'loaded' | 'error' | 'notExists'>(
@@ -46,15 +51,22 @@ const OptimizedProductImage: React.FC<ProductImageProps> = ({
   const observerRef = useRef<IntersectionObserver | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [timestamp, setTimestamp] = useState<number>(Date.now());
+  const [useBase64, setUseBase64] = useState<boolean>(forceBase64);
   
   // Crear la URL de la imagen con parámetro de versión para evitar cachés obsoletas
-  const imageUrl = useBase64 
-    ? `http://localhost:3000/api/producto/${productId}/imagen-base64`
-    : `http://localhost:3000/api/producto/${productId}/imagen?quality=${quality}&width=${width}&height=${height}&v=${timestamp}`;
+  const directImageUrl = `${API_URL}producto/${productId}/imagen?quality=${quality}&width=${width}&height=${height}&v=${timestamp}`;
+  const base64ImageUrl = `${API_URL}producto/${productId}/imagen-base64?v=${timestamp}`;
 
   useEffect(() => {
     // Si no hay ID de producto, no hacer nada
     if (!productId) return;
+
+    // Si ya tenemos la imagen en caché base64, usarla directamente
+    if (imageBase64Cache.has(productId)) {
+      setImageSrc(imageBase64Cache.get(productId)!);
+      setLoadState('loaded');
+      return;
+    }
 
     // Si ya tenemos el estado en caché y no está cargando, simplemente usarlo
     if (imageStatusCache.has(productId) && imageStatusCache.get(productId) !== 'loading') {
@@ -63,40 +75,60 @@ const OptimizedProductImage: React.FC<ProductImageProps> = ({
     }
 
     const loadImage = () => {
-      // Para imágenes base64, necesitamos hacer un fetch
-      if (useBase64) {
-        setLoadState('loading');
-        fetch(imageUrl)
-          .then(response => {
-            if (!response.ok) {
-              if (response.status === 204) {
-                // El producto no tiene imagen
-                imageStatusCache.set(productId, 'notExists');
-                setLoadState('notExists');
-                return;
-              }
-              throw new Error('Failed to load image');
-            }
-            return response.json();
-          })
-          .then(data => {
-            if (data && data.image) {
-              setImageSrc(data.image);
-              imageStatusCache.set(productId, 'loaded');
-              setLoadState('loaded');
-            } else {
-              throw new Error('Invalid image data');
-            }
-          })
-          .catch(err => {
-            console.error(`Error loading base64 image for ${productId}:`, err);
-            imageStatusCache.set(productId, 'error');
-            setLoadState('error');
-          });
+      // Primero intentar obtener la imagen en base64 si está forzado o tenemos problemas con la carga directa
+      if (useBase64 || forceBase64 || retryCount > 0) {
+        fetchBase64Image();
       } else {
-        // Para imágenes directas, establecer la URL
-        setImageSrc(imageUrl);
+        // Intentar con la URL directa primero (más eficiente)
+        setImageSrc(directImageUrl);
         setLoadState('loading');
+      }
+    };
+
+    // Función para cargar imagen en formato base64
+    const fetchBase64Image = async () => {
+      setLoadState('loading');
+      setUseBase64(true);
+
+      try {
+        const token = getAuthToken();
+        if (!token) {
+          throw new Error('No hay token de autenticación');
+        }
+
+        const response = await fetch(base64ImageUrl, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Cache-Control': 'no-cache'
+          }
+        });
+
+        if (!response.ok) {
+          if (response.status === 204) {
+            // El producto no tiene imagen
+            imageStatusCache.set(productId, 'notExists');
+            setLoadState('notExists');
+            return;
+          }
+          throw new Error('Failed to load image');
+        }
+
+        const data = await response.json();
+        if (data && data.image) {
+          // Guardar en caché
+          imageBase64Cache.set(productId, data.image);
+          
+          // Establecer la imagen y marcar como cargada
+          setImageSrc(data.image);
+          imageStatusCache.set(productId, 'loaded');
+          setLoadState('loaded');
+        } else {
+          throw new Error('Invalid image data');
+        }
+      } catch (err) {
+        console.error(`Error loading base64 image for ${productId}:`, err);
+        imageStatusCache.set(productId, 'error');
+        setLoadState('error');
       }
     };
 
@@ -147,7 +179,7 @@ const OptimizedProductImage: React.FC<ProductImageProps> = ({
         observerRef.current = null;
       }
     };
-  }, [productId, imageUrl, priority, useBase64]);
+  }, [productId, directImageUrl, base64ImageUrl, priority, forceBase64, retryCount]);
 
   // Manejar carga correcta de la imagen
   const handleImageLoad = () => {
@@ -156,13 +188,55 @@ const OptimizedProductImage: React.FC<ProductImageProps> = ({
     setRetryCount(0); // Resetear contador de reintentos
   };
 
-  // Manejar error de carga con reintento
+  // Manejar error de carga con reintento usando base64
   const handleImageError = () => {
-    if (retryCount < 1) {
-      // Reintentar una vez con un nuevo timestamp para evitar caché
+    if (!useBase64 && retryCount < 1) {
+      // Si falla la carga directa, intentar con base64
       setRetryCount(prev => prev + 1);
-      setTimestamp(Date.now());
+      setUseBase64(true);
+      
+      // Cargar en base64
+      const token = getAuthToken();
+      if (token) {
+        fetch(base64ImageUrl, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Cache-Control': 'no-cache'
+          }
+        })
+        .then(response => {
+          if (!response.ok) {
+            if (response.status === 204) {
+              imageStatusCache.set(productId, 'notExists');
+              setLoadState('notExists');
+              return null;
+            }
+            throw new Error('Failed to load base64 image');
+          }
+          return response.json();
+        })
+        .then(data => {
+          if (data && data.image) {
+            // Guardar en caché y mostrar
+            imageBase64Cache.set(productId, data.image);
+            setImageSrc(data.image);
+            imageStatusCache.set(productId, 'loaded');
+            setLoadState('loaded');
+          } else {
+            throw new Error('Invalid image data');
+          }
+        })
+        .catch(error => {
+          console.error('Error en reintento con base64:', error);
+          imageStatusCache.set(productId, 'error');
+          setLoadState('error');
+        });
+      } else {
+        imageStatusCache.set(productId, 'error');
+        setLoadState('error');
+      }
     } else {
+      // Si ya intentamos con base64 o excedimos los reintentos, marcar como error
       imageStatusCache.set(productId, 'error');
       setLoadState('error');
     }
@@ -202,7 +276,7 @@ const OptimizedProductImage: React.FC<ProductImageProps> = ({
       {/* Imagen real - para imagen directa */}
       {!useBase64 && (
         <img
-          src={loadState === 'loading' ? undefined : imageUrl}
+          src={loadState === 'loading' ? undefined : directImageUrl}
           alt={alt}
           width={width}
           height={height}
