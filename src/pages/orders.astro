@@ -1,11 +1,11 @@
 ---
 import ShopLayout from '../layouts/ShopLayout.astro';
-import { OrdersWrapper } from '../components/shop/OrdersWrapper';
+import { CartWrapper } from '../components/shop/OrdersWrapper';
 import { Footer } from '../components/common/Footer'
 ---
 
 <ShopLayout title="Tienda Online - Mis Órdenes">
-  <OrdersWrapper client:load />
+  <CartWrapper client:load />
   <Footer client:load />
 </ShopLayout>
 

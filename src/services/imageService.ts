@@ -65,11 +65,7 @@ const hasImage = async (product: any): Promise<boolean> => {
     const token = localStorage.getItem('token');
     if (!token) throw new Error('No authentication token');
 
-<<<<<<< HEAD
     const response = await fetch(`/api/producto/${product._id}/imagen`, {
-=======
-    const response = await fetch(`http://179.43.118.101:3000/api/producto/${product._id}/imagen`, {
->>>>>>> server
       headers: {
         'Authorization': `Bearer ${token}`,
       },
@@ -117,11 +113,7 @@ const batchCheckImages = async (productIds: string[]): Promise<{id: string, hasI
       // Ejecutar peticiones en paralelo
       const checks = await Promise.all(batch.map(async id => {
         try {
-<<<<<<< HEAD
           const response = await fetch(`/api/producto/${id}/imagen`, {
-=======
-          const response = await fetch(`http://179.43.118.101:3000/api/producto/${id}/imagen`, {
->>>>>>> server
             headers: {
               'Authorization': `Bearer ${token}`,
             },
@@ -167,11 +159,7 @@ const uploadImageBase64 = async (productId: string, base64Data: string): Promise
   const token = localStorage.getItem('token');
   if (!token) throw new Error('No authentication token');
 
-<<<<<<< HEAD
   const response = await fetch(`/api/producto/${productId}/imagen-base64`, {
-=======
-  const response = await fetch(`http://179.43.118.101:3000/api/producto/${productId}/imagen-base64`, {
->>>>>>> server
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -196,11 +184,7 @@ const deleteImage = async (productId: string): Promise<any> => {
   const token = localStorage.getItem('token');
   if (!token) throw new Error('No authentication token');
 
-<<<<<<< HEAD
   const response = await fetch(`/api/producto/${productId}/imagen`, {
-=======
-  const response = await fetch(`http://179.43.118.101:3000/api/producto/${productId}/imagen`, {
->>>>>>> server
     method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -220,11 +204,7 @@ const deleteImage = async (productId: string): Promise<any> => {
 
 // Función para obtener la URL de una imagen
 const getImageUrl = (productId: string, width = 80, height = 80, quality = 80): string => {
-<<<<<<< HEAD
   return `/api/producto/${productId}/imagen?quality=${quality}&width=${width}&height=${height}&_=${new Date().getTime()}`;
-=======
-  return `http://179.43.118.101:3000/api/producto/${productId}/imagen?quality=${quality}&width=${width}&height=${height}&_=${new Date().getTime()}`;
->>>>>>> server
 };
 
 // Función para invalidar la caché de una imagen
