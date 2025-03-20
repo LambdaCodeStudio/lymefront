@@ -1,44 +1,44 @@
-/* shop-global.css - Modern Refined Color Palette */
+/* shop-global.css - Nueva Paleta de Colores Moderna */
 
 :root {
-  /* Sophisticated Background Colors */
-  --background-primary: #F5F7FA;
-  --background-secondary: #EEF3F6;
-  --background-component: #E6ECF0;
+  /* Colores de Fondo Sofisticados */
+  --background-primary: #f2f2f2;
+  --background-secondary: #e8f0f3;
+  --background-component: #f5fafc;
   --background-card: #FFFFFF;
   
-  /* Refined Accent Colors */
-  --accent-primary: #2563EB;       /* Deep Blue */
-  --accent-secondary: #7C3AED;     /* Rich Purple */
-  --accent-tertiary: #4338CA;      /* Deep Indigo */
-  --accent-quaternary: #D97706;    /* Warm Orange */
+  /* Colores de Acento Refinados */
+  --accent-primary: #3a8fb7;       /* Azul Principal */
+  --accent-secondary: #2a7a9f;     /* Azul Oscuro */
+  --accent-tertiary: #5baed1;      /* Azul Claro */
+  --accent-quaternary: #a8e6cf;    /* Verde Menta */
   
-  /* Thoughtful State Colors */
-  --state-success: #16A34A;        /* Vibrant Green */
-  --state-warning: #D97706;        /* Warm Orange */
-  --state-error: #DC2626;          /* Bold Red */
-  --state-info: #2196F3;           /* Bright Blue */
+  /* Colores de Estado Funcionales */
+  --state-success: #4CAF50;        /* Verde */
+  --state-warning: #FF9800;        /* Naranja */
+  --state-error: #F44336;          /* Rojo */
+  --state-info: #2196F3;           /* Azul */
   
-  /* Nuanced Text Colors */
-  --text-primary: #1F2937;         /* Deep Charcoal */
-  --text-secondary: #374151;       /* Soft Charcoal */
-  --text-tertiary: #6B7280;        /* Muted Gray */
-  --text-disabled: #9CA3AF;        /* Light Gray */
+  /* Colores de Texto Contrastados */
+  --text-primary: #333333;         /* Gris Oscuro */
+  --text-secondary: #4a4a4a;       /* Gris Medio */
+  --text-tertiary: #5c5c5c;        /* Gris Claro */
+  --text-disabled: #878787;        /* Gris Pálido */
   
-  /* Modern Gradients */
+  /* Gradientes Modernos */
   --gradient-main: linear-gradient(90deg, var(--accent-primary), var(--accent-tertiary));
   --gradient-promo: linear-gradient(135deg, var(--accent-quaternary), var(--accent-secondary));
-  --gradient-featured: linear-gradient(90deg, var(--accent-tertiary), var(--state-info));
-  --gradient-offers: linear-gradient(90deg, var(--accent-quaternary), var(--accent-secondary));
+  --gradient-featured: linear-gradient(90deg, var(--accent-tertiary), var(--accent-quaternary));
+  --gradient-offers: linear-gradient(90deg, var(--accent-secondary), var(--accent-quaternary));
 }
 
-/* Base theme overrides remain largely the same as previous file */
+/* Ajustes del tema base */
 .shop-theme {
   background-color: var(--background-primary) !important;
   color: var(--text-primary) !important;
 }
 
-/* Most existing CSS rules from previous file remain unchanged */
+/* Ajustes para botones estándar */
 .shop-theme button:not([class*="bg-"]) {
   background-color: var(--accent-primary) !important;
   color: white !important;
@@ -46,43 +46,107 @@
 }
 
 .shop-theme button:not([class*="bg-"]):hover {
-  background-color: var(--accent-tertiary) !important;
-  box-shadow: 0 0 15px rgba(37, 99, 235, 0.4) !important;
+  background-color: var(--accent-secondary) !important;
+  box-shadow: 0 0 15px rgba(58, 143, 183, 0.4) !important;
 }
 
-/* Product card hover with subtle sophistication */
+/* Efecto hover para tarjetas de producto */
 .product-card:hover {
   transform: translateY(-5px) !important;
-  box-shadow: 0 12px 30px rgba(37, 99, 235, 0.15) !important;
+  box-shadow: 0 12px 30px rgba(58, 143, 183, 0.15) !important;
 }
 
-/* Custom scrollbar with modern aesthetic */
+/* Scrollbar personalizado */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background-secondary);
+}
+
 ::-webkit-scrollbar-thumb {
   background: var(--accent-primary);
   border-radius: 6px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--accent-tertiary);
+  background: var(--accent-secondary);
 }
 
-/* Enhanced link hover state */
+/* Estado hover mejorado para enlaces */
 .shop-theme a:not(.btn):not(.page-link):hover {
-  color: var(--accent-tertiary) !important;
+  color: var(--accent-secondary) !important;
   text-decoration: underline;
   opacity: 0.85;
 }
 
-/* Refined CTA button style */
+/* Estilo refinado para botones CTA */
 .shop-theme .btn-cta {
   background-color: var(--accent-quaternary) !important;
-  color: white !important;
+  color: var(--text-primary) !important;
   font-weight: bold;
   transition: all 0.3s ease !important;
 }
 
 .shop-theme .btn-cta:hover {
-  background-color: var(--accent-secondary) !important;
-  box-shadow: 0 0 20px rgba(124, 58, 237, 0.3) !important;
+  background-color: #8dd4b9 !important;
+  box-shadow: 0 0 20px rgba(168, 230, 207, 0.4) !important;
   transform: translateY(-2px);
+}
+
+/* Ajustes adicionales para mejorar la consistencia */
+.shop-theme input, 
+.shop-theme select, 
+.shop-theme textarea {
+  border-color: var(--accent-tertiary) !important;
+  background-color: white !important;
+}
+
+.shop-theme input:focus, 
+.shop-theme select:focus, 
+.shop-theme textarea:focus {
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 0 0 3px rgba(58, 143, 183, 0.2) !important;
+}
+
+/* Mejoras para paginación */
+.shop-theme .pagination .page-item.active .page-link {
+  background-color: var(--accent-primary) !important;
+  border-color: var(--accent-primary) !important;
+  color: white !important;
+}
+
+.shop-theme .pagination .page-link {
+  color: var(--accent-primary) !important;
+}
+
+.shop-theme .pagination .page-link:hover {
+  background-color: var(--background-secondary) !important;
+}
+
+/* Ajustes para badges y etiquetas */
+.shop-theme .badge {
+  font-weight: 600 !important;
+}
+
+.shop-theme .badge-primary {
+  background-color: var(--accent-primary) !important;
+  color: white !important;
+}
+
+.shop-theme .badge-secondary {
+  background-color: var(--accent-quaternary) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Tarjetas con estilo mejorado */
+.shop-theme .card {
+  border-color: rgba(58, 143, 183, 0.2) !important;
+  transition: all 0.3s ease !important;
+}
+
+.shop-theme .card:hover {
+  box-shadow: 0 8px 25px rgba(58, 143, 183, 0.1) !important;
 }

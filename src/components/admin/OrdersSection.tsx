@@ -2635,7 +2635,7 @@ const OrdersSection = () => {
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p>Delete Order</p>
+                                  <p>Eliminar Pedido</p>
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
@@ -2648,7 +2648,7 @@ const OrdersSection = () => {
                         <tr>
                           <td colSpan={8} className="px-6 py-4 bg-[#DFEFE6]/20">
                             <div className="space-y-3">
-                              <div className="font-medium text-[#29696B]">Order Details</div>
+                              <div className="font-medium text-[#29696B]">Detalles del Pedido</div>
 
                               <div className="overflow-x-auto rounded-md border border-[#91BEAD]/30">
                                 <table className="min-w-full divide-y divide-[#91BEAD]/20">

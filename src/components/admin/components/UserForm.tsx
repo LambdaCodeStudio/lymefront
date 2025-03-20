@@ -175,8 +175,12 @@ const UserForm: React.FC<UserFormProps> = ({
     // Preparar datos con la configuración temporal correcta
     const submissionData = {
       ...formData,
+      // IMPORTANTE: Pasar el supervisorId seleccionado para operarios
+      supervisorId: formData.role === ROLES.OPERARIO ? formData.supervisorId : undefined,
+      
       // Para operarios, agregar flag de temporal según corresponda
       isTemporary: formData.role === ROLES.OPERARIO ? isTemporary : undefined,
+      
       // Tiempo de expiración solo si es temporal
       expirationMinutes: formData.role === ROLES.OPERARIO && isTemporary 
         ? formData.expirationMinutes || 30 

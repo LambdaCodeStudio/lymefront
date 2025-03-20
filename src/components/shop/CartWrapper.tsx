@@ -8,41 +8,62 @@ export const CartWrapper: React.FC = () => {
   useEffect(() => {
     // Definir variables CSS para la nueva paleta de colores
     const applyModernTheme = () => {
-      // Soft, sophisticated background colors
-      document.documentElement.style.setProperty('--background-primary', '#F4F7FA');
-      document.documentElement.style.setProperty('--background-secondary', '#E9EEF3');
-      document.documentElement.style.setProperty('--background-component', '#FFFFFF');
-      document.documentElement.style.setProperty('--background-card', '#FFFFFF');
+      // Colores principales de la paleta
+      document.documentElement.style.setProperty('--primary', '#3a8fb7');
+      document.documentElement.style.setProperty('--primary-light', '#5baed1');
+      document.documentElement.style.setProperty('--primary-dark', '#2a7a9f');
       
-      // Modern, muted accent colors with depth
-      document.documentElement.style.setProperty('--accent-primary', '#3A7CA5');
-      document.documentElement.style.setProperty('--accent-secondary', '#2C5F8D');
-      document.documentElement.style.setProperty('--accent-tertiary', '#5B9DB3');
-      document.documentElement.style.setProperty('--accent-quaternary', '#E6A957');
+      document.documentElement.style.setProperty('--secondary', '#a8e6cf');
+      document.documentElement.style.setProperty('--secondary-light', '#c4f0de');
+      document.documentElement.style.setProperty('--secondary-dark', '#8dd4b9');
       
-      // Refined state colors
+      document.documentElement.style.setProperty('--accent', '#d4f1f9');
+      document.documentElement.style.setProperty('--accent-light', '#e8f7fc');
+      document.documentElement.style.setProperty('--accent-dark', '#b8e6f2');
+      
+      // Colores de fondo
+      document.documentElement.style.setProperty('--background-primary', '#f2f2f2');
+      document.documentElement.style.setProperty('--background-secondary', '#e8f0f3');
+      document.documentElement.style.setProperty('--background-tertiary', '#ffffff');
+      document.documentElement.style.setProperty('--background-card', '#ffffff');
+      
+      // Colores de texto
+      document.documentElement.style.setProperty('--text-primary', '#333333');
+      document.documentElement.style.setProperty('--text-secondary', '#4a4a4a');
+      document.documentElement.style.setProperty('--text-tertiary', '#5c5c5c');
+      document.documentElement.style.setProperty('--text-inverted', '#ffffff');
+      document.documentElement.style.setProperty('--text-disabled', '#878787');
+      
+      // Colores de estado
       document.documentElement.style.setProperty('--state-success', '#4CAF50');
       document.documentElement.style.setProperty('--state-warning', '#FF9800');
       document.documentElement.style.setProperty('--state-error', '#F44336');
       document.documentElement.style.setProperty('--state-info', '#2196F3');
       
-      // Elegant text hierarchy
-      document.documentElement.style.setProperty('--text-primary', '#1F2937');
-      document.documentElement.style.setProperty('--text-secondary', '#4B5563');
-      document.documentElement.style.setProperty('--text-tertiary', '#6B7280');
-      document.documentElement.style.setProperty('--text-disabled', '#9CA3AF');
+      // Gradientes elegantes
+      document.documentElement.style.setProperty('--gradient-primary', 'linear-gradient(135deg, var(--primary), var(--primary-dark))');
+      document.documentElement.style.setProperty('--gradient-secondary', 'linear-gradient(135deg, var(--secondary), var(--secondary-dark))');
+      document.documentElement.style.setProperty('--gradient-accent', 'linear-gradient(135deg, var(--accent), var(--accent-dark))');
+      document.documentElement.style.setProperty('--gradient-primary-to-secondary', 'linear-gradient(135deg, var(--primary), var(--secondary))');
       
-      // Sophisticated gradients
-      document.documentElement.style.setProperty('--gradient-main', 'linear-gradient(90deg, var(--accent-primary), var(--accent-tertiary))');
-      document.documentElement.style.setProperty('--gradient-promo', 'linear-gradient(135deg, var(--accent-quaternary), var(--accent-secondary))');
-      document.documentElement.style.setProperty('--gradient-featured', 'linear-gradient(90deg, var(--accent-tertiary), var(--state-info))');
-      document.documentElement.style.setProperty('--gradient-offers', 'linear-gradient(90deg, var(--accent-quaternary), #5A6B7D)');
+      // Sombras
+      document.documentElement.style.setProperty('--shadow-sm', '0 1px 2px rgba(0, 0, 0, 0.05)');
+      document.documentElement.style.setProperty('--shadow-md', '0 4px 6px rgba(0, 0, 0, 0.07)');
+      document.documentElement.style.setProperty('--shadow-lg', '0 10px 15px rgba(0, 0, 0, 0.1)');
+      document.documentElement.style.setProperty('--shadow-xl', '0 20px 25px rgba(0, 0, 0, 0.15)');
+      
+      // Bordes redondeados
+      document.documentElement.style.setProperty('--radius-sm', '0.25rem');
+      document.documentElement.style.setProperty('--radius-md', '0.5rem');
+      document.documentElement.style.setProperty('--radius-lg', '0.75rem');
+      document.documentElement.style.setProperty('--radius-xl', '1rem');
+      document.documentElement.style.setProperty('--radius-full', '9999px');
     };
-
+    
     // Agregar la clase al body para aplicar estilos globales
     document.body.classList.add('shop-theme');
     
-    // Aplicar fondo claro y variables CSS de paleta turquesa
+    // Aplicar fondo claro y variables CSS de paleta moderna
     applyModernTheme();
     document.body.style.backgroundColor = 'var(--background-primary)';
     
@@ -67,7 +88,7 @@ export const CartWrapper: React.FC = () => {
   }, []);
 
   return (
-    <div className="shop-theme min-h-screen bg-[#F8FDFC] bg-gradient-to-br from-[#F8FDFC] via-[#E8F8F3] to-[#CFF2E4]">
+    <div className="shop-theme min-h-screen bg-gradient-to-br from-[#d4f1f9] via-[#f2f2f2] to-[#a8e6cf]">
       <AuthProvider>
         <ProtectedRoute>
           <CartProvider>

@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { motion } from 'framer-motion';
 
 // Tipos de interfaces (sin cambios)
 interface OrderProduct {
@@ -183,44 +184,28 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     switch (pedido?.estado?.toLowerCase()) {
       case 'pendiente':
         return (
-          <Badge 
-            className="bg-[--state-warning]/20 text-[--state-warning] 
-                       border border-[--state-warning] 
-                       text-sm px-2 py-1 rounded-full"
-          >
+          <Badge className="bg-[#FF9800]/20 text-[#FF9800] border border-[#FF9800] text-sm px-2 py-1 rounded-full transition-all duration-300">
             <Clock className="w-3 h-3 mr-1" />
             Pendiente de aprobación
           </Badge>
         );
       case 'aprobado':
         return (
-          <Badge 
-            className="bg-[--state-success]/20 text-[--state-success] 
-                       border border-[--state-success] 
-                       text-sm px-2 py-1 rounded-full"
-          >
+          <Badge className="bg-[#4CAF50]/20 text-[#4CAF50] border border-[#4CAF50] text-sm px-2 py-1 rounded-full transition-all duration-300">
             <ClipboardCheck className="w-3 h-3 mr-1" />
             Aprobado
           </Badge>
         );
       case 'rechazado':
         return (
-          <Badge 
-            className="bg-[--state-error]/20 text-[--state-error] 
-                       border border-[--state-error] 
-                       text-sm px-2 py-1 rounded-full"
-          >
+          <Badge className="bg-[#F44336]/20 text-[#F44336] border border-[#F44336] text-sm px-2 py-1 rounded-full transition-all duration-300">
             <Info className="w-3 h-3 mr-1" />
             Rechazado
           </Badge>
         );
       default:
         return (
-          <Badge 
-            className="bg-[--state-info]/20 text-[--state-info] 
-                       border border-[--state-info] 
-                       text-sm px-2 py-1 rounded-full"
-          >
+          <Badge className="bg-[#2196F3]/20 text-[#2196F3] border border-[#2196F3] text-sm px-2 py-1 rounded-full transition-all duration-300">
             <ClipboardList className="w-3 h-3 mr-1" />
             En procesamiento
           </Badge>
@@ -244,22 +229,21 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
     return false;
   };
 
+  // Animaciones para los elementos del diálogo
+  const fadeIn = {
+    hidden: { opacity: 0, y: 10 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.3 } }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent 
-        className="shop-theme max-w-3xl max-h-[90vh] overflow-y-auto 
-                   bg-[--background-component] 
-                   border border-[--accent-primary] 
-                   text-[--text-primary]"
-      >
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-white border border-[#3a8fb7]/20 shadow-lg rounded-xl text-[#333333]">
         <DialogHeader>
-          <DialogTitle 
-            className="text-xl flex items-center text-[--text-primary]"
-          >
-            <ShoppingCart className="w-5 h-5 mr-2" />
+          <DialogTitle className="text-xl flex items-center text-[#333333]">
+            <ShoppingCart className="w-5 h-5 mr-2 text-[#3a8fb7]" />
             {!pedido ? 'Detalles del pedido' : `Pedido #${pedido.nPedido || 'Sin número'}`}
           </DialogTitle>
-          <DialogDescription className="text-[--text-secondary]">
+          <DialogDescription className="text-[#5c5c5c]">
             {pedido?.metadata?.creadoPorOperario ? 
               `Creado por operario: ${pedido.metadata.operarioNombre || 'No disponible'}` : 
               'Revise los detalles completos del pedido'}
@@ -267,23 +251,26 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
         </DialogHeader>
 
         {!pedido ? (
-          <div className="py-8 text-center text-[--text-tertiary]">
+          <div className="py-8 text-center text-[#5c5c5c]">
             No se ha seleccionado ningún pedido para ver sus detalles.
           </div>
         ) : (
-          <div className="space-y-6">
+          <motion.div 
+            initial="hidden"
+            animate="visible"
+            variants={{
+              visible: { transition: { staggerChildren: 0.1 } }
+            }}
+            className="space-y-6"
+          >
             {/* Información general del pedido */}
-            <div 
-              className="bg-[--background-card] 
-                         rounded-lg p-4 space-y-3 
-                         border border-[--accent-secondary]/30"
+            <motion.div 
+              variants={fadeIn}
+              className="bg-white rounded-lg p-4 space-y-3 border border-[#3a8fb7]/20 shadow-sm hover:shadow-md transition-all duration-300"
             >
               <div className="flex justify-between items-start">
-                <h3 
-                  className="font-semibold text-[--text-primary] 
-                             flex items-center"
-                >
-                  <ClipboardList className="w-4 h-4 mr-2" />
+                <h3 className="font-semibold text-[#333333] flex items-center">
+                  <ClipboardList className="w-4 h-4 mr-2 text-[#3a8fb7]" />
                   Información del pedido
                 </h3>
                 {getStatusBadge()}
@@ -292,27 +279,27 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <div className="flex items-start">
-                    <Calendar className="w-4 h-4 text-[--text-tertiary] mt-0.5 mr-2" />
+                    <Calendar className="w-4 h-4 text-[#5baed1] mt-0.5 mr-2" />
                     <div>
-                      <p className="text-sm text-[--text-tertiary]">Fecha de creación:</p>
-                      <p className="text-[--text-primary]">{formatDate(pedido.fecha)}</p>
+                      <p className="text-sm text-[#5c5c5c]">Fecha de creación:</p>
+                      <p className="text-[#333333]">{formatDate(pedido.fecha)}</p>
                     </div>
                   </div>
                   
                   <div className="flex items-start">
-                    <Building className="w-4 h-4 text-[--text-tertiary] mt-0.5 mr-2" />
+                    <Building className="w-4 h-4 text-[#5baed1] mt-0.5 mr-2" />
                     <div>
-                      <p className="text-sm text-[--text-tertiary]">Servicio:</p>
-                      <p className="text-[--text-primary]">{pedido.servicio}</p>
+                      <p className="text-sm text-[#5c5c5c]">Servicio:</p>
+                      <p className="text-[#333333]">{pedido.servicio}</p>
                     </div>
                   </div>
                   
                   {pedido.seccionDelServicio && (
                     <div className="flex items-start">
-                      <MapPin className="w-4 h-4 text-[--text-tertiary] mt-0.5 mr-2" />
+                      <MapPin className="w-4 h-4 text-[#5baed1] mt-0.5 mr-2" />
                       <div>
-                        <p className="text-sm text-[--text-tertiary]">Sección:</p>
-                        <p className="text-[--text-primary]">{pedido.seccionDelServicio}</p>
+                        <p className="text-sm text-[#5c5c5c]">Sección:</p>
+                        <p className="text-[#333333]">{pedido.seccionDelServicio}</p>
                       </div>
                     </div>
                   )}
@@ -321,10 +308,10 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                 <div className="space-y-2">
                   {typeof pedido.userId === 'object' && pedido.userId && (
                     <div className="flex items-start">
-                      <User className="w-4 h-4 text-[--text-tertiary] mt-0.5 mr-2" />
+                      <User className="w-4 h-4 text-[#5baed1] mt-0.5 mr-2" />
                       <div>
-                        <p className="text-sm text-[--text-tertiary]">Creado por:</p>
-                        <p className="text-[--text-primary]">
+                        <p className="text-sm text-[#5c5c5c]">Creado por:</p>
+                        <p className="text-[#333333]">
                           {pedido.userId.nombre || pedido.userId.email || 'Usuario desconocido'}
                         </p>
                       </div>
@@ -333,20 +320,20 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                   
                   {pedido.metadata?.creadoPorOperario && (
                     <div className="flex items-start">
-                      <User className="w-4 h-4 text-[--text-tertiary] mt-0.5 mr-2" />
+                      <User className="w-4 h-4 text-[#5baed1] mt-0.5 mr-2" />
                       <div>
-                        <p className="text-sm text-[--text-tertiary]">Operario:</p>
-                        <p className="text-[--text-primary]">{pedido.metadata.operarioNombre || 'No disponible'}</p>
+                        <p className="text-sm text-[#5c5c5c]">Operario:</p>
+                        <p className="text-[#333333]">{pedido.metadata.operarioNombre || 'No disponible'}</p>
                       </div>
                     </div>
                   )}
                   
                   {pedido.detalle && (
                     <div className="flex items-start">
-                      <Info className="w-4 h-4 text-[--text-tertiary] mt-0.5 mr-2" />
+                      <Info className="w-4 h-4 text-[#5baed1] mt-0.5 mr-2" />
                       <div>
-                        <p className="text-sm text-[--text-tertiary]">Notas:</p>
-                        <p className="text-[--text-primary]">{pedido.detalle}</p>
+                        <p className="text-sm text-[#5c5c5c]">Notas:</p>
+                        <p className="text-[#333333]">{pedido.detalle}</p>
                       </div>
                     </div>
                   )}
@@ -354,42 +341,38 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                   {/* Mostrar motivo de rechazo si aplica */}
                   {pedido.estado === 'rechazado' && pedido.metadata?.motivoRechazo && (
                     <div className="flex items-start">
-                      <AlertCircle className="w-4 h-4 text-[--state-error] mt-0.5 mr-2" />
+                      <AlertCircle className="w-4 h-4 text-[#F44336] mt-0.5 mr-2" />
                       <div>
-                        <p className="text-sm text-[--state-error]">Motivo de rechazo:</p>
-                        <p className="text-[--state-error]/90">{pedido.metadata.motivoRechazo}</p>
+                        <p className="text-sm text-[#F44336]">Motivo de rechazo:</p>
+                        <p className="text-[#F44336]/90">{pedido.metadata.motivoRechazo}</p>
                       </div>
                     </div>
                   )}
                 </div>
               </div>
-            </div>
+            </motion.div>
             
             {/* Lista de productos */}
-            <div 
-              className="bg-[--background-card] 
-                         rounded-lg p-4 
-                         border border-[--accent-secondary]/30"
+            <motion.div 
+              variants={fadeIn}
+              className="bg-white rounded-lg p-4 border border-[#3a8fb7]/20 shadow-sm hover:shadow-md transition-all duration-300"
             >
-              <h3 
-                className="font-semibold text-[--text-primary] 
-                           flex items-center mb-3"
-              >
-                <Package className="w-4 h-4 mr-2" />
+              <h3 className="font-semibold text-[#333333] flex items-center mb-3">
+                <Package className="w-4 h-4 mr-2 text-[#3a8fb7]" />
                 Productos del pedido
               </h3>
               
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="border-b border-[--accent-secondary]/30">
+                  <thead className="border-b border-[#3a8fb7]/20 bg-[#e8f0f3]">
                     <tr>
-                      <th className="py-2 px-2 text-left text-xs text-[--text-tertiary]">Producto</th>
-                      <th className="py-2 px-2 text-center text-xs text-[--text-tertiary]">Cantidad</th>
-                      <th className="py-2 px-2 text-right text-xs text-[--text-tertiary]">Precio</th>
-                      <th className="py-2 px-2 text-right text-xs text-[--text-tertiary]">Subtotal</th>
+                      <th className="py-2 px-2 text-left text-xs text-[#333333] font-medium">Producto</th>
+                      <th className="py-2 px-2 text-center text-xs text-[#333333] font-medium">Cantidad</th>
+                      <th className="py-2 px-2 text-right text-xs text-[#333333] font-medium">Precio</th>
+                      <th className="py-2 px-2 text-right text-xs text-[#333333] font-medium">Subtotal</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[--accent-secondary]/20">
+                  <tbody className="divide-y divide-[#3a8fb7]/10">
                     {pedido.productos.map((item, index) => {
                       const productName = typeof item.productoId === 'object' && item.productoId?.nombre 
                         ? item.productoId.nombre 
@@ -404,37 +387,34 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                       const subtotal = productPrice * item.cantidad;
                       
                       return (
-                        <tr key={index}>
-                          <td className="py-3 px-2 text-[--text-primary]">{productName}</td>
-                          <td className="py-3 px-2 text-center text-[--text-primary]">{item.cantidad}</td>
-                          <td className="py-3 px-2 text-right text-[--text-primary]">${productPrice.toFixed(2)}</td>
-                          <td className="py-3 px-2 text-right font-medium text-[--text-primary]">${subtotal.toFixed(2)}</td>
+                        <tr key={index} className="hover:bg-[#e8f0f3] transition-colors duration-200">
+                          <td className="py-3 px-2 text-[#333333]">{productName}</td>
+                          <td className="py-3 px-2 text-center text-[#333333]">{item.cantidad}</td>
+                          <td className="py-3 px-2 text-right text-[#333333]">${productPrice.toFixed(2)}</td>
+                          <td className="py-3 px-2 text-right font-medium text-[#333333]">${subtotal.toFixed(2)}</td>
                         </tr>
                       );
                     })}
                     
-                    <tr className="bg-[--accent-primary]/20 font-semibold">
-                      <td colSpan={3} className="py-3 px-2 text-right text-[--text-primary]">Total:</td>
-                      <td className="py-3 px-2 text-right text-[--text-primary]">${calculateOrderTotal().toFixed(2)}</td>
+                    <tr className="bg-[#3a8fb7]/10 font-semibold">
+                      <td colSpan={3} className="py-3 px-2 text-right text-[#333333]">Total:</td>
+                      <td className="py-3 px-2 text-right text-[#333333]">${calculateOrderTotal().toFixed(2)}</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
         )}
 
-        <DialogFooter className="flex-col sm:flex-row gap-2 sm:justify-between">
+        <DialogFooter className="flex-col sm:flex-row gap-2 sm:justify-between mt-4">
           <div>
             {pedido && (
               <Button
                 variant="outline"
                 onClick={handleDownloadRemito}
                 disabled={isDownloadingRemito}
-                className="border-[--accent-primary] 
-                           text-[--text-primary] 
-                           hover:bg-[--accent-primary]/10 
-                           hover:text-[--text-primary]"
+                className="border-[#3a8fb7] text-[#333333] hover:bg-[#3a8fb7]/10 hover:text-[#3a8fb7] transition-all duration-200"
               >
                 {isDownloadingRemito ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -450,9 +430,7 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
             <Button
               variant="outline"
               onClick={onClose}
-              className="border-[--accent-secondary]/30 
-                         text-[--text-primary] 
-                         hover:bg-[--background-secondary]/20"
+              className="border-[#5baed1] text-[#333333] hover:bg-[#e8f0f3] transition-all duration-200"
             >
               Cerrar
             </Button>
@@ -466,9 +444,7 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                     onReject(pedido._id);
                     onClose();
                   }}
-                  className="bg-[--state-error] 
-                             hover:bg-[--state-error]/80 
-                             text-white"
+                  className="bg-[#F44336] hover:bg-[#E53935] text-white transition-all duration-200"
                 >
                   <XCircle className="w-4 h-4 mr-2" />
                   Rechazar
@@ -479,9 +455,7 @@ export const OrderDetailsDialog: React.FC<OrderDetailsDialogProps> = ({
                     onApprove(pedido._id);
                     onClose();
                   }}
-                  className="bg-[--state-success] 
-                             hover:bg-[--state-success]/80 
-                             text-white"
+                  className="bg-[#4CAF50] hover:bg-[#43A047] text-white transition-all duration-200"
                 >
                   <CheckCircle2 className="w-4 h-4 mr-2" />
                   Aprobar

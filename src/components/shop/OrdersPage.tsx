@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   ShoppingCart, 
   Search, 
@@ -14,7 +14,6 @@ import {
   ChevronUp, 
   Clock,
   Package,
-  CalendarRange,
   X,
   DollarSign,
   Hash,
@@ -26,7 +25,7 @@ import {
   Users,
   FileCheck,
   CheckCircle2,
-  Bell
+  FileSpreadsheet
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -35,6 +34,7 @@ import {
   CardContent, 
   CardHeader, 
   CardFooter, 
+  CardTitle
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -99,13 +99,15 @@ interface OrderProduct {
   cantidad: number;
   nombre?: string;
   precio?: number;
+  precioUnitario?: number;
 }
 
 interface Order {
   _id: string;
   servicio: string;
-  seccionDelServicio: string;
+  seccionDelServicio?: string;
   userId: string | { _id: string; email?: string; nombre?: string; [key: string]: any };
+  supervisorId?: string | { _id: string; email?: string; nombre?: string; [key: string]: any };
   fecha: string;
   productos: OrderProduct[];
   detalle?: string;
@@ -114,6 +116,14 @@ interface Order {
   displayNumber?: string; // Campo para mostrar consistentemente
   total?: number;
   estado?: OrderStatus; // Estado del pedido
+  cliente?: {
+    clienteId: string | { _id: string; nombre?: string; [key: string]: any };
+    subServicioId?: string;
+    subUbicacionId?: string;
+    nombreCliente?: string;
+    nombreSubServicio?: string;
+    nombreSubUbicacion?: string;
+  };
   metadata?: { // Datos adicionales para pedidos creados por operarios
     creadoPorOperario?: boolean;
     operarioId?: string;
@@ -124,19 +134,11 @@ interface Order {
     fechaAprobacion?: string;
     motivoRechazo?: string;
   };
-}
-
-interface Cliente {
-  _id: string;
-  servicio: string;
-  seccionDelServicio: string;
-  userId: string | {
-    _id: string;
-    email?: string;
-    usuario?: string;
-    nombre?: string;
-    apellido?: string;
-  };
+  fechaAprobacion?: string;
+  fechaRechazo?: string;
+  aprobadoPor?: string | { _id: string; nombre?: string; [key: string]: any };
+  rechazadoPor?: string | { _id: string; nombre?: string; [key: string]: any };
+  observaciones?: string;
 }
 
 export const OrdersPage: React.FC = () => {
@@ -150,7 +152,6 @@ export const OrdersPage: React.FC = () => {
   const [orderDetailsOpen, setOrderDetailsOpen] = useState<string | null>(null);
   const [isDownloadingRemito, setIsDownloadingRemito] = useState<string | null>(null);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
-  const [cachedProducts, setCachedProducts] = useState<Record<string, any>>({});
   
   // Filtros
   const [dateFilter, setDateFilter] = useState({
@@ -211,18 +212,22 @@ export const OrdersPage: React.FC = () => {
 
       const userData = await response.json();
       
+      // Verificar si la respuesta contiene userData.user
+      const user = userData.user || userData;
+      
       // Actualizar estados y localStorage
-      if (userData.role) {
-        localStorage.setItem('userRole', userData.role);
-        setUserRole(userData.role);
+      if (user.role) {
+        localStorage.setItem('userRole', user.role);
+        setUserRole(user.role);
       }
       
-      if (userData._id) {
-        localStorage.setItem('userId', userData._id);
-        setUserId(userData._id);
+      if (user._id || user.id) {
+        const id = user._id || user.id;
+        localStorage.setItem('userId', id);
+        setUserId(id);
       }
       
-      return userData._id || userData.id || null;
+      return user._id || user.id || null;
     } catch (error) {
       console.error('Error al obtener el usuario:', error);
       return null;
@@ -236,8 +241,18 @@ export const OrdersPage: React.FC = () => {
       throw new Error('No se encontró token de autenticación');
     }
     
-    // Obtener todos los pedidos
-    const response = await fetch('http://localhost:3000/api/pedido', {
+    let endpoint = 'http://localhost:3000/api/pedido';
+    
+    // Si el usuario es un supervisor, obtener pedidos específicos
+    if (userRole === 'supervisor' && userId) {
+      endpoint = `http://localhost:3000/api/pedido/supervisor/${userId}`;
+    } 
+    // Si el usuario es operario, obtener solo sus pedidos
+    else if (userRole === 'operario' && userId) {
+      endpoint = `http://localhost:3000/api/pedido/user/${userId}`;
+    }
+    
+    const response = await fetch(endpoint, {
       headers: { 
         'Authorization': `Bearer ${token}`,
         'Cache-Control': 'no-cache'
@@ -255,77 +270,42 @@ export const OrdersPage: React.FC = () => {
       throw new Error(`Error al cargar pedidos (estado: ${response.status})`);
     }
 
-    const allOrders = await response.json();
-    
-    // Determinar qué pedidos mostrar según el rol del usuario
-    let relevantOrders: Order[] = [];
-    
-    if (userRole === 'supervisor') {
-      // Para supervisores: mostrar pedidos propios + los creados por sus operarios
-      relevantOrders = allOrders.filter((order: Order) => {
-        // Pedidos propios del supervisor
-        const isOwnOrder = typeof order.userId === 'object' 
-          ? order.userId._id === userId 
-          : order.userId === userId;
-        
-        // Pedidos creados por operarios que el supervisor supervisa
-        const isOperarioOrder = order.metadata?.creadoPorOperario && 
-                               order.metadata?.supervisorId === userId;
-        
-        return isOwnOrder || isOperarioOrder;
-      });
-    } else if (userRole === 'operario') {
-      // Para operarios: solo mostrar sus propios pedidos
-      relevantOrders = allOrders.filter((order: Order) => {
-        const isDirectOrder = typeof order.userId === 'object' 
-          ? order.userId._id === userId 
-          : order.userId === userId;
-        
-        const isIndirectOrder = order.metadata?.creadoPorOperario && 
-                               order.metadata?.operarioId === userId;
-        
-        return isDirectOrder || isIndirectOrder;
-      });
-    } else {
-      // Para otros roles: mostrar todos los pedidos
-      relevantOrders = allOrders;
-    }
+    const ordersData = await response.json();
     
     // Procesar pedidos (calcular totales y ordenar)
-    const processedOrders = relevantOrders.map((order: Order) => ({
+    const processedOrders = ordersData.map((order: Order) => ({
       ...order,
-      displayNumber: order.nPedido?.toString() || order.numero || 'S/N',
+      displayNumber: order.nPedido?.toString() || 'S/N',
       total: calculateOrderTotal(order)
     })).sort((a: Order, b: Order) => 
       new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
     );
     
-    // Crear caché de productos para cálculos de precios
-    const productCache: Record<string, any> = {};
-    allOrders.forEach((order: Order) => {
-      if (Array.isArray(order.productos)) {
-        order.productos.forEach(item => {
-          if (typeof item.productoId === 'object' && item.productoId) {
-            const productId = item.productoId._id;
-            if (productId) {
-              productCache[productId] = {
-                nombre: item.productoId.nombre || item.nombre || 'Producto desconocido',
-                precio: item.productoId.precio || item.precio || 0
-              };
-            }
-          } else if (item.nombre && typeof item.precio === 'number' && typeof item.productoId === 'string') {
-            productCache[item.productoId] = {
-              nombre: item.nombre,
-              precio: item.precio
-            };
-          }
-        });
-      }
-    });
-    
-    setCachedProducts(productCache);
-    
     return processedOrders;
+  };
+
+  // Calcular el total de un pedido
+  const calculateOrderTotal = (order: Order): number => {
+    if (!Array.isArray(order.productos)) return 0;
+    
+    return order.productos.reduce((total, item) => {
+      let price = 0;
+      
+      // Primero intentamos usar el precio unitario que ya viene en el item
+      if (typeof item.precioUnitario === 'number') {
+        price = item.precioUnitario;
+      }
+      // Luego el precio del item directamente
+      else if (typeof item.precio === 'number') {
+        price = item.precio;
+      } 
+      // Si el producto está poblado y tiene precio
+      else if (typeof item.productoId === 'object' && item.productoId && typeof item.productoId.precio === 'number') {
+        price = item.productoId.precio;
+      }
+      
+      return total + (price * item.cantidad);
+    }, 0);
   };
 
   // Usar React Query para obtener pedidos
@@ -342,35 +322,6 @@ export const OrdersPage: React.FC = () => {
     refetchOnWindowFocus: false
   });
 
-  // Calcular el total de un pedido
-  const calculateOrderTotal = (order: Order): number => {
-    if (!Array.isArray(order.productos)) return 0;
-    
-    return order.productos.reduce((total, item) => {
-      let price = 0;
-      
-      // Primero intentamos usar el precio que ya viene en el item
-      if (typeof item.precio === 'number') {
-        price = item.precio;
-      } else if (typeof item.productoId === 'object' && item.productoId && typeof item.productoId.precio === 'number') {
-        // Si el producto está poblado y tiene precio
-        price = item.productoId.precio;
-      } else {
-        // Extraer ID del producto para buscar en caché
-        const productId = typeof item.productoId === 'object' 
-          ? item.productoId._id 
-          : item.productoId;
-        
-        // Verificar en caché
-        if (cachedProducts[productId] && typeof cachedProducts[productId].precio === 'number') {
-          price = cachedProducts[productId].precio;
-        }
-      }
-      
-      return total + (price * item.cantidad);
-    }, 0);
-  };
-
   // Efecto para filtrar pedidos cuando cambian los filtros
   useEffect(() => {
     if (!orders.length) return;
@@ -379,12 +330,14 @@ export const OrdersPage: React.FC = () => {
     
     // Filtrar por término de búsqueda
     if (searchTerm) {
+      const search = searchTerm.toLowerCase();
       result = result.filter(order => 
-        order.servicio.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (order.seccionDelServicio || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (order.displayNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (typeof order.userId === 'object' && order.userId.email 
-          ? order.userId.email.toLowerCase().includes(searchTerm.toLowerCase())
+        order.servicio.toLowerCase().includes(search) ||
+        (order.seccionDelServicio || '').toLowerCase().includes(search) ||
+        (order.displayNumber || '').toLowerCase().includes(search) ||
+        (order.cliente?.nombreCliente || '').toLowerCase().includes(search) ||
+        (typeof order.userId === 'object' && order.userId?.nombre 
+          ? order.userId.nombre.toLowerCase().includes(search)
           : false)
       );
     }
@@ -406,17 +359,25 @@ export const OrdersPage: React.FC = () => {
         result = result.filter(order => order.estado === OrderStatus.REJECTED);
         break;
       case 'porAprobar':
-        // Mostrar solo pedidos pendientes creados por operarios
+        // Mostrar solo pedidos pendientes que debe aprobar el supervisor
         result = result.filter(order => 
-          order.estado === OrderStatus.PENDING && 
-          order.metadata?.creadoPorOperario
+          order.estado === OrderStatus.PENDING &&
+          userRole === 'supervisor' &&
+          (
+            // Filtrar pedidos donde el supervisor es responsable
+            (typeof order.supervisorId === 'object' 
+              ? order.supervisorId?._id === userId 
+              : order.supervisorId === userId) ||
+            // O pedidos de clientes con subservicios asignados a este supervisor
+            (order.cliente?.subServicioId)
+          )
         );
         break;
       // El caso 'todos' no necesita filtro
     }
     
     setFilteredOrders(result);
-  }, [searchTerm, orders, statusFilter, activeTab]);
+  }, [searchTerm, orders, statusFilter, activeTab, userId, userRole]);
 
   // Mutación para aprobar un pedido
   const approveMutation = useMutation({
@@ -426,7 +387,7 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
       
-      const response = await fetch(`http://localhost:3000/api/pedido/${orderId}/aprobar`, {
+      const response = await fetch(`http://localhost:3000/api/pedido/${orderId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -464,7 +425,7 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
       
-      const response = await fetch(`http://localhost:3000/api/pedido/${orderId}/rechazar`, {
+      const response = await fetch(`http://localhost:3000/api/pedido/${orderId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -472,7 +433,7 @@ export const OrdersPage: React.FC = () => {
         },
         body: JSON.stringify({
           estado: OrderStatus.REJECTED,
-          motivoRechazo: motivo,
+          observaciones: motivo,
           fechaRechazo: new Date().toISOString()
         })
       });
@@ -521,42 +482,10 @@ export const OrdersPage: React.FC = () => {
 
       const data = await response.json();
       
-      // Filtrar según el rol del usuario
-      let relevantOrders: Order[] = [];
-      
-      if (userRole === 'supervisor') {
-        // Para supervisores: mostrar pedidos propios + los creados por sus operarios
-        relevantOrders = data.filter((order: Order) => {
-          const isOwnOrder = typeof order.userId === 'object' 
-            ? order.userId._id === userId 
-            : order.userId === userId;
-          
-          const isOperarioOrder = order.metadata?.creadoPorOperario && 
-                                 order.metadata?.supervisorId === userId;
-          
-          return isOwnOrder || isOperarioOrder;
-        });
-      } else if (userRole === 'operario') {
-        // Para operarios: solo mostrar sus propios pedidos
-        relevantOrders = data.filter((order: Order) => {
-          const isDirectOrder = typeof order.userId === 'object' 
-            ? order.userId._id === userId 
-            : order.userId === userId;
-          
-          const isIndirectOrder = order.metadata?.creadoPorOperario && 
-                                 order.metadata?.operarioId === userId;
-          
-          return isDirectOrder || isIndirectOrder;
-        });
-      } else {
-        // Para otros roles: mostrar todos los pedidos
-        relevantOrders = data;
-      }
-      
       // Procesar pedidos (calcular totales y ordenar)
-      const processedOrders = relevantOrders.map((order: Order) => ({
+      const processedOrders = data.map((order: Order) => ({
         ...order,
-        displayNumber: order.nPedido?.toString() || order.numero || 'S/N',
+        displayNumber: order.nPedido?.toString() || 'S/N',
         total: calculateOrderTotal(order)
       })).sort((a: Order, b: Order) => 
         new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
@@ -583,7 +512,7 @@ export const OrdersPage: React.FC = () => {
     setStatusFilter('all');
     refetch();
     setShowMobileFilters(false);
-    
+    window.location.href="/orders?tab=todos"
     addNotification('Filtros eliminados. Mostrando todos los pedidos.', 'info');
   };
 
@@ -721,47 +650,74 @@ export const OrdersPage: React.FC = () => {
     return 'N/A';
   };
 
+  // Obtener nombre del cliente desde el pedido
+  const getClientName = (order: Order): string => {
+    // Primero intentar con cliente.nombreCliente que es el más explícito
+    if (order.cliente?.nombreCliente) {
+      return order.cliente.nombreCliente;
+    }
+    
+    // Luego con cliente.clienteId si es un objeto
+    if (order.cliente?.clienteId && typeof order.cliente.clienteId === 'object') {
+      return order.cliente.clienteId.nombre || 'Cliente sin nombre';
+    }
+    
+    // Finalmente, usar el campo servicio por compatibilidad
+    return order.servicio || 'Cliente sin nombre';
+  };
+
+  // Obtener sección del cliente desde el pedido
+  const getClientSection = (order: Order): string | null => {
+    // Primero intentar con subServicio
+    if (order.cliente?.nombreSubServicio) {
+      return order.cliente.nombreSubServicio;
+    }
+    
+    // Luego usar seccionDelServicio por compatibilidad
+    return order.seccionDelServicio || null;
+  };
+
   // Renderizar el badge de estado del pedido
   const renderStatusBadge = (status?: OrderStatus) => {
     switch (status) {
       case OrderStatus.PENDING:
         return (
-          <Badge variant="outline" className="bg-[var(--state-warning)]/20 text-[var(--state-warning)] border-[var(--state-warning)]">
+          <Badge variant="outline" className="bg-[#FF9800]/20 text-[#FF9800] border-[#FF9800] transition-colors duration-200">
             <Clock className="w-3 h-3 mr-1" />
             Pendiente
           </Badge>
         );
       case OrderStatus.APPROVED:
         return (
-          <Badge variant="outline" className="bg-[var(--state-success)]/20 text-[var(--state-success)] border-[var(--state-success)]">
+          <Badge variant="outline" className="bg-[#4CAF50]/20 text-[#4CAF50] border-[#4CAF50] transition-colors duration-200">
             <CheckSquare className="w-3 h-3 mr-1" />
             Aprobado
           </Badge>
         );
       case OrderStatus.REJECTED:
         return (
-          <Badge variant="outline" className="bg-[var(--state-error)]/20 text-[var(--state-error)] border-[var(--state-error)]">
+          <Badge variant="outline" className="bg-[#F44336]/20 text-[#F44336] border-[#F44336] transition-colors duration-200">
             <XSquare className="w-3 h-3 mr-1" />
             Rechazado
           </Badge>
         );
       case OrderStatus.DELIVERED:
         return (
-          <Badge variant="outline" className="bg-[var(--state-info)]/20 text-[var(--state-info)] border-[var(--state-info)]">
+          <Badge variant="outline" className="bg-[#2196F3]/20 text-[#2196F3] border-[#2196F3] transition-colors duration-200">
             <Package className="w-3 h-3 mr-1" />
             Entregado
           </Badge>
         );
       case OrderStatus.CANCELED:
         return (
-          <Badge variant="outline" className="bg-[var(--background-secondary)] text-[var(--text-tertiary)] border-[var(--text-disabled)]">
+          <Badge variant="outline" className="bg-[#e8f0f3] text-[#5c5c5c] border-[#878787] transition-colors duration-200">
             <X className="w-3 h-3 mr-1" />
             Cancelado
           </Badge>
         );
       default:
         return (
-          <Badge variant="outline" className="bg-[var(--background-secondary)] text-[var(--text-tertiary)] border-[var(--text-disabled)]">
+          <Badge variant="outline" className="bg-[#e8f0f3] text-[#5c5c5c] border-[#878787] transition-colors duration-200">
             Desconocido
           </Badge>
         );
@@ -772,7 +728,7 @@ export const OrdersPage: React.FC = () => {
   const renderOperarioBadge = (order: Order) => {
     if (order.metadata?.creadoPorOperario) {
       return (
-        <Badge variant="outline" className="bg-[var(--accent-tertiary)]/20 text-[var(--accent-tertiary)] border-[var(--accent-tertiary)] ml-2">
+        <Badge variant="outline" className="bg-[#5baed1]/20 text-[#3a8fb7] border-[#5baed1] ml-2 transition-colors duration-200">
           <Users className="w-3 h-3 mr-1" />
           Operario: {order.metadata.operarioNombre || 'Desconocido'}
         </Badge>
@@ -785,7 +741,14 @@ export const OrdersPage: React.FC = () => {
   const getPendingApprovalCount = () => {
     return orders.filter(order => 
       order.estado === OrderStatus.PENDING && 
-      order.metadata?.creadoPorOperario
+      (
+        // Pedidos directamente asignados al supervisor
+        (typeof order.supervisorId === 'object' 
+          ? order.supervisorId?._id === userId 
+          : order.supervisorId === userId) ||
+        // O pedidos con subservicios asignados a este supervisor
+        order.cliente?.subServicioId
+      )
     ).length;
   };
 
@@ -794,21 +757,43 @@ export const OrdersPage: React.FC = () => {
     refetch();
   };
 
+  // Comprobar si el usuario puede aprobar el pedido (solo supervisores para pedidos en su subservicio)
+  const canApproveOrder = (order: Order): boolean => {
+    if (userRole !== 'supervisor') return false;
+    
+    return (
+      order.estado === OrderStatus.PENDING &&
+      (
+        // El supervisor está directamente asignado al pedido
+        (typeof order.supervisorId === 'object' 
+          ? order.supervisorId?._id === userId 
+          : order.supervisorId === userId) ||
+        // O el pedido tiene un subservicio asignado a este supervisor
+        (order.cliente?.subServicioId)
+      )
+    );
+  };
+
   return (
     <>
       <ShopNavbar />
       <div className="container mx-auto px-4 py-8 shop-theme">
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-3xl font-bold mb-8 flex items-center text-[var(--text-primary)]">
-            <ShoppingCart className="mr-3 h-8 w-8 text-[var(--accent-primary)]" />
+          <motion.h1 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="text-3xl font-bold mb-8 flex items-center text-[#333333]"
+          >
+            <ShoppingCart className="mr-3 h-8 w-8 text-[#3a8fb7]" />
             Mis Pedidos
-          </h1>
+          </motion.h1>
           
           {/* Alertas */}
           {error && (
-            <Alert className="mb-6 bg-[var(--state-error)]/10 border border-[var(--state-error)]/30">
-              <AlertCircle className="h-4 w-4 text-[var(--state-error)]" />
-              <AlertDescription className="ml-2 text-[var(--text-primary)]">
+            <Alert className="mb-6 bg-[#F44336]/10 border border-[#F44336]/30 transition-all duration-300">
+              <AlertCircle className="h-4 w-4 text-[#F44336]" />
+              <AlertDescription className="ml-2 text-[#333333]">
                 {error instanceof Error ? error.message : 'Error al cargar pedidos'}
               </AlertDescription>
             </Alert>
@@ -817,10 +802,10 @@ export const OrdersPage: React.FC = () => {
           {/* Pestañas para filtrar por categorías principales */}
           <div className="mb-6">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="bg-[var(--background-secondary)] border border-[var(--accent-primary)]/20 w-full">
+              <TabsList className="bg-[#e8f0f3] border border-[#3a8fb7]/20 w-full rounded-lg overflow-hidden shadow-sm">
                 <TabsTrigger 
                   value="todos" 
-                  className="flex-1 data-[state=active]:bg-[var(--accent-primary)] data-[state=active]:text-white text-[var(--text-primary)]"
+                  className="flex-1 data-[state=active]:bg-[#3a8fb7] data-[state=active]:text-white text-[#333333] transition-all duration-200"
                 >
                   Todos
                 </TabsTrigger>
@@ -829,12 +814,12 @@ export const OrdersPage: React.FC = () => {
                 {userRole === 'supervisor' && (
                   <TabsTrigger 
                     value="porAprobar" 
-                    className="flex-1 data-[state=active]:bg-[var(--accent-primary)] data-[state=active]:text-white text-[var(--text-primary)] relative"
+                    className="flex-1 data-[state=active]:bg-[#3a8fb7] data-[state=active]:text-white text-[#333333] relative transition-all duration-200"
                   >
                     <FileCheck className="w-4 h-4 mr-1" />
                     Por aprobar
                     {getPendingApprovalCount() > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-[var(--state-warning)] text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                      <span className="absolute -top-1 -right-1 bg-[#FF9800] text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
                         {getPendingApprovalCount()}
                       </span>
                     )}
@@ -843,7 +828,7 @@ export const OrdersPage: React.FC = () => {
                 
                 <TabsTrigger 
                   value="pendientes" 
-                  className="flex-1 data-[state=active]:bg-[var(--accent-primary)] data-[state=active]:text-white text-[var(--text-primary)]"
+                  className="flex-1 data-[state=active]:bg-[#3a8fb7] data-[state=active]:text-white text-[#333333] transition-all duration-200"
                 >
                   <Clock className="w-4 h-4 mr-1" />
                   Pendientes
@@ -851,7 +836,7 @@ export const OrdersPage: React.FC = () => {
                 
                 <TabsTrigger 
                   value="aprobados" 
-                  className="flex-1 data-[state=active]:bg-[var(--accent-primary)] data-[state=active]:text-white text-[var(--text-primary)]"
+                  className="flex-1 data-[state=active]:bg-[#3a8fb7] data-[state=active]:text-white text-[#333333] transition-all duration-200"
                 >
                   <CheckCircle2 className="w-4 h-4 mr-1" />
                   Aprobados
@@ -859,7 +844,7 @@ export const OrdersPage: React.FC = () => {
                 
                 <TabsTrigger 
                   value="rechazados" 
-                  className="flex-1 data-[state=active]:bg-[var(--accent-primary)] data-[state=active]:text-white text-[var(--text-primary)]"
+                  className="flex-1 data-[state=active]:bg-[#3a8fb7] data-[state=active]:text-white text-[#333333] transition-all duration-200"
                 >
                   <XSquare className="w-4 h-4 mr-1" />
                   Rechazados
@@ -869,14 +854,19 @@ export const OrdersPage: React.FC = () => {
           </div>
 
           {/* Filtros y búsqueda */}
-          <div className="mb-6 space-y-4 bg-[var(--background-component)] p-4 rounded-xl shadow-sm border border-[var(--accent-primary)]/10">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+            className="mb-6 space-y-4 bg-white p-4 rounded-xl shadow-sm border border-[#3a8fb7]/10 hover:shadow-md transition-all duration-300"
+          >
             <div className="flex flex-wrap gap-4 items-center justify-between">
               <div className="relative flex-1 min-w-[280px]">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[var(--accent-primary)] w-4 h-4" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#3a8fb7] w-4 h-4" />
                 <Input
                   type="text"
                   placeholder="Buscar pedidos..."
-                  className="pl-10 bg-[var(--background-card)] border-[var(--accent-tertiary)] focus:border-[var(--accent-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)]"
+                  className="pl-10 bg-[#f2f2f2] border-[#5baed1] focus:border-[#3a8fb7] text-[#333333] placeholder:text-[#5c5c5c] transition-all duration-200"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
@@ -887,7 +877,7 @@ export const OrdersPage: React.FC = () => {
                 size="sm"
                 onClick={handleManualRefresh}
                 disabled={isLoading || approveMutation.isPending || rejectMutation.isPending}
-                className="border-[var(--accent-tertiary)] text-[var(--text-primary)] hover:bg-[var(--accent-primary)]/10"
+                className="border-[#5baed1] text-[#333333] hover:bg-[#3a8fb7]/10 transition-all duration-200"
               >
                 {isLoading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -899,7 +889,7 @@ export const OrdersPage: React.FC = () => {
 
             <div className="flex flex-wrap gap-4 items-end">
               <div>
-                <label htmlFor="fechaInicio" className="text-[var(--text-primary)] text-sm font-medium">
+                <label htmlFor="fechaInicio" className="text-[#333333] text-sm font-medium">
                   Fecha Inicio
                 </label>
                 <Input
@@ -907,11 +897,11 @@ export const OrdersPage: React.FC = () => {
                   type="date"
                   value={dateFilter.fechaInicio}
                   onChange={(e) => setDateFilter({ ...dateFilter, fechaInicio: e.target.value })}
-                  className="w-full bg-[var(--background-card)] border-[var(--accent-tertiary)] focus:border-[var(--accent-primary)] text-[var(--text-primary)] mt-1"
+                  className="w-full bg-[#f2f2f2] border-[#5baed1] focus:border-[#3a8fb7] text-[#333333] mt-1 transition-all duration-200"
                 />
               </div>
               <div>
-                <label htmlFor="fechaFin" className="text-[var(--text-primary)] text-sm font-medium">
+                <label htmlFor="fechaFin" className="text-[#333333] text-sm font-medium">
                   Fecha Fin
                 </label>
                 <Input
@@ -919,13 +909,13 @@ export const OrdersPage: React.FC = () => {
                   type="date"
                   value={dateFilter.fechaFin}
                   onChange={(e) => setDateFilter({ ...dateFilter, fechaFin: e.target.value })}
-                  className="w-full bg-[var(--background-card)] border-[var(--accent-tertiary)] focus:border-[var(--accent-primary)] text-[var(--text-primary)] mt-1"
+                  className="w-full bg-[#f2f2f2] border-[#5baed1] focus:border-[#3a8fb7] text-[#333333] mt-1 transition-all duration-200"
                 />
               </div>
               <Button
                 variant="outline"
                 onClick={filterOrdersByDate}
-                className="border-[var(--accent-tertiary)] text-[var(--text-primary)] hover:bg-[var(--accent-primary)]/10"
+                className="border-[#5baed1] text-[#333333] hover:bg-[#3a8fb7]/10 transition-all duration-200"
               >
                 <Filter className="w-4 h-4 mr-2" />
                 Filtrar por Fecha
@@ -934,32 +924,42 @@ export const OrdersPage: React.FC = () => {
                 <Button
                   variant="ghost"
                   onClick={clearAllFilters}
-                  className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--accent-primary)]/10"
+                  className="text-[#5c5c5c] hover:text-[#333333] hover:bg-[#3a8fb7]/10 transition-all duration-200"
                 >
                   Limpiar filtros
                 </Button>
               )}
             </div>
-          </div>
+          </motion.div>
 
           {/* Estado de carga */}
           {isLoading && (
-            <div className="flex justify-center items-center py-20">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex justify-center items-center py-20"
+            >
               <div className="flex flex-col items-center">
-                <Loader2 className="h-10 w-10 animate-spin text-[var(--accent-primary)]" />
-                <p className="mt-4 text-[var(--text-primary)]">Cargando pedidos...</p>
+                <div className="w-16 h-16 border-4 border-t-[#3a8fb7] border-r-[#a8e6cf] border-b-[#d4f1f9] border-l-[#f2f2f2] rounded-full animate-spin mb-4"></div>
+                <p className="mt-4 text-[#333333]">Cargando pedidos...</p>
               </div>
-            </div>
+            </motion.div>
           )}
 
           {/* Sin pedidos */}
           {!isLoading && filteredOrders.length === 0 && (
-            <div className="bg-[var(--background-card)] rounded-xl shadow-sm p-8 text-center border border-[var(--accent-primary)]/10">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-[var(--accent-primary)]/10 rounded-full mb-4">
-                <ShoppingCart className="w-8 h-8 text-[var(--accent-primary)]" />
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="bg-white rounded-xl shadow-sm p-8 text-center border border-[#3a8fb7]/10"
+            >
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-[#3a8fb7]/10 rounded-full mb-4">
+                <ShoppingCart className="w-8 h-8 text-[#3a8fb7]" />
               </div>
-              <h2 className="text-xl font-bold mb-2 text-[var(--text-primary)]">No se encontraron pedidos</h2>
-              <p className="text-[var(--text-secondary)] max-w-lg mx-auto">
+              <h2 className="text-xl font-bold mb-2 text-[#333333]">No se encontraron pedidos</h2>
+              <p className="text-[#4a4a4a] max-w-lg mx-auto">
                 {searchTerm || dateFilter.fechaInicio || dateFilter.fechaFin || statusFilter !== 'all'
                   ? 'No hay pedidos que coincidan con los filtros seleccionados.' 
                   : activeTab === 'porAprobar'
@@ -975,33 +975,43 @@ export const OrdersPage: React.FC = () => {
               {(searchTerm || dateFilter.fechaInicio || dateFilter.fechaFin || statusFilter !== 'all' || activeTab !== 'todos') && (
                 <Button 
                   onClick={clearAllFilters}
-                  className="mt-4 bg-[var(--accent-primary)] hover:bg-[var(--accent-tertiary)] text-white"
+                  className="mt-4 bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white transition-all duration-200"
                 >
                   Mostrar todos los pedidos
                 </Button>
               )}
-            </div>
+            </motion.div>
           )}
 
           {/* Lista de pedidos */}
           {!isLoading && filteredOrders.length > 0 && (
             <div className="space-y-6">
-              <h2 className="text-xl font-medium mb-4 flex items-center text-[var(--text-primary)]">
+              <motion.h2 
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.5, delay: 0.2 }}
+                className="text-xl font-medium mb-4 flex items-center text-[#333333]"
+              >
                 {activeTab === 'todos' ? 'Todos los pedidos' : 
                  activeTab === 'porAprobar' ? 'Pedidos por aprobar' :
                  activeTab === 'pendientes' ? 'Pedidos pendientes' :
                  activeTab === 'aprobados' ? 'Pedidos aprobados' :
                  activeTab === 'rechazados' ? 'Pedidos rechazados' : 'Pedidos'}
-                <Badge variant="outline" className="ml-3 bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] border-[var(--accent-tertiary)]">
+                <Badge variant="outline" className="ml-3 bg-[#3a8fb7]/10 text-[#3a8fb7] border-[#5baed1]">
                   {filteredOrders.length} pedidos
                 </Badge>
-              </h2>
+              </motion.h2>
 
               {/* Vista para escritorio */}
-              <div className="hidden md:block">
-                <div className="bg-[var(--background-card)] rounded-xl shadow-sm overflow-hidden border border-[var(--accent-primary)]/10">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.5, delay: 0.3 }}
+                className="hidden md:block"
+              >
+                <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-[#3a8fb7]/10 hover:shadow-md transition-all duration-300">
                   <table className="w-full">
-                    <thead className="bg-[var(--accent-primary)]/10 text-[var(--text-primary)] border-b border-[var(--accent-primary)]/20">
+                    <thead className="bg-[#3a8fb7]/10 text-[#333333] border-b border-[#3a8fb7]/20">
                       <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
                           Pedido #
@@ -1026,45 +1036,45 @@ export const OrdersPage: React.FC = () => {
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-[var(--accent-tertiary)]/10">
+                    <tbody className="bg-white divide-y divide-[#5baed1]/10">
                       {filteredOrders.map((order) => (
                         <React.Fragment key={order._id}>
-                          <tr className="hover:bg-[var(--background-component)] transition-colors">
+                          <tr className="hover:bg-[#e8f0f3] transition-colors duration-200">
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex items-center font-medium text-[var(--text-primary)]">
-                                <Hash className="w-4 h-4 text-[var(--accent-primary)] mr-2" />
+                              <div className="flex items-center font-medium text-[#333333]">
+                                <Hash className="w-4 h-4 text-[#3a8fb7] mr-2" />
                                 {order.displayNumber}
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-[var(--text-primary)]">{formatDate(order.fecha)}</div>
-                              <div className="text-xs text-[var(--text-tertiary)]">
+                              <div className="text-[#333333]">{formatDate(order.fecha)}</div>
+                              <div className="text-xs text-[#5c5c5c]">
                                 {formatTime(order.fecha)}
                               </div>
                             </td>
                             <td className="px-6 py-4">
                               <div className="flex items-center">
-                                <Building className="w-4 h-4 text-[var(--accent-tertiary)] mr-2" />
+                                <Building className="w-4 h-4 text-[#5baed1] mr-2" />
                                 <div>
-                                  <div className="font-medium text-[var(--text-primary)]">{order.servicio}</div>
-                                  {order.seccionDelServicio && (
-                                    <div className="text-xs text-[var(--text-tertiary)] flex items-center mt-1">
+                                  <div className="font-medium text-[#333333]">{getClientName(order)}</div>
+                                  {getClientSection(order) && (
+                                    <div className="text-xs text-[#5c5c5c] flex items-center mt-1">
                                       <MapPin className="w-3 h-3 mr-1" />
-                                      {order.seccionDelServicio}
+                                      {getClientSection(order)}
                                     </div>
                                   )}
                                 </div>
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <Badge className="bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] border-[var(--accent-tertiary)]/50">
+                              <Badge className="bg-[#3a8fb7]/10 text-[#3a8fb7] border-[#5baed1]/50">
                                 {order.productos?.length || 0} items
                               </Badge>
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => toggleOrderDetails(order._id)}
-                                className="ml-2 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--accent-primary)]/10"
+                                className="ml-2 text-[#4a4a4a] hover:text-[#333333] hover:bg-[#3a8fb7]/10 transition-all duration-200"
                               >
                                 <Eye className="w-4 h-4" />
                               </Button>
@@ -1075,7 +1085,7 @@ export const OrdersPage: React.FC = () => {
                                 {renderOperarioBadge(order)}
                               </div>
                             </td>
-                            <td className="px-6 py-4 text-right whitespace-nowrap font-bold text-[var(--text-primary)]">
+                            <td className="px-6 py-4 text-right whitespace-nowrap font-bold text-[#333333]">
                               ${order.total?.toFixed(2) || '0.00'}
                             </td>
                             <td className="px-6 py-4 text-right whitespace-nowrap">
@@ -1086,7 +1096,7 @@ export const OrdersPage: React.FC = () => {
                                   size="sm"
                                   onClick={() => handleRemitoDownload(order._id)}
                                   disabled={isDownloadingRemito === order._id}
-                                  className="border-[var(--accent-tertiary)] text-[var(--text-primary)] hover:bg-[var(--accent-primary)]/10"
+                                  className="border-[#5baed1] text-[#333333] hover:bg-[#3a8fb7]/10 transition-all duration-200"
                                 >
                                   {isDownloadingRemito === order._id ? (
                                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -1096,15 +1106,13 @@ export const OrdersPage: React.FC = () => {
                                 </Button>
                                 
                                 {/* Botones de aprobación para supervisores */}
-                                {userRole === 'supervisor' && 
-                                  order.estado === OrderStatus.PENDING && 
-                                  order.metadata?.creadoPorOperario && (
+                                {canApproveOrder(order) && (
                                   <>
                                     <Button
                                       variant="outline"
                                       size="sm"
                                       onClick={() => openApprovalDialog(order._id)}
-                                      className="border-[var(--state-success)] text-[var(--state-success)] hover:bg-[var(--state-success)]/10"
+                                      className="border-[#4CAF50] text-[#4CAF50] hover:bg-[#4CAF50]/10 transition-all duration-200"
                                       disabled={approveMutation.isPending || rejectMutation.isPending}
                                     >
                                       <CheckSquare className="h-4 w-4" />
@@ -1113,7 +1121,7 @@ export const OrdersPage: React.FC = () => {
                                       variant="outline"
                                       size="sm"
                                       onClick={() => openRejectionDialog(order._id)}
-                                      className="border-[var(--state-error)] text-[var(--state-error)] hover:bg-[var(--state-error)]/10"
+                                      className="border-[#F44336] text-[#F44336] hover:bg-[#F44336]/10 transition-all duration-200"
                                       disabled={approveMutation.isPending || rejectMutation.isPending}
                                     >
                                       <XSquare className="h-4 w-4" />
@@ -1127,15 +1135,15 @@ export const OrdersPage: React.FC = () => {
                           {/* Detalles del pedido (expandido) */}
                           {orderDetailsOpen === order._id && (
                             <tr>
-                              <td colSpan={7} className="px-6 py-4 bg-[var(--background-component)]">
+                              <td colSpan={7} className="px-6 py-4 bg-[#e8f0f3]">
                                 <div className="space-y-3">
                                   <div className="flex justify-between items-start">
-                                    <h3 className="font-medium text-[var(--text-primary)]">Detalles del Pedido #{order.displayNumber}</h3>
+                                    <h3 className="font-medium text-[#333333]">Detalles del Pedido #{order.displayNumber}</h3>
                                     
                                     {/* Mostrar información de operario (si aplica) */}
                                     {order.metadata?.creadoPorOperario && (
-                                      <div className="bg-[var(--accent-tertiary)]/10 rounded-md p-2 text-xs text-[var(--text-primary)] border border-[var(--accent-tertiary)]/30">
-                                        <div className="flex items-center mb-1 text-[var(--accent-primary)]">
+                                      <div className="bg-[#5baed1]/10 rounded-md p-2 text-xs text-[#333333] border border-[#5baed1]/30">
+                                        <div className="flex items-center mb-1 text-[#3a8fb7]">
                                           <UserCheck className="h-3 w-3 mr-1" />
                                           <span className="font-medium">Pedido creado por operario</span>
                                         </div>
@@ -1148,61 +1156,59 @@ export const OrdersPage: React.FC = () => {
                                   </div>
                                   
                                   {/* Mostrar motivo de rechazo si aplica */}
-                                  {order.estado === OrderStatus.REJECTED && order.metadata?.motivoRechazo && (
-                                    <Alert className="bg-[var(--state-error)]/10 border border-[var(--state-error)]/30 mt-2">
-                                      <AlertTriangle className="h-4 w-4 text-[var(--state-error)]" />
-                                      <AlertDescription className="ml-2 text-[var(--text-primary)]">
-                                        <span className="font-bold">Motivo de rechazo:</span> {order.metadata.motivoRechazo}
+                                  {order.estado === OrderStatus.REJECTED && order.observaciones && (
+                                    <Alert className="bg-[#F44336]/10 border border-[#F44336]/30 mt-2">
+                                      <AlertTriangle className="h-4 w-4 text-[#F44336]" />
+                                      <AlertDescription className="ml-2 text-[#333333]">
+                                        <span className="font-bold">Motivo de rechazo:</span> {order.observaciones}
                                       </AlertDescription>
                                     </Alert>
                                   )}
                                   
                                   {/* Productos del pedido */}
-                                  <div className="bg-[var(--background-card)] rounded-md border border-[var(--accent-tertiary)]/20 overflow-hidden">
+                                  <div className="bg-white rounded-md border border-[#5baed1]/20 overflow-hidden shadow-sm">
                                     <table className="min-w-full">
-                                      <thead className="bg-[var(--accent-primary)]/10 border-b border-[var(--accent-tertiary)]/20">
+                                      <thead className="bg-[#3a8fb7]/10 border-b border-[#5baed1]/20">
                                         <tr>
-                                          <th className="px-4 py-2 text-left text-xs font-medium text-[var(--text-primary)] uppercase">
+                                          <th className="px-4 py-2 text-left text-xs font-medium text-[#333333] uppercase">
                                             Producto
                                           </th>
-                                          <th className="px-4 py-2 text-left text-xs font-medium text-[var(--text-primary)] uppercase">
+                                          <th className="px-4 py-2 text-left text-xs font-medium text-[#333333] uppercase">
                                             Cantidad
                                           </th>
-                                          <th className="px-4 py-2 text-right text-xs font-medium text-[var(--text-primary)] uppercase">
+                                          <th className="px-4 py-2 text-right text-xs font-medium text-[#333333] uppercase">
                                             Precio
                                           </th>
-                                          <th className="px-4 py-2 text-right text-xs font-medium text-[var(--text-primary)] uppercase">
+                                          <th className="px-4 py-2 text-right text-xs font-medium text-[#333333] uppercase">
                                             Total
                                           </th>
                                         </tr>
                                       </thead>
-                                      <tbody className="divide-y divide-[var(--accent-tertiary)]/10">
+                                      <tbody className="divide-y divide-[#5baed1]/10">
                                         {order.productos.map((item, index) => {
                                           // Extraer información del producto
-                                          const productId = typeof item.productoId === 'object'
-                                            ? item.productoId._id
-                                            : item.productoId;
-                                            
                                           const productName = typeof item.productoId === 'object' && item.productoId.nombre
                                             ? item.productoId.nombre
                                             : item.nombre || 'Producto desconocido';
                                             
-                                          const productPrice = typeof item.productoId === 'object' && item.productoId.precio
-                                            ? item.productoId.precio
-                                            : item.precio || 0;
+                                          const productPrice = item.precioUnitario !== undefined
+                                            ? item.precioUnitario
+                                            : (typeof item.productoId === 'object' && item.productoId.precio !== undefined
+                                              ? item.productoId.precio
+                                              : item.precio || 0);
                                           
                                           return (
-                                            <tr key={index} className="hover:bg-[var(--background-component)]/50">
-                                              <td className="px-4 py-3 text-[var(--text-primary)]">
+                                            <tr key={index} className="hover:bg-[#e8f0f3]/50 transition-colors duration-200">
+                                              <td className="px-4 py-3 text-[#333333]">
                                                 {productName}
                                               </td>
-                                              <td className="px-4 py-3 text-[var(--text-secondary)]">
+                                              <td className="px-4 py-3 text-[#4a4a4a]">
                                                 {item.cantidad}
                                               </td>
-                                              <td className="px-4 py-3 text-right text-[var(--text-secondary)]">
+                                              <td className="px-4 py-3 text-right text-[#4a4a4a]">
                                                 ${productPrice.toFixed(2)}
                                               </td>
-                                              <td className="px-4 py-3 text-right font-medium text-[var(--text-primary)]">
+                                              <td className="px-4 py-3 text-right font-medium text-[#333333]">
                                                 ${(productPrice * item.cantidad).toFixed(2)}
                                               </td>
                                             </tr>
@@ -1210,11 +1216,11 @@ export const OrdersPage: React.FC = () => {
                                         })}
                                         
                                         {/* Fila de total */}
-                                        <tr className="bg-[var(--accent-primary)]/5">
-                                          <td colSpan={3} className="px-4 py-3 text-right font-medium text-[var(--text-primary)]">
+                                        <tr className="bg-[#3a8fb7]/5">
+                                          <td colSpan={3} className="px-4 py-3 text-right font-medium text-[#333333]">
                                             Total:
                                           </td>
-                                          <td className="px-4 py-3 text-right font-bold text-[var(--text-primary)]">
+                                          <td className="px-4 py-3 text-right font-bold text-[#333333]">
                                             ${order.total?.toFixed(2) || '0.00'}
                                           </td>
                                         </tr>
@@ -1225,8 +1231,8 @@ export const OrdersPage: React.FC = () => {
                                   {/* Sección de notas */}
                                   {order.detalle && order.detalle.trim() !== '' && (
                                     <div className="mt-3">
-                                      <h4 className="text-sm font-medium text-[var(--text-primary)]">Notas:</h4>
-                                      <p className="text-sm text-[var(--text-secondary)] bg-[var(--background-card)] p-3 rounded-md border border-[var(--accent-tertiary)]/20 mt-1">
+                                      <h4 className="text-sm font-medium text-[#333333]">Notas:</h4>
+                                      <p className="text-sm text-[#4a4a4a] bg-white p-3 rounded-md border border-[#5baed1]/20 mt-1 shadow-sm">
                                         {order.detalle}
                                       </p>
                                     </div>
@@ -1240,160 +1246,168 @@ export const OrdersPage: React.FC = () => {
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </motion.div>
 
               {/* Vista para móvil */}
               <div className="md:hidden space-y-4">
                 {filteredOrders.map((order) => (
-                  <Card key={order._id} className="bg-[var(--background-card)] border-[var(--accent-tertiary)]/20 overflow-hidden">
-                    <CardHeader className="pb-2 bg-[var(--accent-primary)]/5 border-b border-[var(--accent-tertiary)]/20">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <CardTitle className="text-sm flex items-center text-[var(--text-primary)]">
-                            <Hash className="w-4 h-4 text-[var(--accent-primary)] mr-1" />
-                            Pedido #{order.displayNumber}
-                          </CardTitle>
-                          <p className="text-xs text-[var(--text-tertiary)] mt-1">
-                            {formatDate(order.fecha)} - {formatTime(order.fecha)}
-                          </p>
-                        </div>
-                        <div className="flex flex-col items-end">
-                          {renderStatusBadge(order.estado)}
-                          <div className="text-xs text-right mt-1">
-                            <span className="text-[var(--text-primary)] font-medium">${order.total?.toFixed(2) || '0.00'}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="pt-3 pb-2">
-                      <div className="space-y-2">
-                        {/* Datos de cliente */}
-                        <div className="flex items-start gap-2">
-                          <Building className="w-4 h-4 text-[var(--accent-tertiary)] mt-0.5" />
+                  <motion.div
+                    key={order._id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                    whileHover={{ y: -5, transition: { duration: 0.2 } }}
+                  >
+                    <Card className="bg-white border-[#5baed1]/20 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
+                      <CardHeader className="pb-2 bg-[#3a8fb7]/5 border-b border-[#5baed1]/20">
+                        <div className="flex justify-between items-start">
                           <div>
-                            <p className="text-sm font-medium text-[var(--text-primary)]">{order.servicio}</p>
-                            {order.seccionDelServicio && (
-                              <p className="text-xs text-[var(--text-tertiary)] flex items-center mt-0.5">
-                                <MapPin className="w-3 h-3 mr-1" />
-                                {order.seccionDelServicio}
-                              </p>
-                            )}
+                            <CardTitle className="text-sm flex items-center text-[#333333]">
+                              <Hash className="w-4 h-4 text-[#3a8fb7] mr-1" />
+                              Pedido #{order.displayNumber}
+                            </CardTitle>
+                            <p className="text-xs text-[#5c5c5c] mt-1">
+                              {formatDate(order.fecha)} - {formatTime(order.fecha)}
+                            </p>
+                          </div>
+                          <div className="flex flex-col items-end">
+                            {renderStatusBadge(order.estado)}
+                            <div className="text-xs text-right mt-1">
+                              <span className="text-[#333333] font-medium">${order.total?.toFixed(2) || '0.00'}</span>
+                            </div>
                           </div>
                         </div>
-                        
-                        {/* Badge de operario si aplica */}
-                        {renderOperarioBadge(order)}
-                        
-                        {/* Mostrar motivo de rechazo si aplica */}
-                        {order.estado === OrderStatus.REJECTED && order.metadata?.motivoRechazo && (
-                          <div className="mt-2 bg-[var(--state-error)]/10 border border-[var(--state-error)]/30 rounded-md p-2 text-xs text-[var(--text-primary)]">
-                            <span className="font-bold">Motivo de rechazo:</span> {order.metadata.motivoRechazo}
-                          </div>
-                        )}
-                        
-                        <div className="flex justify-between items-center mt-2">
-                          <div className="text-sm text-[var(--text-secondary)] flex items-center">
-                            <DollarSign className="h-4 w-4 mr-1" />
-                            Productos:
-                          </div>
-                          <Badge className="bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] border-[var(--accent-tertiary)]/30">
-                            {order.productos?.length || 0} items
-                          </Badge>
-                        </div>
-                      </div>
-                      
-                      {/* Detalles expandibles del pedido */}
-                      <Accordion type="single" collapsible className="mt-2">
-                        <AccordionItem value="details" className="border-t border-[var(--accent-tertiary)]/20 pt-2">
-                          <AccordionTrigger className="py-2 text-xs text-[var(--accent-primary)]">
-                            Ver detalles del pedido
-                          </AccordionTrigger>
-                          <AccordionContent>
-                            <div className="space-y-2 pt-2">
-                              {order.productos.map((item, index) => {
-                                // Extraer información del producto
-                                const productName = typeof item.productoId === 'object' && item.productoId.nombre
-                                  ? item.productoId.nombre
-                                  : item.nombre || 'Producto desconocido';
-                                  
-                                const productPrice = typeof item.productoId === 'object' && item.productoId.precio
-                                  ? item.productoId.precio
-                                  : item.precio || 0;
-                                
-                                return (
-                                  <div key={index} className="flex justify-between items-center py-1 border-b border-[var(--accent-tertiary)]/10">
-                                    <div className="text-[var(--text-primary)]">
-                                      <div className="text-sm font-medium">{productName}</div>
-                                      <div className="text-xs text-[var(--text-tertiary)]">
-                                        Cant: {item.cantidad} x ${productPrice.toFixed(2)}
-                                      </div>
-                                    </div>
-                                    <div className="text-sm font-medium text-[var(--text-primary)]">
-                                      ${(productPrice * item.cantidad).toFixed(2)}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                              
-                              {/* Notas */}
-                              {order.detalle && order.detalle.trim() !== '' && (
-                                <div className="mt-3 pt-2">
-                                  <h4 className="text-xs font-medium text-[var(--text-primary)]">Notas:</h4>
-                                  <p className="text-xs text-[var(--text-secondary)] bg-[var(--background-component)] p-2 rounded border border-[var(--accent-tertiary)]/20 mt-1">
-                                    {order.detalle}
-                                  </p>
-                                </div>
+                      </CardHeader>
+                      <CardContent className="pt-3 pb-2">
+                        <div className="space-y-2">
+                          {/* Datos de cliente */}
+                          <div className="flex items-start gap-2">
+                            <Building className="w-4 h-4 text-[#5baed1] mt-0.5" />
+                            <div>
+                              <p className="text-sm font-medium text-[#333333]">{getClientName(order)}</p>
+                              {getClientSection(order) && (
+                                <p className="text-xs text-[#5c5c5c] flex items-center mt-0.5">
+                                  <MapPin className="w-3 h-3 mr-1" />
+                                  {getClientSection(order)}
+                                </p>
                               )}
                             </div>
-                          </AccordionContent>
-                        </AccordionItem>
-                      </Accordion>
-                    </CardContent>
-                    <CardFooter className="pt-0 pb-3 flex justify-between">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleRemitoDownload(order._id)}
-                        disabled={isDownloadingRemito === order._id}
-                        className="border-[var(--accent-tertiary)] text-[var(--text-primary)] hover:bg-[var(--accent-primary)]/10"
-                      >
-                        {isDownloadingRemito === order._id ? (
-                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        ) : (
-                          <Download className="h-4 w-4 mr-2" />
-                        )}
-                        Remito
-                      </Button>
-                      
-                      {/* Botones de aprobación para supervisores en móvil */}
-                      {userRole === 'supervisor' && 
-                        order.estado === OrderStatus.PENDING && 
-                        order.metadata?.creadoPorOperario && (
-                        <div className="flex space-x-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openApprovalDialog(order._id)}
-                            className="border-[var(--state-success)] text-[var(--state-success)] hover:bg-[var(--state-success)]/10"
-                            disabled={approveMutation.isPending || rejectMutation.isPending}
-                          >
-                            <CheckSquare className="h-4 w-4 mr-1" />
-                            Aprobar
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openRejectionDialog(order._id)}
-                            className="border-[var(--state-error)] text-[var(--state-error)] hover:bg-[var(--state-error)]/10"
-                            disabled={approveMutation.isPending || rejectMutation.isPending}
-                          >
-                            <XSquare className="h-4 w-4 mr-1" />
-                            Rechazar
-                          </Button>
+                          </div>
+                          
+                          {/* Badge de operario si aplica */}
+                          {renderOperarioBadge(order)}
+                          
+                          {/* Mostrar motivo de rechazo si aplica */}
+                          {order.estado === OrderStatus.REJECTED && order.observaciones && (
+                            <div className="mt-2 bg-[#F44336]/10 border border-[#F44336]/30 rounded-md p-2 text-xs text-[#333333]">
+                              <span className="font-bold">Motivo de rechazo:</span> {order.observaciones}
+                            </div>
+                          )}
+                          
+                          <div className="flex justify-between items-center mt-2">
+                            <div className="text-sm text-[#4a4a4a] flex items-center">
+                              <FileSpreadsheet className="h-4 w-4 mr-1" />
+                              Productos:
+                            </div>
+                            <Badge className="bg-[#3a8fb7]/10 text-[#3a8fb7] border-[#5baed1]/30">
+                              {order.productos?.length || 0} items
+                            </Badge>
+                          </div>
                         </div>
-                      )}
-                    </CardFooter>
-                  </Card>
+                        
+                        {/* Detalles expandibles del pedido */}
+                        <Accordion type="single" collapsible className="mt-2">
+                          <AccordionItem value="details" className="border-t border-[#5baed1]/20 pt-2">
+                            <AccordionTrigger className="py-2 text-xs text-[#3a8fb7] hover:text-[#2a7a9f] transition-colors duration-200">
+                              Ver detalles del pedido
+                            </AccordionTrigger>
+                            <AccordionContent>
+                              <div className="space-y-2 pt-2">
+                                {order.productos.map((item, index) => {
+                                  // Extraer información del producto
+                                  const productName = typeof item.productoId === 'object' && item.productoId.nombre
+                                    ? item.productoId.nombre
+                                    : item.nombre || 'Producto desconocido';
+                                    
+                                  const productPrice = item.precioUnitario !== undefined
+                                    ? item.precioUnitario
+                                    : (typeof item.productoId === 'object' && item.productoId.precio !== undefined
+                                      ? item.productoId.precio
+                                      : item.precio || 0);
+                                  
+                                  return (
+                                    <div key={index} className="flex justify-between items-center py-1 border-b border-[#5baed1]/10">
+                                      <div className="text-[#333333]">
+                                        <div className="text-sm font-medium">{productName}</div>
+                                        <div className="text-xs text-[#5c5c5c]">
+                                          Cant: {item.cantidad} x ${productPrice.toFixed(2)}
+                                        </div>
+                                      </div>
+                                      <div className="text-sm font-medium text-[#333333]">
+                                        ${(productPrice * item.cantidad).toFixed(2)}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                                
+                                {/* Notas */}
+                                {order.detalle && order.detalle.trim() !== '' && (
+                                  <div className="mt-3 pt-2">
+                                    <h4 className="text-xs font-medium text-[#333333]">Notas:</h4>
+                                    <p className="text-xs text-[#4a4a4a] bg-[#e8f0f3] p-2 rounded border border-[#5baed1]/20 mt-1">
+                                      {order.detalle}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            </AccordionContent>
+                          </AccordionItem>
+                        </Accordion>
+                      </CardContent>
+                      <CardFooter className="pt-0 pb-3 flex justify-between">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleRemitoDownload(order._id)}
+                          disabled={isDownloadingRemito === order._id}
+                          className="border-[#5baed1] text-[#333333] hover:bg-[#3a8fb7]/10 transition-all duration-200"
+                        >
+                          {isDownloadingRemito === order._id ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <Download className="h-4 w-4 mr-2" />
+                          )}
+                          Remito
+                        </Button>
+                        
+                        {/* Botones de aprobación para supervisores en móvil */}
+                        {canApproveOrder(order) && (
+                          <div className="flex space-x-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openApprovalDialog(order._id)}
+                              className="border-[#4CAF50] text-[#4CAF50] hover:bg-[#4CAF50]/10 transition-all duration-200"
+                              disabled={approveMutation.isPending || rejectMutation.isPending}
+                            >
+                              <CheckSquare className="h-4 w-4 mr-1" />
+                              Aprobar
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openRejectionDialog(order._id)}
+                              className="border-[#F44336] text-[#F44336] hover:bg-[#F44336]/10 transition-all duration-200"
+                              disabled={approveMutation.isPending || rejectMutation.isPending}
+                            >
+                              <XSquare className="h-4 w-4 mr-1" />
+                              Rechazar
+                            </Button>
+                          </div>
+                        )}
+                      </CardFooter>
+                    </Card>
+                  </motion.div>
                 ))}
               </div>
             </div>
@@ -1403,24 +1417,24 @@ export const OrdersPage: React.FC = () => {
       
       {/* Diálogo de confirmación de aprobación */}
       <Dialog open={approvalDialogOpen} onOpenChange={setApprovalDialogOpen}>
-        <DialogContent className="sm:max-w-md bg-[var(--background-card)] border-[var(--accent-tertiary)]">
+        <DialogContent className="sm:max-w-md bg-white border-[#5baed1] shadow-xl">
           <DialogHeader>
-            <DialogTitle className="text-[var(--text-primary)] flex items-center">
-              <CheckCircle2 className="mr-2 h-5 w-5 text-[var(--state-success)]" />
+            <DialogTitle className="text-[#333333] flex items-center">
+              <CheckCircle2 className="mr-2 h-5 w-5 text-[#4CAF50]" />
               Aprobar Pedido
             </DialogTitle>
-            <DialogDescription className="text-[var(--text-tertiary)]">
+            <DialogDescription className="text-[#5c5c5c]">
               Al aprobar este pedido, se generará la orden y se procesará para su entrega.
             </DialogDescription>
           </DialogHeader>
           
           <div className="py-4">
-            <p className="text-[var(--text-primary)]">
+            <p className="text-[#333333]">
               ¿Estás seguro de que deseas aprobar este pedido?
             </p>
             
-            <div className="mt-4 bg-[var(--accent-primary)]/5 p-3 rounded-md border border-[var(--accent-primary)]/20">
-              <p className="text-sm text-[var(--text-secondary)]">
+            <div className="mt-4 bg-[#3a8fb7]/5 p-3 rounded-md border border-[#3a8fb7]/20">
+              <p className="text-sm text-[#4a4a4a]">
                 Una vez aprobado, el pedido se enviará a logística para su procesamiento y entrega. 
                 El operario será notificado de que su pedido ha sido aprobado.
               </p>
@@ -1432,7 +1446,7 @@ export const OrdersPage: React.FC = () => {
               type="button" 
               variant="outline"
               onClick={() => setApprovalDialogOpen(false)}
-              className="border-[var(--accent-tertiary)] text-[var(--text-primary)]"
+              className="border-[#5baed1] text-[#333333]"
               disabled={approveMutation.isPending}
             >
               Cancelar
@@ -1441,7 +1455,7 @@ export const OrdersPage: React.FC = () => {
               type="button"
               onClick={handleApproveOrder}
               disabled={approveMutation.isPending}
-              className="bg-[var(--state-success)] hover:bg-[var(--state-success)]/80 text-white font-medium"
+              className="bg-[#4CAF50] hover:bg-[#43A047] text-white font-medium transition-all duration-200"
             >
               {approveMutation.isPending ? (
                 <>
@@ -1461,19 +1475,19 @@ export const OrdersPage: React.FC = () => {
       
       {/* Diálogo de rechazo de pedido */}
       <Dialog open={rejectionDialogOpen} onOpenChange={setRejectionDialogOpen}>
-        <DialogContent className="sm:max-w-md bg-[var(--background-card)] border-[var(--accent-tertiary)]">
+        <DialogContent className="sm:max-w-md bg-white border-[#5baed1] shadow-xl">
           <DialogHeader>
-            <DialogTitle className="text-[var(--text-primary)] flex items-center">
-              <XSquare className="mr-2 h-5 w-5 text-[var(--state-error)]" />
+            <DialogTitle className="text-[#333333] flex items-center">
+              <XSquare className="mr-2 h-5 w-5 text-[#F44336]" />
               Rechazar Pedido
             </DialogTitle>
-            <DialogDescription className="text-[var(--text-tertiary)]">
+            <DialogDescription className="text-[#5c5c5c]">
               Por favor, proporciona un motivo para el rechazo del pedido.
             </DialogDescription>
           </DialogHeader>
           
           <div className="py-4">
-            <Label htmlFor="rejectionReason" className="text-[var(--text-primary)] mb-2 block">
+            <Label htmlFor="rejectionReason" className="text-[#333333] mb-2 block">
               Motivo del rechazo *
             </Label>
             <Textarea
@@ -1481,12 +1495,12 @@ export const OrdersPage: React.FC = () => {
               value={rejectionReason}
               onChange={(e) => setRejectionReason(e.target.value)}
               placeholder="Explica por qué estás rechazando este pedido..."
-              className="min-h-[120px] bg-[var(--background-component)] border-[var(--accent-tertiary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)]"
+              className="min-h-[120px] bg-[#f2f2f2] border-[#5baed1] text-[#333333] placeholder:text-[#5c5c5c] focus:border-[#3a8fb7] transition-all duration-200"
               required
             />
             
-            <div className="mt-4 bg-[var(--state-error)]/10 p-3 rounded-md border border-[var(--state-error)]/20">
-              <p className="text-sm text-[var(--text-secondary)]">
+            <div className="mt-4 bg-[#F44336]/10 p-3 rounded-md border border-[#F44336]/20">
+              <p className="text-sm text-[#4a4a4a]">
                 Al rechazar un pedido, se notificará al operario con el motivo proporcionado. 
                 El pedido no se procesará y los productos volverán a estar disponibles.
               </p>
@@ -1498,7 +1512,7 @@ export const OrdersPage: React.FC = () => {
               type="button" 
               variant="outline"
               onClick={() => setRejectionDialogOpen(false)}
-              className="border-[var(--accent-tertiary)] text-[var(--text-primary)]"
+              className="border-[#5baed1] text-[#333333]"
               disabled={rejectMutation.isPending}
             >
               Cancelar
@@ -1507,7 +1521,7 @@ export const OrdersPage: React.FC = () => {
               type="button"
               onClick={handleRejectOrder}
               disabled={rejectMutation.isPending || !rejectionReason.trim()}
-              className="bg-[var(--state-error)] hover:bg-[var(--state-error)]/80 text-white"
+              className="bg-[#F44336] hover:bg-[#E53935] text-white transition-all duration-200"
             >
               {rejectMutation.isPending ? (
                 <>

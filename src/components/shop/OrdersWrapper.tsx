@@ -1,45 +1,71 @@
 import React, { useEffect } from 'react';
 import { AuthProvider, ProtectedRoute } from '@/components/auth/AuthProvider';
+import { QueryProvider } from '@/providers/QueryProvider';
+import { OrdersPage } from './OrdersPage';
 import { CartProvider } from '@/providers/CartProvider';
-import { Cart } from './Cart';
 
-export const CartWrapper: React.FC = () => {
-  // Agregar clase de shop-theme al body cuando se monta el componente
+export const OrdersWrapper: React.FC = () => {
+  // Aplicar tema cuando se monta el componente
   useEffect(() => {
     // Definir variables CSS para la nueva paleta de colores
-    const applyTurquoiseTheme = () => {
-      // Variables de colores para la nueva paleta turquesa
-      document.documentElement.style.setProperty('--background-primary', '#F8FDFC');
-      document.documentElement.style.setProperty('--background-secondary', '#CFF2E4');
-      document.documentElement.style.setProperty('--background-component', '#E8F8F3');
-      document.documentElement.style.setProperty('--background-card', '#FFFFFF');
+    const applyModernTheme = () => {
+      // Colores principales de la paleta
+      document.documentElement.style.setProperty('--primary', '#3a8fb7');
+      document.documentElement.style.setProperty('--primary-light', '#5baed1');
+      document.documentElement.style.setProperty('--primary-dark', '#2a7a9f');
       
-      document.documentElement.style.setProperty('--accent-primary', '#1B9C96');
-      document.documentElement.style.setProperty('--accent-secondary', '#29696B');
-      document.documentElement.style.setProperty('--accent-tertiary', '#139692');
-      document.documentElement.style.setProperty('--accent-quaternary', '#F2A516');
+      document.documentElement.style.setProperty('--secondary', '#a8e6cf');
+      document.documentElement.style.setProperty('--secondary-light', '#c4f0de');
+      document.documentElement.style.setProperty('--secondary-dark', '#8dd4b9');
       
-      document.documentElement.style.setProperty('--state-success', '#1B9C96');
-      document.documentElement.style.setProperty('--state-warning', '#F2A516');
-      document.documentElement.style.setProperty('--state-error', '#E74C3C');
-      document.documentElement.style.setProperty('--state-info', '#84D6C8');
+      document.documentElement.style.setProperty('--accent', '#d4f1f9');
+      document.documentElement.style.setProperty('--accent-light', '#e8f7fc');
+      document.documentElement.style.setProperty('--accent-dark', '#b8e6f2');
       
-      document.documentElement.style.setProperty('--text-primary', '#0D4E4B');
-      document.documentElement.style.setProperty('--text-secondary', '#29696B');
-      document.documentElement.style.setProperty('--text-tertiary', '#4A7C79');
-      document.documentElement.style.setProperty('--text-disabled', '#A0ABA9');
+      // Colores de fondo
+      document.documentElement.style.setProperty('--background-primary', '#f2f2f2');
+      document.documentElement.style.setProperty('--background-secondary', '#e8f0f3');
+      document.documentElement.style.setProperty('--background-tertiary', '#ffffff');
+      document.documentElement.style.setProperty('--background-card', '#ffffff');
       
-      document.documentElement.style.setProperty('--gradient-main', 'linear-gradient(90deg, var(--accent-primary), var(--accent-tertiary))');
-      document.documentElement.style.setProperty('--gradient-promo', 'linear-gradient(90deg, var(--accent-quaternary), var(--accent-primary))');
-      document.documentElement.style.setProperty('--gradient-featured', 'linear-gradient(90deg, var(--accent-tertiary), var(--state-info))');
-      document.documentElement.style.setProperty('--gradient-offers', 'linear-gradient(90deg, var(--accent-quaternary), var(--accent-secondary))');
+      // Colores de texto
+      document.documentElement.style.setProperty('--text-primary', '#333333');
+      document.documentElement.style.setProperty('--text-secondary', '#4a4a4a');
+      document.documentElement.style.setProperty('--text-tertiary', '#5c5c5c');
+      document.documentElement.style.setProperty('--text-inverted', '#ffffff');
+      document.documentElement.style.setProperty('--text-disabled', '#878787');
+      
+      // Colores de estado
+      document.documentElement.style.setProperty('--state-success', '#4CAF50');
+      document.documentElement.style.setProperty('--state-warning', '#FF9800');
+      document.documentElement.style.setProperty('--state-error', '#F44336');
+      document.documentElement.style.setProperty('--state-info', '#2196F3');
+      
+      // Gradientes elegantes
+      document.documentElement.style.setProperty('--gradient-primary', 'linear-gradient(135deg, var(--primary), var(--primary-dark))');
+      document.documentElement.style.setProperty('--gradient-secondary', 'linear-gradient(135deg, var(--secondary), var(--secondary-dark))');
+      document.documentElement.style.setProperty('--gradient-accent', 'linear-gradient(135deg, var(--accent), var(--accent-dark))');
+      document.documentElement.style.setProperty('--gradient-primary-to-secondary', 'linear-gradient(135deg, var(--primary), var(--secondary))');
+      
+      // Sombras
+      document.documentElement.style.setProperty('--shadow-sm', '0 1px 2px rgba(0, 0, 0, 0.05)');
+      document.documentElement.style.setProperty('--shadow-md', '0 4px 6px rgba(0, 0, 0, 0.07)');
+      document.documentElement.style.setProperty('--shadow-lg', '0 10px 15px rgba(0, 0, 0, 0.1)');
+      document.documentElement.style.setProperty('--shadow-xl', '0 20px 25px rgba(0, 0, 0, 0.15)');
+      
+      // Bordes redondeados
+      document.documentElement.style.setProperty('--radius-sm', '0.25rem');
+      document.documentElement.style.setProperty('--radius-md', '0.5rem');
+      document.documentElement.style.setProperty('--radius-lg', '0.75rem');
+      document.documentElement.style.setProperty('--radius-xl', '1rem');
+      document.documentElement.style.setProperty('--radius-full', '9999px');
     };
 
     // Agregar la clase al body para aplicar estilos globales
     document.body.classList.add('shop-theme');
     
-    // Aplicar fondo claro y variables CSS de paleta turquesa
-    applyTurquoiseTheme();
+    // Aplicar fondo claro y variables CSS de paleta moderna
+    applyModernTheme();
     document.body.style.backgroundColor = 'var(--background-primary)';
     
     // Limpiar cuando se desmonte
@@ -63,11 +89,13 @@ export const CartWrapper: React.FC = () => {
   }, []);
 
   return (
-    <div className="shop-theme min-h-screen bg-[#F8FDFC] bg-gradient-to-br from-[#F8FDFC] via-[#E8F8F3] to-[#CFF2E4]">
+    <div className="shop-theme min-h-screen bg-gradient-to-br from-[#d4f1f9] via-[#f2f2f2] to-[#a8e6cf]">
       <AuthProvider>
         <ProtectedRoute>
-          <CartProvider>
-            <Cart />
+        <CartProvider>
+          <QueryProvider>
+            <OrdersPage />
+          </QueryProvider>
           </CartProvider>
         </ProtectedRoute>
       </AuthProvider>

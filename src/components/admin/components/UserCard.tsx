@@ -66,8 +66,13 @@ const getCreatorName = (user: User): string => {
     return user.createdBy.usuario;
   }
   
-  // Como último recurso, usar el ID truncado
-  return `ID: ${user.createdBy._id.substring(0, 8)}`;
+  // Como último recurso, usar el ID truncado si existe
+  if (user.createdBy._id) {
+    return `ID: ${user.createdBy._id.toString().substring(0, 8)}`;
+  }
+  
+  // Si no hay ID, devolver un valor por defecto
+  return 'Usuario desconocido';
 };
 
 interface UserCardProps {

@@ -90,34 +90,34 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     return text.slice(0, maxLength) + '...';
   };
 
-  // Determinar la clase de gradiente según la categoría - ACTUALIZADO con variables CSS
+  // Determinar la clase de gradiente según la categoría
   const getGradientClass = () => {
     if (product.esCombo) {
-      return 'from-[var(--accent-primary)]/80 to-[var(--accent-tertiary)]/80'; // Degradado para combos
+      return 'from-[#3a8fb7]/80 to-[#5baed1]/80'; // Degradado para combos
     } else if (product.categoria === 'limpieza') {
-      return 'from-[var(--accent-tertiary)]/80 to-[var(--accent-quaternary)]/80'; // Degradado para limpieza
+      return 'from-[#5baed1]/80 to-[#a8e6cf]/80'; // Degradado para limpieza
     }
-    return 'from-[var(--accent-secondary)]/80 to-[var(--accent-primary)]/80'; // Degradado para mantenimiento
+    return 'from-[#2a7a9f]/80 to-[#3a8fb7]/80'; // Degradado para mantenimiento
   };
 
   // Determinar el color de borde según la categoría
   const getBorderClass = () => {
     if (product.esCombo) {
-      return 'border-[var(--accent-primary)]'; // Borde para combos
+      return 'border-[#3a8fb7]'; // Borde para combos
     } else if (product.categoria === 'limpieza') {
-      return 'border-[var(--accent-tertiary)]'; // Borde para limpieza
+      return 'border-[#5baed1]'; // Borde para limpieza
     }
-    return 'border-[var(--accent-secondary)]'; // Borde para mantenimiento
+    return 'border-[#2a7a9f]'; // Borde para mantenimiento
   };
 
   // Determinar el color del botón según la categoría
   const getButtonClass = () => {
     if (product.esCombo) {
-      return 'bg-[var(--accent-primary)] hover:bg-[var(--accent-tertiary)]'; // Botón especial para combos
+      return 'bg-[#3a8fb7] hover:bg-[#2a7a9f]'; // Botón especial para combos
     } else if (product.categoria === 'limpieza') {
-      return 'bg-[var(--accent-primary)] hover:bg-[var(--accent-tertiary)]'; // Botón para limpieza
+      return 'bg-[#3a8fb7] hover:bg-[#5baed1]'; // Botón para limpieza
     }
-    return 'bg-[var(--accent-secondary)] hover:bg-[var(--accent-primary)]'; // Botón para mantenimiento
+    return 'bg-[#2a7a9f] hover:bg-[#3a8fb7]'; // Botón para mantenimiento
   };
 
   // Obtener colores y estilos para el indicador de stock
@@ -125,9 +125,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     // Para productos de mantenimiento, no mostramos stock específico
     if (product.categoria === 'mantenimiento') {
       return {
-        bg: 'bg-[var(--background-primary)]',
-        text: 'text-[var(--accent-primary)]',
-        border: 'border-[var(--accent-primary)]',
+        bg: 'bg-[#f2f2f2]',
+        text: 'text-[#3a8fb7]',
+        border: 'border-[#3a8fb7]',
         icon: <Check size={12} className="mr-1" />,
         label: 'Disponible'
       };
@@ -136,25 +136,25 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     // Para productos de limpieza - ahora usando alertaStockBajo del backend
     if (product.stock === 0) {
       return {
-        bg: 'bg-[var(--state-error)]/10',
-        text: 'text-[var(--state-error)]',
-        border: 'border-[var(--state-error)]',
+        bg: 'bg-[#F44336]/10',
+        text: 'text-[#F44336]',
+        border: 'border-[#F44336]',
         icon: <AlertTriangle size={12} className="mr-1" />,
         label: 'Sin stock'
       };
     } else if (product.alertaStockBajo) {
       return {
-        bg: 'bg-[var(--state-warning)]/10',
-        text: 'text-[var(--state-warning)]',
-        border: 'border-[var(--state-warning)]',
+        bg: 'bg-[#FF9800]/10',
+        text: 'text-[#FF9800]',
+        border: 'border-[#FF9800]',
         icon: <Package size={12} className="mr-1" />,
         label: `Stock: ${product.stock}`
       };
     } else {
       return {
-        bg: 'bg-[var(--accent-quaternary)]',
-        text: 'text-[var(--accent-primary)]',
-        border: 'border-[var(--accent-primary)]',
+        bg: 'bg-[#a8e6cf]/30',
+        text: 'text-[#2a7a9f]',
+        border: 'border-[#a8e6cf]',
         icon: <Check size={12} className="mr-1" />,
         label: `Stock: ${product.stock}`
       };
@@ -230,32 +230,32 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     };
 
     return (
-      <div className="mt-2 text-[var(--text-primary)] bg-[var(--accent-quaternary)]/70 rounded-md p-2 text-xs">
+      <div className="mt-2 text-[#333333] bg-[#d4f1f9]/50 rounded-md p-2 text-xs">
         <div className="font-medium mb-1 flex items-center justify-between">
           <div className="flex items-center">
-            <PackagePlus size={14} className="mr-1 text-[var(--accent-primary)]" />
+            <PackagePlus size={14} className="mr-1 text-[#3a8fb7]" />
             Incluye:
           </div>
           {hasMoreItems && (
             <Button
               variant="ghost"
-              className="h-5 px-1 py-0 text-[10px] text-[var(--text-primary)] hover:bg-[var(--accent-primary)]/20"
+              className="h-5 px-1 py-0 text-[10px] text-[#333333] hover:bg-[#3a8fb7]/20"
               onClick={toggleExpand}
             >
               {expandedCombo ? 'Ver menos' : `Ver todos (${comboItems.length})`}
             </Button>
           )}
         </div>
-        <ul className={`space-y-1 ${expandedCombo ? 'max-h-48' : 'max-h-16'} overflow-y-auto transition-all duration-300 scrollbar-thin scrollbar-thumb-[var(--accent-primary)]/40 scrollbar-track-transparent`}>
+        <ul className={`space-y-1 ${expandedCombo ? 'max-h-48' : 'max-h-16'} overflow-y-auto transition-all duration-300 scrollbar-thin scrollbar-thumb-[#3a8fb7]/40 scrollbar-track-transparent`}>
           {displayedItems.map((item, index) => (
             <li key={index} className="flex justify-between">
               <span className="truncate pr-2">{item.nombre}</span>
-              <span className="text-[var(--accent-primary)]">x{item.cantidad}</span>
+              <span className="text-[#3a8fb7]">x{item.cantidad}</span>
             </li>
           ))}
         </ul>
         {!expandedCombo && hasMoreItems && (
-          <div className="mt-1 text-center text-[var(--text-tertiary)] text-[10px]">
+          <div className="mt-1 text-center text-[#5c5c5c] text-[10px]">
             +{comboItems.length - initialItemsToShow} productos más
           </div>
         )}
@@ -283,7 +283,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       className="h-full product-card"
     >
       <Card 
-        className={`h-full flex flex-col bg-gradient-to-br ${getGradientClass()} border ${getBorderClass()} hover:shadow-lg hover:shadow-[var(--accent-primary)]/20 transition-all overflow-hidden`}
+        className={`h-full flex flex-col bg-gradient-to-br ${getGradientClass()} border ${getBorderClass()} hover:shadow-lg hover:shadow-[#3a8fb7]/30 transition-all duration-300 overflow-hidden`}
         onClick={onShowDetails}
       >
         {/* Imagen del producto - Optimizada para responsividad */}
@@ -315,7 +315,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                       logoImg.onerror = () => {
                         logoImg.style.display = 'none';
                         const textSpan = document.createElement('span');
-                        textSpan.className = "text-[var(--text-tertiary)]";
+                        textSpan.className = "text-[#5c5c5c]";
                         textSpan.textContent = product.esCombo ? "Combo" : "Sin imagen";
                         fallbackContainer.appendChild(textSpan);
                       };
@@ -339,7 +339,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                     
                     if (e.currentTarget.parentElement) {
                       const textSpan = document.createElement('span');
-                      textSpan.className = "text-[var(--text-tertiary)]";
+                      textSpan.className = "text-[#5c5c5c]";
                       textSpan.textContent = product.esCombo ? "Combo" : "Sin imagen";
                       e.currentTarget.parentElement.appendChild(textSpan);
                     }
@@ -351,7 +351,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             {/* Badge de combo */}
             {product.esCombo && (
               <Badge 
-                className="absolute top-2 left-2 z-10 bg-[var(--background-card)] text-[var(--accent-primary)] border border-[var(--accent-primary)]"
+                className="absolute top-2 left-2 z-10 bg-[#ffffff] text-[#3a8fb7] border border-[#3a8fb7]"
               >
                 <PackagePlus size={12} className="mr-1" />
                 Combo
@@ -363,8 +363,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               <Badge 
                 className={`absolute ${product.esCombo ? 'top-9' : 'top-2'} right-2 z-10 
                   ${product.estado === 'discontinuado' 
-                    ? 'bg-[var(--state-error)]/10 text-[var(--state-error)] border-[var(--state-error)]' 
-                    : 'bg-[var(--state-warning)]/10 text-[var(--state-warning)] border-[var(--state-warning)]'}`}
+                    ? 'bg-[#F44336]/10 text-[#F44336] border-[#F44336]' 
+                    : 'bg-[#FF9800]/10 text-[#FF9800] border-[#FF9800]'}`}
               >
                 {product.estado === 'discontinuado' ? 'Discontinuado' : 'Agotado'}
               </Badge>
@@ -390,10 +390,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             <Button
               variant="ghost"
               size="icon"
-              className={`absolute top-2 right-2 z-10 bg-white/70 hover:bg-[var(--accent-quaternary)]/20 rounded-full 
+              className={`absolute top-2 right-2 z-10 bg-white/70 hover:bg-[#a8e6cf]/30 rounded-full 
                 ${compact ? 'h-7 w-7 sm:h-8 sm:w-8' : 'h-8 w-8'} 
-                ${isFavorite ? 'text-[var(--accent-quaternary)]' : 'text-[var(--text-tertiary)]'} 
-                transition-all touch-manipulation`}
+                ${isFavorite ? 'text-[#FF9800]' : 'text-[#5c5c5c]'} 
+                transition-all duration-200 touch-manipulation`}
               onClick={(e) => {
                 e.stopPropagation();
                 onToggleFavorite();
@@ -409,14 +409,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {/* Badge de categoría - Responsivo */}
           <Badge 
             variant="outline" 
-            className={`mb-1 sm:mb-2 text-xs border-[var(--accent-primary)] text-[var(--text-primary)] bg-white/60
+            className={`mb-1 sm:mb-2 text-xs border-[#3a8fb7] text-[#333333] bg-white/60
               ${compact ? 'hidden xs:inline-flex' : ''} category-badge ${product.categoria === 'mantenimiento' ? 'maintenance' : 'cleaning'}`}
           >
             {product.subCategoria || product.categoria}
           </Badge>
 
           {/* Nombre del producto - Con tamaño adaptable */}
-          <h3 className={`font-medium line-clamp-1 text-[var(--text-primary)] 
+          <h3 className={`font-medium line-clamp-1 text-[#333333] 
             ${compact ? 'text-sm sm:text-base' : 'text-base sm:text-lg'} mb-1`}>
             {product.nombre}
           </h3>
@@ -424,14 +424,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {/* Descripción - Con expansión controlada */}
           {product.descripcion && (
             <div className="relative">
-              <p className={`text-sm text-[var(--text-secondary)] ${showDescription ? '' : 'line-clamp-2'} 
+              <p className={`text-sm text-[#4a4a4a] ${showDescription ? '' : 'line-clamp-2'} 
                 ${compact ? 'text-xs sm:text-sm mb-1' : 'mb-1 sm:mb-2'}`}>
                 {product.descripcion}
               </p>
               {product.descripcion.length > 100 && (
                 <Button
                   variant="ghost"
-                  className="absolute bottom-0 right-0 h-6 px-1 py-0.5 text-xs text-[var(--text-tertiary)] hover:bg-[var(--accent-primary)]/20 hover:text-[var(--text-primary)]"
+                  className="absolute bottom-0 right-0 h-6 px-1 py-0.5 text-xs text-[#5c5c5c] hover:bg-[#3a8fb7]/20 hover:text-[#333333]"
                   onClick={toggleDescription}
                   aria-label={showDescription ? "Mostrar menos" : "Mostrar más"}
                 >
@@ -445,7 +445,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {product.esCombo && renderComboContent()}
 
           {/* Precio - Con formato adaptable */}
-          <div className={`font-bold text-[var(--accent-quaternary)] ${compact ? 'text-base sm:text-lg mt-1' : 'text-xl mt-2'}`}>
+          <div className={`font-bold text-[#FFFFFF] ${compact ? 'text-base sm:text-lg mt-1' : 'text-xl mt-2'}`}>
             ${product.precio.toFixed(2)}
           </div>
         </CardContent>
@@ -458,7 +458,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className={`${compact ? 'h-8 w-8 sm:h-8 sm:w-8' : 'h-8 w-8'} p-0 text-[var(--text-primary)] hover:text-[var(--accent-primary)] hover:bg-[var(--accent-quaternary)] touch-manipulation`}
+                    className={`${compact ? 'h-8 w-8 sm:h-8 sm:w-8' : 'h-8 w-8'} p-0 text-[#333333] hover:text-[#3a8fb7] hover:bg-[#d4f1f9]/60 touch-manipulation`}
                     onClick={(e) => {
                       e.stopPropagation();
                       handleQuantityChange(quantity - 1);
@@ -474,13 +474,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                     value={quantity}
                     onChange={(e) => handleQuantityChange(parseInt(e.target.value) || 1)}
                     onClick={(e) => e.stopPropagation()}
-                    className={`${compact ? 'w-10 sm:w-14 h-8' : 'w-14 h-8'} text-center p-0 border-0 bg-transparent focus:ring-0 text-[var(--text-primary)]`}
+                    className={`${compact ? 'w-10 sm:w-14 h-8' : 'w-14 h-8'} text-center p-0 border-0 bg-transparent focus:ring-0 text-[#333333]`}
                     aria-label="Cantidad"
                   />
                   <Button
                     variant="ghost"
                     size="sm"
-                    className={`${compact ? 'h-8 w-8 sm:h-8 sm:w-8' : 'h-8 w-8'} p-0 text-[var(--text-primary)] hover:text-[var(--accent-primary)] hover:bg-[var(--accent-quaternary)] touch-manipulation`}
+                    className={`${compact ? 'h-8 w-8 sm:h-8 sm:w-8' : 'h-8 w-8'} p-0 text-[#333333] hover:text-[#3a8fb7] hover:bg-[#d4f1f9]/60 touch-manipulation`}
                     onClick={(e) => {
                       e.stopPropagation();
                       handleQuantityChange(quantity + 1);
@@ -491,7 +491,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                   </Button>
                 </div>
                 <Button
-                  className={`w-full ${getButtonClass()} text-white ${compact ? 'text-xs sm:text-sm py-1 h-8 sm:h-9' : 'h-9 sm:h-10'} touch-manipulation shadow-md hover:shadow-lg hover:shadow-[var(--accent-primary)]/30 transition-all duration-300`}
+                  className={`w-full ${getButtonClass()} text-white ${compact ? 'text-xs sm:text-sm py-1 h-8 sm:h-9' : 'h-9 sm:h-10'} touch-manipulation shadow-md hover:shadow-lg hover:shadow-[#3a8fb7]/30 transition-all duration-300`}
                   onClick={(e) => {
                     e.stopPropagation();
                     handleAddToCart();
@@ -507,7 +507,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             ) : (
               <Button
                 className={`w-full ${getButtonClass()} group transition-all duration-300 text-white 
-                  ${compact ? 'text-xs sm:text-sm py-1 h-8 sm:h-9' : 'h-9 sm:h-10'} touch-manipulation shadow-md hover:shadow-lg hover:shadow-[var(--accent-primary)]/30`}
+                  ${compact ? 'text-xs sm:text-sm py-1 h-8 sm:h-9' : 'h-9 sm:h-10'} touch-manipulation shadow-md hover:shadow-lg hover:shadow-[#3a8fb7]/30`}
                 onClick={(e) => {
                   e.stopPropagation();
                   setShowQuantitySelector(true);
@@ -521,7 +521,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           ) : (
             <Button
               disabled
-              className={`w-full bg-[var(--text-disabled)] text-white cursor-not-allowed 
+              className={`w-full bg-[#878787] text-white cursor-not-allowed 
                 ${compact ? 'text-xs sm:text-sm py-1 h-8 sm:h-9' : 'h-9 sm:h-10'}`}
               aria-label="Sin stock disponible"
             >
@@ -539,7 +539,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="absolute bottom-2 right-2 h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-white/70 hover:bg-[var(--accent-primary)]/60 text-[var(--accent-primary)] hover:text-white touch-manipulation"
+                  className="absolute bottom-2 right-2 h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-white/70 hover:bg-[#3a8fb7]/80 text-[#3a8fb7] hover:text-white touch-manipulation transition-all duration-200"
                   onClick={(e) => {
                     e.stopPropagation();
                     onShowDetails();
@@ -549,7 +549,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                   <Info size={compact ? 14 : 16} />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent className="bg-white border-[var(--accent-primary)] text-[var(--text-primary)]">
+              <TooltipContent className="bg-white border-[#3a8fb7] text-[#333333]">
                 <p>Ver detalles</p>
               </TooltipContent>
             </Tooltip>

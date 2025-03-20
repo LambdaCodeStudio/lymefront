@@ -9,49 +9,57 @@ const { title = 'Tienda Lyme - Productos de Calidad' } = Astro.props;
 ---
 
 <MainLayout title={title}>
-  <!-- Fondo actualizado con tonos de Lyme -->
-  <div class="min-h-screen bg-gradient-to-br from-[#0F172A] via-[#00701A]/90 to-[#0F172A] text-white shop-theme !important">
+  <!-- Fondo actualizado con la nueva paleta de colores -->
+  <div class="min-h-screen bg-gradient-to-br from-[#d4f1f9] via-[#f2f2f2] to-[#a8e6cf] shop-theme !important">
     <slot />
   </div>
 </MainLayout>
 
 <style is:global>
-  /* Variables de Lyme definidas en shop-global.css */
+  /* Variables con la nueva paleta de colores */
   :root {
     /* Colores primarios */
-    --lyme-primary-dark: #00701A;
-    --lyme-primary-medium: #7CB342;
-    --lyme-primary-light: #AED581;
-    --lyme-primary-lighter: #E8F5E9;
+    --lyme-primary-dark: #2a7a9f;
+    --lyme-primary-medium: #3a8fb7;
+    --lyme-primary-light: #5baed1;
+    --lyme-primary-lighter: #d4f1f9;
+    
+    /* Colores secundarios */
+    --lyme-secondary-dark: #8dd4b9;
+    --lyme-secondary-medium: #a8e6cf;
+    --lyme-secondary-light: #c4f0de;
     
     /* Colores de interfaz */
-    --lyme-ui-background: #0F172A;
-    --lyme-ui-card: rgba(30, 41, 59, 0.7);
-    --lyme-ui-border: #2A82C7;
+    --lyme-ui-background: #f2f2f2;
+    --lyme-ui-card: #ffffff;
+    --lyme-ui-border: #d4f1f9;
     
     /* Colores de texto */
-    --lyme-text-primary: #F8F9FA;
-    --lyme-text-secondary: #CED4DA;
-    --lyme-text-muted: #6C757D;
+    --lyme-text-primary: #333333;
+    --lyme-text-secondary: #4a4a4a;
+    --lyme-text-muted: #5c5c5c;
     
     /* Colores de estado */
-    --lyme-state-success: #2E7D32;
-    --lyme-state-warning: #FF6B35;
-    --lyme-state-danger: #D32F2F;
-    --lyme-state-info: #2A82C7;
+    --lyme-state-success: #4CAF50;
+    --lyme-state-warning: #FF9800;
+    --lyme-state-danger: #F44336;
+    --lyme-state-info: #2196F3;
   }
 
-  /* Force theme for all shop pages with Lyme colors */
+  /* Force theme for all shop pages with nueva palette */
   body {
     background-color: var(--lyme-ui-background) !important;
     color: var(--lyme-text-primary) !important;
   }
   
   /* Ensure all cards and UI elements have proper contrast */
-  .card, .bg-white, .bg-gray-100, .bg-gray-200 {
+  .card, .bg-white {
     background-color: var(--lyme-ui-card) !important;
     border-color: var(--lyme-ui-border) !important;
-    backdrop-filter: blur(10px);
+  }
+  
+  .bg-gray-100, .bg-gray-200 {
+    background-color: var(--lyme-ui-background) !important;
   }
   
   /* Update text colors for better readability with new palette */
@@ -69,32 +77,32 @@ const { title = 'Tienda Lyme - Productos de Calidad' } = Astro.props;
   
   /* Additional styles for consistent theming */
   .btn-primary, .bg-primary {
-    background-color: var(--lyme-primary-dark) !important;
-    border-color: var(--lyme-primary-dark) !important;
+    background-color: var(--lyme-primary-medium) !important;
+    border-color: var(--lyme-primary-medium) !important;
   }
   
   .btn-secondary, .bg-secondary {
-    background-color: var(--lyme-state-warning) !important;
-    border-color: var(--lyme-state-warning) !important;
+    background-color: var(--lyme-secondary-medium) !important;
+    border-color: var(--lyme-secondary-medium) !important;
   }
   
   .text-primary {
-    color: var(--lyme-primary-dark) !important;
+    color: var(--lyme-primary-medium) !important;
   }
   
   .text-secondary {
-    color: var(--lyme-state-warning) !important;
+    color: var(--lyme-secondary-medium) !important;
   }
   
   /* Override específico para elementos del ShopHome */
   .product-card {
-    background-color: rgba(30, 41, 59, 0.7) !important;
+    background-color: var(--lyme-ui-card) !important;
     border-color: var(--lyme-ui-border) !important;
   }
   
   /* Ensure inputs and form elements match the theme */
   input, select, textarea {
-    background-color: rgba(51, 65, 85, 0.5) !important;
+    background-color: var(--lyme-ui-card) !important;
     border-color: var(--lyme-ui-border) !important;
     color: var(--lyme-text-primary) !important;
   }
@@ -103,15 +111,15 @@ const { title = 'Tienda Lyme - Productos de Calidad' } = Astro.props;
     color: var(--lyme-text-muted) !important;
   }
   
-  /* Mantener el texto blanco en los botones oscuros */
-  .bg-[#00701A], .bg-[#7CB342], .from-[#00701A], .to-[#7CB342], 
-  .bg-gradient-to-br.from-\[\#00701A\] {
+  /* Mantener el texto oscuro en los botones claros */
+  .bg-[#d4f1f9], .bg-[#a8e6cf], .from-[#d4f1f9], .to-[#a8e6cf], 
+  .bg-gradient-to-br.from-\[\#d4f1f9\] {
     color: var(--lyme-text-primary) !important;
   }
   
-  /* Botones con fondo claro deben tener texto oscuro */
-  .bg-[#E8F5E9] {
-    color: var(--lyme-primary-dark) !important;
+  /* Botones con fondo oscuro deben tener texto claro */
+  .bg-[#3a8fb7], .bg-[#2a7a9f] {
+    color: white !important;
   }
   
   /* Dialog/Modal styling */
@@ -128,40 +136,28 @@ const { title = 'Tienda Lyme - Productos de Calidad' } = Astro.props;
   }
   
   th, td {
-    border-color: rgba(124, 179, 66, 0.3) !important;
+    border-color: rgba(58, 143, 183, 0.3) !important;
   }
   
   /* Shadow effects for modern look */
   .shadow, .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl {
-    --tw-shadow-color: rgba(0, 112, 26, 0.15) !important;
+    --tw-shadow-color: rgba(58, 143, 183, 0.15) !important;
   }
   
   /* Ajustes para asegurar compatibilidad con ShopHome */
   .bg-gradient-to-r.from-\[\#00888A\].to-\[\#50C3AD\],
   .bg-gradient-to-r.from-\[\#00701A\].to-\[\#7CB342\] {
-    background: linear-gradient(to right, var(--lyme-primary-dark), var(--lyme-primary-medium)) !important;
+    background: linear-gradient(to right, var(--lyme-primary-medium), var(--lyme-secondary-medium)) !important;
   }
   
-  /* Mantener textos en blanco dentro de elementos con fondos oscuros */
-  .bg-\[\#00701A\]\/20 .text-white,
-  .bg-gradient-to-br.from-\[\#00701A\] .text-white,
-  .bg-gradient-to-br.from-\[\#7CB342\] .text-white {
-    color: var(--lyme-text-primary) !important;
-  }
-  
-  /* Asegurar que los textos dentro de elementos con fondos claros son oscuros */
-  .bg-\[\#E8F5E9\] {
-    color: var(--lyme-primary-dark) !important;
-  }
-
-  /* Custom scrollbar para tema oscuro */
+  /* Custom scrollbar para el tema */
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
 
   ::-webkit-scrollbar-track {
-    background: rgba(30, 41, 59, 0.5);
+    background: var(--lyme-ui-background);
   }
 
   ::-webkit-scrollbar-thumb {

@@ -14,7 +14,10 @@ import {
   Loader2,
   ArrowUpDown,
   Filter,
-  X
+  X,
+  ChevronRight,
+  Check,
+  Trash2
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -32,26 +35,28 @@ import {
   SheetHeader,
   SheetTitle,
   SheetTrigger,
+  SheetFooter,
 } from "@/components/ui/sheet";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-// Importación segura de useNotification
+// Safe import of useNotification
 let useNotification;
 try {
   useNotification = require('@/context/NotificationContext').useNotification;
 } catch (e) {
-  console.warn('NotificationContext no disponible, las notificaciones estarán desactivadas');
-  // Crear un hook de reemplazo que devuelve un objeto con una función vacía
+  console.warn('NotificationContext not available, notifications will be disabled');
+  // Create a replacement hook that returns an object with an empty function
   useNotification = () => ({
     addNotification: (message, type) => {
-      console.log(`Notificación (${type}): ${message}`);
+      console.log(`Notification (${type}): ${message}`);
     }
   });
 }
 
-// Tipo para los productos
+// Type for products
 interface Product {
   _id: string;
   nombre: string;
@@ -73,23 +78,23 @@ interface Product {
   };
 }
 
-// Componente principal
+// Main component
 export const ShopHome: React.FC = () => {
   const { addItem } = useCartContext();
   const queryClient = useQueryClient();
 
-  // Uso seguro de notificaciones
+  // Safe use of notifications
   let notificationHook;
   try {
     notificationHook = typeof useNotification === 'function' ? useNotification() : { addNotification: null };
   } catch (e) {
-    console.warn('Error al usar useNotification:', e);
+    console.warn('Error using useNotification:', e);
     notificationHook = { addNotification: null };
   }
 
   const { addNotification } = notificationHook;
 
-  // Estados principales
+  // Main states
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -97,8 +102,9 @@ export const ShopHome: React.FC = () => {
   const [favorites, setFavorites] = useState<string[]>([]);
   const [showFavorites, setShowFavorites] = useState(false);
   const [sortOrder, setSortOrder] = useState<'price-asc' | 'price-desc' | 'name-asc' | 'name-desc' | 'newest'>('newest');
+  const [activeTab, setActiveTab] = useState('all');
   
-  // Estados para filtros avanzados
+  // States for advanced filters
   const [marcas, setMarcas] = useState<string[]>([]);
   const [selectedMarcas, setSelectedMarcas] = useState<string[]>([]);
   const [proveedores, setProveedores] = useState<string[]>([]);
@@ -107,15 +113,15 @@ export const ShopHome: React.FC = () => {
   const [maxPrecio, setMaxPrecio] = useState<number>(100000);
   const [showOnlyStock, setShowOnlyStock] = useState<boolean>(false);
   
-  // Estados para paginación local
+  // States for local pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
   
-  // Estados para información del usuario
+  // States for user information
   const [userSecciones, setUserSecciones] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   
-  // Efecto para recuperar información de usuario y favoritos
+  // Effect to retrieve user information and favorites
   useEffect(() => {
     const storedSecciones = localStorage.getItem('userSecciones');
     const storedRole = localStorage.getItem('userRole');
@@ -123,7 +129,7 @@ export const ShopHome: React.FC = () => {
     if (storedSecciones) {
       setUserSecciones(storedSecciones);
     } else {
-      // Si no está en localStorage, intentamos obtenerlo de la API
+      // If not in localStorage, we try to get it from the API
       fetchUserData();
     }
     
@@ -131,22 +137,27 @@ export const ShopHome: React.FC = () => {
       setUserRole(storedRole);
     }
     
-    // Cargar favoritos de localStorage
+    // Load favorites from localStorage
     const storedFavorites = localStorage.getItem('favorites');
     if (storedFavorites) {
       try {
         setFavorites(JSON.parse(storedFavorites));
       } catch (error) {
-        console.error('Error al cargar favoritos:', error);
+        console.error('Error loading favorites:', error);
         localStorage.removeItem('favorites');
       }
     }
 
-    // Verificar si hay filtro por categoría en la URL
+    // Check if there is a category filter in the URL
     const params = new URLSearchParams(window.location.search);
     const categoryParam = params.get('category');
     if (categoryParam) {
       setSelectedCategory(categoryParam);
+      
+      // If there's a category in the URL, set it as the active tab too
+      if (categoryParam === 'limpieza' || categoryParam === 'mantenimiento') {
+        setActiveTab(categoryParam);
+      }
     }
 
     const subcategoryParam = params.get('subcategory');
@@ -157,15 +168,21 @@ export const ShopHome: React.FC = () => {
     const viewParam = params.get('view');
     if (viewParam === 'favorites') {
       setShowFavorites(true);
+      setActiveTab('favorites');
+    }
+    
+    const searchParam = params.get('search');
+    if (searchParam) {
+      setSearchTerm(searchParam);
     }
   }, []);
 
-  // Obtener datos del usuario
+  // Get user data
   const fetchUserData = async () => {
     try {
       const token = getAuthToken();
       if (!token) {
-        throw new Error('No hay token de autenticación');
+        throw new Error('No authentication token');
       }
 
       const response = await fetch('http://localhost:3000/api/auth/me', {
@@ -177,7 +194,7 @@ export const ShopHome: React.FC = () => {
       if (response.ok) {
         const userData = await response.json();
         
-        // Guardar en localStorage y estado
+        // Save to localStorage and state
         if (userData.secciones) {
           localStorage.setItem('userSecciones', userData.secciones);
           setUserSecciones(userData.secciones);
@@ -189,24 +206,24 @@ export const ShopHome: React.FC = () => {
         }
       }
     } catch (error) {
-      console.error('Error al obtener datos del usuario:', error);
+      console.error('Error getting user data:', error);
     }
   };
 
-  // Función para obtener TODOS los productos de una vez
+  // Function to get ALL products at once
   const fetchAllProducts = async () => {
     const token = getAuthToken();
     if (!token) {
-      throw new Error('No hay token de autenticación');
+      throw new Error('No authentication token');
     }
   
-    // Determinar filtros de categoría según los permisos del usuario
+    // Determine category filters according to user permissions
     let categoryFilter = '';
     if (userSecciones && userSecciones !== 'ambos') {
       categoryFilter = `&category=${userSecciones}`;
     }
     
-    // Usar un límite grande para intentar obtener todos los productos
+    // Use a large limit to try to get all products
     const limit = 1000;
     const url = `http://localhost:3000/api/producto?page=1&limit=${limit}${categoryFilter}`;
     
@@ -225,36 +242,36 @@ export const ShopHome: React.FC = () => {
         localStorage.removeItem('userRole');
         localStorage.removeItem('userSecciones');
         window.location.href = '/login';
-        throw new Error('Sesión expirada');
+        throw new Error('Session expired');
       }
-      throw new Error(`Error al cargar productos (${response.status})`);
+      throw new Error(`Error loading products (${response.status})`);
     }
   
     const data = await response.json();
     
-    // Procesar la respuesta según su formato
+    // Process the response according to its format
     if (data && data.items && Array.isArray(data.items)) {
       return procesarProductos(data.items);
     } else if (Array.isArray(data)) {
       return procesarProductos(data);
     } else {
-      console.error('Formato de respuesta inesperado:', data);
-      throw new Error('Formato de respuesta inesperado');
+      console.error('Unexpected response format:', data);
+      throw new Error('Unexpected response format');
     }
   };
 
-  // Usar React Query para obtener todos los productos
+  // Use React Query to get all products
   const { data: allProducts = [], isLoading, error, refetch } = useQuery({
     queryKey: ['allProducts', userSecciones],
     queryFn: fetchAllProducts,
-    staleTime: 5 * 60 * 1000, // 5 minutos
+    staleTime: 5 * 60 * 1000, // 5 minutes
     refetchOnWindowFocus: false,
   });
 
-  // Extraer marcas y proveedores únicos para filtros
+  // Extract unique brands and suppliers for filters
   useEffect(() => {
     if (allProducts.length) {
-      // Extraer marcas únicas
+      // Extract unique brands
       const uniqueMarcas = Array.from(
         new Set(
           allProducts
@@ -265,7 +282,7 @@ export const ShopHome: React.FC = () => {
       
       setMarcas(uniqueMarcas.sort());
       
-      // Extraer proveedores únicos
+      // Extract unique suppliers
       const uniqueProveedores = Array.from(
         new Set(
           allProducts
@@ -276,10 +293,10 @@ export const ShopHome: React.FC = () => {
       
       setProveedores(uniqueProveedores.sort());
       
-      // Determinar precio máximo para el slider
+      // Determine maximum price for the slider
       const maxPrice = Math.max(
         ...allProducts.map(p => p.precio), 
-        100 // Valor mínimo por defecto
+        100 // Minimum default value
       );
       
       setMaxPrecio(maxPrice);
@@ -287,27 +304,27 @@ export const ShopHome: React.FC = () => {
     }
   }, [allProducts]);
 
-  // Procesar productos según permisos
+  // Process products according to permissions
   const procesarProductos = (data: Product[]): Product[] => {
-    // Filtrado por sección según permisos
-    let productosFiltrados = data;
+    // Filter by section according to permissions
+    let filteredProducts = data;
     
     if (userSecciones && userSecciones !== 'ambos') {
-      productosFiltrados = data.filter(producto => 
-        producto.categoria === userSecciones
+      filteredProducts = data.filter(product => 
+        product.categoria === userSecciones
       );
     }
     
-    return productosFiltrados;
+    return filteredProducts;
   };
 
-  // Efecto para filtrar productos cuando cambian los filtros o los productos
+  // Effect to filter products when filters or products change
   useEffect(() => {
     if (!allProducts.length) return;
 
     let result = [...allProducts];
 
-    // Filtrar por búsqueda
+    // Filter by search
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
       result = result.filter(product =>
@@ -319,58 +336,63 @@ export const ShopHome: React.FC = () => {
       );
     }
 
-    // Filtrar por categoría
+    // Filter by tab (category)
+    if (activeTab !== 'all' && activeTab !== 'favorites') {
+      result = result.filter(product => product.categoria === activeTab);
+    }
+    
+    // Filter by category
     if (selectedCategory !== 'all') {
       result = result.filter(product => product.categoria === selectedCategory);
     }
     
-    // Filtrar por subcategoría
+    // Filter by subcategory
     if (selectedSubcategory !== 'all') {
       result = result.filter(product => product.subCategoria === selectedSubcategory);
     }
     
-    // Filtrar por marcas seleccionadas
+    // Filter by selected brands
     if (selectedMarcas.length > 0) {
       result = result.filter(product => 
         product.marca && selectedMarcas.includes(product.marca)
       );
     }
     
-    // Filtrar por proveedores seleccionados
+    // Filter by selected suppliers
     if (selectedProveedores.length > 0) {
       result = result.filter(product => 
         product.proveedor?.nombre && selectedProveedores.includes(product.proveedor.nombre)
       );
     }
     
-    // Filtrar por rango de precio
+    // Filter by price range
     result = result.filter(product => 
       product.precio >= precioRange[0] && product.precio <= precioRange[1]
     );
     
-    // Filtrar por stock disponible
+    // Filter by available stock
     if (showOnlyStock) {
       result = result.filter(product => product.stock > 0);
     }
 
-    // Filtrar por favoritos
-    if (showFavorites) {
+    // Filter by favorites
+    if (showFavorites || activeTab === 'favorites') {
       result = result.filter(product => favorites.includes(product._id));
     }
 
-    // Solo productos con stock para limpieza, mantenimiento no tiene restricción
+    // Only products with stock for cleaning, maintenance has no restriction
     if (!showOnlyStock) {
       result = result.filter(product => 
-        // Para productos de mantenimiento, no filtramos por stock
+        // For maintenance products, we don't filter by stock
         product.categoria === 'mantenimiento' || product.stock > 0
       );
     }
     
-    // Ordenar según el criterio seleccionado
+    // Sort according to the selected criteria
     result = sortProducts(result, sortOrder);
 
     setFilteredProducts(result);
-    setCurrentPage(1); // Reiniciar a la primera página al cambiar filtros
+    setCurrentPage(1); // Reset to the first page when changing filters
   }, [
     allProducts, 
     searchTerm, 
@@ -382,10 +404,11 @@ export const ShopHome: React.FC = () => {
     showOnlyStock,
     showFavorites, 
     favorites, 
-    sortOrder
+    sortOrder,
+    activeTab
   ]);
 
-  // Función para ordenar productos
+  // Function to sort products
   const sortProducts = (items: Product[], order: string) => {
     const sorted = [...items];
     
@@ -401,23 +424,23 @@ export const ShopHome: React.FC = () => {
       case 'newest':
       default:
         return sorted.sort((a, b) => {
-          // Si tenemos fechas de creación, usarlas para ordenar
+          // If we have creation dates, use them to sort
           if (a.createdAt && b.createdAt) {
             return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
           }
-          return 0; // Sin cambios si no hay fechas
+          return 0; // No changes if there are no dates
         });
     }
   };
 
-  // Actualizar manualmente los productos
+  // Manually update products
   const handleManualRefresh = () => {
-    // Limpiar caché y recargar
+    // Clear cache and reload
     queryClient.invalidateQueries(['allProducts']);
     refetch();
   };
 
-  // Alternar favorito
+  // Toggle favorite
   const toggleFavorite = (productId: string) => {
     const newFavorites = favorites.includes(productId)
       ? favorites.filter(id => id !== productId)
@@ -449,7 +472,7 @@ export const ShopHome: React.FC = () => {
     }
   };
   
-  // Limpiar todos los filtros
+  // Clean all filters
   const clearAllFilters = () => {
     setSelectedCategory('all');
     setSelectedSubcategory('all');
@@ -458,106 +481,39 @@ export const ShopHome: React.FC = () => {
     setPrecioRange([0, maxPrecio]);
     setShowOnlyStock(false);
     setSearchTerm('');
-    setShowFavorites(false);
     setSortOrder('newest');
   };
-
-  // Determinar qué categorías debemos mostrar según permisos
-  const renderCategoriasDestacadas = () => {
-    if (showFavorites || selectedCategory !== 'all') return null;
-    
-    const categorias = [];
-    
-    // Categoría Limpieza (solo si tiene acceso)
-    if (userSecciones === 'limpieza' || userSecciones === 'ambos') {
-      categorias.push(
-        <Card key="limpieza" className="bg-gradient-to-br from-[var(--accent-primary)] to-[var(--accent-tertiary)] border-[var(--background-secondary)] hover:shadow-lg hover:shadow-[var(--accent-primary)]/20 transition-all cursor-pointer group overflow-hidden text-white">
-          <CardContent className="p-6 flex items-center justify-between">
-            <div>
-              <h3 className="text-xl font-semibold mb-1">Limpieza</h3>
-              <p className="text-white mb-4">Productos para mantener todo impecable</p>
-              <Button
-                size="sm"
-                className="bg-white hover:bg-[var(--background-secondary)] text-[var(--accent-primary)] font-medium"
-                onClick={() => setSelectedCategory('limpieza')}
-              >
-                Ver productos
-              </Button>
-            </div>
-            <div className="text-white group-hover:scale-110 transition-transform">
-              <Sparkles className="h-16 w-16" />
-            </div>
-          </CardContent>
-        </Card>
-      );
-    }
-    
-    // Categoría Mantenimiento (solo si tiene acceso)
-    if (userSecciones === 'mantenimiento' || userSecciones === 'ambos') {
-      categorias.push(
-        <Card key="mantenimiento" className="bg-gradient-to-br from-[var(--accent-secondary)] to-[var(--accent-tertiary)] border-[var(--background-secondary)] hover:shadow-lg hover:shadow-[var(--accent-secondary)]/20 transition-all cursor-pointer group overflow-hidden text-white">
-          <CardContent className="p-6 flex items-center justify-between">
-            <div>
-              <h3 className="text-xl font-semibold mb-1">Mantenimiento</h3>
-              <p className="text-white mb-4">Todo para reparaciones y proyectos</p>
-              <Button
-                size="sm"
-                className="bg-white hover:bg-[var(--background-secondary)] text-[var(--accent-secondary)] font-medium"
-                onClick={() => setSelectedCategory('mantenimiento')}
-              >
-                Ver productos
-              </Button>
-            </div>
-            <div className="text-white group-hover:scale-110 transition-transform">
-              <Wrench className="h-16 w-16" />
-            </div>
-          </CardContent>
-        </Card>
-      );
-    }
-    
-    // Siempre mostrar carrito
-    categorias.push(
-      <Card key="carrito" className="bg-gradient-to-br from-[var(--accent-quaternary)] to-[var(--accent-tertiary)] border-[var(--background-secondary)] hover:shadow-lg hover:shadow-[var(--accent-quaternary)]/20 transition-all cursor-pointer group overflow-hidden text-white">
-        <CardContent className="p-6 flex items-center justify-between">
-          <div>
-            <h3 className="text-xl font-semibold mb-1">Mi carrito</h3>
-            <p className="text-white mb-4">Revisa tus productos seleccionados</p>
-            <Button
-              size="sm"
-              className="bg-white hover:bg-[var(--background-secondary)] text-[var(--accent-quaternary)] font-medium"
-              onClick={() => window.location.href = '/cart'}
-            >
-              Ver carrito
-            </Button>
-          </div>
-          <div className="text-white group-hover:scale-110 transition-transform">
-            <ShoppingCart className="h-16 w-16" />
-          </div>
-        </CardContent>
-      </Card>
-    );
-    
-    // Determinar layout según número de categorías
-    const gridCols = categorias.length === 1 ? "grid-cols-1" :
-                    categorias.length === 2 ? "grid-cols-1 md:grid-cols-2" :
-                    "grid-cols-1 md:grid-cols-3";
-    
-    return (
-      <div className={`grid ${gridCols} gap-4 mb-8`}>
-        {categorias}
-      </div>
-    );
-  };
   
-  // Obtener subcategorías para la categoría seleccionada
-  const getSubcategories = () => {
-    if (selectedCategory === 'all') return [];
+  // Handle tab change
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
     
+    if (value === 'favorites') {
+      setShowFavorites(true);
+    } else {
+      setShowFavorites(false);
+      
+      if (value !== 'all') {
+        setSelectedCategory(value);
+      } else {
+        setSelectedCategory('all');
+      }
+    }
+    
+    // Reset subcategory when changing tabs
+    setSelectedSubcategory('all');
+  };
+
+  // Get subcategories for the selected category
+  const getSubcategories = () => {
+    // If viewing all categories or favorites, return an empty array
+    if (activeTab === 'all' || activeTab === 'favorites') return [];
+    
+    // Otherwise, get subcategories for the active tab (category)
     const subcategories = Array.from(
       new Set(
         allProducts
-          .filter(p => p.categoria === selectedCategory)
+          .filter(p => p.categoria === activeTab)
           .map(p => p.subCategoria)
       )
     );
@@ -565,17 +521,17 @@ export const ShopHome: React.FC = () => {
     return subcategories.sort();
   };
   
-  // Calcular productos para página actual (paginación local)
+  // Calculate products for current page (local pagination)
   const getCurrentPageItems = () => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
     return filteredProducts.slice(startIndex, endIndex);
   };
 
-  // Calcular total de páginas para los productos filtrados
+  // Calculate total pages for filtered products
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
   
-  // Número de filtros activos
+  // Number of active filters
   const activeFiltersCount = [
     selectedCategory !== 'all',
     selectedSubcategory !== 'all',
@@ -583,59 +539,112 @@ export const ShopHome: React.FC = () => {
     selectedProveedores.length > 0,
     precioRange[0] > 0 || precioRange[1] < maxPrecio,
     showOnlyStock,
-    showFavorites,
   ].filter(Boolean).length;
 
+  // Animation variants for framer-motion
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { 
+      opacity: 1,
+      transition: { 
+        staggerChildren: 0.05 
+      }
+    }
+  };
+  
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { 
+      opacity: 1, 
+      y: 0,
+      transition: { type: "spring", stiffness: 100 }
+    }
+  };
+  
+  // Determine which tabs to show based on user permissions
+  const renderTabs = () => {
+    const tabs = [
+      { value: 'all', label: 'Todos', icon: <Package className="w-4 h-4 mr-1" /> }
+    ];
+    
+    // Add category tabs based on permissions
+    if (userSecciones === 'limpieza' || userSecciones === 'ambos') {
+      tabs.push({ 
+        value: 'limpieza', 
+        label: 'Limpieza', 
+        icon: <Sparkles className="w-4 h-4 mr-1" /> 
+      });
+    }
+    
+    if (userSecciones === 'mantenimiento' || userSecciones === 'ambos') {
+      tabs.push({ 
+        value: 'mantenimiento', 
+        label: 'Mantenimiento', 
+        icon: <Wrench className="w-4 h-4 mr-1" /> 
+      });
+    }
+    
+    // Always add favorites tab
+    tabs.push({ 
+      value: 'favorites', 
+      label: 'Favoritos', 
+      icon: <Heart className="w-4 h-4 mr-1" /> 
+    });
+    
+    return tabs;
+  };
+
   return (
-    <div className="shop-theme">
+    <div className="shop-theme bg-gradient-to-br from-[#d4f1f9] via-[#f2f2f2] to-[#a8e6cf]">
       <ShopNavbar />
       <div className="container mx-auto px-4 py-8">
         <div className="space-y-8">
 
-          {/* Vista de error */}
+          {/* Error view */}
           {error && (
-            <Alert variant="destructive" className="bg-[var(--state-error)]/10 border border-[var(--state-error)]">
-              <AlertCircle className="h-4 w-4 text-[var(--state-error)]" />
-              <AlertDescription className="text-[var(--text-primary)]">
-                {error instanceof Error ? error.message : 'Error al cargar productos'}
+            <Alert variant="destructive" className="bg-[#f8d7da] border border-[#f5c2c7]">
+              <AlertCircle className="h-4 w-4 text-[#842029]" />
+              <AlertDescription className="text-[#842029]">
+                {error instanceof Error ? error.message : 'Error loading products'}
               </AlertDescription>
             </Alert>
           )}
 
-          {/* Vista de carga */}
+          {/* Loading view */}
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-20">
-              <div className="w-16 h-16 border-4 border-t-[var(--accent-primary)] border-r-[var(--accent-tertiary)] border-b-[var(--accent-quaternary)] border-l-[var(--background-card)] rounded-full animate-spin mb-4"></div>
-              <p className="text-[var(--text-primary)]">Cargando productos...</p>
+              <div className="w-16 h-16 border-4 border-t-[#3a8fb7] border-r-[#a8e6cf] border-b-[#d4f1f9] border-l-[#f2f2f2] rounded-full animate-spin mb-4"></div>
+              <p className="text-[#333333]">Loading products...</p>
             </div>
           ) : (
             <>
-              <section className="relative mb-4 sm:mb-6 overflow-hidden rounded-lg sm:rounded-xl md:rounded-2xl mx-2 sm:mx-0">
+              <section className="relative mb-6 overflow-hidden rounded-xl mx-auto max-w-7xl">
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="relative h-40 sm:h-48 md:h-64 lg:h-80 flex items-center z-10 p-4 sm:p-6 md:p-8"
+                  className="relative h-48 sm:h-64 md:h-72 lg:h-80 flex items-center z-10 p-6 md:p-12"
                 >
-                  {/* Fondo con gradiente - mejorado para responsividad */}
-                  <div className="absolute inset-0 bg-[var(--gradient-main)] overflow-hidden">
-                    <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-5"></div>
-                    <div className="absolute -inset-[10px] bg-[var(--accent-primary)]/30 blur-3xl animate-pulse"></div>
+                  {/* Background with gradient - improved for responsiveness */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#3a8fb7] to-[#5baed1] overflow-hidden">
+                    <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-10"></div>
+                    <div className="absolute right-0 bottom-0 w-64 h-64 bg-[#a8e6cf] rounded-full filter blur-3xl opacity-20 -mr-20 -mb-20"></div>
+                    <div className="absolute left-1/2 top-0 w-40 h-40 bg-[#d4f1f9] rounded-full filter blur-3xl opacity-20 -ml-20 -mt-20"></div>
                   </div>
 
-                  <div className="relative z-10 w-full max-w-xs sm:max-w-lg md:max-w-2xl lg:max-w-3xl">
-                    <motion.h1
+                  <div className="relative z-10 w-full max-w-4xl">
+                                            <motion.h1
                       initial={{ y: 20, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
                       transition={{ delay: 0.2 }}
-                      className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold mb-2 sm:mb-3 md:mb-4 text-white leading-tight"
+                      className="text-3xl sm:text-4xl md:text-5xl font-bold mb-3 md:mb-4 text-white leading-tight"
                     >
-                      Bienvenido a la tienda de <span className="text-[var(--accent-quaternary)] font-bold">Lyme S.A</span>
+                      Bienvenido a <span className="text-[#a8e6cf] font-bold">LYME S.A</span>
                     </motion.h1>
                     <motion.p
                       initial={{ y: 20, opacity: 0 }}
                       animate={{ y: 0, opacity: 1 }}
                       transition={{ delay: 0.3 }}
-                      className="text-white/90 text-sm sm:text-base md:text-lg mb-3 sm:mb-4 md:mb-6 max-w-sm md:max-w-md lg:max-w-lg"
+                      className="text-white/90 text-sm sm:text-base md:text-lg mb-6 max-w-xl"
                     >
                       {userSecciones === 'limpieza' 
                         ? 'Encuentra todos los productos de limpieza que necesitas.'
@@ -643,390 +652,393 @@ export const ShopHome: React.FC = () => {
                         ? 'Explora nuestra selección de productos para mantenimiento.'
                         : 'Encuentra todo lo que necesitas para limpieza y mantenimiento en un solo lugar.'}
                     </motion.p>
+                    
+                    <motion.div
+                      initial={{ y: 20, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      transition={{ delay: 0.4 }}
+                    >
+                      <div className="flex flex-wrap gap-3">
+                        <a 
+                          href="/cart" 
+                          className="bg-white hover:bg-[#f2f2f2] text-[#3a8fb7] px-5 py-2.5 rounded-lg font-medium flex items-center transition-all shadow-lg shadow-[#3a8fb7]/10"
+                        >
+                          <ShoppingCart className="w-5 h-5 mr-2" />
+                          Ver Carrito
+                        </a>
+                        <button 
+                          onClick={handleManualRefresh}
+                          className="bg-[#a8e6cf] hover:bg-[#8dd4b9] text-[#474747] px-5 py-2.5 rounded-lg font-medium flex items-center transition-all shadow-lg shadow-[#3a8fb7]/10"
+                        >
+                          <RefreshCw className="w-5 h-5 mr-2" />
+                          Actualizar Productos
+                        </button>
+                      </div>
+                    </motion.div>
                   </div>
                 </motion.div>
               </section>
 
-              {/* Filtros y búsqueda */}
-              <div className="flex flex-col md:flex-row justify-between gap-4 mb-6">
-                <div className="w-full md:w-auto flex-1 flex flex-col md:flex-row gap-4">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[var(--accent-primary)]" />
-                    <Input
-                      type="text"
-                      placeholder="Buscar productos..."
-                      className="pl-10 bg-[var(--background-card)] border-[var(--accent-primary)] focus:border-[var(--accent-tertiary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)]"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="flex-shrink-0">
-                    <Select
-                      value={selectedCategory}
-                      onValueChange={(value) => {
-                        setSelectedCategory(value);
-                        setSelectedSubcategory('all'); // Reset subcategory when category changes
-                      }}
-                    >
-                      <SelectTrigger className="w-full md:w-auto bg-[var(--background-card)] border-[var(--accent-primary)] text-[var(--text-primary)]">
-                        <SelectValue placeholder="Todas las categorías" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-[var(--background-card)] border-[var(--accent-primary)]">
-                        <SelectItem value="all" className="text-[var(--text-primary)]">Todas las categorías</SelectItem>
-                        
-                        {/* Solo mostrar categorías según permisos */}
-                        {(userSecciones === 'limpieza' || userSecciones === 'ambos') && (
-                          <SelectItem value="limpieza" className="text-[var(--text-primary)]">Limpieza</SelectItem>
-                        )}
-                        
-                        {(userSecciones === 'mantenimiento' || userSecciones === 'ambos') && (
-                          <SelectItem value="mantenimiento" className="text-[var(--text-primary)]">Mantenimiento</SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  {/* Solo mostrar subcategorías si hay una categoría seleccionada */}
-                  {selectedCategory !== 'all' && (
-                    <div className="flex-shrink-0">
-                      <Select
-                        value={selectedSubcategory}
-                        onValueChange={setSelectedSubcategory}
-                      >
-                        <SelectTrigger className="w-full md:w-auto bg-[var(--background-card)] border-[var(--accent-primary)] text-[var(--text-primary)]">
-                          <SelectValue placeholder="Subcategoría" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-[var(--background-card)] border-[var(--accent-primary)]">
-                          <SelectItem value="all" className="text-[var(--text-primary)]">Todas las subcategorías</SelectItem>
-                          
-                          {/* Listar subcategorías disponibles */}
-                          {getSubcategories().map((subcategory) => (
-                            <SelectItem 
-                              key={subcategory} 
-                              value={subcategory} 
-                              className="text-[var(--text-primary)]"
-                            >
-                              {subcategory}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {/* Trigger de filtros avanzados */}
-                  <Sheet>
-                    <SheetTrigger asChild>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        className="border-[var(--accent-primary)] text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/10"
-                      >
-                        <Filter className="w-4 h-4 mr-2" />
-                        Filtros
-                        {activeFiltersCount > 0 && (
-                          <Badge className="ml-2 bg-[var(--accent-primary)] text-white">
-                            {activeFiltersCount}
-                          </Badge>
-                        )}
-                      </Button>
-                    </SheetTrigger>
-                    <SheetContent className="bg-[var(--background-card)] border-[var(--accent-primary)]">
-                      <SheetHeader>
-                        <SheetTitle className="text-[var(--text-primary)]">Filtros avanzados</SheetTitle>
-                      </SheetHeader>
-                      
-                      <div className="py-4 space-y-6">
-                        {/* Filtro por marca */}
-                        {marcas.length > 0 && (
-                          <div className="space-y-2">
-                            <h3 className="text-[var(--text-primary)] font-medium">Marcas</h3>
-                            <div className="max-h-48 overflow-y-auto space-y-2">
-                              {marcas.map(marca => (
-                                <div key={marca} className="flex items-center space-x-2">
-                                  <Checkbox 
-                                    id={`marca-${marca}`}
-                                    checked={selectedMarcas.includes(marca)}
-                                    onCheckedChange={(checked) => {
-                                      if (checked) {
-                                        setSelectedMarcas(prev => [...prev, marca]);
-                                      } else {
-                                        setSelectedMarcas(prev => prev.filter(m => m !== marca));
-                                      }
-                                    }}
-                                    className="border-[var(--accent-primary)] data-[state=checked]:bg-[var(--accent-primary)]"
-                                  />
-                                  <Label 
-                                    htmlFor={`marca-${marca}`}
-                                    className="text-[var(--text-primary)] cursor-pointer"
-                                  >
-                                    {marca}
-                                  </Label>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* Filtro por proveedor */}
-                        {proveedores.length > 0 && (
-                          <div className="space-y-2">
-                            <h3 className="text-[var(--text-primary)] font-medium">Proveedores</h3>
-                            <div className="max-h-48 overflow-y-auto space-y-2">
-                              {proveedores.map(proveedor => (
-                                <div key={proveedor} className="flex items-center space-x-2">
-                                  <Checkbox 
-                                    id={`proveedor-${proveedor}`}
-                                    checked={selectedProveedores.includes(proveedor)}
-                                    onCheckedChange={(checked) => {
-                                      if (checked) {
-                                        setSelectedProveedores(prev => [...prev, proveedor]);
-                                      } else {
-                                        setSelectedProveedores(prev => prev.filter(p => p !== proveedor));
-                                      }
-                                    }}
-                                    className="border-[var(--accent-primary)] data-[state=checked]:bg-[var(--accent-primary)]"
-                                  />
-                                  <Label 
-                                    htmlFor={`proveedor-${proveedor}`}
-                                    className="text-[var(--text-primary)] cursor-pointer"
-                                  >
-                                    {proveedor}
-                                  </Label>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* Filtro por rango de precio */}
-                        <div className="space-y-4">
-                          <h3 className="text-[var(--text-primary)] font-medium">Rango de precio</h3>
-                          <Slider
-                            value={precioRange}
-                            min={0}
-                            max={maxPrecio}
-                            step={100}
-                            onValueChange={setPrecioRange}
-                            className="my-6"
-                          />
-                          <div className="flex justify-between">
-                            <span className="text-[var(--text-primary)]">
-                              ${precioRange[0].toLocaleString()}
-                            </span>
-                            <span className="text-[var(--text-primary)]">
-                              ${precioRange[1].toLocaleString()}
-                            </span>
-                          </div>
-                        </div>
-                        
-                        {/* Filtro por stock */}
-                        <div className="flex items-center space-x-2">
-                          <Checkbox 
-                            id="show-only-stock"
-                            checked={showOnlyStock}
-                            onCheckedChange={(checked) => setShowOnlyStock(!!checked)}
-                            className="border-[var(--accent-primary)] data-[state=checked]:bg-[var(--accent-primary)]"
-                          />
-                          <Label 
-                            htmlFor="show-only-stock"
-                            className="text-[var(--text-primary)] cursor-pointer"
-                          >
-                            Mostrar solo productos con stock
-                          </Label>
-                        </div>
-                        
-                        {/* Acciones de filtros */}
-                        <div className="flex justify-between pt-4">
-                          <Button
-                            variant="outline"
-                            onClick={clearAllFilters}
-                            className="border-[var(--state-error)] text-[var(--state-error)] hover:bg-[var(--state-error)]/10"
-                          >
-                            <X className="w-4 h-4 mr-2" />
-                            Limpiar filtros
-                          </Button>
-                          
-                          <SheetTrigger asChild>
-                            <Button className="bg-[var(--accent-primary)] hover:bg-[var(--accent-tertiary)] text-white">
-                              Aplicar filtros
-                            </Button>
-                          </SheetTrigger>
-                        </div>
-                      </div>
-                    </SheetContent>
-                  </Sheet>
-                  
-                  {/* Selector de ordenamiento */}
-                  <Select
-                    value={sortOrder}
-                    onValueChange={(value: any) => setSortOrder(value)}
-                  >
-                    <SelectTrigger className="w-full md:w-44 bg-[var(--background-card)] border-[var(--accent-primary)] text-[var(--text-primary)]">
-                      <div className="flex items-center">
-                        <ArrowUpDown className="w-4 h-4 mr-2" />
-                        <span>Ordenar por</span>
-                      </div>
-                    </SelectTrigger>
-                    <SelectContent className="bg-[var(--background-card)] border-[var(--accent-primary)]">
-                      <SelectItem value="newest" className="text-[var(--text-primary)]">Más recientes</SelectItem>
-                      <SelectItem value="price-asc" className="text-[var(--text-primary)]">Precio: menor a mayor</SelectItem>
-                      <SelectItem value="price-desc" className="text-[var(--text-primary)]">Precio: mayor a menor</SelectItem>
-                      <SelectItem value="name-asc" className="text-[var(--text-primary)]">Nombre: A-Z</SelectItem>
-                      <SelectItem value="name-desc" className="text-[var(--text-primary)]">Nombre: Z-A</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleManualRefresh}
-                    disabled={isLoading}
-                    className="border-[var(--accent-primary)] text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/10"
-                  >
-                    {isLoading ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="w-4 h-4" />
-                    )}
-                  </Button>
-                  
-                  <Button
-                    variant={showFavorites ? "default" : "outline"}
-                    size="sm"
-                    className={`${showFavorites
-                      ? "bg-[var(--accent-quaternary)] hover:bg-[var(--accent-quaternary)]/90 text-white"
-                      : "bg-[var(--background-card)] hover:bg-[var(--accent-quaternary)]/10 border-[var(--accent-quaternary)] text-[var(--accent-quaternary)]"
-                      }`}
-                    onClick={() => setShowFavorites(!showFavorites)}
-                  >
-                    <Heart className={`w-4 h-4 mr-2 ${showFavorites ? "fill-white" : ""}`} />
-                    Favoritos
-                  </Button>
+              {/* Top search bar */}
+              <div className="bg-white rounded-lg shadow-md p-4 mb-6 transition-all duration-200 hover:shadow-lg">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#3a8fb7]" />
+                  <Input
+                    type="text"
+                    placeholder="Buscar productos por nombre, descripción, marca..."
+                    className="pl-10 bg-white border-[#d4f1f9] focus:border-[#3a8fb7] text-[#333333] placeholder-[#5c5c5c]"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
                 </div>
               </div>
 
-              {/* Categorías destacadas */}
-              {renderCategoriasDestacadas()}
-
-              {/* Lista de productos */}
-              <div>
-                {showFavorites && favorites.length === 0 ? (
-                  <div className="text-center py-16">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-[var(--accent-quaternary)]/20 rounded-full mb-4">
-                      <Heart className="h-8 w-8 text-[var(--accent-quaternary)]" />
-                    </div>
-                    <h3 className="text-xl font-medium mb-2 text-[var(--text-primary)]">No tienes favoritos</h3>
-                    <p className="text-[var(--text-secondary)] mb-6">
-                      Agrega productos a tus favoritos para encontrarlos rápidamente
-                    </p>
-                  </div>
-                ) : filteredProducts.length === 0 ? (
-                  <div className="text-center py-20">
-                    <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-[var(--accent-primary)]/30 mb-6">
-                      <Package className="h-10 w-10 text-[var(--text-primary)]" />
-                    </div>
-                    <h2 className="text-xl md:text-2xl font-bold mb-2 text-[var(--text-primary)]">No se encontraron productos</h2>
-                    <p className="text-[var(--text-secondary)] mb-6 max-w-lg mx-auto">
-                      {showFavorites
-                        ? "No tienes productos favoritos guardados. Explora nuestra tienda y agrega algunos."
-                        : "No hay productos que coincidan con tu búsqueda. Intenta con otros términos o filtros."}
-                    </p>
-                    <Button
-                      onClick={clearAllFilters}
-                      className="bg-[var(--accent-primary)] hover:bg-[var(--accent-tertiary)] text-white"
+              {/* Pestañas de categorías */}
+              <Tabs 
+                defaultValue="all" 
+                value={activeTab}
+                onValueChange={handleTabChange}
+                className="mb-6"
+              >
+                <TabsList className="grid grid-cols-4 bg-[#FFFF] p-1">
+                  {renderTabs().map(tab => (
+                    <TabsTrigger 
+                      key={tab.value} 
+                      value={tab.value}
+                      className="data-[state=active]:bg-white data-[state=active]:text-[#3a8fb7] data-[state=active]:shadow-md"
                     >
-                      Ver todos los productos
-                    </Button>
-                  </div>
-                ) : (
-                  <>
-                    <h2 className="text-2xl font-bold mb-6 flex items-center text-[var(--text-primary)]">
-                      {showFavorites ? (
-                        <>
-                          <Heart className="w-5 h-5 mr-2 text-[var(--accent-quaternary)] fill-[var(--accent-quaternary)]" />
-                          Tus Favoritos
-                        </>
-                      ) : selectedCategory !== 'all' ? (
-                        <>
-                          {selectedCategory === 'limpieza' ? (
-                            <Sparkles className="w-5 h-5 mr-2 text-[var(--accent-primary)]" />
-                          ) : selectedCategory === 'mantenimiento' ? (
-                            <Wrench className="w-5 h-5 mr-2 text-[var(--accent-secondary)]" />
-                          ) : (
-                            <Package className="w-5 h-5 mr-2 text-[var(--accent-quaternary)]" />
-                          )}
-                          Productos: {selectedCategory === 'limpieza' ? 'Limpieza' :
-                            selectedCategory === 'mantenimiento' ? 'Mantenimiento' :
-                              selectedCategory}
-                          
-                          {selectedSubcategory !== 'all' && (
-                            <span className="ml-2 text-[var(--text-tertiary)]">
-                              {' › '}{selectedSubcategory}
-                            </span>
-                          )}
-                        </>
-                      ) : (
-                        <>Todos los Productos</>
-                      )}
-                      <Badge variant="outline" className="ml-3 bg-[var(--accent-primary)]/10 text-[var(--accent-primary)] border-[var(--accent-primary)]">
-                        {filteredProducts.length} productos
-                      </Badge>
-                      
-                      {activeFiltersCount > 0 && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={clearAllFilters}
-                          className="ml-2 text-[var(--text-tertiary)] hover:text-[var(--state-error)]"
-                        >
-                          <X className="w-4 h-4 mr-1" />
-                          Limpiar filtros
-                        </Button>
-                      )}
-                    </h2>
+                      <span className="flex items-center">
+                        {tab.icon}
+                        <span className="hidden sm:inline">{tab.label}</span>
+                      </span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
 
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 xs:gap-4 sm:gap-5 md:gap-6">
-                      {getCurrentPageItems().map((product) => (
-                        <ProductCard
-                          key={product._id}
-                          product={product}
-                          isFavorite={favorites.includes(product._id)}
-                          onToggleFavorite={() => toggleFavorite(product._id)}
-                          onAddToCart={(quantity) => handleAddToCart(product, quantity)}
-                          compact={true}
-                        />
-                      ))}
+                {/* Main content */}
+                <div className="mt-6">
+                  <div className="flex flex-col lg:flex-row gap-6">
+                    {/* Sidebar filters */}
+                    <div className="w-full lg:w-64 shrink-0">
+                      <div className="bg-white rounded-lg shadow-md overflow-hidden sticky top-20">
+                        <div className="p-4 bg-[#3a8fb7] text-white font-medium flex items-center justify-between">
+                          <span className="flex items-center">
+                            <Filter className="w-4 h-4 mr-2" />
+                            Filtros
+                          </span>
+                          {activeFiltersCount > 0 && (
+                            <Badge className="bg-[#a8e6cf] text-[#ffffff]">
+                              {activeFiltersCount}
+                            </Badge>
+                          )}
+                        </div>
+                        
+                        <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
+                          {/* Filtro de subcategoría */}
+                          {getSubcategories().length > 0 && (
+                            <div className="space-y-2">
+                              <h3 className="text-[#333333] font-medium flex items-center">
+                                <ChevronRight className="w-4 h-4 mr-1 text-[#3a8fb7]" />
+                                Subcategorías
+                              </h3>
+                              <Select
+                                value={selectedSubcategory}
+                                onValueChange={setSelectedSubcategory}
+                              >
+                                <SelectTrigger className="w-full bg-white border-[#d4f1f9] text-[#333333]">
+                                  <SelectValue placeholder="Todas las subcategorías" />
+                                </SelectTrigger>
+                                <SelectContent className="bg-white border-[#d4f1f9]">
+                                  <SelectItem value="all" className="text-[#333333]">Todas las subcategorías</SelectItem>
+                                  
+                                  {/* Listar subcategorías disponibles */}
+                                  {getSubcategories().map((subcategory) => (
+                                    <SelectItem 
+                                      key={subcategory} 
+                                      value={subcategory} 
+                                      className="text-[#333333]"
+                                    >
+                                      {subcategory}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                          
+                          {/* Filtro por marca */}
+                          {marcas.length > 0 && (
+                            <div className="space-y-2">
+                              <h3 className="text-[#333333] font-medium flex items-center">
+                                <ChevronRight className="w-4 h-4 mr-1 text-[#3a8fb7]" />
+                                Marcas
+                              </h3>
+                              <div className="max-h-36 overflow-y-auto space-y-2 bg-white border border-[#d4f1f9] rounded-md p-2">
+                                {marcas.map(marca => (
+                                  <div key={marca} className="flex items-center space-x-2">
+                                    <Checkbox 
+                                      id={`marca-${marca}`}
+                                      checked={selectedMarcas.includes(marca)}
+                                      onCheckedChange={(checked) => {
+                                        if (checked) {
+                                          setSelectedMarcas(prev => [...prev, marca]);
+                                        } else {
+                                          setSelectedMarcas(prev => prev.filter(m => m !== marca));
+                                        }
+                                      }}
+                                      className="border-[#3a8fb7] data-[state=checked]:bg-[#3a8fb7]"
+                                    />
+                                    <Label 
+                                      htmlFor={`marca-${marca}`}
+                                      className="text-[#333333] cursor-pointer text-sm"
+                                    >
+                                      {marca}
+                                    </Label>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Filtro por proveedor */}
+                          {proveedores.length > 0 && (
+                            <div className="space-y-2">
+                              <h3 className="text-[#333333] font-medium flex items-center">
+                                <ChevronRight className="w-4 h-4 mr-1 text-[#3a8fb7]" />
+                                Proveedores
+                              </h3>
+                              <div className="max-h-36 overflow-y-auto space-y-2 bg-white border border-[#d4f1f9] rounded-md p-2">
+                                {proveedores.map(proveedor => (
+                                  <div key={proveedor} className="flex items-center space-x-2">
+                                    <Checkbox 
+                                      id={`proveedor-${proveedor}`}
+                                      checked={selectedProveedores.includes(proveedor)}
+                                      onCheckedChange={(checked) => {
+                                        if (checked) {
+                                          setSelectedProveedores(prev => [...prev, proveedor]);
+                                        } else {
+                                          setSelectedProveedores(prev => prev.filter(p => p !== proveedor));
+                                        }
+                                      }}
+                                      className="border-[#3a8fb7] data-[state=checked]:bg-[#3a8fb7]"
+                                    />
+                                    <Label 
+                                      htmlFor={`proveedor-${proveedor}`}
+                                      className="text-[#333333] cursor-pointer text-sm"
+                                    >
+                                      {proveedor}
+                                    </Label>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Price range filter */}
+                          <div className="space-y-3">
+                            <h3 className="text-[#333333] font-medium flex items-center">
+                              <ChevronRight className="w-4 h-4 mr-1 text-[#3a8fb7]" />
+                              Rango de Precio
+                            </h3>
+                            <Slider
+                              value={precioRange}
+                              min={0}
+                              max={maxPrecio}
+                              step={100}
+                              onValueChange={setPrecioRange}
+                              className="my-6"
+                            />
+                            <div className="flex justify-between">
+                              <span className="text-[#333333] text-sm font-medium">
+                                ${precioRange[0].toLocaleString()}
+                              </span>
+                              <span className="text-[#333333] text-sm font-medium">
+                                ${precioRange[1].toLocaleString()}
+                              </span>
+                            </div>
+                          </div>
+                          
+                          {/* Filtro de stock */}
+                          <div className="pt-2">
+                            <div className="flex items-center space-x-2">
+                              <Checkbox 
+                                id="show-only-stock"
+                                checked={showOnlyStock}
+                                onCheckedChange={(checked) => setShowOnlyStock(!!checked)}
+                                className="border-[#3a8fb7] data-[state=checked]:bg-[#3a8fb7]"
+                              />
+                              <Label 
+                                htmlFor="show-only-stock"
+                                className="text-[#333333] cursor-pointer"
+                              >
+                                Mostrar solo productos en stock
+                              </Label>
+                            </div>
+                          </div>
+                          
+                          {/* Orden */}
+                          <div className="space-y-2 pt-2">
+                            <h3 className="text-[#c4c4c4] font-medium flex items-center">
+                              <ChevronRight className="w-4 h-4 mr-1 text-[#3a8fb7]" />
+                              Ordenar Por
+                            </h3>
+                            <Select
+                              value={sortOrder}
+                              onValueChange={(value: any) => setSortOrder(value)}
+                            >
+                              <SelectTrigger className="w-full bg-white border-[#d4f1f9] text-[#333333]">
+                                <SelectValue placeholder="Ordenar por" />
+                              </SelectTrigger>
+                              <SelectContent className="bg-white border-[#d4f1f9]">
+                                <SelectItem value="newest" className="text-[#333333]">Más recientes</SelectItem>
+                                <SelectItem value="price-asc" className="text-[#333333]">Precio: Menor a Mayor</SelectItem>
+                                <SelectItem value="price-desc" className="text-[#333333]">Precio: Mayor a Menor</SelectItem>
+                                <SelectItem value="name-asc" className="text-[#333333]">Nombre: A-Z</SelectItem>
+                                <SelectItem value="name-desc" className="text-[#333333]">Nombre: Z-A</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          
+                          {/* Filter actions */}
+                          {activeFiltersCount > 0 && (
+                            <div className="pt-4">
+                              <Button
+                                variant="outline"
+                                onClick={clearAllFilters}
+                                className="w-full border-[#F44336] text-[#F44336] hover:bg-[#F44336]/10 flex items-center justify-center"
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Limpiar Filtros
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                     
-                    {/* Paginación */}
-                    {filteredProducts.length > 0 && (
-                      <div className="mt-8 flex flex-col items-center">
-                        <EnhancedPagination
-                          totalItems={filteredProducts.length}
-                          itemsPerPage={itemsPerPage}
-                          currentPage={currentPage}
-                          onPageChange={setCurrentPage}
-                          onItemsPerPageChange={setItemsPerPage}
-                          className="text-[var(--text-primary)]"
-                        />
-                        
-                        {/* Información sobre la visualización */}
-                        <div className="mt-4 text-center text-sm text-[var(--text-tertiary)]">
-                          <p>
-                            Mostrando {Math.min(filteredProducts.length, (currentPage - 1) * itemsPerPage + 1)} 
-                            - {Math.min(filteredProducts.length, currentPage * itemsPerPage)} 
-                            &nbsp;de {filteredProducts.length} productos
-                          </p>
-                        </div>
+                    {/* Cuadrícula de productos */}
+                    <div className="flex-1">
+                      {/* Encabezado de productos con contador de resultados */}
+                      <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-xl font-bold text-[#333333] flex items-center">
+                          {activeTab === 'favorites' ? (
+                            <>
+                              <Heart className="w-5 h-5 mr-2 text-[#3a8fb7]" />
+                              Mis Favoritos
+                            </>
+                          ) : activeTab !== 'all' ? (
+                            <>
+                              {activeTab === 'limpieza' ? (
+                                <Sparkles className="w-5 h-5 mr-2 text-[#3a8fb7]" />
+                              ) : activeTab === 'mantenimiento' ? (
+                                <Wrench className="w-5 h-5 mr-2 text-[#3a8fb7]" />
+                              ) : (
+                                <Package className="w-5 h-5 mr-2 text-[#3a8fb7]" />
+                              )}
+                              {activeTab === 'limpieza' ? 'Productos de Limpieza' :
+                               activeTab === 'mantenimiento' ? 'Productos de Mantenimiento' :
+                               activeTab}
+                              
+                              {selectedSubcategory !== 'all' && (
+                                <span className="ml-2 text-[#5c5c5c]">
+                                  {' › '}{selectedSubcategory}
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <>Todos los Productos</>
+                          )}
+                          <Badge className="ml-3 bg-[#3a8fb7]/10 text-[#3a8fb7] border-[#3a8fb7] font-normal">
+                            {filteredProducts.length} productos
+                          </Badge>
+                        </h2>
                       </div>
-                    )}
-                  </>
-                )}
-              </div>
+
+                      {/* Estados vacíos */}
+                      {activeTab === 'favorites' && favorites.length === 0 ? (
+                        <div className="bg-white rounded-lg shadow-md p-10 text-center">
+                          <div className="inline-flex items-center justify-center w-16 h-16 bg-[#3a8fb7]/10 rounded-full mb-4">
+                            <Heart className="h-8 w-8 text-[#3a8fb7]" />
+                          </div>
+                          <h3 className="text-xl font-medium mb-2 text-[#333333]">Aún no tienes favoritos</h3>
+                          <p className="text-[#5c5c5c] mb-6">
+                            Agrega productos a tus favoritos para encontrarlos rápidamente
+                          </p>
+                          <Button
+                            onClick={() => handleTabChange('all')}
+                            className="bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white"
+                          >
+                            Ver Productos
+                          </Button>
+                        </div>
+                      ) : filteredProducts.length === 0 ? (
+                        <div className="bg-white rounded-lg shadow-md p-10 text-center">
+                          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-[#3a8fb7]/10 mb-6">
+                            <Package className="h-10 w-10 text-[#3a8fb7]" />
+                          </div>
+                          <h2 className="text-xl md:text-2xl font-bold mb-2 text-[#333333]">No se encontraron productos</h2>
+                          <p className="text-[#5c5c5c] mb-6 max-w-lg mx-auto">
+                            {activeTab === 'favorites'
+                              ? "No tienes productos favoritos guardados. Explora nuestra tienda y agrega algunos."
+                              : "No hay productos que coincidan con tu búsqueda. Intenta con otros términos o filtros."}
+                          </p>
+                          <Button
+                            onClick={clearAllFilters}
+                            className="bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white"
+                          >
+                            Restablecer Filtros
+                          </Button>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Product grid */}
+                          <motion.div 
+                            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+                            variants={containerVariants}
+                            initial="hidden"
+                            animate="visible"
+                          >
+                            {getCurrentPageItems().map((product) => (
+                              <motion.div key={product._id} variants={itemVariants}>
+                                <ProductCard
+                                  product={product}
+                                  isFavorite={favorites.includes(product._id)}
+                                  onToggleFavorite={() => toggleFavorite(product._id)}
+                                  onAddToCart={(quantity) => handleAddToCart(product, quantity)}
+                                  compact={true}
+                                />
+                              </motion.div>
+                            ))}
+                          </motion.div>
+                          
+                          {/* Pagination */}
+                          {filteredProducts.length > 0 && (
+                            <div className="mt-8 flex flex-col items-center">
+                              <EnhancedPagination
+                                totalItems={filteredProducts.length}
+                                itemsPerPage={itemsPerPage}
+                                currentPage={currentPage}
+                                onPageChange={setCurrentPage}
+                                onItemsPerPageChange={setItemsPerPage}
+                                className="text-[#333333]"
+                              />
+                              
+                              {/* Information about display */}
+                              <div className="mt-4 text-center text-sm text-[#5c5c5c]">
+                                <p>
+                                  Mostrando {Math.min(filteredProducts.length, (currentPage - 1) * itemsPerPage + 1)} 
+                                  - {Math.min(filteredProducts.length, currentPage * itemsPerPage)} 
+                                  &nbsp;de {filteredProducts.length} productos
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </Tabs>
             </>
           )}
         </div>
