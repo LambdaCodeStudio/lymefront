@@ -107,7 +107,11 @@ export const useUserManagement = () => {
       } else {
         // Crear nuevo usuario
         const newUser = await userService.createUser(submissionData as CreateUserDTO);
-        setUsers(prevUsers => [...prevUsers, newUser]);
+        
+        // Recargar todos los usuarios para asegurar datos actualizados
+        const refreshedUsers = await userService.getAllUsers();
+        setUsers(refreshedUsers);
+        
         toast({
           title: 'Éxito',
           description: 'Usuario creado correctamente',

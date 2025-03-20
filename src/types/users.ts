@@ -37,6 +37,8 @@ export interface User {
     expirationDate: Date;
     minutesRemaining: number;
   };
+  // Agregamos la propiedad supervisorId para operarios
+  supervisorId?: string;
 }
 
 export interface LoginResponse {

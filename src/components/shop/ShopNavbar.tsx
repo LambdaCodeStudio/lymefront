@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ShoppingCart, Menu, X, LogOut, Search, Settings, ClipboardList, BookCheck, Bell, ChevronDown, User, Home, Heart } from 'lucide-react';
+import { ShoppingCart, Menu, X, LogOut, Search, Settings, ClipboardList, BookCheck, Bell, ChevronDown, User, Home, Heart, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -40,6 +40,7 @@ export const ShopNavbar: React.FC = () => {
   const [userSecciones, setUserSecciones] = useState<string | null>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
   const [pendingApprovals, setPendingApprovals] = useState(0);
+  const [rejectedOrders, setRejectedOrders] = useState(0);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -78,6 +79,10 @@ export const ShopNavbar: React.FC = () => {
             // Actualizar localStorage con datos más recientes
             if (data.user.role) localStorage.setItem('userRole', data.user.role);
             if (data.user.secciones) localStorage.setItem('userSecciones', data.user.secciones);
+            if (data.user.id || data.user._id) {
+              const userId = data.user.id || data.user._id;
+              localStorage.setItem('userId', userId);
+            }
             
             // Actualizar estados con datos frescos
             setUserRole(data.user.role);
@@ -85,7 +90,11 @@ export const ShopNavbar: React.FC = () => {
             
             // Si es supervisor, obtener el número de pedidos pendientes
             if (data.user.role === 'supervisor') {
-              fetchPendingApprovals(data.user.id || data.user._id);
+              fetchPendingApprovals(data.user.id || data.user._id, 'supervisor');
+            }
+            // Si es operario, obtener el número de pedidos rechazados
+            else if (data.user.role === 'operario') {
+              fetchPendingApprovals(data.user.id || data.user._id, 'operario');
             }
           }
         } else {
@@ -125,15 +134,26 @@ export const ShopNavbar: React.FC = () => {
     }
   }, [searchOpen]);
   
-  // Obtener el número de pedidos pendientes para supervisores
-  const fetchPendingApprovals = async (supervisorId: string) => {
+  // Obtener el número de pedidos pendientes para supervisores o rechazados para operarios
+  const fetchPendingApprovals = async (userId: string, role: string) => {
     try {
       const token = localStorage.getItem('token');
       if (!token) return;
       
-      // Usar el endpoint específico para pedidos por supervisor
-      // El parámetro estado=pendiente está incluido, pero vamos a asegurarnos filtrando en el cliente también
-      const response = await fetch(`${API_BASE_URL}/pedido/supervisor/${supervisorId}`, {
+      let endpoint = '';
+      
+      // Determinar el endpoint según el rol del usuario
+      if (role === 'supervisor') {
+        // Para supervisores: obtener pedidos pendientes de aprobación
+        endpoint = `${API_BASE_URL}/pedido/supervisor/${userId}`;
+      } else if (role === 'operario') {
+        // Para operarios: obtener pedidos rechazados donde el operario es el creador
+        endpoint = `${API_BASE_URL}/pedido/operario/${userId}/rechazados`;
+      } else {
+        return;
+      }
+      
+      const response = await fetch(endpoint, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -144,23 +164,43 @@ export const ShopNavbar: React.FC = () => {
         
         // Verificar que tenemos un array de pedidos
         if (Array.isArray(data)) {
-          // Filtrar explícitamente los pedidos con estado "pendiente"
-          const pendingOrders = data.filter(pedido => pedido.estado === 'pendiente');
-          const pendingCount = pendingOrders.length;
-          
-          console.log(`Total de pedidos del supervisor: ${data.length}`);
-          console.log(`Pedidos pendientes por aprobar: ${pendingCount}`);
-          
-          // Actualizar el contador solo con los pedidos pendientes
-          setPendingApprovals(pendingCount);
+          if (role === 'supervisor') {
+            // Filtrar explícitamente los pedidos con estado "pendiente"
+            const pendingOrders = data.filter(pedido => pedido.estado === 'pendiente');
+            const pendingCount = pendingOrders.length;
+            
+            console.log(`Total de pedidos del supervisor: ${data.length}`);
+            console.log(`Pedidos pendientes por aprobar: ${pendingCount}`);
+            
+            // Actualizar el contador solo con los pedidos pendientes
+            setPendingApprovals(pendingCount);
+          } else if (role === 'operario') {
+            // Filtrar explícitamente los pedidos con estado "rechazado"
+            const rejected = data.filter(pedido => pedido.estado === 'rechazado');
+            const rejectedCount = rejected.length;
+            
+            console.log(`Total de pedidos creados por el operario: ${data.length}`);
+            console.log(`Pedidos rechazados: ${rejectedCount}`);
+            
+            // Actualizar el contador de pedidos rechazados
+            setRejectedOrders(rejectedCount);
+          }
         } else {
           console.warn("La respuesta no es un array de pedidos:", data);
-          setPendingApprovals(0);
+          if (role === 'supervisor') {
+            setPendingApprovals(0);
+          } else if (role === 'operario') {
+            setRejectedOrders(0);
+          }
         }
       }
     } catch (error) {
-      console.error('Error al obtener pedidos pendientes:', error);
-      setPendingApprovals(0);
+      console.error('Error al obtener pedidos:', error);
+      if (role === 'supervisor') {
+        setPendingApprovals(0);
+      } else if (role === 'operario') {
+        setRejectedOrders(0);
+      }
     }
   };
 
@@ -305,7 +345,7 @@ export const ShopNavbar: React.FC = () => {
                 </a>
               )}
 
-              {/* Show badge with pending orders for supervisors - UPDATED: only show if pendingApprovals > 0 */}
+              {/* Show badge with pending orders for supervisors */}
               {isSupervisor && pendingApprovals > 0 && (
                 <a 
                   href="/orders?tab=porAprobar" 
@@ -315,6 +355,20 @@ export const ShopNavbar: React.FC = () => {
                   <Bell className="w-5 h-5" />
                   <span className="absolute -top-2 -right-2 bg-[#a8e6cf] text-[#3a8fb7] text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
                     {pendingApprovals}
+                  </span>
+                </a>
+              )}
+
+              {/* Show badge with rejected orders for operators */}
+              {isOperario && rejectedOrders > 0 && (
+                <a 
+                  href="/orders?tab=rechazados" 
+                  className="relative text-white hover:text-[#d4f1f9] transition-colors duration-200"
+                  aria-label="Pedidos Rechazados"
+                >
+                  <AlertTriangle className="w-5 h-5" />
+                  <span className="absolute -top-2 -right-2 bg-[#F44336] text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                    {rejectedOrders}
                   </span>
                 </a>
               )}
@@ -404,6 +458,27 @@ export const ShopNavbar: React.FC = () => {
                             <Badge className="ml-2 bg-[#a8e6cf] text-[#3a8fb7]">{pendingApprovals}</Badge>
                           </a>
                         )}
+                        {/* Show "Rejected Orders" for operators */}
+                        {isOperario && rejectedOrders > 0 && (
+                          <a
+                            href="/orders?tab=rechazados"
+                            className="flex items-center px-4 py-2 text-sm text-[#333333] hover:bg-[#d4f1f9]/30"
+                          >
+                            <AlertTriangle className="w-4 h-4 mr-2 text-[#F44336]" />
+                            Pedidos Rechazados
+                            <Badge className="ml-2 bg-[#F44336] text-white">{rejectedOrders}</Badge>
+                          </a>
+                        )}
+                        {/* Show "Created Orders" for operators */}
+                        {isOperario && (
+                          <a
+                            href="/orders?tab=creados"
+                            className="flex items-center px-4 py-2 text-sm text-[#333333] hover:bg-[#d4f1f9]/30"
+                          >
+                            <BookCheck className="w-4 h-4 mr-2 text-[#3a8fb7]" />
+                            Pedidos Creados
+                          </a>
+                        )}
                         {canAccessAdmin && (
                           <a
                             href="/admin"
@@ -453,12 +528,12 @@ export const ShopNavbar: React.FC = () => {
             <div className="container mx-auto">
               <form onSubmit={handleSearch} className="flex items-center">
                 <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#3a8fb7]" />
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#3a8fb7] w-4 h-4" />
                   <Input 
                     ref={searchInputRef}
                     type="text" 
                     placeholder="Buscar productos..." 
-                    className="w-full pl-10 focus:ring-[#3a8fb7] focus:border-[#3a8fb7] bg-white border-[#d4f1f9] text-[#333333] placeholder-[#5c5c5c]"
+                    className="w-full pl-10 focus:ring-[#3a8fb7] focus:border-[#3a8fb7] bg-white border-[#d4f1f9] text-[#333333] placeholder:text-[#5c5c5c]"
                   />
                 </div>
                 <Button 
@@ -576,7 +651,7 @@ export const ShopNavbar: React.FC = () => {
                 </a>
               )}
               
-              {/* Show "Orders to Approve" only when there are pending orders - UPDATED */}
+              {/* Show "Orders to Approve" only when there are pending orders */}
               {isSupervisor && pendingApprovals > 0 && (
                 <a 
                   href="/orders?tab=porAprobar" 
@@ -586,6 +661,31 @@ export const ShopNavbar: React.FC = () => {
                   <Bell className="w-5 h-5 mr-3 text-[#3a8fb7]" />
                   <span>Pedidos por Aprobar</span>
                   <Badge className="ml-2 bg-[#a8e6cf] text-[#3a8fb7]">{pendingApprovals}</Badge>
+                </a>
+              )}
+
+              {/* Show "Rejected Orders" for operators */}
+              {isOperario && rejectedOrders > 0 && (
+                <a 
+                  href="/orders?tab=rechazados" 
+                  className="flex items-center text-[#333333] hover:bg-[#d4f1f9]/30 hover:text-[#3a8fb7] transition-colors py-3 px-3 rounded-lg relative"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  <AlertTriangle className="w-5 h-5 mr-3 text-[#F44336]" />
+                  <span>Pedidos Rechazados</span>
+                  <Badge className="ml-2 bg-[#F44336] text-white">{rejectedOrders}</Badge>
+                </a>
+              )}
+
+              {/* Show "Created Orders" for operators */}
+              {isOperario && (
+                <a 
+                  href="/orders?tab=creados" 
+                  className="flex items-center text-[#333333] hover:bg-[#d4f1f9]/30 hover:text-[#3a8fb7] transition-colors py-3 px-3 rounded-lg"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  <BookCheck className="w-5 h-5 mr-3 text-[#3a8fb7]" />
+                  <span>Pedidos Creados</span>
                 </a>
               )}
               

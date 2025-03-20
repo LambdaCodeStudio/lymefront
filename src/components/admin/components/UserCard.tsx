@@ -54,25 +54,22 @@ const canDeleteOrDeactivate = (userRole: string) => userRole !== ROLES.ADMIN;
 
 // Función para obtener el nombre del creador de un usuario
 const getCreatorName = (user: User): string => {
+  // Si no hay información del creador
   if (!user.createdBy) return '-';
   
-  // Priorizar el nombre completo
-  if (user.createdBy.nombre && user.createdBy.apellido) {
-    return `${user.createdBy.nombre} ${user.createdBy.apellido}`;
+  // Si createdBy es un objeto con propiedades
+  if (typeof user.createdBy === 'object' && user.createdBy !== null) {
+    if (user.createdBy.nombre && user.createdBy.apellido) {
+      return `${user.createdBy.nombre} ${user.createdBy.apellido}`;
+    } else if (user.createdBy.nombre) {
+      return user.createdBy.nombre;
+    } else if (user.createdBy.usuario) {
+      return user.createdBy.usuario;
+    }
   }
   
-  // Si no hay nombre completo, usar el nombre de usuario
-  if (user.createdBy.usuario) {
-    return user.createdBy.usuario;
-  }
-  
-  // Como último recurso, usar el ID truncado si existe
-  if (user.createdBy._id) {
-    return `ID: ${user.createdBy._id.toString().substring(0, 8)}`;
-  }
-  
-  // Si no hay ID, devolver un valor por defecto
-  return 'Usuario desconocido';
+  // Si createdBy es un string (ID) o no tiene propiedades reconocibles
+  return 'Admin';
 };
 
 interface UserCardProps {

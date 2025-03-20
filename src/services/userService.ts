@@ -206,22 +206,18 @@ export const updateUser = async (id: string, userData: UpdateUserDTO): Promise<U
     ...cleanedUserData
   };
 
-  // Manejar campos específicos
+  // Manejar campos específicos según el rol
   if (preparedData.role !== undefined) {
-    // Asegurar que el rol sea válido
-    preparedData.role = preparedData.role;
-  }
-
-  if (preparedData.secciones !== undefined) {
-    // Asegurar que la sección sea válida
-    preparedData.secciones = preparedData.secciones;
-  }
-
-  // Gestión especial para operarios temporales
-  if (preparedData.role === 'operario') {
-    preparedData.isTemporary = userData.isTemporary;
-    if (userData.isTemporary && userData.expirationMinutes) {
-      preparedData.expirationMinutes = userData.expirationMinutes;
+    // Si el rol NO es operario, eliminar el supervisorId para evitar el error de validación
+    if (preparedData.role !== 'operario') {
+      delete preparedData.supervisorId;
+      delete preparedData.isTemporary;
+      delete preparedData.expirationMinutes;
+    } else {
+      // Gestión especial para operarios temporales
+      if (userData.isTemporary && userData.expirationMinutes) {
+        preparedData.expirationMinutes = userData.expirationMinutes;
+      }
     }
   }
 
@@ -321,9 +317,14 @@ export const register = async (userData: CreateUserDTO): Promise<User> => {
 
 /**
  * Obtener lista de supervisores
+ * @param {boolean} fresh - Si es true, fuerza una actualización fresca ignorando la caché
+ * @returns {Promise<User[]>} Lista de supervisores
  */
-export const getSupervisors = async (): Promise<User[]> => {
-  const response = await fetchApi<{supervisors: User[], count: number}>('supervisors');
+export const getSupervisors = async (fresh = false): Promise<User[]> => {
+  // Construir el endpoint con el parámetro fresh si es necesario
+  const endpoint = fresh ? 'supervisors?fresh=true' : 'supervisors';
+  
+  const response = await fetchApi<{supervisors: User[], count: number}>(endpoint);
   
   if (!response.success || !response.supervisors) {
     throw new Error('Error al obtener la lista de supervisores');

@@ -25,7 +25,8 @@ import {
   Users,
   FileCheck,
   CheckCircle2,
-  FileSpreadsheet
+  FileSpreadsheet,
+  BookCheck
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -241,39 +242,101 @@ export const OrdersPage: React.FC = () => {
       throw new Error('No se encontró token de autenticación');
     }
     
-    let endpoint = 'http://localhost:3000/api/pedido';
+    let allOrders: Order[] = [];
     
     // Si el usuario es un supervisor, obtener pedidos específicos
     if (userRole === 'supervisor' && userId) {
-      endpoint = `http://localhost:3000/api/pedido/supervisor/${userId}`;
+      const response = await fetch(`http://localhost:3000/api/pedido/supervisor/${userId}`, {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
+        }
+      });
+
+      if (!response.ok) {
+        handleAuthError(response);
+        throw new Error(`Error al cargar pedidos (estado: ${response.status})`);
+      }
+
+      allOrders = await response.json();
     } 
-    // Si el usuario es operario, obtener solo sus pedidos
+    // Si el usuario es operario, obtener sus pedidos regulares y los que ha creado
     else if (userRole === 'operario' && userId) {
-      endpoint = `http://localhost:3000/api/pedido/user/${userId}`;
-    }
-    
-    const response = await fetch(endpoint, {
-      headers: { 
-        'Authorization': `Bearer ${token}`,
-        'Cache-Control': 'no-cache'
-      }
-    });
+      try {
+        // Obtener los pedidos regulares del operario
+        const regularOrdersResponse = await fetch(`http://localhost:3000/api/pedido/user/${userId}`, {
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Cache-Control': 'no-cache'
+          }
+        });
 
-    if (!response.ok) {
-      if (response.status === 401) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('userRole');
-        localStorage.removeItem('userId');
-        window.location.href = '/login';
-        return [];
-      }
-      throw new Error(`Error al cargar pedidos (estado: ${response.status})`);
-    }
+        if (!regularOrdersResponse.ok) {
+          handleAuthError(regularOrdersResponse);
+          throw new Error(`Error al cargar pedidos regulares (estado: ${regularOrdersResponse.status})`);
+        }
 
-    const ordersData = await response.json();
+        const regularOrders = await regularOrdersResponse.json();
+        allOrders = [...regularOrders];
+        
+        // Obtener los pedidos creados por el operario
+        try {
+          const createdOrdersResponse = await fetch(`http://localhost:3000/api/pedido/operario/${userId}`, {
+            headers: { 
+              'Authorization': `Bearer ${token}`,
+              'Cache-Control': 'no-cache'
+            }
+          });
+
+          if (createdOrdersResponse.ok) {
+            const createdOrders = await createdOrdersResponse.json();
+            
+            // Combinar ambos conjuntos de pedidos
+            const orderMap = new Map<string, Order>();
+            
+            // Procesar pedidos regulares
+            regularOrders.forEach(order => {
+              orderMap.set(order._id, order);
+            });
+            
+            // Añadir pedidos creados, sobreescribiendo si es necesario
+            createdOrders.forEach(order => {
+              orderMap.set(order._id, order);
+            });
+            
+            // Convertir el Map de vuelta a un array
+            allOrders = Array.from(orderMap.values());
+            
+            console.log(`Total de pedidos para operario: ${allOrders.length} (${regularOrders.length} regulares, ${createdOrders.length} creados)`);
+          }
+        } catch (createdOrdersError) {
+          console.error('Error al obtener pedidos creados por el operario:', createdOrdersError);
+          // Continuar con los pedidos regulares si hay un error con los pedidos creados
+        }
+      } catch (error) {
+        console.error('Error al obtener pedidos para operario:', error);
+        throw error;
+      }
+    }
+    // Para cualquier otro rol, obtener todos los pedidos
+    else {
+      const response = await fetch('http://localhost:3000/api/pedido', {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
+        }
+      });
+
+      if (!response.ok) {
+        handleAuthError(response);
+        throw new Error(`Error al cargar pedidos (estado: ${response.status})`);
+      }
+
+      allOrders = await response.json();
+    }
     
     // Procesar pedidos (calcular totales y ordenar)
-    const processedOrders = ordersData.map((order: Order) => ({
+    const processedOrders = allOrders.map((order: Order) => ({
       ...order,
       displayNumber: order.nPedido?.toString() || 'S/N',
       total: calculateOrderTotal(order)
@@ -282,6 +345,16 @@ export const OrdersPage: React.FC = () => {
     );
     
     return processedOrders;
+  };
+
+  // Función auxiliar para manejar errores de autenticación
+  const handleAuthError = (response: Response) => {
+    if (response.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('userRole');
+      localStorage.removeItem('userId');
+      window.location.href = '/login';
+    }
   };
 
   // Calcular el total de un pedido
@@ -356,7 +429,29 @@ export const OrdersPage: React.FC = () => {
         result = result.filter(order => order.estado === OrderStatus.APPROVED);
         break;
       case 'rechazados':
-        result = result.filter(order => order.estado === OrderStatus.REJECTED);
+        if (userRole === 'operario') {
+          // Para operarios, mostrar pedidos rechazados con énfasis en los creados por ellos
+          result = result.filter(order => 
+            order.estado === OrderStatus.REJECTED && (
+              // Pedidos rechazados creados por este operario
+              (order.metadata?.creadoPorOperario && order.metadata?.operarioId === userId) ||
+              // O pedidos rechazados asignados a este operario
+              (typeof order.userId === 'object' 
+                ? order.userId?._id === userId 
+                : order.userId === userId)
+            )
+          );
+        } else {
+          // Para otros roles, mostrar todos los pedidos rechazados
+          result = result.filter(order => order.estado === OrderStatus.REJECTED);
+        }
+        break;
+      case 'creados':
+        // Pedidos creados por operarios (solo para operarios)
+        result = result.filter(order => 
+          order.metadata?.creadoPorOperario && 
+          order.metadata?.operarioId === userId
+        );
         break;
       case 'porAprobar':
         // Mostrar solo pedidos pendientes que debe aprobar el supervisor
@@ -470,7 +565,12 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No se encontró token de autenticación');
       }
 
-      const url = `http://localhost:3000/api/pedido/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
+      let url = `http://localhost:3000/api/pedido/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
+      
+      // Si es operario, añadir el parámetro de usuario
+      if (userRole === 'operario' && userId) {
+        url += `&userId=${userId}`;
+      }
       
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -480,7 +580,41 @@ export const OrdersPage: React.FC = () => {
         throw new Error(`Error al filtrar pedidos por fecha (estado: ${response.status})`);
       }
 
-      const data = await response.json();
+      let data = await response.json();
+      
+      // Si es operario, intentar también obtener los pedidos creados
+      if (userRole === 'operario' && userId) {
+        try {
+          const createdOrdersUrl = `http://localhost:3000/api/pedido/operario/${userId}/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
+          
+          const createdOrdersResponse = await fetch(createdOrdersUrl, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          
+          if (createdOrdersResponse.ok) {
+            const createdOrdersData = await createdOrdersResponse.json();
+            
+            // Combinar ambos conjuntos y eliminar duplicados
+            const orderMap = new Map<string, Order>();
+            
+            // Añadir pedidos regulares
+            data.forEach((order: Order) => {
+              orderMap.set(order._id, order);
+            });
+            
+            // Añadir pedidos creados
+            createdOrdersData.forEach((order: Order) => {
+              orderMap.set(order._id, order);
+            });
+            
+            // Convertir el Map de vuelta a un array
+            data = Array.from(orderMap.values());
+          }
+        } catch (error) {
+          console.error('Error al obtener pedidos creados por fecha:', error);
+          // Continuar con los pedidos regulares si hay un error
+        }
+      }
       
       // Procesar pedidos (calcular totales y ordenar)
       const processedOrders = data.map((order: Order) => ({
@@ -752,6 +886,14 @@ export const OrdersPage: React.FC = () => {
     ).length;
   };
 
+  // Obtener conteo de pedidos creados por el operario
+  const getCreatedOrdersCount = () => {
+    return orders.filter(order => 
+      order.metadata?.creadoPorOperario && 
+      order.metadata?.operarioId === userId
+    ).length;
+  };
+
   // Función para actualizar manualmente
   const handleManualRefresh = () => {
     refetch();
@@ -802,7 +944,7 @@ export const OrdersPage: React.FC = () => {
           {/* Pestañas para filtrar por categorías principales */}
           <div className="mb-6">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="bg-[#e8f0f3] border border-[#3a8fb7]/20 w-full rounded-lg overflow-hidden shadow-sm">
+              <TabsList className="bg-[#e8f0f3] border border-[#3a8fb7]/20 w-full rounded-lg overflow-x-auto flex-nowrap whitespace-nowrap shadow-sm">
                 <TabsTrigger 
                   value="todos" 
                   className="flex-1 data-[state=active]:bg-[#3a8fb7] data-[state=active]:text-white text-[#333333] transition-all duration-200"
@@ -821,6 +963,22 @@ export const OrdersPage: React.FC = () => {
                     {getPendingApprovalCount() > 0 && (
                       <span className="absolute -top-1 -right-1 bg-[#FF9800] text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
                         {getPendingApprovalCount()}
+                      </span>
+                    )}
+                  </TabsTrigger>
+                )}
+
+                {/* Pestaña extra para operarios: pedidos creados */}
+                {userRole === 'operario' && (
+                  <TabsTrigger 
+                    value="creados" 
+                    className="flex-1 data-[state=active]:bg-[#3a8fb7] data-[state=active]:text-white text-[#333333] relative transition-all duration-200"
+                  >
+                    <BookCheck className="w-4 h-4 mr-1" />
+                    Creados
+                    {getCreatedOrdersCount() > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-[#3a8fb7] text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                        {getCreatedOrdersCount()}
                       </span>
                     )}
                   </TabsTrigger>
@@ -853,12 +1011,12 @@ export const OrdersPage: React.FC = () => {
             </Tabs>
           </div>
 
-          {/* Filtros y búsqueda */}
+          {/* Filtros para desktop */}
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="mb-6 space-y-4 bg-white p-4 rounded-xl shadow-sm border border-[#3a8fb7]/10 hover:shadow-md transition-all duration-300"
+            className="mb-6 space-y-4 bg-white p-4 rounded-xl shadow-sm border border-[#3a8fb7]/10 hover:shadow-md transition-all duration-300 hidden md:block"
           >
             <div className="flex flex-wrap gap-4 items-center justify-between">
               <div className="relative flex-1 min-w-[280px]">
@@ -912,13 +1070,34 @@ export const OrdersPage: React.FC = () => {
                   className="w-full bg-[#f2f2f2] border-[#5baed1] focus:border-[#3a8fb7] text-[#333333] mt-1 transition-all duration-200"
                 />
               </div>
+              <div>
+                <label htmlFor="statusFilter" className="text-[#333333] text-sm font-medium">
+                  Estado
+                </label>
+                <Select 
+                  value={statusFilter} 
+                  onValueChange={setStatusFilter}
+                >
+                  <SelectTrigger id="statusFilter" className="w-full bg-[#f2f2f2] border-[#5baed1] mt-1">
+                    <SelectValue placeholder="Todos los estados" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los estados</SelectItem>
+                    <SelectItem value="pendiente">Pendiente</SelectItem>
+                    <SelectItem value="aprobado">Aprobado</SelectItem>
+                    <SelectItem value="rechazado">Rechazado</SelectItem>
+                    <SelectItem value="entregado">Entregado</SelectItem>
+                    <SelectItem value="cancelado">Cancelado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <Button
                 variant="outline"
                 onClick={filterOrdersByDate}
                 className="border-[#5baed1] text-[#333333] hover:bg-[#3a8fb7]/10 transition-all duration-200"
               >
                 <Filter className="w-4 h-4 mr-2" />
-                Filtrar por Fecha
+                Filtrar
               </Button>
               {(dateFilter.fechaInicio || dateFilter.fechaFin || searchTerm || statusFilter !== 'all') && (
                 <Button
@@ -931,6 +1110,119 @@ export const OrdersPage: React.FC = () => {
               )}
             </div>
           </motion.div>
+
+          {/* Filtros móviles */}
+          <div className="md:hidden mb-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#3a8fb7] w-4 h-4" />
+                <Input
+                  type="text"
+                  placeholder="Buscar pedidos..."
+                  className="pl-10 bg-[#f2f2f2] border-[#5baed1] focus:border-[#3a8fb7] text-[#333333] placeholder:text-[#5c5c5c] transition-all duration-200"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setShowMobileFilters(!showMobileFilters)}
+                className="border-[#5baed1] text-[#333333] hover:bg-[#3a8fb7]/10 transition-all duration-200"
+              >
+                <Filter className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleManualRefresh}
+                disabled={isLoading}
+                className="border-[#5baed1] text-[#333333] hover:bg-[#3a8fb7]/10 transition-all duration-200"
+              >
+                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              </Button>
+            </div>
+
+            <AnimatePresence>
+              {showMobileFilters && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="mt-2 p-4 bg-white rounded-lg border border-[#5baed1]/20 shadow-sm"
+                >
+                  <div className="space-y-4">
+                    <div>
+                      <label htmlFor="mobileStatus" className="text-[#333333] text-sm font-medium">
+                        Estado
+                      </label>
+                      <Select 
+                        value={statusFilter} 
+                        onValueChange={setStatusFilter}
+                      >
+                        <SelectTrigger id="mobileStatus" className="w-full bg-[#f2f2f2] border-[#5baed1] mt-1">
+                          <SelectValue placeholder="Todos los estados" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todos los estados</SelectItem>
+                          <SelectItem value="pendiente">Pendiente</SelectItem>
+                          <SelectItem value="aprobado">Aprobado</SelectItem>
+                          <SelectItem value="rechazado">Rechazado</SelectItem>
+                          <SelectItem value="entregado">Entregado</SelectItem>
+                          <SelectItem value="cancelado">Cancelado</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="mobileFechaInicio" className="text-[#333333] text-sm font-medium">
+                        Fecha Inicio
+                      </label>
+                      <Input
+                        id="mobileFechaInicio"
+                        type="date"
+                        value={dateFilter.fechaInicio}
+                        onChange={(e) => setDateFilter({ ...dateFilter, fechaInicio: e.target.value })}
+                        className="w-full bg-[#f2f2f2] border-[#5baed1] mt-1"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label htmlFor="mobileFechaFin" className="text-[#333333] text-sm font-medium">
+                        Fecha Fin
+                      </label>
+                      <Input
+                        id="mobileFechaFin"
+                        type="date"
+                        value={dateFilter.fechaFin}
+                        onChange={(e) => setDateFilter({ ...dateFilter, fechaFin: e.target.value })}
+                        className="w-full bg-[#f2f2f2] border-[#5baed1] mt-1"
+                      />
+                    </div>
+                    
+                    <div className="flex space-x-2">
+                      <Button
+                        variant="default"
+                        onClick={filterOrdersByDate}
+                        className="flex-1 bg-[#3a8fb7] hover:bg-[#2a7a9f]"
+                      >
+                        Aplicar Filtros
+                      </Button>
+                      
+                      <Button
+                        variant="outline"
+                        onClick={clearAllFilters}
+                        className="border-[#5baed1] text-[#333333]"
+                      >
+                        Limpiar
+                      </Button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
           {/* Estado de carga */}
           {isLoading && (
@@ -970,7 +1262,9 @@ export const OrdersPage: React.FC = () => {
                         ? 'No hay pedidos aprobados.'
                         : activeTab === 'rechazados'
                           ? 'No hay pedidos rechazados.'
-                          : 'Aún no has realizado ningún pedido. Comienza a comprar para ver tus pedidos aquí.'}
+                          : activeTab === 'creados'
+                            ? 'No has creado ningún pedido como operario.'
+                            : 'Aún no has realizado ningún pedido. Comienza a comprar para ver tus pedidos aquí.'}
               </p>
               {(searchTerm || dateFilter.fechaInicio || dateFilter.fechaFin || statusFilter !== 'all' || activeTab !== 'todos') && (
                 <Button 
@@ -996,7 +1290,9 @@ export const OrdersPage: React.FC = () => {
                  activeTab === 'porAprobar' ? 'Pedidos por aprobar' :
                  activeTab === 'pendientes' ? 'Pedidos pendientes' :
                  activeTab === 'aprobados' ? 'Pedidos aprobados' :
-                 activeTab === 'rechazados' ? 'Pedidos rechazados' : 'Pedidos'}
+                 activeTab === 'rechazados' ? 'Pedidos rechazados' :
+                 activeTab === 'creados' ? 'Pedidos creados por mí' :
+                 'Pedidos'}
                 <Badge variant="outline" className="ml-3 bg-[#3a8fb7]/10 text-[#3a8fb7] border-[#5baed1]">
                   {filteredOrders.length} pedidos
                 </Badge>
@@ -1010,241 +1306,243 @@ export const OrdersPage: React.FC = () => {
                 className="hidden md:block"
               >
                 <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-[#3a8fb7]/10 hover:shadow-md transition-all duration-300">
-                  <table className="w-full">
-                    <thead className="bg-[#3a8fb7]/10 text-[#333333] border-b border-[#3a8fb7]/20">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                          Pedido #
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                          Fecha
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                          Cliente
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                          Productos
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
-                          Estado
-                        </th>
-                        <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider">
-                          Total
-                        </th>
-                        <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider">
-                          Acciones
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-[#5baed1]/10">
-                      {filteredOrders.map((order) => (
-                        <React.Fragment key={order._id}>
-                          <tr className="hover:bg-[#e8f0f3] transition-colors duration-200">
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex items-center font-medium text-[#333333]">
-                                <Hash className="w-4 h-4 text-[#3a8fb7] mr-2" />
-                                {order.displayNumber}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-[#333333]">{formatDate(order.fecha)}</div>
-                              <div className="text-xs text-[#5c5c5c]">
-                                {formatTime(order.fecha)}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex items-center">
-                                <Building className="w-4 h-4 text-[#5baed1] mr-2" />
-                                <div>
-                                  <div className="font-medium text-[#333333]">{getClientName(order)}</div>
-                                  {getClientSection(order) && (
-                                    <div className="text-xs text-[#5c5c5c] flex items-center mt-1">
-                                      <MapPin className="w-3 h-3 mr-1" />
-                                      {getClientSection(order)}
-                                    </div>
-                                  )}
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-[#3a8fb7]/10 text-[#333333] border-b border-[#3a8fb7]/20">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                            Pedido #
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                            Fecha
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                            Cliente
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                            Productos
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider">
+                            Estado
+                          </th>
+                          <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider">
+                            Total
+                          </th>
+                          <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider">
+                            Acciones
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-[#5baed1]/10">
+                        {filteredOrders.map((order) => (
+                          <React.Fragment key={order._id}>
+                            <tr className="hover:bg-[#e8f0f3] transition-colors duration-200">
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center font-medium text-[#333333]">
+                                  <Hash className="w-4 h-4 text-[#3a8fb7] mr-2" />
+                                  {order.displayNumber}
                                 </div>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <Badge className="bg-[#3a8fb7]/10 text-[#3a8fb7] border-[#5baed1]/50">
-                                {order.productos?.length || 0} items
-                              </Badge>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => toggleOrderDetails(order._id)}
-                                className="ml-2 text-[#4a4a4a] hover:text-[#333333] hover:bg-[#3a8fb7]/10 transition-all duration-200"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </Button>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex flex-col space-y-1">
-                                {renderStatusBadge(order.estado)}
-                                {renderOperarioBadge(order)}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 text-right whitespace-nowrap font-bold text-[#333333]">
-                              ${order.total?.toFixed(2) || '0.00'}
-                            </td>
-                            <td className="px-6 py-4 text-right whitespace-nowrap">
-                              <div className="flex justify-end space-x-2">
-                                {/* Botón para descargar remito */}
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleRemitoDownload(order._id)}
-                                  disabled={isDownloadingRemito === order._id}
-                                  className="border-[#5baed1] text-[#333333] hover:bg-[#3a8fb7]/10 transition-all duration-200"
-                                >
-                                  {isDownloadingRemito === order._id ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <Download className="h-4 w-4" />
-                                  )}
-                                </Button>
-                                
-                                {/* Botones de aprobación para supervisores */}
-                                {canApproveOrder(order) && (
-                                  <>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => openApprovalDialog(order._id)}
-                                      className="border-[#4CAF50] text-[#4CAF50] hover:bg-[#4CAF50]/10 transition-all duration-200"
-                                      disabled={approveMutation.isPending || rejectMutation.isPending}
-                                    >
-                                      <CheckSquare className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => openRejectionDialog(order._id)}
-                                      className="border-[#F44336] text-[#F44336] hover:bg-[#F44336]/10 transition-all duration-200"
-                                      disabled={approveMutation.isPending || rejectMutation.isPending}
-                                    >
-                                      <XSquare className="h-4 w-4" />
-                                    </Button>
-                                  </>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                          
-                          {/* Detalles del pedido (expandido) */}
-                          {orderDetailsOpen === order._id && (
-                            <tr>
-                              <td colSpan={7} className="px-6 py-4 bg-[#e8f0f3]">
-                                <div className="space-y-3">
-                                  <div className="flex justify-between items-start">
-                                    <h3 className="font-medium text-[#333333]">Detalles del Pedido #{order.displayNumber}</h3>
-                                    
-                                    {/* Mostrar información de operario (si aplica) */}
-                                    {order.metadata?.creadoPorOperario && (
-                                      <div className="bg-[#5baed1]/10 rounded-md p-2 text-xs text-[#333333] border border-[#5baed1]/30">
-                                        <div className="flex items-center mb-1 text-[#3a8fb7]">
-                                          <UserCheck className="h-3 w-3 mr-1" />
-                                          <span className="font-medium">Pedido creado por operario</span>
-                                        </div>
-                                        <p>Operario: <span className="font-medium">{order.metadata.operarioNombre || "Desconocido"}</span></p>
-                                        {order.metadata.fechaCreacion && (
-                                          <p>Fecha: {formatDate(order.metadata.fechaCreacion)} {formatTime(order.metadata.fechaCreacion)}</p>
-                                        )}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-[#333333]">{formatDate(order.fecha)}</div>
+                                <div className="text-xs text-[#5c5c5c]">
+                                  {formatTime(order.fecha)}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex items-center">
+                                  <Building className="w-4 h-4 text-[#5baed1] mr-2" />
+                                  <div>
+                                    <div className="font-medium text-[#333333]">{getClientName(order)}</div>
+                                    {getClientSection(order) && (
+                                      <div className="text-xs text-[#5c5c5c] flex items-center mt-1">
+                                        <MapPin className="w-3 h-3 mr-1" />
+                                        {getClientSection(order)}
                                       </div>
                                     )}
                                   </div>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <Badge className="bg-[#3a8fb7]/10 text-[#3a8fb7] border-[#5baed1]/50">
+                                  {order.productos?.length || 0} items
+                                </Badge>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => toggleOrderDetails(order._id)}
+                                  className="ml-2 text-[#4a4a4a] hover:text-[#333333] hover:bg-[#3a8fb7]/10 transition-all duration-200"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </Button>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex flex-col space-y-1">
+                                  {renderStatusBadge(order.estado)}
+                                  {renderOperarioBadge(order)}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 text-right whitespace-nowrap font-bold text-[#333333]">
+                                ${order.total?.toFixed(2) || '0.00'}
+                              </td>
+                              <td className="px-6 py-4 text-right whitespace-nowrap">
+                                <div className="flex justify-end space-x-2">
+                                  {/* Botón para descargar remito */}
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleRemitoDownload(order._id)}
+                                    disabled={isDownloadingRemito === order._id}
+                                    className="border-[#5baed1] text-[#333333] hover:bg-[#3a8fb7]/10 transition-all duration-200"
+                                  >
+                                    {isDownloadingRemito === order._id ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Download className="h-4 w-4" />
+                                    )}
+                                  </Button>
                                   
-                                  {/* Mostrar motivo de rechazo si aplica */}
-                                  {order.estado === OrderStatus.REJECTED && order.observaciones && (
-                                    <Alert className="bg-[#F44336]/10 border border-[#F44336]/30 mt-2">
-                                      <AlertTriangle className="h-4 w-4 text-[#F44336]" />
-                                      <AlertDescription className="ml-2 text-[#333333]">
-                                        <span className="font-bold">Motivo de rechazo:</span> {order.observaciones}
-                                      </AlertDescription>
-                                    </Alert>
-                                  )}
-                                  
-                                  {/* Productos del pedido */}
-                                  <div className="bg-white rounded-md border border-[#5baed1]/20 overflow-hidden shadow-sm">
-                                    <table className="min-w-full">
-                                      <thead className="bg-[#3a8fb7]/10 border-b border-[#5baed1]/20">
-                                        <tr>
-                                          <th className="px-4 py-2 text-left text-xs font-medium text-[#333333] uppercase">
-                                            Producto
-                                          </th>
-                                          <th className="px-4 py-2 text-left text-xs font-medium text-[#333333] uppercase">
-                                            Cantidad
-                                          </th>
-                                          <th className="px-4 py-2 text-right text-xs font-medium text-[#333333] uppercase">
-                                            Precio
-                                          </th>
-                                          <th className="px-4 py-2 text-right text-xs font-medium text-[#333333] uppercase">
-                                            Total
-                                          </th>
-                                        </tr>
-                                      </thead>
-                                      <tbody className="divide-y divide-[#5baed1]/10">
-                                        {order.productos.map((item, index) => {
-                                          // Extraer información del producto
-                                          const productName = typeof item.productoId === 'object' && item.productoId.nombre
-                                            ? item.productoId.nombre
-                                            : item.nombre || 'Producto desconocido';
-                                            
-                                          const productPrice = item.precioUnitario !== undefined
-                                            ? item.precioUnitario
-                                            : (typeof item.productoId === 'object' && item.productoId.precio !== undefined
-                                              ? item.productoId.precio
-                                              : item.precio || 0);
-                                          
-                                          return (
-                                            <tr key={index} className="hover:bg-[#e8f0f3]/50 transition-colors duration-200">
-                                              <td className="px-4 py-3 text-[#333333]">
-                                                {productName}
-                                              </td>
-                                              <td className="px-4 py-3 text-[#4a4a4a]">
-                                                {item.cantidad}
-                                              </td>
-                                              <td className="px-4 py-3 text-right text-[#4a4a4a]">
-                                                ${productPrice.toFixed(2)}
-                                              </td>
-                                              <td className="px-4 py-3 text-right font-medium text-[#333333]">
-                                                ${(productPrice * item.cantidad).toFixed(2)}
-                                              </td>
-                                            </tr>
-                                          );
-                                        })}
-                                        
-                                        {/* Fila de total */}
-                                        <tr className="bg-[#3a8fb7]/5">
-                                          <td colSpan={3} className="px-4 py-3 text-right font-medium text-[#333333]">
-                                            Total:
-                                          </td>
-                                          <td className="px-4 py-3 text-right font-bold text-[#333333]">
-                                            ${order.total?.toFixed(2) || '0.00'}
-                                          </td>
-                                        </tr>
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                  
-                                  {/* Sección de notas */}
-                                  {order.detalle && order.detalle.trim() !== '' && (
-                                    <div className="mt-3">
-                                      <h4 className="text-sm font-medium text-[#333333]">Notas:</h4>
-                                      <p className="text-sm text-[#4a4a4a] bg-white p-3 rounded-md border border-[#5baed1]/20 mt-1 shadow-sm">
-                                        {order.detalle}
-                                      </p>
-                                    </div>
+                                  {/* Botones de aprobación para supervisores */}
+                                  {canApproveOrder(order) && (
+                                    <>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => openApprovalDialog(order._id)}
+                                        className="border-[#4CAF50] text-[#4CAF50] hover:bg-[#4CAF50]/10 transition-all duration-200"
+                                        disabled={approveMutation.isPending || rejectMutation.isPending}
+                                      >
+                                        <CheckSquare className="h-4 w-4" />
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => openRejectionDialog(order._id)}
+                                        className="border-[#F44336] text-[#F44336] hover:bg-[#F44336]/10 transition-all duration-200"
+                                        disabled={approveMutation.isPending || rejectMutation.isPending}
+                                      >
+                                        <XSquare className="h-4 w-4" />
+                                      </Button>
+                                    </>
                                   )}
                                 </div>
                               </td>
                             </tr>
-                          )}
-                        </React.Fragment>
-                      ))}
-                    </tbody>
-                  </table>
+                            
+                            {/* Detalles del pedido (expandido) */}
+                            {orderDetailsOpen === order._id && (
+                              <tr>
+                                <td colSpan={7} className="px-6 py-4 bg-[#e8f0f3]">
+                                  <div className="space-y-3">
+                                    <div className="flex justify-between items-start">
+                                      <h3 className="font-medium text-[#333333]">Detalles del Pedido #{order.displayNumber}</h3>
+                                      
+                                      {/* Mostrar información de operario (si aplica) */}
+                                      {order.metadata?.creadoPorOperario && (
+                                        <div className="bg-[#5baed1]/10 rounded-md p-2 text-xs text-[#333333] border border-[#5baed1]/30">
+                                          <div className="flex items-center mb-1 text-[#3a8fb7]">
+                                            <UserCheck className="h-3 w-3 mr-1" />
+                                            <span className="font-medium">Pedido creado por operario</span>
+                                          </div>
+                                          <p>Operario: <span className="font-medium">{order.metadata.operarioNombre || "Desconocido"}</span></p>
+                                          {order.metadata.fechaCreacion && (
+                                            <p>Fecha: {formatDate(order.metadata.fechaCreacion)} {formatTime(order.metadata.fechaCreacion)}</p>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                    
+                                    {/* Mostrar motivo de rechazo si aplica */}
+                                    {order.estado === OrderStatus.REJECTED && order.observaciones && (
+                                      <Alert className="bg-[#F44336]/10 border border-[#F44336]/30 mt-2">
+                                        <AlertTriangle className="h-4 w-4 text-[#F44336]" />
+                                        <AlertDescription className="ml-2 text-[#333333]">
+                                          <span className="font-bold">Motivo de rechazo:</span> {order.observaciones}
+                                        </AlertDescription>
+                                      </Alert>
+                                    )}
+                                    
+                                    {/* Productos del pedido */}
+                                    <div className="bg-white rounded-md border border-[#5baed1]/20 overflow-hidden shadow-sm">
+                                      <table className="min-w-full">
+                                        <thead className="bg-[#3a8fb7]/10 border-b border-[#5baed1]/20">
+                                          <tr>
+                                            <th className="px-4 py-2 text-left text-xs font-medium text-[#333333] uppercase">
+                                              Producto
+                                            </th>
+                                            <th className="px-4 py-2 text-left text-xs font-medium text-[#333333] uppercase">
+                                              Cantidad
+                                            </th>
+                                            <th className="px-4 py-2 text-right text-xs font-medium text-[#333333] uppercase">
+                                              Precio
+                                            </th>
+                                            <th className="px-4 py-2 text-right text-xs font-medium text-[#333333] uppercase">
+                                              Total
+                                            </th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-[#5baed1]/10">
+                                          {order.productos.map((item, index) => {
+                                            // Extraer información del producto
+                                            const productName = typeof item.productoId === 'object' && item.productoId.nombre
+                                              ? item.productoId.nombre
+                                              : item.nombre || 'Producto desconocido';
+                                              
+                                            const productPrice = item.precioUnitario !== undefined
+                                              ? item.precioUnitario
+                                              : (typeof item.productoId === 'object' && item.productoId.precio !== undefined
+                                                ? item.productoId.precio
+                                                : item.precio || 0);
+                                            
+                                            return (
+                                              <tr key={index} className="hover:bg-[#e8f0f3]/50 transition-colors duration-200">
+                                                <td className="px-4 py-3 text-[#333333]">
+                                                  {productName}
+                                                </td>
+                                                <td className="px-4 py-3 text-[#4a4a4a]">
+                                                  {item.cantidad}
+                                                </td>
+                                                <td className="px-4 py-3 text-right text-[#4a4a4a]">
+                                                  ${productPrice.toFixed(2)}
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-medium text-[#333333]">
+                                                  ${(productPrice * item.cantidad).toFixed(2)}
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+                                          
+                                          {/* Fila de total */}
+                                          <tr className="bg-[#3a8fb7]/5">
+                                            <td colSpan={3} className="px-4 py-3 text-right font-medium text-[#333333]">
+                                              Total:
+                                            </td>
+                                            <td className="px-4 py-3 text-right font-bold text-[#333333]">
+                                              ${order.total?.toFixed(2) || '0.00'}
+                                            </td>
+                                          </tr>
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                    
+                                    {/* Sección de notas */}
+                                    {order.detalle && order.detalle.trim() !== '' && (
+                                      <div className="mt-3">
+                                        <h4 className="text-sm font-medium text-[#333333]">Notas:</h4>
+                                        <p className="text-sm text-[#4a4a4a] bg-white p-3 rounded-md border border-[#5baed1]/20 mt-1 shadow-sm">
+                                          {order.detalle}
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </motion.div>
 

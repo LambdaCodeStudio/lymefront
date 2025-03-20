@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AlertCircle, Info } from 'lucide-react';
 import {
   Dialog,
@@ -82,6 +82,12 @@ const UserForm: React.FC<UserFormProps> = ({
   const [windowWidth, setWindowWidth] = useState(
     typeof window !== 'undefined' ? window.innerWidth : 1024
   );
+
+  // Nuevo estado para controlar las secciones disponibles
+  const [availableSections, setAvailableSections] = useState<string[]>(['limpieza', 'mantenimiento', 'ambos']);
+  
+  // Nuevo estado para almacenar información del supervisor seleccionado
+  const [selectedSupervisorInfo, setSelectedSupervisorInfo] = useState<User | null>(null);
   
   // Efecto para detectar el tamaño de la ventana
   useEffect(() => {
@@ -95,50 +101,105 @@ const UserForm: React.FC<UserFormProps> = ({
     }
   }, []);
   
-  // Cargar supervisores cuando se selecciona rol de operario
+  // Cargar supervisores cuando se selecciona rol de operario o cuando se abre el modal
   useEffect(() => {
-    const loadSupervisors = async () => {
-      // Cargar supervisores para nuevos operarios Y cuando se edita/cambia a operario
-      if (formData.role === ROLES.OPERARIO) {
-        setSupervisorsLoading(true);
-        setSupervisorsError('');
-        try {
-          // Usar la respuesta actualizada según el nuevo formato de la API
-          const supervisors = await userService.getSupervisors();
+    // Cargar supervisores cada vez que se abre el modal o cuando se cambia a rol operario
+    if (isOpen) {
+      const loadSupervisors = async () => {
+        // Solo cargar si el rol es operario o es undefined (modal recién abierto)
+        if (formData.role === ROLES.OPERARIO || !formData.role) {
+          setSupervisorsLoading(true);
+          setSupervisorsError('');
           
-          console.log('Supervisores cargados:', supervisors);
-          
-          // Filtrar al usuario actual si es un supervisor siendo cambiado a operario
-          let filteredSupervisors = [...supervisors];
-          if (editingUser && editingUser._id) {
-            filteredSupervisors = supervisors.filter(sup => sup._id !== editingUser._id);
+          try {
+            // Forzar una nueva petición al servidor cada vez que se abre el modal
+            const supervisors = await userService.getSupervisors(true);
+            console.log('Supervisores actualizados:', supervisors);
+            
+            // Filtrar al usuario actual si es un supervisor siendo cambiado a operario
+            let filteredSupervisors = [...supervisors];
+            if (editingUser && editingUser._id) {
+              filteredSupervisors = supervisors.filter(sup => sup._id !== editingUser._id);
+            }
+            
+            setAvailableSupervisors(filteredSupervisors);
+            
+            // Si estamos editando un operario, asegurarnos de que el supervisor actual esté seleccionado
+            if (editingUser && editingUser.supervisorId && !formData.supervisorId) {
+              setFormData(prev => ({
+                ...prev,
+                supervisorId: editingUser.supervisorId
+              }));
+            }
+            
+            // Verificar si hay supervisores
+            if (filteredSupervisors.length === 0) {
+              setSupervisorsError('No hay supervisores disponibles');
+            }
+          } catch (err) {
+            console.error('Error al cargar supervisores:', err);
+            setSupervisorsError('No se pudieron cargar los supervisores');
+          } finally {
+            setSupervisorsLoading(false);
           }
-          
-          setAvailableSupervisors(filteredSupervisors);
+        }
+      };
+      
+      loadSupervisors();
+    }
+  }, [isOpen, formData.role, editingUser]);
 
-          // Si estamos editando un operario, asegurarnos de que el supervisor actual esté seleccionado
-          if (editingUser && editingUser.supervisorId && !formData.supervisorId) {
-            setFormData(prev => ({
-              ...prev,
-              supervisorId: editingUser.supervisorId
-            }));
-          }
+  // Efecto para obtener información del supervisor seleccionado y actualizar secciones
+  useEffect(() => {
+    const getSupervisorInfo = async () => {
+      if (formData.role === ROLES.OPERARIO && formData.supervisorId) {
+        try {
+          // Buscar el supervisor en la lista de supervisores disponibles
+          const supervisor = availableSupervisors.find(sup => sup._id === formData.supervisorId);
           
-          // Verificar si hay supervisores
-          if (filteredSupervisors.length === 0) {
-            setSupervisorsError('No hay supervisores disponibles');
+          if (supervisor) {
+            setSelectedSupervisorInfo(supervisor);
+            
+            // Actualizar las secciones disponibles según las secciones del supervisor
+            if (supervisor.secciones === 'limpieza') {
+              setAvailableSections(['limpieza']);
+              // Forzar la selección de limpieza siempre, sin importar lo que hubiera antes
+              setFormData(prev => ({
+                ...prev,
+                secciones: 'limpieza'
+              }));
+            } else if (supervisor.secciones === 'mantenimiento') {
+              setAvailableSections(['mantenimiento']);
+              // Forzar la selección de mantenimiento siempre, sin importar lo que hubiera antes
+              setFormData(prev => ({
+                ...prev,
+                secciones: 'mantenimiento'
+              }));
+            } else if (supervisor.secciones === 'ambos') {
+              // Si el supervisor tiene ambos, permitir todas las opciones
+              setAvailableSections(['limpieza', 'mantenimiento', 'ambos']);
+              
+              // Si no hay una selección previa válida, establecer 'ambos' como predeterminado
+              if (!formData.secciones || !['limpieza', 'mantenimiento', 'ambos'].includes(formData.secciones)) {
+                setFormData(prev => ({
+                  ...prev,
+                  secciones: 'ambos'
+                }));
+              }
+            }
           }
         } catch (err) {
-          console.error('Error al cargar supervisores:', err);
-          setSupervisorsError('No se pudieron cargar los supervisores');
-        } finally {
-          setSupervisorsLoading(false);
+          console.error('Error al obtener información del supervisor:', err);
         }
+      } else if (formData.role !== ROLES.OPERARIO) {
+        // Resetear cuando no es operario
+        setSelectedSupervisorInfo(null);
+        setAvailableSections(['limpieza', 'mantenimiento', 'ambos']);
       }
     };
-  
-    loadSupervisors();
-  }, [formData.role, editingUser]);
+    
+    getSupervisorInfo();
+  }, [formData.role, formData.supervisorId, availableSupervisors]);
   
   // Efecto para actualizar isTemporary cuando cambie el usuario editado
   useEffect(() => {
@@ -445,17 +506,36 @@ const UserForm: React.FC<UserFormProps> = ({
                     secciones: value
                   });
                 }}
+                disabled={formData.role === ROLES.OPERARIO && (availableSections.length === 1 || !formData.supervisorId)}
                 required
               >
                 <SelectTrigger id="secciones">
                   <SelectValue placeholder="Seleccionar secciones" />
                 </SelectTrigger>
                 <SelectContent position="popper" sideOffset={5} align="start">
-                  <SelectItem value="limpieza">Limpieza</SelectItem>
-                  <SelectItem value="mantenimiento">Mantenimiento</SelectItem>
-                  <SelectItem value="ambos">Ambos</SelectItem>
+                  {availableSections.includes('limpieza') && (
+                    <SelectItem value="limpieza">Limpieza</SelectItem>
+                  )}
+                  {availableSections.includes('mantenimiento') && (
+                    <SelectItem value="mantenimiento">Mantenimiento</SelectItem>
+                  )}
+                  {availableSections.includes('ambos') && (
+                    <SelectItem value="ambos">Ambos</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
+              
+              {formData.role === ROLES.OPERARIO && !formData.supervisorId && (
+                <p className="text-amber-600 text-xs mt-1">
+                  Primero debes seleccionar un supervisor para determinar las secciones disponibles
+                </p>
+              )}
+              
+              {formData.role === ROLES.OPERARIO && selectedSupervisorInfo && availableSections.length === 1 && (
+                <p className="text-amber-600 text-xs mt-1">
+                  Las secciones están limitadas según las asignadas al supervisor seleccionado
+                </p>
+              )}
             </div>
           </div>
 
