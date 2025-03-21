@@ -130,7 +130,7 @@ const ApproveOrdersWrapper: React.FC = () => {
         }
         
         // Obtener información del usuario
-        const userResponse = await fetch('http://localhost:3000/api/auth/me', {
+        const userResponse = await fetch('/api/auth/me', {
           headers: {
             'Authorization': `Bearer ${token}`
           }

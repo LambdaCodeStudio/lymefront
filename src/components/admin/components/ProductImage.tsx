@@ -19,7 +19,7 @@ const imageStatusCache = new Map<string, 'loading' | 'loaded' | 'error' | 'notEx
 
 // Rutas de imágenes
 const IMAGES_URL_PREFIX = '/images/products';
-const API_URL = "http://localhost:3000/api/";
+const API_URL = "/api/";
 
 /**
  * Componente optimizado para mostrar imágenes de productos con soporte para

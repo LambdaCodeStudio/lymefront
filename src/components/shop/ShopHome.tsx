@@ -190,7 +190,7 @@ export const ShopHome: React.FC = () => {
         throw new Error('No authentication token');
       }
 
-      const response = await fetch('http://localhost:3000/api/auth/me', {
+      const response = await fetch('/api/auth/me', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -230,7 +230,7 @@ export const ShopHome: React.FC = () => {
     
     // Use a large limit to try to get all products
     const limit = 1000;
-    const url = `http://localhost:3000/api/producto?page=1&limit=${limit}${categoryFilter}`;
+    const url = `/api/producto?page=1&limit=${limit}${categoryFilter}`;
     
     console.log(`Fetching all products from: ${url}`);
     
@@ -247,9 +247,9 @@ export const ShopHome: React.FC = () => {
         localStorage.removeItem('userRole');
         localStorage.removeItem('userSecciones');
         window.location.href = '/login';
-        throw new Error('Session expired');
+        throw new Error(' Expiro la sesión');
       }
-      throw new Error(`Error loading products (${response.status})`);
+      throw new Error(`Error cargando los productos (${response.status})`);
     }
   
     const data = await response.json();
