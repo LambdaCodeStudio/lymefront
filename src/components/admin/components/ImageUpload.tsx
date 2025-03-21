@@ -13,7 +13,6 @@ interface ImageUploadProps {
   maxSizeMB?: number;
   maxWidth?: number;
   maxHeight?: number;
-  preferBase64?: boolean;
 }
 
 const ImageUpload: React.FC<ImageUploadProps> = ({
@@ -21,14 +20,12 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
   onImageUploaded,
   maxSizeMB = 5,
   maxWidth = 1200,
-  maxHeight = 1200,
-  preferBase64 = true // Por defecto, preferir base64 ya que la BD almacena en ese formato
+  maxHeight = 1200
 }) => {
   const { addNotification } = useNotification();
   const [loading, setLoading] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [fileToUpload, setFileToUpload] = useState<File | null>(null);
-  const [base64Data, setBase64Data] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Improved file validation and processing
@@ -50,7 +47,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
     let processedFile = file;
     if (file.size > 1024 * 1024) { // Compress if larger than 1MB
       try {
-        // More efficient compression
+        // Compression
         processedFile = await compressImage(file, maxWidth, maxHeight);
         
         // Add notification about compression
@@ -84,12 +81,11 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
         return;
       }
       
-      // Create preview and convert to base64
+      // Create preview
       const reader = new FileReader();
       reader.onloadend = () => {
         if (reader.result) {
           setImagePreview(reader.result as string);
-          setBase64Data(reader.result as string);
           setFileToUpload(processedFile);
         }
       };
@@ -159,8 +155,8 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
               // Draw image
               ctx.drawImage(img, 0, 0, width, height);
               
-              // Determine output format based on browser support and original format
-              const outputType = file.type === 'image/png' ? 'image/png' : 'image/webp';
+              // Determine output format - preferir WebP para mejor compresión
+              const outputType = 'image/webp';
               const quality = file.size > 2 * 1024 * 1024 ? 0.6 : 0.8;
               
               // Create blob
@@ -215,9 +211,9 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
     });
   };
   
-  // Optimized image upload with both methods
+  // Optimized image upload using FormData (ahora preferido ya que guardamos en sistema de archivos)
   const uploadImage = async () => {
-    if (!fileToUpload && !base64Data) {
+    if (!fileToUpload) {
       addNotification?.('No hay imagen para subir', 'warning');
       return;
     }
@@ -230,42 +226,33 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
         throw new Error('No hay token de autenticación');
       }
 
-      let success = false;
-      
-      // Intentar primero con base64 si es preferido o tenemos los datos ya
-      if (preferBase64 && base64Data) {
-        try {
-          await uploadBase64(productId, base64Data, token);
-          success = true;
-        } catch (error) {
-          console.error('Error en subida base64, intentando con FormData:', error);
-          // Si falla, intentar con el método FormData si tenemos un archivo
-          if (fileToUpload) {
-            await uploadWithFormData(productId, fileToUpload, token);
-            success = true;
-          } else {
-            throw error; // Propagar el error si no tenemos archivo para retry
-          }
-        }
-      } 
-      // Si no preferimos base64 o no tenemos los datos, usar FormData
-      else if (fileToUpload) {
-        try {
-          await uploadWithFormData(productId, fileToUpload, token);
-          success = true;
-        } catch (error) {
-          console.error('Error en subida con FormData, intentando con Base64:', error);
-          // Si falla y tenemos datos base64, intentar con ese método
-          if (base64Data) {
-            await uploadBase64(productId, base64Data, token);
-            success = true;
-          } else {
-            throw error;
-          }
-        }
-      }
+      // Crear FormData para enviar la imagen
+      const formDataObj = new FormData();
+      formDataObj.append('imagen', fileToUpload);
 
-      if (success) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+      try {
+        const response = await fetch(`${API_URL}producto/${productId}/imagen`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formDataObj,
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`Error en subida (${response.status}): ${response.statusText}`);
+        }
+        
+        // Obtener la URL de la imagen desde la respuesta
+        const data = await response.json();
+        
+        // Mostrar notificación de éxito
         addNotification?.('Imagen subida correctamente', 'success');
         
         // Notificar al componente padre
@@ -275,7 +262,13 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
         
         // Limpiar el formulario
         handleClear();
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          throw new Error('La solicitud tardó demasiado tiempo');
+        }
+        throw error;
       }
+
     } catch (err: any) {
       console.error('Error al subir imagen:', err);
       addNotification?.(`Error al subir la imagen: ${err.message || 'Error desconocido'}`, 'error');
@@ -287,74 +280,11 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
       setLoading(false);
     }
   };
-
-  // Subir usando FormData y multipart/form-data
-  const uploadWithFormData = async (productId: string, file: File, token: string): Promise<void> => {
-    // Crear FormData para enviar la imagen
-    const formDataObj = new FormData();
-    formDataObj.append('imagen', file);
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-    try {
-      const response = await fetch(`${API_URL}producto/${productId}/imagen`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formDataObj,
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`Error en subida FormData (${response.status}): ${response.statusText}`);
-      }
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        throw new Error('La solicitud tardó demasiado tiempo');
-      }
-      throw error;
-    }
-  };
-
-  // Subir usando Base64
-  const uploadBase64 = async (productId: string, base64Image: string, token: string): Promise<void> => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-    try {
-      const response = await fetch(`${API_URL}producto/${productId}/imagen-base64`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ base64Image }),
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Error ${response.status}: ${response.statusText}`);
-      }
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        throw new Error('La solicitud tardó demasiado tiempo');
-      }
-      throw error;
-    }
-  };
   
   // Clear form
   const handleClear = () => {
     setImagePreview(null);
     setFileToUpload(null);
-    setBase64Data(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }

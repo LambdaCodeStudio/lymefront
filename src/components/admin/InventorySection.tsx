@@ -66,15 +66,29 @@ import { inventoryObservable, getAuthToken } from '@/utils/inventoryUtils';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import OptimizedProductImage from './components/ProductImage';
 import ImageUpload from './components/ImageUpload';
-import { 
-  Product, 
-  ComboItemType, 
-  ProveedorType, 
+import {
+  Product,
+  ComboItemType,
+  ProveedorType,
   PaginatedResponse
 } from '@/types/inventory';
 
 // Definir URL base para la API
 const API_URL = "http://localhost:3000/api/";
+
+/**
+ * Obtiene la URL de la imagen para un producto
+ * Sigue la misma lógica que en ProductCard para mantener consistencia
+ */
+const getProductImageUrl = (productId: string, addTimestamp = true) => {
+  if (!productId) return '/lyme.png';
+
+  // Construir URL basada en ID
+  const url = `/images/products/${productId}.webp`;
+
+  // Agregar timestamp para evitar caché si se solicita
+  return addTimestamp ? `${url}?t=${Date.now()}` : url;
+};
 
 // Definir umbral de stock bajo
 const LOW_STOCK_THRESHOLD = 10;
@@ -156,39 +170,24 @@ const InventorySection = () => {
   // Estado para almacenar todos los productos disponibles para combos
   const [allAvailableProducts, setAllAvailableProducts] = useState<Product[]>([]);
 
-  // Hook para paginación con lógica adaptada de AdminUserManagement
-  const useMediaQuery = (query: string) => {
-    const [matches, setMatches] = useState(
-      typeof window !== 'undefined' ? window.matchMedia(query).matches : false
-    );
+
+  const useDebounce = (value: string, delay: number) => {
+    const [debouncedValue, setDebouncedValue] = useState(value);
 
     useEffect(() => {
-      if (typeof window === 'undefined') return;
-
-      const mediaQuery = window.matchMedia(query);
-      setMatches(mediaQuery.matches);
-
-      const handler = (event: MediaQueryListEvent) => setMatches(event.matches);
-
-      if (mediaQuery.addEventListener) {
-        mediaQuery.addEventListener('change', handler);
-      } else {
-        // @ts-ignore - Para compatibilidad con navegadores antiguos
-        mediaQuery.addListener(handler);
-      }
+      const handler = setTimeout(() => {
+        setDebouncedValue(value);
+      }, delay);
 
       return () => {
-        if (mediaQuery.removeEventListener) {
-          mediaQuery.removeEventListener('change', handler);
-        } else {
-          // @ts-ignore - Para compatibilidad con navegadores antiguos
-          mediaQuery.removeListener(handler);
-        }
+        clearTimeout(handler);
       };
-    }, [query]);
+    }, [value, delay]);
 
-    return matches;
+    return debouncedValue;
   };
+
+  const debouncedSearchTerm = useDebounce(searchTerm, 500); // 500ms de delay
 
   const [formData, setFormData] = useState<FormDataType>({
     nombre: '',
@@ -368,8 +367,13 @@ const InventorySection = () => {
         console.log("Filtrando productos con stock bajo...");
       } else {
         // Aplicamos los filtros normales
-        if (searchTerm) {
-          queryParams.append('search', searchTerm);
+        if (debouncedSearchTerm) {  // Usar el término de búsqueda debounced
+          // Búsqueda progresiva usando regex
+          queryParams.append('regex', debouncedSearchTerm);
+          queryParams.append('regexFields', 'nombre,descripcion,marca,proveedor.nombre');
+          queryParams.append('regexOptions', 'i');
+
+          console.log(`Buscando productos que coincidan con: "${debouncedSearchTerm}"`);
         }
 
         if (selectedCategory !== 'all') {
@@ -377,12 +381,16 @@ const InventorySection = () => {
         }
       }
 
+      // Agregar cache buster para evitar resultados en caché del servidor
+      queryParams.append('_', Date.now().toString());
+
       const urlWithParams = `${API_URL}producto?${queryParams.toString()}`;
+      console.log(`Consultando API: ${urlWithParams}`);
 
       const response = await fetch(urlWithParams, {
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Cache-Control': 'no-cache'
+          'Cache-Control': 'no-cache, no-store, must-revalidate'
         }
       });
 
@@ -395,7 +403,7 @@ const InventorySection = () => {
           }
           return;
         }
-        throw new Error('Error al cargar productos');
+        throw new Error(`Error al cargar productos (${response.status})`);
       }
 
       // Obtenemos el JSON de la respuesta
@@ -429,8 +437,15 @@ const InventorySection = () => {
         }
       }
 
+      // Asegurarnos de que los productos tienen URLs de imágenes correctas
+      const productsWithImages = extractedProducts.map(product => ({
+        ...product,
+        // Asegurar que hasImage sea un booleano
+        hasImage: product.hasImage === true
+      }));
+
       // Establecer productos y total
-      setProducts(extractedProducts);
+      setProducts(productsWithImages);
       setTotalCount(totalItems);
 
       // Marcar carga inicial como completada
@@ -666,9 +681,9 @@ const InventorySection = () => {
     // Verificar cada item del combo
     comboItems.forEach(item => {
       // Buscar el producto en la lista de productos disponibles
-      const product = allAvailableProducts.find(p => 
-        typeof item.productoId === 'string' 
-          ? p._id === item.productoId 
+      const product = allAvailableProducts.find(p =>
+        typeof item.productoId === 'string'
+          ? p._id === item.productoId
           : p._id === item.productoId._id
       );
 
@@ -743,7 +758,7 @@ const InventorySection = () => {
       setCurrentPage(1);
       fetchProducts(true, 1, itemsPerPage);
     }
-  }, [searchTerm, selectedCategory, showLowStockOnly, showNoStockOnly]);
+  }, [debouncedSearchTerm, selectedCategory, showLowStockOnly, showNoStockOnly]);
 
   // Función segura para obtener productos filtrados
   const getFilteredProducts = () => {
@@ -783,6 +798,60 @@ const InventorySection = () => {
     });
   };
 
+  // Función adaptada para convertir base64 a blob y usar FormData
+const handleImageUploadBase64 = async (productId: string) => {
+  if (!formData.imagenPreview || typeof formData.imagenPreview !== 'string') return true;
+
+  try {
+    setImageLoading(true);
+
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('No hay token de autenticación');
+    }
+
+    // Convertir base64 a Blob
+    const base64Response = await fetch(formData.imagenPreview);
+    const blob = await base64Response.blob();
+    
+    // Crear un archivo a partir del blob
+    const file = new File([blob], `${productId}.webp`, { 
+      type: 'image/webp',
+      lastModified: Date.now()
+    });
+
+    // Usar FormData para enviar el archivo
+    const formDataObj = new FormData();
+    formDataObj.append('imagen', file);
+
+    const response = await fetch(`${API_URL}producto/${productId}/imagen`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      },
+      body: formDataObj
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error al subir imagen (${response.status})`);
+    }
+
+    // Actualizar el producto específico en el estado
+    const updatedProduct = await fetchProductById(productId);
+    if (updatedProduct) {
+      updateProductInState(updatedProduct);
+    }
+
+    return true;
+  } catch (error: any) {
+    console.error('Error al subir imagen:', error);
+    addNotification(`Error al subir imagen: ${error.message}`, 'error');
+    return false;
+  } finally {
+    setImageLoading(false);
+  }
+};
+
   // Cargar todos los productos al abrir el modal de combos
   useEffect(() => {
     if (showComboSelectionModal) {
@@ -815,13 +884,26 @@ const InventorySection = () => {
     return productsToFilter.filter(product => {
       if (!product || product.esCombo) return false;
 
-      // Buscar por término de búsqueda (si existe)
-      const matchesSearch =
-        comboSearchTerm === '' || (
-          (product.nombre && product.nombre.toLowerCase().includes(comboSearchTerm.toLowerCase()))
-        );
+      // Buscar de forma incremental por término de búsqueda (si existe)
+      // Esto permite resultados mientras se escribe B -> Bo -> Bot -> Botin
+      if (comboSearchTerm === '') return true;
 
-      return matchesSearch;
+      // Buscar en nombre (prioridad principal)
+      if (product.nombre && product.nombre.toLowerCase().includes(comboSearchTerm.toLowerCase())) {
+        return true;
+      }
+
+      // Buscar también en otros campos relevantes
+      if (product.marca && product.marca.toLowerCase().includes(comboSearchTerm.toLowerCase())) {
+        return true;
+      }
+
+      if (product.descripcion && product.descripcion.toLowerCase().includes(comboSearchTerm.toLowerCase())) {
+        return true;
+      }
+
+      // Si llega aquí, no coincide con ningún campo
+      return false;
     });
   };
 
@@ -964,56 +1046,12 @@ const InventorySection = () => {
     }
   };
 
-  // Función mejorada para manejar la imagen en base64
-  const handleImageUploadBase64 = async (productId: string) => {
-    if (!formData.imagenPreview || typeof formData.imagenPreview !== 'string') return true;
-
-    try {
-      setImageLoading(true);
-
-      const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-
-      // Enviar la imagen en formato base64
-      const response = await fetch(`${API_URL}producto/${productId}/imagen-base64`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          base64Image: formData.imagenPreview
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error al subir imagen base64 (${response.status})`);
-      }
-
-      // Actualizar el producto específico en el estado
-      const updatedProduct = await fetchProductById(productId);
-      if (updatedProduct) {
-        updateProductInState(updatedProduct);
-      }
-
-      return true;
-    } catch (error: any) {
-      console.error('Error al subir imagen base64:', error);
-      addNotification(`Error al subir imagen: ${error.message}`, 'error');
-      return false;
-    } finally {
-      setImageLoading(false);
-    }
-  };
-
   // Agregar un ítem al combo
   const handleAddComboItem = (product: Product) => {
     // Verificar si ya existe
-    const existingItem = tempSelectedItems.find(item => 
-      typeof item.productoId === 'string' 
-        ? item.productoId === product._id 
+    const existingItem = tempSelectedItems.find(item =>
+      typeof item.productoId === 'string'
+        ? item.productoId === product._id
         : item.productoId._id === product._id
     );
 
@@ -1021,10 +1059,10 @@ const InventorySection = () => {
       // Si ya existe, solo actualizar la cantidad
       setTempSelectedItems(prevItems =>
         prevItems.map(item => {
-          const itemId = typeof item.productoId === 'string' 
-            ? item.productoId 
+          const itemId = typeof item.productoId === 'string'
+            ? item.productoId
             : item.productoId._id;
-            
+
           return itemId === product._id
             ? { ...item, cantidad: item.cantidad + 1 }
             : item;
@@ -1034,11 +1072,11 @@ const InventorySection = () => {
       // Si no existe, agregarlo
       setTempSelectedItems(prevItems => [
         ...prevItems,
-        { 
-          productoId: product._id, 
-          nombre: product.nombre, 
-          cantidad: 1, 
-          precio: product.precio 
+        {
+          productoId: product._id,
+          nombre: product.nombre,
+          cantidad: 1,
+          precio: product.precio
         }
       ]);
     }
@@ -1050,8 +1088,8 @@ const InventorySection = () => {
       // Si la cantidad es 0 o menos, eliminar el ítem
       setTempSelectedItems(prevItems =>
         prevItems.filter(item => {
-          const itemId = typeof item.productoId === 'string' 
-            ? item.productoId 
+          const itemId = typeof item.productoId === 'string'
+            ? item.productoId
             : item.productoId._id;
           return itemId !== productId;
         })
@@ -1060,10 +1098,10 @@ const InventorySection = () => {
       // Actualizar la cantidad
       setTempSelectedItems(prevItems =>
         prevItems.map(item => {
-          const itemId = typeof item.productoId === 'string' 
-            ? item.productoId 
+          const itemId = typeof item.productoId === 'string'
+            ? item.productoId
             : item.productoId._id;
-          
+
           return itemId === productId
             ? { ...item, cantidad: newQuantity }
             : item;
@@ -1197,17 +1235,18 @@ const InventorySection = () => {
         throw new Error('Error al procesar datos del producto guardado');
       }
 
-      // Manejar la subida de imagen si hay una imagen nueva
+      // Manejar la subida de imagen de manera unificada
       if (formData.imagen) {
+        // Si tenemos un archivo, usar handleImageUpload
         const imageUploaded = await handleImageUpload(savedProduct._id);
         if (!imageUploaded) {
           console.log('Hubo un problema al subir la imagen, pero el producto se guardó correctamente');
         }
       } else if (formData.imagenPreview && typeof formData.imagenPreview === 'string' && formData.imagenPreview.startsWith('data:image')) {
-        // Si tenemos una imagen en base64 (no un objeto File)
+        // Si tenemos una imagen en base64, convertir y usar el mismo método
         const imageUploaded = await handleImageUploadBase64(savedProduct._id);
         if (!imageUploaded) {
-          console.log('Hubo un problema al subir la imagen base64, pero el producto se guardó correctamente');
+          console.log('Hubo un problema al subir la imagen, pero el producto se guardó correctamente');
         }
       }
 
@@ -1365,17 +1404,12 @@ const InventorySection = () => {
         setSelectedComboItems([]);
       }
 
-      // Intentar cargar vista previa de la imagen
+      // Preparar URL para vista previa de imagen
       let imagePreview = null;
-      
+
       if (product.hasImage) {
-        try {
-          // Usar el componente de imagen optimizado
-          imagePreview = `${API_URL}producto/${product._id}/imagen?cache=${Date.now()}`;
-        } catch (error) {
-          console.error('Error al preparar imagen:', error);
-          imagePreview = null;
-        }
+        // Usar la función utilitaria para obtener la URL de la imagen
+        imagePreview = getProductImageUrl(product._id, true);
       }
 
       // Preparar datos del formulario para la edición
@@ -1473,10 +1507,10 @@ const InventorySection = () => {
   // Función para renderizar indicador de stock
   const renderStockIndicator = (stock: number, alertaStockBajo?: boolean) => {
     // Usar el flag alertaStockBajo del backend si está disponible
-    const isLowStock = alertaStockBajo !== undefined 
-      ? alertaStockBajo 
+    const isLowStock = alertaStockBajo !== undefined
+      ? alertaStockBajo
       : (stock <= LOW_STOCK_THRESHOLD && stock > 0);
-      
+
     if (stock <= 0) {
       return (
         <div className="flex items-center gap-1">
@@ -1865,13 +1899,15 @@ const InventorySection = () => {
                         <div className="flex-shrink-0 h-10 w-10 mr-3">
                           <div className="h-10 w-10 rounded-full flex items-center justify-center border border-[#91BEAD]/30 overflow-hidden">
                             {product.hasImage ? (
-                              <OptimizedProductImage
-                                productId={product._id}
+                              <img
+                                src={getProductImageUrl(product._id)}
                                 alt={product.nombre}
-                                width={40}
-                                height={40}
-                                quality={75}
                                 className="h-10 w-10 object-cover"
+                                onError={(e) => {
+                                  const target = e.target as HTMLImageElement;
+                                  target.src = "/lyme.png";
+                                  target.className = "h-8 w-8 object-contain";
+                                }}
                               />
                             ) : (
                               <div className="h-10 w-10 rounded-full bg-[#DFEFE6]/50 flex items-center justify-center text-xs text-[#29696B]">
@@ -1946,10 +1982,10 @@ const InventorySection = () => {
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <Badge 
+                      <Badge
                         className={`
-                          ${product.estado === 'activo' 
-                            ? 'bg-green-100 text-green-800 border-green-200' 
+                          ${product.estado === 'activo'
+                            ? 'bg-green-100 text-green-800 border-green-200'
                             : product.estado === 'discontinuado'
                               ? 'bg-gray-100 text-gray-800 border-gray-200'
                               : 'bg-red-100 text-red-800 border-red-200'
@@ -2040,10 +2076,10 @@ const InventorySection = () => {
                     </Badge>
                   )}
                 </div>
-                <Badge 
+                <Badge
                   className={`
-                    ${product.estado === 'activo' 
-                      ? 'bg-green-100 text-green-800 border-green-200' 
+                    ${product.estado === 'activo'
+                      ? 'bg-green-100 text-green-800 border-green-200'
                       : product.estado === 'discontinuado'
                         ? 'bg-gray-100 text-gray-800 border-gray-200'
                         : 'bg-red-100 text-red-800 border-red-200'
@@ -2059,13 +2095,15 @@ const InventorySection = () => {
                 <div className="flex-shrink-0 h-16 w-16">
                   <div className="h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30 overflow-hidden">
                     {product.hasImage ? (
-                      <OptimizedProductImage
-                        productId={product._id}
+                      <img
+                        src={getProductImageUrl(product._id)}
                         alt={product.nombre}
-                        width={64}
-                        height={64}
-                        quality={60}
                         className="h-16 w-16 object-cover"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = "/lyme.png";
+                          target.className = "h-12 w-12 object-contain";
+                        }}
                       />
                     ) : (
                       <div className="h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center text-xs text-[#29696B]">
@@ -2126,7 +2164,7 @@ const InventorySection = () => {
                       </span>
                       <span className="block">Vendidos: {product.vendidos || 0}</span>
                     </div>
-                    
+
                     <div className="flex justify-between items-center mt-1">
                       <span className="capitalize">{product.subCategoria}</span>
                       {product.marca && (
@@ -2135,7 +2173,7 @@ const InventorySection = () => {
                         </span>
                       )}
                     </div>
-                    
+
                     {product.proveedor?.nombre && (
                       <div className="mt-1 flex items-center">
                         <Building className="w-3 h-3 mr-1" />
@@ -2348,7 +2386,7 @@ const InventorySection = () => {
                       <SelectValue placeholder="Seleccionar estado" />
                     </SelectTrigger>
                     <SelectContent className="border-[#91BEAD]">
-                    {estadosProducto.map((estado) => (
+                      {estadosProducto.map((estado) => (
                         <SelectItem key={estado.value} value={estado.value}>
                           {estado.label}
                         </SelectItem>
@@ -2453,58 +2491,58 @@ const InventorySection = () => {
               {/* Información del proveedor */}
               <div className="border rounded-md p-3 border-[#91BEAD]/30 bg-[#DFEFE6]/10">
                 <Label className="text-sm font-medium text-[#29696B] block mb-2">Información del Proveedor</Label>
-                
+
                 <div className="space-y-3">
                   <div>
                     <Label htmlFor="proveedorNombre" className="text-xs text-[#7AA79C]">Nombre del Proveedor</Label>
                     <Input
                       id="proveedorNombre"
                       value={formData.proveedor.nombre}
-                      onChange={(e) => setFormData({ 
-                        ...formData, 
-                        proveedor: { ...formData.proveedor, nombre: e.target.value } 
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        proveedor: { ...formData.proveedor, nombre: e.target.value }
                       })}
                       className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
                     />
                   </div>
-                  
+
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <Label htmlFor="proveedorContacto" className="text-xs text-[#7AA79C]">Persona de Contacto</Label>
                       <Input
                         id="proveedorContacto"
                         value={formData.proveedor.contacto}
-                        onChange={(e) => setFormData({ 
-                          ...formData, 
-                          proveedor: { ...formData.proveedor, contacto: e.target.value } 
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          proveedor: { ...formData.proveedor, contacto: e.target.value }
                         })}
                         className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
                       />
                     </div>
-                    
+
                     <div>
                       <Label htmlFor="proveedorTelefono" className="text-xs text-[#7AA79C]">Teléfono</Label>
                       <Input
                         id="proveedorTelefono"
                         value={formData.proveedor.telefono}
-                        onChange={(e) => setFormData({ 
-                          ...formData, 
-                          proveedor: { ...formData.proveedor, telefono: e.target.value } 
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          proveedor: { ...formData.proveedor, telefono: e.target.value }
                         })}
                         className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
                       />
                     </div>
                   </div>
-                  
+
                   <div>
                     <Label htmlFor="proveedorEmail" className="text-xs text-[#7AA79C]">Email</Label>
                     <Input
                       id="proveedorEmail"
                       type="email"
                       value={formData.proveedor.email}
-                      onChange={(e) => setFormData({ 
-                        ...formData, 
-                        proveedor: { ...formData.proveedor, email: e.target.value } 
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        proveedor: { ...formData.proveedor, email: e.target.value }
                       })}
                       className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
                     />
@@ -2557,7 +2595,7 @@ const InventorySection = () => {
                         <span>Precio total de los productos:</span>
                         <span>${calculateComboTotal(selectedComboItems).toFixed(2)}</span>
                       </div>
-                      
+
                       {/* Alertas de stock para combos */}
                       {stockWarnings.length > 0 && (
                         <div className="mt-2 bg-yellow-50 border border-yellow-300 rounded-md p-2">
@@ -2585,23 +2623,19 @@ const InventorySection = () => {
                   <div className="mt-1 flex flex-col space-y-2">
                     {formData.imagenPreview ? (
                       <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
-                        {typeof formData.imagenPreview === 'string' && formData.imagenPreview.startsWith('http') ? (
-                          <OptimizedProductImage
-                            productId={editingProduct._id}
-                            alt="Vista previa"
-                            width={320}
-                            height={180}
-                            quality={80}
-                            className="w-full h-full object-contain"
-                          />
-                        ) : (
+                        {typeof formData.imagenPreview === 'string' && (
                           <img
-                            src={formData.imagenPreview as string}
+                            src={formData.imagenPreview}
                             alt="Vista previa"
                             className="w-full h-full object-contain"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.src = "/lyme.png";
+                              target.className = "w-full h-full object-contain p-4";
+                            }}
                           />
                         )}
-                        
+
                         <Button
                           type="button"
                           variant="destructive"
@@ -2613,20 +2647,26 @@ const InventorySection = () => {
                         </Button>
                       </div>
                     ) : (
-                      <ImageUpload 
-                        productId={editingProduct._id}
-                        onImageUploaded={(success) => {
-                          if (success) {
-                            // Refrescar el producto para mostrar la nueva imagen
-                            fetchProductById(editingProduct._id).then(product => {
-                              if (product) {
-                                updateProductInState(product);
-                                handleEdit(product); // Recargar el formulario con los datos actualizados
-                              }
-                            });
-                          }
-                        }}
-                      />
+                      <div className="flex flex-col items-center justify-center w-full">
+                        <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#91BEAD]/30 border-dashed rounded-md cursor-pointer bg-[#DFEFE6]/20 hover:bg-[#DFEFE6]/40 transition-colors">
+                          <div className="flex flex-col items-center justify-center pt-3 pb-4">
+                            <ImageIcon className="w-8 h-8 text-[#7AA79C] mb-1" />
+                            <p className="text-xs text-[#7AA79C]">
+                              Haz clic para subir una imagen
+                            </p>
+                            <p className="text-xs text-[#7AA79C]">
+                              Máximo 5MB
+                            </p>
+                          </div>
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handleImageChange}
+                          />
+                        </label>
+                      </div>
                     )}
                   </div>
                 ) : (
@@ -2637,6 +2677,11 @@ const InventorySection = () => {
                           src={formData.imagenPreview as string}
                           alt="Vista previa"
                           className="w-full h-full object-contain"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.src = "/lyme.png";
+                            target.className = "w-full h-full object-contain p-4";
+                          }}
                         />
                         <Button
                           type="button"
@@ -2804,7 +2849,7 @@ const InventorySection = () => {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => handleUpdateComboItemQuantity(
-                                  typeof item.productoId === 'string' ? item.productoId : item.productoId._id, 
+                                  typeof item.productoId === 'string' ? item.productoId : item.productoId._id,
                                   0
                                 )}
                                 className="h-7 w-7 p-0 text-red-500 hover:bg-red-50"
@@ -2823,7 +2868,7 @@ const InventorySection = () => {
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => handleUpdateComboItemQuantity(
-                                    typeof item.productoId === 'string' ? item.productoId : item.productoId._id, 
+                                    typeof item.productoId === 'string' ? item.productoId : item.productoId._id,
                                     item.cantidad - 1
                                   )}
                                   className="h-7 w-7 p-0 text-[#29696B] hover:bg-[#DFEFE6]/30"
@@ -2836,7 +2881,7 @@ const InventorySection = () => {
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => handleUpdateComboItemQuantity(
-                                    typeof item.productoId === 'string' ? item.productoId : item.productoId._id, 
+                                    typeof item.productoId === 'string' ? item.productoId : item.productoId._id,
                                     item.cantidad + 1
                                   )}
                                   className="h-7 w-7 p-0 text-[#29696B] hover:bg-[#DFEFE6]/30"
@@ -2854,7 +2899,7 @@ const InventorySection = () => {
                         <span>Total:</span>
                         <span>${calculateComboTotal(tempSelectedItems).toFixed(2)}</span>
                       </div>
-                      
+
                       {/* Alertas de stock para combos */}
                       {stockWarnings.length > 0 && (
                         <div className="mt-2 bg-yellow-50 border border-yellow-300 rounded-md p-2">
@@ -2974,4 +3019,4 @@ const InventorySection = () => {
   );
 };
 
-export default InventorySection
+export default InventorySection;

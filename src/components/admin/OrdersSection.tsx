@@ -1384,10 +1384,10 @@ const OrdersSection = () => {
     // If it's an object with username and name
     if (typeof userId === 'object' && userId) {
       return {
-        usuario: userId.usuario || "User not available",
+        usuario: userId.usuario || "User",
         name: userId.usuario || (userId.nombre
           ? `${userId.nombre} ${userId.apellido || ''}`
-          : "User not available")
+          : "User")
       };
     }
 
@@ -1416,7 +1416,7 @@ const OrdersSection = () => {
     }
 
     // If no information is found
-    return { usuario: "User not available", name: "User not available" };
+    return { usuario: "User", name: "User" };
   }, [supervisors, currentUser]);
 
   // Create a new order
