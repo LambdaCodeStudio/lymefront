@@ -153,6 +153,7 @@ export const OrdersPage: React.FC = () => {
   const [orderDetailsOpen, setOrderDetailsOpen] = useState<string | null>(null);
   const [isDownloadingRemito, setIsDownloadingRemito] = useState<string | null>(null);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // Filtros
   const [dateFilter, setDateFilter] = useState({
@@ -935,65 +936,131 @@ export const OrdersPage: React.FC = () => {
           {/* Pestañas para filtrar por categorías principales */}
           <div className="mb-6">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="bg-[#e8f0f3] border border-[#3a8fb7]/20 w-full rounded-lg overflow-x-auto flex flex-nowrap p-0.5 shadow-sm">
-                {/* Pestaña Todos - siempre visible */}
-                <TabsTrigger
-                  value="todos"
-                  className="flex-1 data-[state=active]:bg-[#3a8fb7] data-[state=active]:text-white text-[#333333] transition-all duration-200 text-[10px] xxs:text-[11px] xs:text-xs sm:text-sm py-1 px-0.5 xxs:px-1 sm:py-1.5 sm:px-2 h-8 sm:h-10 min-w-[60px]"
+              <div className="relative w-full">
+                <Button
+                  variant="outline"
+                  className="border-[#3a8fb7]/20 bg-[#e8f0f3] w-full sm:w-[220px] flex justify-between items-center shadow-sm"
+                  onClick={() => setMenuOpen(!menuOpen)}
                 >
-                  Todos
-                </TabsTrigger>
-
-                {/* Pestaña Por aprobar - solo para supervisores */}
-                {userRole === 'supervisor' && (
-                  <TabsTrigger
-                    value="porAprobar"
-                    className="flex-1 data-[state=active]:bg-[#3a8fb7] data-[state=active]:text-white text-[#333333] relative transition-all duration-200 text-[10px] xxs:text-[11px] xs:text-xs sm:text-sm py-1 px-0.5 xxs:px-1 sm:py-1.5 sm:px-2 h-8 sm:h-10 min-w-[80px]"
-                  >
-                    <Clock className="h-3 w-3 sm:h-4 sm:w-4 mr-0.5 xxs:mr-1 hidden xxs:inline-block" />
-                    Pendientes
-                    {getPendingApprovalCount() > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-[#FF9800] text-white text-xs font-bold rounded-full h-4 w-4 sm:h-5 sm:w-5 flex items-center justify-center">
-                        {getPendingApprovalCount()}
-                      </span>
+                  <div className="flex items-center gap-2">
+                    {activeTab === "todos" && "Todos"}
+                    {activeTab === "porAprobar" && (
+                      <>
+                        <Clock className="h-4 w-4" />
+                        <span>Pendientes</span>
+                        {getPendingApprovalCount() > 0 && (
+                          <span className="bg-[#FF9800] text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                            {getPendingApprovalCount()}
+                          </span>
+                        )}
+                      </>
                     )}
-                  </TabsTrigger>
-                )}
-
-                {/* Pestaña Creados - solo para operarios */}
-                {userRole === 'operario' && (
-                  <TabsTrigger
-                    value="creados"
-                    className="flex-1 data-[state=active]:bg-[#3a8fb7] data-[state=active]:text-white text-[#333333] relative transition-all duration-200 text-[10px] xxs:text-[11px] xs:text-xs sm:text-sm py-1 px-0.5 xxs:px-1 sm:py-1.5 sm:px-2 h-8 sm:h-10 min-w-[70px]"
-                  >
-                    <BookCheck className="h-3 w-3 sm:h-4 sm:w-4 mr-0.5 xxs:mr-1 hidden xxs:inline-block" />
-                    Creados
-                    {getCreatedOrdersCount() > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-[#3a8fb7] text-white text-xs font-bold rounded-full h-4 w-4 sm:h-5 sm:w-5 flex items-center justify-center">
-                        {getCreatedOrdersCount()}
-                      </span>
+                    {activeTab === "creados" && (
+                      <>
+                        <BookCheck className="h-4 w-4" />
+                        <span>Creados</span>
+                        {getCreatedOrdersCount() > 0 && (
+                          <span className="bg-[#3a8fb7] text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                            {getCreatedOrdersCount()}
+                          </span>
+                        )}
+                      </>
                     )}
-                  </TabsTrigger>
+                    {activeTab === "aprobados" && (
+                      <>
+                        <CheckCircle2 className="h-4 w-4" />
+                        <span>Aprobados</span>
+                      </>
+                    )}
+                    {activeTab === "rechazados" && (
+                      <>
+                        <XSquare className="h-4 w-4" />
+                        <span>Rechazados</span>
+                      </>
+                    )}
+                  </div>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${menuOpen ? 'rotate-180' : ''}`} />
+                </Button>
+
+                {menuOpen && (
+                  <div className="absolute top-full left-0 z-10 mt-1 w-full sm:w-[220px] rounded-md border border-[#3a8fb7]/20 bg-white shadow-lg">
+                    <div className="p-1 flex flex-col">
+                      <Button
+                        variant="ghost"
+                        className={`justify-start mb-1 ${activeTab === "todos" ? "bg-[#3a8fb7] text-white" : "text-[#333333]"}`}
+                        onClick={() => {
+                          setActiveTab("todos");
+                          setMenuOpen(false);
+                        }}
+                      >
+                        Todos
+                      </Button>
+
+                      {userRole === 'supervisor' && (
+                        <Button
+                          variant="ghost"
+                          className={`justify-start mb-1 ${activeTab === "porAprobar" ? "bg-[#3a8fb7] text-white" : "text-[#333333]"}`}
+                          onClick={() => {
+                            setActiveTab("porAprobar");
+                            setMenuOpen(false);
+                          }}
+                        >
+                          <Clock className="w-4 h-4 mr-2" />
+                          Pendientes
+                          {getPendingApprovalCount() > 0 && (
+                            <span className="ml-2 bg-[#FF9800] text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                              {getPendingApprovalCount()}
+                            </span>
+                          )}
+                        </Button>
+                      )}
+
+                      {userRole === 'operario' && (
+                        <Button
+                          variant="ghost"
+                          className={`justify-start mb-1 ${activeTab === "creados" ? "bg-[#3a8fb7] text-white" : "text-[#333333]"}`}
+                          onClick={() => {
+                            setActiveTab("creados");
+                            setMenuOpen(false);
+                          }}
+                        >
+                          <BookCheck className="w-4 h-4 mr-2" />
+                          Creados
+                          {getCreatedOrdersCount() > 0 && (
+                            <span className="ml-2 bg-[#3a8fb7] text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                              {getCreatedOrdersCount()}
+                            </span>
+                          )}
+                        </Button>
+                      )}
+
+                      <Button
+                        variant="ghost"
+                        className={`justify-start mb-1 ${activeTab === "aprobados" ? "bg-[#3a8fb7] text-white" : "text-[#333333]"}`}
+                        onClick={() => {
+                          setActiveTab("aprobados");
+                          setMenuOpen(false);
+                        }}
+                      >
+                        <CheckCircle2 className="w-4 h-4 mr-2" />
+                        Aprobados
+                      </Button>
+
+                      <Button
+                        variant="ghost"
+                        className={`justify-start mb-1 ${activeTab === "rechazados" ? "bg-[#3a8fb7] text-white" : "text-[#333333]"}`}
+                        onClick={() => {
+                          setActiveTab("rechazados");
+                          setMenuOpen(false);
+                        }}
+                      >
+                        <XSquare className="w-4 h-4 mr-2" />
+                        Rechazados
+                      </Button>
+                    </div>
+                  </div>
                 )}
-
-                {/* Pestaña Aprobados - siempre visible */}
-                <TabsTrigger
-                  value="aprobados"
-                  className="flex-1 data-[state=active]:bg-[#3a8fb7] data-[state=active]:text-white text-[#333333] transition-all duration-200 text-[10px] xxs:text-[11px] xs:text-xs sm:text-sm py-1 px-0.5 xxs:px-1 sm:py-1.5 sm:px-2 h-8 sm:h-10 min-w-[70px]"
-                >
-                  <CheckCircle2 className="h-3 w-3 sm:h-4 sm:w-4 mr-0.5 xxs:mr-1 hidden xxs:inline-block" />
-                  Aprobados
-                </TabsTrigger>
-
-                {/* Pestaña Rechazados - siempre visible */}
-                <TabsTrigger
-                  value="rechazados"
-                  className="flex-1 data-[state=active]:bg-[#3a8fb7] data-[state=active]:text-white text-[#333333] transition-all duration-200 text-[10px] xxs:text-[11px] xs:text-xs sm:text-sm py-1 px-0.5 xxs:px-1 sm:py-1.5 sm:px-2 h-8 sm:h-10 min-w-[75px]"
-                >
-                  <XSquare className="h-3 w-3 sm:h-4 sm:w-4 mr-0.5 xxs:mr-1 hidden xxs:inline-block" />
-                  Rechazados
-                </TabsTrigger>
-              </TabsList>
+              </div>
             </Tabs>
           </div>
 
