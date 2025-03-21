@@ -74,7 +74,7 @@ import {
 } from '@/types/inventory';
 
 // Definir URL base para la API
-const API_URL = "/api/";
+const API_URL = "http://localhost:3000/api/";
 
 /**
  * Obtiene la URL de la imagen para un producto

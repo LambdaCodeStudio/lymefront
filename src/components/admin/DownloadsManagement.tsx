@@ -17,7 +17,8 @@ import {
   AlertCircle,
   CheckCircle,
   Store,
-  SlidersHorizontal
+  SlidersHorizontal,
+  ChevronDown
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from "@/components/ui/button";
@@ -219,6 +220,9 @@ const DownloadsManagement: React.FC = () => {
   const [selectedSubUbicacion, setSelectedSubUbicacion] = useState<string>('');
   const [selectedPedido, setSelectedPedido] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Menú
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // Orders table state
   const [allPedidos, setAllPedidos] = useState<Pedido[]>([]);
@@ -469,7 +473,7 @@ const DownloadsManagement: React.FC = () => {
       setLoadingCacheData(true);
 
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/producto', {
+      const response = await fetch('http://localhost:3000/api/producto', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -526,7 +530,7 @@ const DownloadsManagement: React.FC = () => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/auth/users', {
+      const response = await fetch('http://localhost:3000/api/auth/users', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -578,7 +582,7 @@ const DownloadsManagement: React.FC = () => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/cliente', {
+      const response = await fetch('http://localhost:3000/api/cliente', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -629,7 +633,7 @@ const DownloadsManagement: React.FC = () => {
     setLoadingPedidos(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/pedido', {
+      const response = await fetch('http://localhost:3000/api/pedido', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -692,7 +696,7 @@ const DownloadsManagement: React.FC = () => {
       return [];
     }
 
-    let url = `/api/pedido/cliente/${clienteId}`;
+    let url = `http://localhost:3000/api/pedido/cliente/${clienteId}`;
 
     // Construir URL con query params
     if (subServicioId || subUbicacionId) {
@@ -961,7 +965,7 @@ const DownloadsManagement: React.FC = () => {
       }
 
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/downloads/excel?${params.toString()}`, {
+      const response = await fetch(`http://localhost:3000/api/downloads/excel?${params.toString()}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -1021,7 +1025,7 @@ const DownloadsManagement: React.FC = () => {
       }
 
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/downloads/reporte-mensual?${params.toString()}`, {
+      const response = await fetch(`http://localhost:3000/api/downloads/reporte-mensual?${params.toString()}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -1082,7 +1086,7 @@ const DownloadsManagement: React.FC = () => {
       console.log(`Starting remito download for order: ${pedidoId}`);
 
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/downloads/remito/${pedidoId}`, {
+      const response = await fetch(`http://localhost:3000/api/downloads/remito/${pedidoId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -2058,37 +2062,81 @@ const DownloadsManagement: React.FC = () => {
 
       {/* Tab Navigation */}
       <div className="min-h-[60px]">
-        <Tabs defaultValue="excel" value={activeTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className="w-full grid grid-cols-4 gap-1 bg-[#DFEFE6]/50 p-1 rounded-md">
-            <TabsTrigger
-              value="excel"
-              className="h-12 sm:h-10 px-2 py-1.5 text-xs sm:text-sm data-[state=active]:bg-[#29696B] data-[state=active]:text-white flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2"
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-              <span className="text-center sm:text-left">Reportes Excel</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="remitos"
-              className="h-12 sm:h-10 px-2 py-1.5 text-xs sm:text-sm data-[state=active]:bg-[#29696B] data-[state=active]:text-white flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2"
-            >
-              <FileText className="w-4 h-4" />
-              <span className="text-center sm:text-left">Remitos por Cliente</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="reporteMensual"
-              className="h-12 sm:h-10 px-2 py-1.5 text-xs sm:text-sm data-[state=active]:bg-[#29696B] data-[state=active]:text-white flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2"
-            >
-              <Calendar className="w-4 h-4" />
-              <span className="text-center sm:text-left">Reporte Mensual</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="tabla"
-              className="h-12 sm:h-10 px-2 py-1.5 text-xs sm:text-sm data-[state=active]:bg-[#29696B] data-[state=active]:text-white flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2"
-            >
-              <Hash className="w-4 h-4" />
-              <span className="text-center sm:text-left">Tabla de Pedidos</span>
-            </TabsTrigger>
-          </TabsList>
+  <Tabs defaultValue="excel" value={activeTab} onValueChange={handleTabChange} className="w-full">
+    <div className="w-full flex justify-start mb-4">
+      <div className="relative">
+        <Button 
+          variant="outline" 
+          className="border-[#91BEAD] bg-white w-[220px] flex justify-between items-center"
+          onClick={() => setMenuOpen(!menuOpen)}
+        >
+          <div className="flex items-center gap-2">
+            {activeTab === "excel" && <FileSpreadsheet className="w-4 h-4" />}
+            {activeTab === "remitos" && <FileText className="w-4 h-4" />}
+            {activeTab === "reporteMensual" && <Calendar className="w-4 h-4" />}
+            {activeTab === "tabla" && <Hash className="w-4 h-4" />}
+            <span>
+              {activeTab === "excel" && "Reportes Excel"}
+              {activeTab === "remitos" && "Remitos por Cliente"}
+              {activeTab === "reporteMensual" && "Reporte Mensual"}
+              {activeTab === "tabla" && "Tabla de Pedidos"}
+            </span>
+          </div>
+          <ChevronDown className={`w-4 h-4 transition-transform ${menuOpen ? 'rotate-180' : ''}`} />
+        </Button>
+        
+        {menuOpen && (
+          <div className="absolute top-full left-0 z-10 mt-1 w-[220px] rounded-md border border-[#91BEAD]/20 bg-white shadow-lg">
+            <div className="p-1">
+              <Button 
+                variant="ghost" 
+                className={`w-full justify-start mb-1 ${activeTab === "excel" ? "bg-[#29696B] text-white" : ""}`}
+                onClick={() => {
+                  handleTabChange("excel");
+                  setMenuOpen(false);
+                }}
+              >
+                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                Reportes Excel
+              </Button>
+              <Button 
+                variant="ghost" 
+                className={`w-full justify-start mb-1 ${activeTab === "remitos" ? "bg-[#29696B] text-white" : ""}`}
+                onClick={() => {
+                  handleTabChange("remitos");
+                  setMenuOpen(false);
+                }}
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                Remitos por Cliente
+              </Button>
+              <Button 
+                variant="ghost" 
+                className={`w-full justify-start mb-1 ${activeTab === "reporteMensual" ? "bg-[#29696B] text-white" : ""}`}
+                onClick={() => {
+                  handleTabChange("reporteMensual");
+                  setMenuOpen(false);
+                }}
+              >
+                <Calendar className="w-4 h-4 mr-2" />
+                Reporte Mensual
+              </Button>
+              <Button 
+                variant="ghost" 
+                className={`w-full justify-start mb-1 ${activeTab === "tabla" ? "bg-[#29696B] text-white" : ""}`}
+                onClick={() => {
+                  handleTabChange("tabla");
+                  setMenuOpen(false);
+                }}
+              >
+                <Hash className="w-4 h-4 mr-2" />
+                Tabla de Pedidos
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
 
           {/* Excel Tab */}
           <TabsContent value="excel" className="mt-4 pt-4">

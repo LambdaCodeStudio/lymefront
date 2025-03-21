@@ -201,7 +201,7 @@ interface FilterParams {
  */
 const OrdersService = {
   // API base URL
-  apiUrl: '/api',
+  apiUrl: 'http://localhost:3000/api',
 
   // Fetch orders with filters
   async fetchOrders(filters: FilterParams = {}): Promise<Order[]> {
@@ -209,22 +209,22 @@ const OrdersService = {
     if (!token) throw new Error("No hay token de autenticación.");
 
     // Build base URL
-    let url = `/api/pedido`;
+    let url = `http://localhost:3000/api/pedido`;
     let queryParams = new URLSearchParams();
 
     // Apply date filters
     if (filters.from && filters.to) {
       queryParams.append('fechaInicio', filters.from);
       queryParams.append('fechaFin', filters.to);
-      url = `/api/pedido/fecha?${queryParams.toString()}`;
+      url = `http://localhost:3000/api/pedido/fecha?${queryParams.toString()}`;
     }
     // Filter by supervisor
     else if (filters.supervisor) {
-      url = `/api/pedido/supervisor/${filters.supervisor}`;
+      url = `http://localhost:3000/api/pedido/supervisor/${filters.supervisor}`;
     }
     // Filter by client
     else if (filters.clienteId) {
-      url = `/api/pedido/cliente/${filters.clienteId}`;
+      url = `http://localhost:3000/api/pedido/cliente/${filters.clienteId}`;
 
       // Add subServicioId if exists
       if (filters.subServicioId) {
@@ -243,11 +243,11 @@ const OrdersService = {
     }
     // Filter by service (compatibility)
     else if (filters.servicio) {
-      url = `/api/pedido/servicio/${encodeURIComponent(filters.servicio)}`;
+      url = `http://localhost:3000/api/pedido/servicio/${encodeURIComponent(filters.servicio)}`;
     }
     // Filter by status
     else if (filters.estado && filters.estado !== 'todos') {
-      url = `/api/pedido/estado/${filters.estado}`;
+      url = `http://localhost:3000/api/pedido/estado/${filters.estado}`;
     }
 
     const response = await fetch(url, {
@@ -275,7 +275,7 @@ const OrdersService = {
     const token = getAuthToken();
     if (!token) throw new Error("No hay token de autenticación.");
 
-    const response = await fetch(`/api/pedido/${id}`, {
+    const response = await fetch(`http://localhost:3000/api/pedido/${id}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Cache-Control': 'no-cache'
@@ -294,7 +294,7 @@ const OrdersService = {
     const token = getAuthToken();
     if (!token) throw new Error("No hay token de autenticación.");
 
-    const response = await fetch(`/api/auth/supervisors`, {
+    const response = await fetch(`http://localhost:3000/api/auth/supervisors`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Cache-Control': 'no-cache'
@@ -314,7 +314,7 @@ const OrdersService = {
     const token = getAuthToken();
     if (!token) throw new Error("No hay token de autenticación.");
 
-    const response = await fetch(`/api/producto`, {
+    const response = await fetch(`http://localhost:3000/api/producto`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Cache-Control': 'no-cache'
@@ -334,7 +334,7 @@ const OrdersService = {
     const token = getAuthToken();
     if (!token) throw new Error("No hay token de autenticación.");
 
-    const response = await fetch(`/api/producto/${productId}`, {
+    const response = await fetch(`http://localhost:3000/api/producto/${productId}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Cache-Control': 'no-cache'
@@ -353,7 +353,7 @@ const OrdersService = {
     const token = getAuthToken();
     if (!token) throw new Error("No hay token de autenticación.");
 
-    const response = await fetch(`/api/cliente`, {
+    const response = await fetch(`http://localhost:3000/api/cliente`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Cache-Control': 'no-cache'
@@ -372,7 +372,7 @@ const OrdersService = {
     const token = getAuthToken();
     if (!token) throw new Error("No hay token de autenticación.");
 
-    const response = await fetch(`/api/cliente/user/${supervisorId}`, {
+    const response = await fetch(`http://localhost:3000/api/cliente/user/${supervisorId}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Cache-Control': 'no-cache'
@@ -422,7 +422,7 @@ const OrdersService = {
       estado: data.estado || 'pendiente'
     };
 
-    const response = await fetch(`/api/pedido`, {
+    const response = await fetch(`http://localhost:3000/api/pedido`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -475,7 +475,7 @@ const OrdersService = {
       estado: data.estado || 'pendiente'
     };
 
-    const response = await fetch(`/api/pedido/${id}`, {
+    const response = await fetch(`http://localhost:3000/api/pedido/${id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -497,7 +497,7 @@ const OrdersService = {
     const token = getAuthToken();
     if (!token) throw new Error("No hay token de autenticación.");
 
-    const response = await fetch(`/api/pedido/${id}`, {
+    const response = await fetch(`http://localhost:3000/api/pedido/${id}`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${token}`
@@ -517,7 +517,7 @@ const OrdersService = {
     const token = getAuthToken();
     if (!token) throw new Error("No hay token de autenticación.");
 
-    const response = await fetch(`/api/auth/me`, {
+    const response = await fetch(`http://localhost:3000/api/auth/me`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Cache-Control': 'no-cache'
@@ -544,7 +544,7 @@ const OrdersService = {
     if (!token) throw new Error("No hay token de autenticación.");
 
     // First get the current order
-    const orderResponse = await fetch(`/api/pedido/${id}`, {
+    const orderResponse = await fetch(`http://localhost:3000/api/pedido/${id}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Cache-Control': 'no-cache'
@@ -558,7 +558,7 @@ const OrdersService = {
     const order = await orderResponse.json();
 
     // Update only the status field
-    const updateResponse = await fetch(`/api/pedido/${id}`, {
+    const updateResponse = await fetch(`http://localhost:3000/api/pedido/${id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -584,7 +584,7 @@ const OrdersService = {
     if (!token) throw new Error("No hay token de autenticación.");
 
     // Create request to get receipt with authentication token
-    const response = await fetch(`/api/downloads/remito/${id}`, {
+    const response = await fetch(`http://localhost:3000/api/downloads/remito/${id}`, {
       headers: {
         'Authorization': `Bearer ${token}`
       }
