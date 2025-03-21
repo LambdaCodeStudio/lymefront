@@ -5,7 +5,7 @@ dist/
 
 # Dependencies
 node_modules/
-public/
+public/images
 
 # Environment
 .env.local

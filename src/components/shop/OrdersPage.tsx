@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  ShoppingCart, 
-  Search, 
-  Filter, 
-  Download, 
-  Calendar, 
-  Building, 
-  MapPin, 
-  Eye, 
-  Loader2, 
-  AlertCircle, 
-  ChevronDown, 
-  ChevronUp, 
+import {
+  ShoppingCart,
+  Search,
+  Filter,
+  Download,
+  Calendar,
+  Building,
+  MapPin,
+  Eye,
+  Loader2,
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
   Clock,
   Package,
   X,
@@ -30,45 +30,45 @@ import {
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Card, 
-  CardContent, 
-  CardHeader, 
-  CardFooter, 
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardFooter,
   CardTitle
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { 
+import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogDescription, 
-  DialogFooter, 
-  DialogHeader, 
-  DialogTitle 
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
 } from "@/components/ui/select";
-import { 
-  Tabs, 
-  TabsContent, 
-  TabsList, 
-  TabsTrigger 
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger
 } from "@/components/ui/tabs";
 import { ShopNavbar } from './ShopNavbar';
 
@@ -78,10 +78,10 @@ try {
   useNotification = require('@/context/NotificationContext').useNotification;
 } catch (e) {
   console.warn('NotificationContext no disponible, las notificaciones estarán desactivadas');
-  useNotification = () => ({ 
+  useNotification = () => ({
     addNotification: (message, type) => {
       console.log(`Notificación (${type}): ${message}`);
-    } 
+    }
   });
 }
 
@@ -96,7 +96,7 @@ enum OrderStatus {
 
 // Tipos de datos
 interface OrderProduct {
-  productoId: string | { _id: string; nombre?: string; precio?: number; [key: string]: any };
+  productoId: string | { _id: string; nombre?: string; precio?: number;[key: string]: any };
   cantidad: number;
   nombre?: string;
   precio?: number;
@@ -107,8 +107,8 @@ interface Order {
   _id: string;
   servicio: string;
   seccionDelServicio?: string;
-  userId: string | { _id: string; email?: string; nombre?: string; [key: string]: any };
-  supervisorId?: string | { _id: string; email?: string; nombre?: string; [key: string]: any };
+  userId: string | { _id: string; email?: string; nombre?: string;[key: string]: any };
+  supervisorId?: string | { _id: string; email?: string; nombre?: string;[key: string]: any };
   fecha: string;
   productos: OrderProduct[];
   detalle?: string;
@@ -118,7 +118,7 @@ interface Order {
   total?: number;
   estado?: OrderStatus; // Estado del pedido
   cliente?: {
-    clienteId: string | { _id: string; nombre?: string; [key: string]: any };
+    clienteId: string | { _id: string; nombre?: string;[key: string]: any };
     subServicioId?: string;
     subUbicacionId?: string;
     nombreCliente?: string;
@@ -137,8 +137,8 @@ interface Order {
   };
   fechaAprobacion?: string;
   fechaRechazo?: string;
-  aprobadoPor?: string | { _id: string; nombre?: string; [key: string]: any };
-  rechazadoPor?: string | { _id: string; nombre?: string; [key: string]: any };
+  aprobadoPor?: string | { _id: string; nombre?: string;[key: string]: any };
+  rechazadoPor?: string | { _id: string; nombre?: string;[key: string]: any };
   observaciones?: string;
 }
 
@@ -153,27 +153,27 @@ export const OrdersPage: React.FC = () => {
   const [orderDetailsOpen, setOrderDetailsOpen] = useState<string | null>(null);
   const [isDownloadingRemito, setIsDownloadingRemito] = useState<string | null>(null);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
-  
+
   // Filtros
   const [dateFilter, setDateFilter] = useState({
     fechaInicio: '',
     fechaFin: ''
   });
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  
+
   // Estado para la pestaña actual
   const [activeTab, setActiveTab] = useState<string>('todos');
-  
+
   // Estados para la función de aprobar/rechazar pedidos
   const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
   const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
-  
+
   // Información del usuario
   const [userRole, setUserRole] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
-  
+
   // Obtener parámetros de URL al cargar
   useEffect(() => {
     // Verificar tab en URL
@@ -188,10 +188,10 @@ export const OrdersPage: React.FC = () => {
   useEffect(() => {
     const storedRole = localStorage.getItem('userRole');
     const storedId = localStorage.getItem('userId');
-    
+
     if (storedRole) setUserRole(storedRole);
     if (storedId) setUserId(storedId);
-    
+
     fetchUserData();
   }, []);
 
@@ -212,22 +212,22 @@ export const OrdersPage: React.FC = () => {
       }
 
       const userData = await response.json();
-      
+
       // Verificar si la respuesta contiene userData.user
       const user = userData.user || userData;
-      
+
       // Actualizar estados y localStorage
       if (user.role) {
         localStorage.setItem('userRole', user.role);
         setUserRole(user.role);
       }
-      
+
       if (user._id || user.id) {
         const id = user._id || user.id;
         localStorage.setItem('userId', id);
         setUserId(id);
       }
-      
+
       return user._id || user.id || null;
     } catch (error) {
       console.error('Error al obtener el usuario:', error);
@@ -241,13 +241,13 @@ export const OrdersPage: React.FC = () => {
     if (!token) {
       throw new Error('No se encontró token de autenticación');
     }
-    
+
     let allOrders: Order[] = [];
-    
+
     // Si el usuario es un supervisor, obtener pedidos específicos
     if (userRole === 'supervisor' && userId) {
       const response = await fetch(`http://localhost:3000/api/pedido/supervisor/${userId}`, {
-        headers: { 
+        headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
         }
@@ -259,13 +259,13 @@ export const OrdersPage: React.FC = () => {
       }
 
       allOrders = await response.json();
-    } 
+    }
     // Si el usuario es operario, obtener sus pedidos regulares y los que ha creado
     else if (userRole === 'operario' && userId) {
       try {
         // Obtener los pedidos regulares del operario
         const regularOrdersResponse = await fetch(`http://localhost:3000/api/pedido/user/${userId}`, {
-          headers: { 
+          headers: {
             'Authorization': `Bearer ${token}`,
             'Cache-Control': 'no-cache'
           }
@@ -278,11 +278,11 @@ export const OrdersPage: React.FC = () => {
 
         const regularOrders = await regularOrdersResponse.json();
         allOrders = [...regularOrders];
-        
+
         // Obtener los pedidos creados por el operario
         try {
           const createdOrdersResponse = await fetch(`http://localhost:3000/api/pedido/operario/${userId}`, {
-            headers: { 
+            headers: {
               'Authorization': `Bearer ${token}`,
               'Cache-Control': 'no-cache'
             }
@@ -290,23 +290,23 @@ export const OrdersPage: React.FC = () => {
 
           if (createdOrdersResponse.ok) {
             const createdOrders = await createdOrdersResponse.json();
-            
+
             // Combinar ambos conjuntos de pedidos
             const orderMap = new Map<string, Order>();
-            
+
             // Procesar pedidos regulares
             regularOrders.forEach(order => {
               orderMap.set(order._id, order);
             });
-            
+
             // Añadir pedidos creados, sobreescribiendo si es necesario
             createdOrders.forEach(order => {
               orderMap.set(order._id, order);
             });
-            
+
             // Convertir el Map de vuelta a un array
             allOrders = Array.from(orderMap.values());
-            
+
             console.log(`Total de pedidos para operario: ${allOrders.length} (${regularOrders.length} regulares, ${createdOrders.length} creados)`);
           }
         } catch (createdOrdersError) {
@@ -321,7 +321,7 @@ export const OrdersPage: React.FC = () => {
     // Para cualquier otro rol, obtener todos los pedidos
     else {
       const response = await fetch('http://localhost:3000/api/pedido', {
-        headers: { 
+        headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
         }
@@ -334,16 +334,16 @@ export const OrdersPage: React.FC = () => {
 
       allOrders = await response.json();
     }
-    
+
     // Procesar pedidos (calcular totales y ordenar)
     const processedOrders = allOrders.map((order: Order) => ({
       ...order,
       displayNumber: order.nPedido?.toString() || 'S/N',
       total: calculateOrderTotal(order)
-    })).sort((a: Order, b: Order) => 
+    })).sort((a: Order, b: Order) =>
       new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
     );
-    
+
     return processedOrders;
   };
 
@@ -360,10 +360,10 @@ export const OrdersPage: React.FC = () => {
   // Calcular el total de un pedido
   const calculateOrderTotal = (order: Order): number => {
     if (!Array.isArray(order.productos)) return 0;
-    
+
     return order.productos.reduce((total, item) => {
       let price = 0;
-      
+
       // Primero intentamos usar el precio unitario que ya viene en el item
       if (typeof item.precioUnitario === 'number') {
         price = item.precioUnitario;
@@ -371,22 +371,22 @@ export const OrdersPage: React.FC = () => {
       // Luego el precio del item directamente
       else if (typeof item.precio === 'number') {
         price = item.precio;
-      } 
+      }
       // Si el producto está poblado y tiene precio
       else if (typeof item.productoId === 'object' && item.productoId && typeof item.productoId.precio === 'number') {
         price = item.productoId.precio;
       }
-      
+
       return total + (price * item.cantidad);
     }, 0);
   };
 
   // Usar React Query para obtener pedidos
-  const { 
-    data: orders = [], 
-    isLoading, 
-    error, 
-    refetch 
+  const {
+    data: orders = [],
+    isLoading,
+    error,
+    refetch
   } = useQuery({
     queryKey: ['orders', userId, userRole],
     queryFn: fetchOrders,
@@ -398,31 +398,32 @@ export const OrdersPage: React.FC = () => {
   // Efecto para filtrar pedidos cuando cambian los filtros
   useEffect(() => {
     if (!orders.length) return;
-    
+
     let result = [...orders];
-    
+
     // Filtrar por término de búsqueda
     if (searchTerm) {
       const search = searchTerm.toLowerCase();
-      result = result.filter(order => 
+      result = result.filter(order =>
         order.servicio.toLowerCase().includes(search) ||
         (order.seccionDelServicio || '').toLowerCase().includes(search) ||
         (order.displayNumber || '').toLowerCase().includes(search) ||
         (order.cliente?.nombreCliente || '').toLowerCase().includes(search) ||
-        (typeof order.userId === 'object' && order.userId?.nombre 
+        (typeof order.userId === 'object' && order.userId?.nombre
           ? order.userId.nombre.toLowerCase().includes(search)
           : false)
       );
     }
-    
+
     // Filtrar por estado si se ha seleccionado un filtro
     if (statusFilter !== 'all') {
       result = result.filter(order => order.estado === statusFilter);
     }
-    
+
     // Filtrar por pestañas
     switch (activeTab) {
-      case 'pendientes':
+      case 'porAprobar':
+        // Mostrar todos los pedidos pendientes, unificando la funcionalidad
         result = result.filter(order => order.estado === OrderStatus.PENDING);
         break;
       case 'aprobados':
@@ -431,13 +432,13 @@ export const OrdersPage: React.FC = () => {
       case 'rechazados':
         if (userRole === 'operario') {
           // Para operarios, mostrar pedidos rechazados con énfasis en los creados por ellos
-          result = result.filter(order => 
+          result = result.filter(order =>
             order.estado === OrderStatus.REJECTED && (
               // Pedidos rechazados creados por este operario
               (order.metadata?.creadoPorOperario && order.metadata?.operarioId === userId) ||
               // O pedidos rechazados asignados a este operario
-              (typeof order.userId === 'object' 
-                ? order.userId?._id === userId 
+              (typeof order.userId === 'object'
+                ? order.userId?._id === userId
                 : order.userId === userId)
             )
           );
@@ -448,29 +449,13 @@ export const OrdersPage: React.FC = () => {
         break;
       case 'creados':
         // Pedidos creados por operarios (solo para operarios)
-        result = result.filter(order => 
-          order.metadata?.creadoPorOperario && 
+        result = result.filter(order =>
+          order.metadata?.creadoPorOperario &&
           order.metadata?.operarioId === userId
         );
         break;
-      case 'porAprobar':
-        // Mostrar solo pedidos pendientes que debe aprobar el supervisor
-        result = result.filter(order => 
-          order.estado === OrderStatus.PENDING &&
-          userRole === 'supervisor' &&
-          (
-            // Filtrar pedidos donde el supervisor es responsable
-            (typeof order.supervisorId === 'object' 
-              ? order.supervisorId?._id === userId 
-              : order.supervisorId === userId) ||
-            // O pedidos de clientes con subservicios asignados a este supervisor
-            (order.cliente?.subServicioId)
-          )
-        );
-        break;
-      // El caso 'todos' no necesita filtro
     }
-    
+
     setFilteredOrders(result);
   }, [searchTerm, orders, statusFilter, activeTab, userId, userRole]);
 
@@ -481,7 +466,7 @@ export const OrdersPage: React.FC = () => {
       if (!token) {
         throw new Error('No hay token de autenticación');
       }
-      
+
       const response = await fetch(`http://localhost:3000/api/pedido/${orderId}`, {
         method: 'PUT',
         headers: {
@@ -493,12 +478,12 @@ export const OrdersPage: React.FC = () => {
           fechaAprobacion: new Date().toISOString()
         })
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.mensaje || `Error al aprobar pedido (${response.status})`);
       }
-      
+
       return orderId;
     },
     onSuccess: (orderId) => {
@@ -514,12 +499,12 @@ export const OrdersPage: React.FC = () => {
 
   // Mutación para rechazar un pedido
   const rejectMutation = useMutation({
-    mutationFn: async ({orderId, motivo}: {orderId: string, motivo: string}) => {
+    mutationFn: async ({ orderId, motivo }: { orderId: string, motivo: string }) => {
       const token = localStorage.getItem('token');
       if (!token) {
         throw new Error('No hay token de autenticación');
       }
-      
+
       const response = await fetch(`http://localhost:3000/api/pedido/${orderId}`, {
         method: 'PUT',
         headers: {
@@ -532,12 +517,12 @@ export const OrdersPage: React.FC = () => {
           fechaRechazo: new Date().toISOString()
         })
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.mensaje || `Error al rechazar pedido (${response.status})`);
       }
-      
+
       return orderId;
     },
     onSuccess: (orderId) => {
@@ -566,12 +551,12 @@ export const OrdersPage: React.FC = () => {
       }
 
       let url = `http://localhost:3000/api/pedido/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
-      
+
       // Si es operario, añadir el parámetro de usuario
       if (userRole === 'operario' && userId) {
         url += `&userId=${userId}`;
       }
-      
+
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -581,32 +566,32 @@ export const OrdersPage: React.FC = () => {
       }
 
       let data = await response.json();
-      
+
       // Si es operario, intentar también obtener los pedidos creados
       if (userRole === 'operario' && userId) {
         try {
           const createdOrdersUrl = `http://localhost:3000/api/pedido/operario/${userId}/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
-          
+
           const createdOrdersResponse = await fetch(createdOrdersUrl, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
-          
+
           if (createdOrdersResponse.ok) {
             const createdOrdersData = await createdOrdersResponse.json();
-            
+
             // Combinar ambos conjuntos y eliminar duplicados
             const orderMap = new Map<string, Order>();
-            
+
             // Añadir pedidos regulares
             data.forEach((order: Order) => {
               orderMap.set(order._id, order);
             });
-            
+
             // Añadir pedidos creados
             createdOrdersData.forEach((order: Order) => {
               orderMap.set(order._id, order);
             });
-            
+
             // Convertir el Map de vuelta a un array
             data = Array.from(orderMap.values());
           }
@@ -615,22 +600,22 @@ export const OrdersPage: React.FC = () => {
           // Continuar con los pedidos regulares si hay un error
         }
       }
-      
+
       // Procesar pedidos (calcular totales y ordenar)
       const processedOrders = data.map((order: Order) => ({
         ...order,
         displayNumber: order.nPedido?.toString() || 'S/N',
         total: calculateOrderTotal(order)
-      })).sort((a: Order, b: Order) => 
+      })).sort((a: Order, b: Order) =>
         new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
       );
-      
+
       // Actualizar la caché de React Query manualmente
       queryClient.setQueryData(['orders', userId, userRole], processedOrders);
-      
-      addNotification(`Se encontraron ${processedOrders.length} pedidos en el rango de fechas seleccionado`, 
+
+      addNotification(`Se encontraron ${processedOrders.length} pedidos en el rango de fechas seleccionado`,
         processedOrders.length === 0 ? 'info' : 'success');
-      
+
       // Cerrar filtros móviles si están abiertos
       setShowMobileFilters(false);
     } catch (error) {
@@ -644,9 +629,15 @@ export const OrdersPage: React.FC = () => {
     setSearchTerm('');
     setDateFilter({ fechaInicio: '', fechaFin: '' });
     setStatusFilter('all');
+    setActiveTab('todos');
     refetch();
     setShowMobileFilters(false);
-    window.location.href="/orders?tab=todos"
+
+    // Actualizar URL sin recargar la página usando History API
+    const url = new URL(window.location);
+    url.searchParams.set('tab', 'todos');
+    window.history.pushState({}, '', url);
+
     addNotification('Filtros eliminados. Mostrando todos los pedidos.', 'info');
   };
 
@@ -662,7 +653,7 @@ export const OrdersPage: React.FC = () => {
   // Descargar remito
   const handleRemitoDownload = async (orderId: string) => {
     if (!orderId) return;
-    
+
     try {
       setIsDownloadingRemito(orderId);
 
@@ -670,31 +661,31 @@ export const OrdersPage: React.FC = () => {
       if (!token) {
         throw new Error('No se encontró token de autenticación');
       }
-      
+
       const response = await fetch(`http://localhost:3000/api/downloads/remito/${orderId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },
         method: 'GET'
       });
-      
+
       // Verificar si la respuesta es válida
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Error ${response.status}: ${errorText}`);
       }
-      
+
       // Convertir respuesta a blob
       const blob = await response.blob();
-      
+
       // Verificar que el blob no esté vacío
       if (!blob || blob.size === 0) {
         throw new Error('La respuesta del servidor está vacía');
       }
-      
+
       // Obtener información del pedido para el nombre del archivo
       const order = orders.find(o => o._id === orderId);
-      
+
       // Crear URL y descargar
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -703,13 +694,13 @@ export const OrdersPage: React.FC = () => {
       link.setAttribute('download', `remito_${order?.displayNumber || orderId}.pdf`);
       document.body.appendChild(link);
       link.click();
-      
+
       // Limpiar
       setTimeout(() => {
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
       }, 100);
-      
+
       addNotification('Remito descargado correctamente', 'success');
     } catch (error) {
       console.error('Error al descargar remito:', error);
@@ -780,7 +771,7 @@ export const OrdersPage: React.FC = () => {
     if (typeof userId === 'object' && userId !== null && userId.email) {
       return userId.email;
     }
-    
+
     return 'N/A';
   };
 
@@ -790,12 +781,12 @@ export const OrdersPage: React.FC = () => {
     if (order.cliente?.nombreCliente) {
       return order.cliente.nombreCliente;
     }
-    
+
     // Luego con cliente.clienteId si es un objeto
     if (order.cliente?.clienteId && typeof order.cliente.clienteId === 'object') {
       return order.cliente.clienteId.nombre || 'Cliente sin nombre';
     }
-    
+
     // Finalmente, usar el campo servicio por compatibilidad
     return order.servicio || 'Cliente sin nombre';
   };
@@ -806,7 +797,7 @@ export const OrdersPage: React.FC = () => {
     if (order.cliente?.nombreSubServicio) {
       return order.cliente.nombreSubServicio;
     }
-    
+
     // Luego usar seccionDelServicio por compatibilidad
     return order.seccionDelServicio || null;
   };
@@ -873,12 +864,12 @@ export const OrdersPage: React.FC = () => {
 
   // Obtener conteo de pedidos pendientes por aprobar (para supervisores)
   const getPendingApprovalCount = () => {
-    return orders.filter(order => 
-      order.estado === OrderStatus.PENDING && 
+    return orders.filter(order =>
+      order.estado === OrderStatus.PENDING &&
       (
         // Pedidos directamente asignados al supervisor
-        (typeof order.supervisorId === 'object' 
-          ? order.supervisorId?._id === userId 
+        (typeof order.supervisorId === 'object'
+          ? order.supervisorId?._id === userId
           : order.supervisorId === userId) ||
         // O pedidos con subservicios asignados a este supervisor
         order.cliente?.subServicioId
@@ -888,8 +879,8 @@ export const OrdersPage: React.FC = () => {
 
   // Obtener conteo de pedidos creados por el operario
   const getCreatedOrdersCount = () => {
-    return orders.filter(order => 
-      order.metadata?.creadoPorOperario && 
+    return orders.filter(order =>
+      order.metadata?.creadoPorOperario &&
       order.metadata?.operarioId === userId
     ).length;
   };
@@ -902,13 +893,13 @@ export const OrdersPage: React.FC = () => {
   // Comprobar si el usuario puede aprobar el pedido (solo supervisores para pedidos en su subservicio)
   const canApproveOrder = (order: Order): boolean => {
     if (userRole !== 'supervisor') return false;
-    
+
     return (
       order.estado === OrderStatus.PENDING &&
       (
         // El supervisor está directamente asignado al pedido
-        (typeof order.supervisorId === 'object' 
-          ? order.supervisorId?._id === userId 
+        (typeof order.supervisorId === 'object'
+          ? order.supervisorId?._id === userId
           : order.supervisorId === userId) ||
         // O el pedido tiene un subservicio asignado a este supervisor
         (order.cliente?.subServicioId)
@@ -921,7 +912,7 @@ export const OrdersPage: React.FC = () => {
       <ShopNavbar />
       <div className="container mx-auto px-4 py-8 shop-theme">
         <div className="max-w-6xl mx-auto">
-          <motion.h1 
+          <motion.h1
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
@@ -930,7 +921,7 @@ export const OrdersPage: React.FC = () => {
             <ShoppingCart className="mr-3 h-8 w-8 text-[#3a8fb7]" />
             Mis Pedidos
           </motion.h1>
-          
+
           {/* Alertas */}
           {error && (
             <Alert className="mb-6 bg-[#F44336]/10 border border-[#F44336]/30 transition-all duration-300">
@@ -944,67 +935,62 @@ export const OrdersPage: React.FC = () => {
           {/* Pestañas para filtrar por categorías principales */}
           <div className="mb-6">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="bg-[#e8f0f3] border border-[#3a8fb7]/20 w-full rounded-lg overflow-x-auto flex-nowrap whitespace-nowrap shadow-sm">
-                <TabsTrigger 
-                  value="todos" 
-                  className="flex-1 data-[state=active]:bg-[#3a8fb7] data-[state=active]:text-white text-[#333333] transition-all duration-200"
+              <TabsList className="bg-[#e8f0f3] border border-[#3a8fb7]/20 w-full rounded-lg overflow-x-auto flex flex-nowrap p-0.5 shadow-sm">
+                {/* Pestaña Todos - siempre visible */}
+                <TabsTrigger
+                  value="todos"
+                  className="flex-1 data-[state=active]:bg-[#3a8fb7] data-[state=active]:text-white text-[#333333] transition-all duration-200 text-[10px] xxs:text-[11px] xs:text-xs sm:text-sm py-1 px-0.5 xxs:px-1 sm:py-1.5 sm:px-2 h-8 sm:h-10 min-w-[60px]"
                 >
                   Todos
                 </TabsTrigger>
-                
-                {/* Pestaña extra para supervisores: pedidos por aprobar */}
+
+                {/* Pestaña Por aprobar - solo para supervisores */}
                 {userRole === 'supervisor' && (
-                  <TabsTrigger 
-                    value="porAprobar" 
-                    className="flex-1 data-[state=active]:bg-[#3a8fb7] data-[state=active]:text-white text-[#333333] relative transition-all duration-200"
+                  <TabsTrigger
+                    value="porAprobar"
+                    className="flex-1 data-[state=active]:bg-[#3a8fb7] data-[state=active]:text-white text-[#333333] relative transition-all duration-200 text-[10px] xxs:text-[11px] xs:text-xs sm:text-sm py-1 px-0.5 xxs:px-1 sm:py-1.5 sm:px-2 h-8 sm:h-10 min-w-[80px]"
                   >
-                    <FileCheck className="w-4 h-4 mr-1" />
-                    Por aprobar
+                    <Clock className="h-3 w-3 sm:h-4 sm:w-4 mr-0.5 xxs:mr-1 hidden xxs:inline-block" />
+                    Pendientes
                     {getPendingApprovalCount() > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-[#FF9800] text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                      <span className="absolute -top-1 -right-1 bg-[#FF9800] text-white text-xs font-bold rounded-full h-4 w-4 sm:h-5 sm:w-5 flex items-center justify-center">
                         {getPendingApprovalCount()}
                       </span>
                     )}
                   </TabsTrigger>
                 )}
 
-                {/* Pestaña extra para operarios: pedidos creados */}
+                {/* Pestaña Creados - solo para operarios */}
                 {userRole === 'operario' && (
-                  <TabsTrigger 
-                    value="creados" 
-                    className="flex-1 data-[state=active]:bg-[#3a8fb7] data-[state=active]:text-white text-[#333333] relative transition-all duration-200"
+                  <TabsTrigger
+                    value="creados"
+                    className="flex-1 data-[state=active]:bg-[#3a8fb7] data-[state=active]:text-white text-[#333333] relative transition-all duration-200 text-[10px] xxs:text-[11px] xs:text-xs sm:text-sm py-1 px-0.5 xxs:px-1 sm:py-1.5 sm:px-2 h-8 sm:h-10 min-w-[70px]"
                   >
-                    <BookCheck className="w-4 h-4 mr-1" />
+                    <BookCheck className="h-3 w-3 sm:h-4 sm:w-4 mr-0.5 xxs:mr-1 hidden xxs:inline-block" />
                     Creados
                     {getCreatedOrdersCount() > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-[#3a8fb7] text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                      <span className="absolute -top-1 -right-1 bg-[#3a8fb7] text-white text-xs font-bold rounded-full h-4 w-4 sm:h-5 sm:w-5 flex items-center justify-center">
                         {getCreatedOrdersCount()}
                       </span>
                     )}
                   </TabsTrigger>
                 )}
-                
-                <TabsTrigger 
-                  value="pendientes" 
-                  className="flex-1 data-[state=active]:bg-[#3a8fb7] data-[state=active]:text-white text-[#333333] transition-all duration-200"
+
+                {/* Pestaña Aprobados - siempre visible */}
+                <TabsTrigger
+                  value="aprobados"
+                  className="flex-1 data-[state=active]:bg-[#3a8fb7] data-[state=active]:text-white text-[#333333] transition-all duration-200 text-[10px] xxs:text-[11px] xs:text-xs sm:text-sm py-1 px-0.5 xxs:px-1 sm:py-1.5 sm:px-2 h-8 sm:h-10 min-w-[70px]"
                 >
-                  <Clock className="w-4 h-4 mr-1" />
-                  Pendientes
-                </TabsTrigger>
-                
-                <TabsTrigger 
-                  value="aprobados" 
-                  className="flex-1 data-[state=active]:bg-[#3a8fb7] data-[state=active]:text-white text-[#333333] transition-all duration-200"
-                >
-                  <CheckCircle2 className="w-4 h-4 mr-1" />
+                  <CheckCircle2 className="h-3 w-3 sm:h-4 sm:w-4 mr-0.5 xxs:mr-1 hidden xxs:inline-block" />
                   Aprobados
                 </TabsTrigger>
-                
-                <TabsTrigger 
-                  value="rechazados" 
-                  className="flex-1 data-[state=active]:bg-[#3a8fb7] data-[state=active]:text-white text-[#333333] transition-all duration-200"
+
+                {/* Pestaña Rechazados - siempre visible */}
+                <TabsTrigger
+                  value="rechazados"
+                  className="flex-1 data-[state=active]:bg-[#3a8fb7] data-[state=active]:text-white text-[#333333] transition-all duration-200 text-[10px] xxs:text-[11px] xs:text-xs sm:text-sm py-1 px-0.5 xxs:px-1 sm:py-1.5 sm:px-2 h-8 sm:h-10 min-w-[75px]"
                 >
-                  <XSquare className="w-4 h-4 mr-1" />
+                  <XSquare className="h-3 w-3 sm:h-4 sm:w-4 mr-0.5 xxs:mr-1 hidden xxs:inline-block" />
                   Rechazados
                 </TabsTrigger>
               </TabsList>
@@ -1012,7 +998,7 @@ export const OrdersPage: React.FC = () => {
           </div>
 
           {/* Filtros para desktop */}
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
@@ -1029,7 +1015,7 @@ export const OrdersPage: React.FC = () => {
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
-              
+
               <Button
                 variant="outline"
                 size="sm"
@@ -1074,8 +1060,8 @@ export const OrdersPage: React.FC = () => {
                 <label htmlFor="statusFilter" className="text-[#333333] text-sm font-medium">
                   Estado
                 </label>
-                <Select 
-                  value={statusFilter} 
+                <Select
+                  value={statusFilter}
                   onValueChange={setStatusFilter}
                 >
                   <SelectTrigger id="statusFilter" className="w-full bg-[#f2f2f2] border-[#5baed1] mt-1">
@@ -1157,8 +1143,8 @@ export const OrdersPage: React.FC = () => {
                       <label htmlFor="mobileStatus" className="text-[#333333] text-sm font-medium">
                         Estado
                       </label>
-                      <Select 
-                        value={statusFilter} 
+                      <Select
+                        value={statusFilter}
                         onValueChange={setStatusFilter}
                       >
                         <SelectTrigger id="mobileStatus" className="w-full bg-[#f2f2f2] border-[#5baed1] mt-1">
@@ -1174,7 +1160,7 @@ export const OrdersPage: React.FC = () => {
                         </SelectContent>
                       </Select>
                     </div>
-                    
+
                     <div>
                       <label htmlFor="mobileFechaInicio" className="text-[#333333] text-sm font-medium">
                         Fecha Inicio
@@ -1187,7 +1173,7 @@ export const OrdersPage: React.FC = () => {
                         className="w-full bg-[#f2f2f2] border-[#5baed1] mt-1"
                       />
                     </div>
-                    
+
                     <div>
                       <label htmlFor="mobileFechaFin" className="text-[#333333] text-sm font-medium">
                         Fecha Fin
@@ -1200,7 +1186,7 @@ export const OrdersPage: React.FC = () => {
                         className="w-full bg-[#f2f2f2] border-[#5baed1] mt-1"
                       />
                     </div>
-                    
+
                     <div className="flex space-x-2">
                       <Button
                         variant="default"
@@ -1209,7 +1195,7 @@ export const OrdersPage: React.FC = () => {
                       >
                         Aplicar Filtros
                       </Button>
-                      
+
                       <Button
                         variant="outline"
                         onClick={clearAllFilters}
@@ -1226,7 +1212,7 @@ export const OrdersPage: React.FC = () => {
 
           {/* Estado de carga */}
           {isLoading && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -1241,7 +1227,7 @@ export const OrdersPage: React.FC = () => {
 
           {/* Sin pedidos */}
           {!isLoading && filteredOrders.length === 0 && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
@@ -1253,7 +1239,7 @@ export const OrdersPage: React.FC = () => {
               <h2 className="text-xl font-bold mb-2 text-[#333333]">No se encontraron pedidos</h2>
               <p className="text-[#4a4a4a] max-w-lg mx-auto">
                 {searchTerm || dateFilter.fechaInicio || dateFilter.fechaFin || statusFilter !== 'all'
-                  ? 'No hay pedidos que coincidan con los filtros seleccionados.' 
+                  ? 'No hay pedidos que coincidan con los filtros seleccionados.'
                   : activeTab === 'porAprobar'
                     ? 'No hay pedidos pendientes de aprobación.'
                     : activeTab === 'pendientes'
@@ -1267,7 +1253,7 @@ export const OrdersPage: React.FC = () => {
                             : 'Aún no has realizado ningún pedido. Comienza a comprar para ver tus pedidos aquí.'}
               </p>
               {(searchTerm || dateFilter.fechaInicio || dateFilter.fechaFin || statusFilter !== 'all' || activeTab !== 'todos') && (
-                <Button 
+                <Button
                   onClick={clearAllFilters}
                   className="mt-4 bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white transition-all duration-200"
                 >
@@ -1280,26 +1266,25 @@ export const OrdersPage: React.FC = () => {
           {/* Lista de pedidos */}
           {!isLoading && filteredOrders.length > 0 && (
             <div className="space-y-6">
-              <motion.h2 
+              <motion.h2
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.5, delay: 0.2 }}
                 className="text-xl font-medium mb-4 flex items-center text-[#333333]"
               >
-                {activeTab === 'todos' ? 'Todos los pedidos' : 
-                 activeTab === 'porAprobar' ? 'Pedidos por aprobar' :
-                 activeTab === 'pendientes' ? 'Pedidos pendientes' :
-                 activeTab === 'aprobados' ? 'Pedidos aprobados' :
-                 activeTab === 'rechazados' ? 'Pedidos rechazados' :
-                 activeTab === 'creados' ? 'Pedidos creados por mí' :
-                 'Pedidos'}
+                {activeTab === 'todos' ? 'Todos los pedidos' :
+                  activeTab === 'porAprobar' ? 'Pedidos pendientes' :
+                    activeTab === 'aprobados' ? 'Pedidos aprobados' :
+                      activeTab === 'rechazados' ? 'Pedidos rechazados' :
+                        activeTab === 'creados' ? 'Pedidos creados por mí' :
+                          'Pedidos'}
                 <Badge variant="outline" className="ml-3 bg-[#3a8fb7]/10 text-[#3a8fb7] border-[#5baed1]">
                   {filteredOrders.length} pedidos
                 </Badge>
               </motion.h2>
 
               {/* Vista para escritorio */}
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.5, delay: 0.3 }}
@@ -1401,7 +1386,7 @@ export const OrdersPage: React.FC = () => {
                                       <Download className="h-4 w-4" />
                                     )}
                                   </Button>
-                                  
+
                                   {/* Botones de aprobación para supervisores */}
                                   {canApproveOrder(order) && (
                                     <>
@@ -1428,7 +1413,7 @@ export const OrdersPage: React.FC = () => {
                                 </div>
                               </td>
                             </tr>
-                            
+
                             {/* Detalles del pedido (expandido) */}
                             {orderDetailsOpen === order._id && (
                               <tr>
@@ -1436,7 +1421,7 @@ export const OrdersPage: React.FC = () => {
                                   <div className="space-y-3">
                                     <div className="flex justify-between items-start">
                                       <h3 className="font-medium text-[#333333]">Detalles del Pedido #{order.displayNumber}</h3>
-                                      
+
                                       {/* Mostrar información de operario (si aplica) */}
                                       {order.metadata?.creadoPorOperario && (
                                         <div className="bg-[#5baed1]/10 rounded-md p-2 text-xs text-[#333333] border border-[#5baed1]/30">
@@ -1451,7 +1436,7 @@ export const OrdersPage: React.FC = () => {
                                         </div>
                                       )}
                                     </div>
-                                    
+
                                     {/* Mostrar motivo de rechazo si aplica */}
                                     {order.estado === OrderStatus.REJECTED && order.observaciones && (
                                       <Alert className="bg-[#F44336]/10 border border-[#F44336]/30 mt-2">
@@ -1461,7 +1446,7 @@ export const OrdersPage: React.FC = () => {
                                         </AlertDescription>
                                       </Alert>
                                     )}
-                                    
+
                                     {/* Productos del pedido */}
                                     <div className="bg-white rounded-md border border-[#5baed1]/20 overflow-hidden shadow-sm">
                                       <table className="min-w-full">
@@ -1487,13 +1472,13 @@ export const OrdersPage: React.FC = () => {
                                             const productName = typeof item.productoId === 'object' && item.productoId.nombre
                                               ? item.productoId.nombre
                                               : item.nombre || 'Producto desconocido';
-                                              
+
                                             const productPrice = item.precioUnitario !== undefined
                                               ? item.precioUnitario
                                               : (typeof item.productoId === 'object' && item.productoId.precio !== undefined
                                                 ? item.productoId.precio
                                                 : item.precio || 0);
-                                            
+
                                             return (
                                               <tr key={index} className="hover:bg-[#e8f0f3]/50 transition-colors duration-200">
                                                 <td className="px-4 py-3 text-[#333333]">
@@ -1511,7 +1496,7 @@ export const OrdersPage: React.FC = () => {
                                               </tr>
                                             );
                                           })}
-                                          
+
                                           {/* Fila de total */}
                                           <tr className="bg-[#3a8fb7]/5">
                                             <td colSpan={3} className="px-4 py-3 text-right font-medium text-[#333333]">
@@ -1524,7 +1509,7 @@ export const OrdersPage: React.FC = () => {
                                         </tbody>
                                       </table>
                                     </div>
-                                    
+
                                     {/* Sección de notas */}
                                     {order.detalle && order.detalle.trim() !== '' && (
                                       <div className="mt-3">
@@ -1591,17 +1576,17 @@ export const OrdersPage: React.FC = () => {
                               )}
                             </div>
                           </div>
-                          
+
                           {/* Badge de operario si aplica */}
                           {renderOperarioBadge(order)}
-                          
+
                           {/* Mostrar motivo de rechazo si aplica */}
                           {order.estado === OrderStatus.REJECTED && order.observaciones && (
                             <div className="mt-2 bg-[#F44336]/10 border border-[#F44336]/30 rounded-md p-2 text-xs text-[#333333]">
                               <span className="font-bold">Motivo de rechazo:</span> {order.observaciones}
                             </div>
                           )}
-                          
+
                           <div className="flex justify-between items-center mt-2">
                             <div className="text-sm text-[#4a4a4a] flex items-center">
                               <FileSpreadsheet className="h-4 w-4 mr-1" />
@@ -1612,7 +1597,7 @@ export const OrdersPage: React.FC = () => {
                             </Badge>
                           </div>
                         </div>
-                        
+
                         {/* Detalles expandibles del pedido */}
                         <Accordion type="single" collapsible className="mt-2">
                           <AccordionItem value="details" className="border-t border-[#5baed1]/20 pt-2">
@@ -1626,13 +1611,13 @@ export const OrdersPage: React.FC = () => {
                                   const productName = typeof item.productoId === 'object' && item.productoId.nombre
                                     ? item.productoId.nombre
                                     : item.nombre || 'Producto desconocido';
-                                    
+
                                   const productPrice = item.precioUnitario !== undefined
                                     ? item.precioUnitario
                                     : (typeof item.productoId === 'object' && item.productoId.precio !== undefined
                                       ? item.productoId.precio
                                       : item.precio || 0);
-                                  
+
                                   return (
                                     <div key={index} className="flex justify-between items-center py-1 border-b border-[#5baed1]/10">
                                       <div className="text-[#333333]">
@@ -1647,7 +1632,7 @@ export const OrdersPage: React.FC = () => {
                                     </div>
                                   );
                                 })}
-                                
+
                                 {/* Notas */}
                                 {order.detalle && order.detalle.trim() !== '' && (
                                   <div className="mt-3 pt-2">
@@ -1677,7 +1662,7 @@ export const OrdersPage: React.FC = () => {
                           )}
                           Remito
                         </Button>
-                        
+
                         {/* Botones de aprobación para supervisores en móvil */}
                         {canApproveOrder(order) && (
                           <div className="flex space-x-2">
@@ -1712,7 +1697,7 @@ export const OrdersPage: React.FC = () => {
           )}
         </div>
       </div>
-      
+
       {/* Diálogo de confirmación de aprobación */}
       <Dialog open={approvalDialogOpen} onOpenChange={setApprovalDialogOpen}>
         <DialogContent className="sm:max-w-md bg-white border-[#5baed1] shadow-xl">
@@ -1725,23 +1710,23 @@ export const OrdersPage: React.FC = () => {
               Al aprobar este pedido, se generará la orden y se procesará para su entrega.
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="py-4">
             <p className="text-[#333333]">
               ¿Estás seguro de que deseas aprobar este pedido?
             </p>
-            
+
             <div className="mt-4 bg-[#3a8fb7]/5 p-3 rounded-md border border-[#3a8fb7]/20">
               <p className="text-sm text-[#4a4a4a]">
-                Una vez aprobado, el pedido se enviará a logística para su procesamiento y entrega. 
+                Una vez aprobado, el pedido se enviará a logística para su procesamiento y entrega.
                 El operario será notificado de que su pedido ha sido aprobado.
               </p>
             </div>
           </div>
-          
+
           <DialogFooter>
-            <Button 
-              type="button" 
+            <Button
+              type="button"
               variant="outline"
               onClick={() => setApprovalDialogOpen(false)}
               className="border-[#5baed1] text-[#333333]"
@@ -1749,7 +1734,7 @@ export const OrdersPage: React.FC = () => {
             >
               Cancelar
             </Button>
-            <Button 
+            <Button
               type="button"
               onClick={handleApproveOrder}
               disabled={approveMutation.isPending}
@@ -1770,7 +1755,7 @@ export const OrdersPage: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      
+
       {/* Diálogo de rechazo de pedido */}
       <Dialog open={rejectionDialogOpen} onOpenChange={setRejectionDialogOpen}>
         <DialogContent className="sm:max-w-md bg-white border-[#5baed1] shadow-xl">
@@ -1783,7 +1768,7 @@ export const OrdersPage: React.FC = () => {
               Por favor, proporciona un motivo para el rechazo del pedido.
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="py-4">
             <Label htmlFor="rejectionReason" className="text-[#333333] mb-2 block">
               Motivo del rechazo *
@@ -1796,18 +1781,18 @@ export const OrdersPage: React.FC = () => {
               className="min-h-[120px] bg-[#f2f2f2] border-[#5baed1] text-[#333333] placeholder:text-[#5c5c5c] focus:border-[#3a8fb7] transition-all duration-200"
               required
             />
-            
+
             <div className="mt-4 bg-[#F44336]/10 p-3 rounded-md border border-[#F44336]/20">
               <p className="text-sm text-[#4a4a4a]">
-                Al rechazar un pedido, se notificará al operario con el motivo proporcionado. 
+                Al rechazar un pedido, se notificará al operario con el motivo proporcionado.
                 El pedido no se procesará y los productos volverán a estar disponibles.
               </p>
             </div>
           </div>
-          
+
           <DialogFooter>
-            <Button 
-              type="button" 
+            <Button
+              type="button"
               variant="outline"
               onClick={() => setRejectionDialogOpen(false)}
               className="border-[#5baed1] text-[#333333]"
@@ -1815,7 +1800,7 @@ export const OrdersPage: React.FC = () => {
             >
               Cancelar
             </Button>
-            <Button 
+            <Button
               type="button"
               onClick={handleRejectOrder}
               disabled={rejectMutation.isPending || !rejectionReason.trim()}
@@ -1839,3 +1824,27 @@ export const OrdersPage: React.FC = () => {
     </>
   );
 };
+
+<style jsx global>{`
+  /* Tamaños de pantalla personalizados */
+  @media (min-width: 360px) {
+    .xxs\\:text-\\[11px\\] {
+      font-size: 11px;
+    }
+    .xxs\\:px-1 {
+      padding-left: 0.25rem;
+      padding-right: 0.25rem;
+    }
+    .xxs\\:mr-1 {
+      margin-right: 0.25rem;
+    }
+    .xxs\\:inline-block {
+      display: inline-block;
+    }
+  }
+  @media (min-width: 480px) {
+    .xs\\:text-xs {
+      font-size: 0.75rem;
+    }
+  }
+`}</style>

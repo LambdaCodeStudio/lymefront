@@ -23,7 +23,8 @@ import {
   Home,
   Info,
   Phone,
-  Shield
+  Shield,
+  User
 } from 'lucide-react';
 
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -45,11 +46,27 @@ import {
   SelectValue
 } from "@/components/ui/select";
 
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList
+} from "@/components/ui/command";
+
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger
+} from "@/components/ui/popover";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 
 import {
   Card,
@@ -122,7 +139,7 @@ interface SubServicio {
 interface UnassignedSubServicio {
   clienteId: string;
   nombreCliente: string;
-  userId: string | UserExtended;
+  userId: string | UserExtended | UserExtended[];
   subServicios: SubServicio[];
 }
 
@@ -151,13 +168,13 @@ interface Client {
   descripcion: string;
   servicio: string;
   seccionDelServicio: string;
-  userId: string | {
+  userId: string[] | {
     _id: string;
     email?: string;
     usuario?: string;
     nombre?: string;
     apellido?: string;
-  };
+  }[];
   subServicios: SubServicio[];
   direccion: string;
   telefono: string;
@@ -173,7 +190,7 @@ interface CreateClientData {
   descripcion: string;
   servicio?: string;
   seccionDelServicio?: string;
-  userId: string;
+  userId: string[];
   direccion: string;
   telefono: string;
   email: string;
@@ -186,7 +203,7 @@ interface UpdateClientData {
   descripcion: string;
   servicio?: string;
   seccionDelServicio?: string;
-  userId: string;
+  userId: string[];
   direccion: string;
   telefono: string;
   email: string;
@@ -203,6 +220,8 @@ interface CreateSubUbicacionData {
   nombre: string;
   descripcion: string;
 }
+
+
 
 // Funciones para gestionar la caché
 const getFromCache = (key: string) => {
@@ -264,14 +283,14 @@ const ClientsSection: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  
+
   // Estados para modales
   const [showModal, setShowModal] = useState(false);
   const [showSubServicioModal, setShowSubServicioModal] = useState(false);
   const [showSubUbicacionModal, setShowSubUbicacionModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showSupervisorModal, setShowSupervisorModal] = useState(false);
-  
+
   // Estados para la edición actual
   const [currentClient, setCurrentClient] = useState<Client | null>(null);
   const [currentSubServicio, setCurrentSubServicio] = useState<SubServicio | null>(null);
@@ -279,10 +298,10 @@ const ClientsSection: React.FC = () => {
   const [currentSubUbicacion, setCurrentSubUbicacion] = useState<SubUbicacion | null>(null);
   const [currentSupervisorId, setCurrentSupervisorId] = useState<string>('');
   const [idToDelete, setIdToDelete] = useState<{ id: string, type: 'cliente' | 'subservicio' | 'sububicacion' | 'supervisor', parentId?: string, subServicioId?: string } | null>(null);
-  
+
   // Estados para mensajes de feedback
   const [successMessage, setSuccessMessage] = useState<string>('');
-  
+
   // Estados para filtrado y UI
   const [activeUserId, setActiveUserId] = useState<string>("all");
   const [activeSupervisorId, setActiveSupervisorId] = useState<string>("all");
@@ -302,7 +321,7 @@ const ClientsSection: React.FC = () => {
   const [clientFormData, setClientFormData] = useState<CreateClientData>({
     nombre: '',
     descripcion: '',
-    userId: '',
+    userId: [],
     direccion: '',
     telefono: '',
     email: '',
@@ -343,10 +362,10 @@ const ClientsSection: React.FC = () => {
 
     if (typeof window !== 'undefined') {
       window.addEventListener('resize', handleResize);
-      
+
       // Ajustar itemsPerPage según el tamaño inicial de la pantalla
       setItemsPerPage(window.innerWidth < 768 ? 3 : 7);
-      
+
       return () => window.removeEventListener('resize', handleResize);
     }
   }, []);
@@ -391,6 +410,116 @@ const ClientsSection: React.FC = () => {
     return null;
   };
 
+  // Componente para selección múltiple de supervisores
+  const MultiSupervisorSelect = ({
+    supervisors,
+    selectedSupervisors = [],
+    onChange,
+    placeholder = "Seleccionar supervisores..."
+  }) => {
+    const [open, setOpen] = useState(false);
+
+    const safeSelectedSupervisors = Array.isArray(selectedSupervisors) ? selectedSupervisors : [];
+
+    const toggleSupervisor = (supervisorId) => {
+      console.log('Toggling supervisor:', supervisorId);
+      console.log('Current selected:', safeSelectedSupervisors);
+
+      const isCurrentlySelected = safeSelectedSupervisors.includes(supervisorId);
+      let newSelectedSupervisors;
+
+      if (isCurrentlySelected) {
+        // Si ya está seleccionado, quitar
+        newSelectedSupervisors = safeSelectedSupervisors.filter(id => id !== supervisorId);
+      } else {
+        // Si no está seleccionado, agregar
+        newSelectedSupervisors = [...safeSelectedSupervisors, supervisorId];
+      }
+
+      console.log('New selected:', newSelectedSupervisors);
+
+      // Llamar directamente a onChange con el nuevo array
+      onChange(newSelectedSupervisors);
+    };
+
+    return (
+      <div className="flex flex-col space-y-4">
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className="justify-between w-full border-[#91BEAD] focus:ring-[#29696B]/20"
+            >
+              <span>
+                {safeSelectedSupervisors.length > 0
+                  ? `${safeSelectedSupervisors.length} supervisor${safeSelectedSupervisors.length > 1 ? 'es' : ''} seleccionado${safeSelectedSupervisors.length > 1 ? 's' : ''}`
+                  : placeholder}
+              </span>
+              <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-full p-0" align="start">
+            <Command className="w-full">
+              <CommandInput placeholder="Buscar supervisor..." />
+              <CommandList>
+                <CommandEmpty>No se encontraron supervisores.</CommandEmpty>
+                <CommandGroup>
+                  {supervisors.map(supervisor => (
+                    <CommandItem
+                      key={supervisor._id}
+                      onSelect={() => toggleSupervisor(supervisor._id)}
+                      className="flex items-center space-x-2"
+                    >
+                      <div className="flex items-center gap-2 w-full">
+                        <Checkbox
+                          checked={safeSelectedSupervisors.includes(supervisor._id)}
+                          onCheckedChange={() => toggleSupervisor(supervisor._id)}
+                          className="text-[#29696B] border-[#91BEAD]"
+                        />
+                        <div className="flex flex-col">
+                          <span>
+                            {supervisor.email || supervisor.usuario || `${supervisor.nombre || ''} ${supervisor.apellido || ''}`.trim() || supervisor._id}
+                          </span>
+                          {supervisor.role && (
+                            <span className="text-xs text-muted-foreground">
+                              {supervisor.role === 'supervisor' ? 'Supervisor' : supervisor.role}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+
+        {safeSelectedSupervisors.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {safeSelectedSupervisors.map(id => {
+              const supervisor = supervisors.find(s => s._id === id);
+              return (
+                <Badge key={id} variant="secondary" className="flex items-center gap-1 bg-[#DFEFE6] text-[#29696B] border-[#91BEAD]">
+                  {supervisor ? (supervisor.email || supervisor.usuario || `${supervisor.nombre || ''} ${supervisor.apellido || ''}`.trim() || id.substring(0, 8)) : id.substring(0, 8)}
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onChange(safeSelectedSupervisors.filter(i => i !== id));
+                    }}
+                    className="ml-1 rounded-full hover:bg-[#91BEAD]/20 p-0.5"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
   // Efecto para cargar datos iniciales
   useEffect(() => {
     console.log("ClientSection montado, selectedUserId:", selectedUserId);
@@ -417,10 +546,10 @@ const ClientsSection: React.FC = () => {
         const userId = selectedUserId || storedSelectedUserId || lastCreatedUserId;
         console.log("Se encontró un userId para usar en el formulario:", userId);
 
-        // Inicializar el formulario con este usuario
+        // Inicializar el formulario con este usuario - ASEGURARNOS DE QUE ES UN ARRAY
         setClientFormData(prev => ({
           ...prev,
-          userId: userId
+          userId: userId ? [userId] : []
         }));
 
         // Limpiar valores de localStorage
@@ -440,11 +569,15 @@ const ClientsSection: React.FC = () => {
     if (selectedUserId) {
       console.log("selectedUserId cambió a:", selectedUserId);
 
-      // Actualizar el formulario
-      setClientFormData(prev => ({
-        ...prev,
-        userId: selectedUserId
-      }));
+      // Actualizar el formulario para incluir el nuevo usuario seleccionado
+      setClientFormData(prev => {
+        // Asegurarnos que prev.userId es un array
+        const currentUserIds = Array.isArray(prev.userId) ? prev.userId : [];
+        return {
+          ...prev,
+          userId: currentUserIds.includes(selectedUserId) ? currentUserIds : [...currentUserIds, selectedUserId]
+        };
+      });
     }
   }, [selectedUserId]);
 
@@ -529,12 +662,12 @@ const ClientsSection: React.FC = () => {
       }
 
       let apiUrl = 'http://localhost:3000/api/cliente';
-      
+
       // Si hay un supervisor activo, obtener los clientes filtrados por supervisor
       if (activeSupervisorId !== "all" && viewMode === 'all') {
         apiUrl = `http://localhost:3000/api/cliente/supervisor/${activeSupervisorId}`;
       }
-      
+
       const response = await fetch(apiUrl, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -1280,10 +1413,26 @@ const ClientsSection: React.FC = () => {
    */
   const handleEditClient = (client: Client) => {
     setCurrentClient(client);
+
+    // Convertir userId a array de strings si no lo es
+    let userIds: string[] = [];
+
+    if (Array.isArray(client.userId)) {
+      userIds = client.userId.map(id =>
+        typeof id === 'object' && id !== null && id._id ? id._id : String(id)
+      );
+    } else if (client.userId) {
+      // Si no es un array, convertirlo en array con un solo elemento
+      const id = typeof client.userId === 'object' && client.userId._id
+        ? client.userId._id
+        : String(client.userId);
+      userIds = [id];
+    }
+
     setClientFormData({
       nombre: client.nombre,
       descripcion: client.descripcion || '',
-      userId: typeof client.userId === 'object' ? client.userId._id : client.userId,
+      userId: userIds,
       direccion: client.direccion || '',
       telefono: client.telefono || '',
       email: client.email || '',
@@ -1311,10 +1460,10 @@ const ClientsSection: React.FC = () => {
     setSubServicioFormData({
       nombre: subservicio.nombre,
       descripcion: subservicio.descripcion || '',
-      supervisorId: typeof subservicio.supervisorId === 'object' && subservicio.supervisorId 
-        ? subservicio.supervisorId._id 
-        : typeof subservicio.supervisorId === 'string' 
-          ? subservicio.supervisorId 
+      supervisorId: typeof subservicio.supervisorId === 'object' && subservicio.supervisorId
+        ? subservicio.supervisorId._id
+        : typeof subservicio.supervisorId === 'string'
+          ? subservicio.supervisorId
           : ''
     });
     setShowSubServicioModal(true);
@@ -1329,8 +1478,8 @@ const ClientsSection: React.FC = () => {
     // Establecer el supervisor actual si existe
     if (subservicio.supervisorId) {
       setCurrentSupervisorId(
-        typeof subservicio.supervisorId === 'object' 
-          ? subservicio.supervisorId._id 
+        typeof subservicio.supervisorId === 'object'
+          ? subservicio.supervisorId._id
           : subservicio.supervisorId
       );
     } else {
@@ -1343,8 +1492,8 @@ const ClientsSection: React.FC = () => {
    * Prepara la confirmación para remover un supervisor
    */
   const confirmRemoveSupervisor = (clientId: string, subServicioId: string) => {
-    setIdToDelete({ 
-      id: 'supervisor', 
+    setIdToDelete({
+      id: 'supervisor',
       type: 'supervisor',
       parentId: clientId,
       subServicioId: subServicioId
@@ -1419,7 +1568,7 @@ const ClientsSection: React.FC = () => {
           successMsg = 'Subservicio eliminado correctamente';
           break;
         case 'sububicacion':
-          if (!idToDelete.parentId || !idToDelete.subServicioId) 
+          if (!idToDelete.parentId || !idToDelete.subServicioId)
             throw new Error('ID de cliente y subservicio requeridos para eliminar sububicación');
           url = `http://localhost:3000/api/cliente/${idToDelete.parentId}/subservicio/${idToDelete.subServicioId}/sububicacion/${idToDelete.id}`;
           successMsg = 'Sububicación eliminada correctamente';
@@ -1446,7 +1595,7 @@ const ClientsSection: React.FC = () => {
       if (idToDelete.type === 'subservicio') {
         await fetchSubservicesWithoutSupervisor(true);
       }
-      
+
       setShowDeleteModal(false);
       setIdToDelete(null);
 
@@ -1478,7 +1627,7 @@ const ClientsSection: React.FC = () => {
     setClientFormData({
       nombre: '',
       descripcion: '',
-      userId: activeUserId !== "all" ? activeUserId : '',
+      userId: activeUserId !== "all" ? [activeUserId] : [],
       direccion: '',
       telefono: '',
       email: '',
@@ -1609,9 +1758,24 @@ const ClientsSection: React.FC = () => {
    * Determina si un cliente contiene subservicios sin supervisor
    */
   const clientHasUnassignedSubservices = (client: Client) => {
-    return client.subServicios.some(subservicio => 
+    return client.subServicios.some(subservicio =>
       !subservicio.supervisorId || subservicio.requiereSupervisor
     );
+  };
+
+  /**
+   * Obtiene los supervisores asignados a un cliente
+   */
+  const getClientSupervisors = (client: Client): string[] => {
+    if (!client.userId) return [];
+
+    if (Array.isArray(client.userId)) {
+      return client.userId.map(id =>
+        typeof id === 'object' && id !== null && id._id ? id._id : String(id)
+      );
+    } else {
+      return [typeof client.userId === 'object' && client.userId._id ? client.userId._id : String(client.userId)];
+    }
   };
 
   // Filtrar clientes según término de búsqueda, usuario seleccionado y supervisor
@@ -1629,13 +1793,13 @@ const ClientsSection: React.FC = () => {
       client.telefono,
       client.direccion
     ].filter(Boolean).map(field => field.toLowerCase());
-    
+
     // También buscar en subservicios y sububicaciones
     if (client.subServicios) {
       client.subServicios.forEach(subServicio => {
         searchFields.push(subServicio.nombre.toLowerCase());
         if (subServicio.descripcion) searchFields.push(subServicio.descripcion.toLowerCase());
-        
+
         if (subServicio.subUbicaciones) {
           subServicio.subUbicaciones.forEach(subUbicacion => {
             searchFields.push(subUbicacion.nombre.toLowerCase());
@@ -1645,22 +1809,35 @@ const ClientsSection: React.FC = () => {
       });
     }
 
-    const matchesSearch = searchFields.some(field => 
+    const matchesSearch = searchFields.some(field =>
       field.includes(searchTerm.toLowerCase())
     );
 
     // Filtro por usuario seleccionado
-    const matchesUser = activeUserId === "all" ||
-      (typeof client.userId === 'object' && client.userId !== null
-        ? client.userId._id === activeUserId
-        : client.userId === activeUserId);
+    let matchesUser = activeUserId === "all";
+
+    // Si userId es un array, verificar si incluye activeUserId
+    if (activeUserId !== "all" && Array.isArray(client.userId)) {
+      const userIds = client.userId.map(id =>
+        typeof id === 'object' && id !== null && id._id ? id._id.toString() : id.toString()
+      );
+      matchesUser = userIds.includes(activeUserId);
+    }
+    // Si userId es un objeto, verificar si su _id es igual a activeUserId
+    else if (activeUserId !== "all" && typeof client.userId === 'object' && client.userId !== null) {
+      matchesUser = client.userId._id === activeUserId;
+    }
+    // Si userId es un string, verificar si es igual a activeUserId
+    else if (activeUserId !== "all") {
+      matchesUser = client.userId === activeUserId;
+    }
 
     // Filtro por supervisor (si está aplicado)
-    const matchesSupervisor = activeSupervisorId === "all" || 
-      client.subServicios.some(subServicio => 
-        (typeof subServicio.supervisorId === 'object' && subServicio.supervisorId !== null
-          ? subServicio.supervisorId._id === activeSupervisorId
-          : subServicio.supervisorId === activeSupervisorId)
+    const matchesSupervisor = activeSupervisorId === "all" ||
+      client.subServicios.some(subServicio =>
+      (typeof subServicio.supervisorId === 'object' && subServicio.supervisorId !== null
+        ? subServicio.supervisorId._id === activeSupervisorId
+        : subServicio.supervisorId === activeSupervisorId)
       );
 
     return matchesSearch && matchesUser && matchesSupervisor;
@@ -1670,7 +1847,7 @@ const ClientsSection: React.FC = () => {
   const totalItems = filteredClients.length;
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = Math.min(startIndex + itemsPerPage, totalItems);
-  
+
   // Obtener solo los clientes de la página actual
   const paginatedClients = filteredClients.slice(startIndex, endIndex);
 
@@ -1823,7 +2000,7 @@ const ClientsSection: React.FC = () => {
           {/* Selector de vista */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button 
+              <Button
                 variant="outline"
                 className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50"
               >
@@ -1832,19 +2009,19 @@ const ClientsSection: React.FC = () => {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem 
+              <DropdownMenuItem
                 onClick={() => toggleViewMode('all')}
                 className={viewMode === 'all' ? 'bg-[#DFEFE6]/30 font-medium' : ''}
               >
                 <Building className="w-4 h-4 mr-2 text-[#29696B]" />
                 Vista normal
               </DropdownMenuItem>
-              <DropdownMenuItem 
+              <DropdownMenuItem
                 onClick={() => toggleViewMode('unassigned')}
                 className={viewMode === 'unassigned' ? 'bg-[#DFEFE6]/30 font-medium' : ''}
               >
                 <AlertTriangle className="w-4 h-4 mr-2 text-amber-500" />
-                Subservicios sin supervisor 
+                Subservicios sin supervisor
                 {totalUnassignedSubservices > 0 && (
                   <Badge className="ml-2 bg-amber-100 text-amber-700 border-amber-300">
                     {totalUnassignedSubservices}
@@ -1854,8 +2031,8 @@ const ClientsSection: React.FC = () => {
             </DropdownMenuContent>
           </DropdownMenu>
 
-         
-          
+
+
           <Button
             onClick={() => {
               resetClientForm();
@@ -1913,8 +2090,8 @@ const ClientsSection: React.FC = () => {
                   variant={viewMode === 'all' ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => toggleViewMode('all')}
-                  className={viewMode === 'all' 
-                    ? 'bg-[#29696B] text-white hover:bg-[#29696B]/90' 
+                  className={viewMode === 'all'
+                    ? 'bg-[#29696B] text-white hover:bg-[#29696B]/90'
                     : 'border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50'}
                 >
                   <Building className="w-3 h-3 mr-1" />
@@ -1924,8 +2101,8 @@ const ClientsSection: React.FC = () => {
                   variant={viewMode === 'unassigned' ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => toggleViewMode('unassigned')}
-                  className={viewMode === 'unassigned' 
-                    ? 'bg-[#29696B] text-white hover:bg-[#29696B]/90' 
+                  className={viewMode === 'unassigned'
+                    ? 'bg-[#29696B] text-white hover:bg-[#29696B]/90'
                     : 'border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50'}
                 >
                   <AlertTriangle className="w-3 h-3 mr-1" />
@@ -2192,17 +2369,35 @@ const ClientsSection: React.FC = () => {
                                 <p className="text-[#29696B]">{client.direccion || 'No especificada'}</p>
                               </div>
                             </div>
-                            <div className="flex items-start">
-                              <Users className="w-4 h-4 text-[#7AA79C] mt-1 mr-2" />
-                              <div>
-                                <p className="text-sm text-[#7AA79C]">Usuario Asignado</p>
-                                <p className="text-[#29696B]">
-                                  {typeof client.userId === 'object' && client.userId
-                                    ? client.userId.email || client.userId.usuario || `${client.userId.nombre || ''} ${client.userId.apellido || ''}`.trim()
-                                    : typeof client.userId === 'string'
-                                      ? getUserIdentifierById(client.userId)
-                                      : 'No asignado'}
-                                </p>
+                            <div className="flex flex-col">
+                              <div className="flex items-start">
+                                <Users className="w-4 h-4 text-[#7AA79C] mt-1 mr-2" />
+                                <div>
+                                  <p className="text-sm text-[#7AA79C]">Supervisores Asignados</p>
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {Array.isArray(client.userId) && client.userId.length > 0 ? (
+                                      client.userId.map(userId => {
+                                        const supervisorId = typeof userId === 'object' && userId !== null ? userId._id : userId;
+                                        const supervisor = supervisors.find(s => s._id === supervisorId);
+
+                                        return (
+                                          <Badge
+                                            key={supervisorId}
+                                            variant="outline"
+                                            className="bg-[#DFEFE6]/80 text-[#29696B] border-[#91BEAD] text-xs"
+                                          >
+                                            {supervisor
+                                              ? (supervisor.email || supervisor.usuario || `${supervisor.nombre || ''} ${supervisor.apellido || ''}`.trim() || supervisorId.substring(0, 8))
+                                              : `Supervisor ID: ${supervisorId.substring(0, 8)}`
+                                            }
+                                          </Badge>
+                                        );
+                                      })
+                                    ) : (
+                                      <span className="text-[#29696B]">No hay supervisores asignados</span>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -2232,7 +2427,7 @@ const ClientsSection: React.FC = () => {
                                       {subservicio.descripcion && (
                                         <p className="text-sm text-[#7AA79C]">{subservicio.descripcion}</p>
                                       )}
-                                      
+
                                       {/* Mostrar información del supervisor */}
                                       {subservicio.supervisorId ? (
                                         <div className="flex items-center mt-1">
@@ -2307,7 +2502,7 @@ const ClientsSection: React.FC = () => {
                                           Editar Subservicio
                                         </DropdownMenuItem>
                                         {subservicio.supervisorId && (
-                                          <DropdownMenuItem 
+                                          <DropdownMenuItem
                                             onClick={() => confirmRemoveSupervisor(client._id, subservicio._id)}
                                             className="text-amber-600"
                                           >
@@ -2492,17 +2687,36 @@ const ClientsSection: React.FC = () => {
                                       Dirección: <span className="text-[#29696B]">{client.direccion || 'No especificada'}</span>
                                     </span>
                                   </div>
-                                  <div className="flex items-center">
-                                    <Users className="w-3 h-3 text-[#7AA79C] mr-2" />
-                                    <span className="text-[#7AA79C]">
-                                      Usuario: <span className="text-[#29696B]">
-                                        {typeof client.userId === 'object' && client.userId
-                                          ? client.userId.email || client.userId.usuario || `${client.userId.nombre || ''} ${client.userId.apellido || ''}`.trim()
-                                          : typeof client.userId === 'string'
-                                            ? getUserIdentifierById(client.userId)
-                                            : 'No asignado'}
-                                      </span>
-                                    </span>
+                                  <div className="flex flex-col">
+                                    <div className="flex items-start">
+                                      <Users className="w-3 h-3 text-[#7AA79C] mt-1 mr-2" />
+                                      <div>
+                                        <span className="text-[#7AA79C]">Supervisores:</span>
+                                        <div className="flex flex-wrap gap-1 mt-1">
+                                          {Array.isArray(client.userId) && client.userId.length > 0 ? (
+                                            client.userId.map(userId => {
+                                              const supervisorId = typeof userId === 'object' && userId !== null ? userId._id : userId;
+                                              const supervisor = supervisors.find(s => s._id === supervisorId);
+
+                                              return (
+                                                <Badge
+                                                  key={supervisorId}
+                                                  variant="outline"
+                                                  className="bg-[#DFEFE6]/80 text-[#29696B] border-[#91BEAD] text-xs"
+                                                >
+                                                  {supervisor
+                                                    ? (supervisor.email || supervisor.usuario || `${supervisor.nombre || ''} ${supervisor.apellido || ''}`.trim() || supervisorId.substring(0, 8))
+                                                    : `ID: ${supervisorId.substring(0, 8)}`
+                                                  }
+                                                </Badge>
+                                              );
+                                            })
+                                          ) : (
+                                            <span className="text-[#29696B] text-xs">No hay supervisores asignados</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
                                   </div>
                                 </div>
 
@@ -2693,7 +2907,7 @@ const ClientsSection: React.FC = () => {
               <Alert className="bg-amber-50 border border-amber-200 text-amber-800">
                 <AlertTriangle className="h-4 w-4 text-amber-600" />
                 <AlertDescription className="ml-2">
-                  Se encontraron {totalUnassignedSubservices} subservicios sin supervisor asignado. 
+                  Se encontraron {totalUnassignedSubservices} subservicios sin supervisor asignado.
                   Puede asignarles un supervisor utilizando el botón "Asignar Supervisor".
                 </AlertDescription>
               </Alert>
@@ -2711,12 +2925,36 @@ const ClientsSection: React.FC = () => {
                         </Badge>
                       </div>
                       <div className="text-sm text-[#7AA79C] mt-1">
-                        Usuario asignado: {
-                          typeof cliente.userId === 'object' && cliente.userId
-                            ? cliente.userId.email || cliente.userId.usuario || `${cliente.userId.nombre || ''} ${cliente.userId.apellido || ''}`.trim()
-                            : typeof cliente.userId === 'string'
-                              ? getUserIdentifierById(cliente.userId as string)
-                              : 'No asignado'
+                        Supervisores asignados: {
+                          Array.isArray(cliente.userId) ? (
+                            cliente.userId.length > 0 ? (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {cliente.userId.map(userId => {
+                                  const supervisorId = typeof userId === 'object' && userId !== null ? userId._id : userId;
+                                  const supervisor = supervisors.find(s => s._id === supervisorId);
+
+                                  return (
+                                    <Badge
+                                      key={supervisorId}
+                                      variant="outline"
+                                      className="bg-[#DFEFE6]/80 text-[#29696B] border-[#91BEAD] text-xs"
+                                    >
+                                      {supervisor
+                                        ? (supervisor.email || supervisor.usuario || `${supervisor.nombre || ''} ${supervisor.apellido || ''}`.trim() || supervisorId.substring(0, 8))
+                                        : `ID: ${supervisorId.substring(0, 8)}`
+                                      }
+                                    </Badge>
+                                  );
+                                })}
+                              </div>
+                            ) : 'Ninguno'
+                          ) : (
+                            typeof cliente.userId === 'object' && cliente.userId
+                              ? cliente.userId.email || cliente.userId.usuario || `${cliente.userId.nombre || ''} ${cliente.userId.apellido || ''}`.trim()
+                              : typeof cliente.userId === 'string'
+                                ? getUserIdentifierById(cliente.userId as string)
+                                : 'No asignado'
+                          )
                         }
                       </div>
                     </CardHeader>
@@ -2753,7 +2991,9 @@ const ClientsSection: React.FC = () => {
                                     descripcion: '',
                                     servicio: cliente.nombreCliente,
                                     seccionDelServicio: '',
-                                    userId: cliente.userId,
+                                    userId: typeof cliente.userId === 'object' && Array.isArray(cliente.userId)
+                                      ? cliente.userId
+                                      : (cliente.userId ? [cliente.userId] : []),
                                     subServicios: [],
                                     direccion: '',
                                     telefono: '',
@@ -2827,52 +3067,17 @@ const ClientsSection: React.FC = () => {
             </div>
 
             <div>
-              <Label htmlFor="userId" className="text-sm text-[#29696B]">Usuario Asignado*</Label>
-              {activeUserId !== "all" ? (
-                <div className="mt-3 p-3 bg-[#DFEFE6]/20 border border-[#91BEAD]/30 rounded-md flex items-center text-sm">
-                  <Users className="text-[#29696B] w-4 h-4 mr-2" />
-                  <span className="text-[#7AA79C]">
-                    Usuario Asignado: <strong className="text-[#29696B]">{getUserIdentifierById(activeUserId)}</strong>
-                  </span>
-                </div>
-              ) : (
-                <>
-                  <Select
-                    value={clientFormData.userId}
-                    onValueChange={(value) => setClientFormData({ ...clientFormData, userId: value })}
-                    required
-                  >
-                    <SelectTrigger className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
-                      <SelectValue placeholder="Seleccionar supervisor" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {users
-                        .filter(user => user.role === 'supervisor')
-                        .length > 0 ? (
-                        users
-                          .filter(user => user.role === 'supervisor')
-                          .sort((a, b) => (a.email || a.usuario || '').localeCompare(b.email || b.usuario || ''))
-                          .map(user => (
-                            <SelectItem key={user._id} value={user._id}>
-                              {user.email || user.usuario || `${user.nombre || ''} ${user.apellido || ''}`.trim() || user._id}
-                            </SelectItem>
-                          ))
-                      ) : (
-                        <SelectItem value="no-supervisors" disabled>
-                          No hay supervisores disponibles
-                        </SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-
-                  {/* Mostrar detalles del usuario seleccionado */}
-                  {clientFormData.userId && (
-                    <div className="mt-2 text-sm text-[#29696B] flex items-center">
-                      <Mail className="w-3 h-3 mr-1" />
-                      Usuario Asignado: <strong className="ml-1">{getUserIdentifierById(clientFormData.userId)}</strong>
-                    </div>
-                  )}
-                </>
+              <Label htmlFor="userId" className="text-sm text-[#29696B]">Supervisores Asignados*</Label>
+              <div className="mt-1">
+                <MultiSupervisorSelect
+                  supervisors={supervisors}
+                  selectedSupervisors={clientFormData.userId || []}
+                  onChange={(newValue: any) => setClientFormData({ ...clientFormData, userId: newValue })}
+                  placeholder="Seleccionar supervisores..."
+                />
+              </div>
+              {!clientFormData.userId || (Array.isArray(clientFormData.userId) && clientFormData.userId.length === 0) && (
+                <p className="text-xs text-red-500 mt-1">Debe seleccionar al menos un supervisor</p>
               )}
             </div>
 
@@ -2936,7 +3141,8 @@ const ClientsSection: React.FC = () => {
               </Button>
               <Button
                 type="submit"
-                disabled={loading || deletingOperation}
+                disabled={loading || deletingOperation || !clientFormData.userId ||
+                  (Array.isArray(clientFormData.userId) && clientFormData.userId.length === 0)}
                 className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
               >
                 {loading || deletingOperation ? (
@@ -2996,24 +3202,39 @@ const ClientsSection: React.FC = () => {
               <Label htmlFor="subservicio-supervisor" className="text-sm text-[#29696B]">Supervisor Asignado (Opcional)</Label>
               <Select
                 value={subServicioFormData.supervisorId || ''}
-                onValueChange={(value) => setSubServicioFormData({ ...subServicioFormData, supervisorId: value })}
+                onValueChange={(value) => setSubServicioFormData({ ...subServicioFormData, supervisorId: value === 'all' ? '' : value })}
+                required
               >
-                <SelectTrigger id="subservicio-supervisor" className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
+                <SelectTrigger
+                  id="subservicio-supervisor"
+                  className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20"
+                  data-invalid={!subServicioFormData.supervisorId}
+                >
                   <SelectValue placeholder="Seleccionar supervisor" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Sin supervisor</SelectItem>
-                  {supervisors.length > 0 ? (
-                    supervisors
-                      .sort((a, b) => (a.email || a.usuario || '').localeCompare(b.email || b.usuario || ''))
-                      .map(supervisor => (
-                        <SelectItem key={supervisor._id} value={supervisor._id}>
-                          {supervisor.email || supervisor.usuario || `${supervisor.nombre || ''} ${supervisor.apellido || ''}`.trim() || supervisor._id}
-                        </SelectItem>
-                      ))
+                  {/* Obtener solo los supervisores que están asignados al cliente */}
+                  {currentClientForSubServicio && Array.isArray(currentClientForSubServicio.userId) ? (
+                    currentClientForSubServicio.userId.length > 0 ? (
+                      currentClientForSubServicio.userId.map(userId => {
+                        const supervisorId = typeof userId === 'object' && userId !== null && userId._id ? userId._id : String(userId);
+                        const supervisor = supervisors.find(s => s._id === supervisorId);
+
+                        return supervisor ? (
+                          <SelectItem key={supervisorId} value={supervisorId}>
+                            {supervisor.email || supervisor.usuario || `${supervisor.nombre || ''} ${supervisor.apellido || ''}`.trim() || supervisorId}
+                          </SelectItem>
+                        ) : null;
+                      }).filter(Boolean)
+                    ) : (
+                      <SelectItem value="no-supervisors" disabled>
+                        No hay supervisores asignados al cliente
+                      </SelectItem>
+                    )
                   ) : (
                     <SelectItem value="no-supervisors" disabled>
-                      No hay supervisores disponibles
+                      Cliente no disponible
                     </SelectItem>
                   )}
                 </SelectContent>
@@ -3026,6 +3247,10 @@ const ClientsSection: React.FC = () => {
                   Supervisor: <strong className="ml-1">{getSupervisorIdentifierById(subServicioFormData.supervisorId)}</strong>
                 </div>
               )}
+
+              <p className="text-xs text-[#7AA79C] mt-1">
+                Nota: Solo se muestran los supervisores asignados a este cliente.
+              </p>
             </div>
 
             <DialogFooter className="gap-2 mt-4">
@@ -3088,17 +3313,27 @@ const ClientsSection: React.FC = () => {
                   <SelectValue placeholder="Seleccionar supervisor" />
                 </SelectTrigger>
                 <SelectContent>
-                  {supervisors.length > 0 ? (
-                    supervisors
-                      .sort((a, b) => (a.email || a.usuario || '').localeCompare(b.email || b.usuario || ''))
-                      .map(supervisor => (
-                        <SelectItem key={supervisor._id} value={supervisor._id}>
-                          {supervisor.email || supervisor.usuario || `${supervisor.nombre || ''} ${supervisor.apellido || ''}`.trim() || supervisor._id}
-                        </SelectItem>
-                      ))
+                  {/* Obtener solo los supervisores que están asignados al cliente */}
+                  {currentClientForSubServicio && Array.isArray(currentClientForSubServicio.userId) ? (
+                    currentClientForSubServicio.userId.length > 0 ? (
+                      currentClientForSubServicio.userId.map(userId => {
+                        const supervisorId = typeof userId === 'object' && userId !== null && userId._id ? userId._id : String(userId);
+                        const supervisor = supervisors.find(s => s._id === supervisorId);
+
+                        return supervisor ? (
+                          <SelectItem key={supervisorId} value={supervisorId}>
+                            {supervisor.email || supervisor.usuario || `${supervisor.nombre || ''} ${supervisor.apellido || ''}`.trim() || supervisorId}
+                          </SelectItem>
+                        ) : null;
+                      }).filter(Boolean)
+                    ) : (
+                      <SelectItem value="no-supervisors" disabled>
+                        No hay supervisores asignados al cliente
+                      </SelectItem>
+                    )
                   ) : (
                     <SelectItem value="no-supervisors" disabled>
-                      No hay supervisores disponibles
+                      Cliente no disponible
                     </SelectItem>
                   )}
                 </SelectContent>
@@ -3145,6 +3380,10 @@ const ClientsSection: React.FC = () => {
                   </div>
                 </div>
               )}
+
+              <p className="text-xs text-[#7AA79C] mt-2">
+                Nota: Solo puede seleccionar supervisores que estén asignados a este cliente.
+              </p>
             </div>
 
             <DialogFooter className="gap-2 mt-4">
@@ -3256,13 +3495,13 @@ const ClientsSection: React.FC = () => {
           <DialogHeader>
             <DialogTitle className="text-red-600 flex items-center gap-2">
               <AlertTriangle className="h-5 w-5" />
-              {idToDelete?.type === 'cliente' ? 'Eliminar Cliente' : 
-              idToDelete?.type === 'subservicio' ? 'Eliminar Subservicio' : 
-              idToDelete?.type === 'sububicacion' ? 'Eliminar Sububicación' :
-              'Remover Supervisor'}
+              {idToDelete?.type === 'cliente' ? 'Eliminar Cliente' :
+                idToDelete?.type === 'subservicio' ? 'Eliminar Subservicio' :
+                  idToDelete?.type === 'sububicacion' ? 'Eliminar Sububicación' :
+                    'Remover Supervisor'}
             </DialogTitle>
             <DialogDescription className="text-[#7AA79C]">
-              {idToDelete?.type === 'supervisor' 
+              {idToDelete?.type === 'supervisor'
                 ? '¿Está seguro de remover el supervisor de este subservicio? Esta acción no se puede deshacer.'
                 : `¿Está seguro de eliminar este ${idToDelete?.type}? Esta acción no se puede deshacer.`}
             </DialogDescription>
@@ -3319,7 +3558,7 @@ const ClientsSection: React.FC = () => {
                       <p className="font-medium text-amber-700">Se removerá el supervisor del siguiente subservicio:</p>
                       <p className="mt-1">Cliente: <strong>{client?.nombre}</strong></p>
                       <p className="mt-1">Subservicio: <strong>{subservicio?.nombre}</strong></p>
-                      <p className="mt-1">Supervisor actual: 
+                      <p className="mt-1">Supervisor actual:
                         <strong>
                           {typeof subservicio?.supervisorId === 'object' && subservicio?.supervisorId
                             ? ' ' + (subservicio.supervisorId.email || subservicio.supervisorId.usuario || `${subservicio.supervisorId.nombre || ''} ${subservicio.supervisorId.apellido || ''}`.trim())
@@ -3350,8 +3589,8 @@ const ClientsSection: React.FC = () => {
               variant="destructive"
               onClick={executeDelete}
               disabled={deletingOperation}
-              className={idToDelete?.type === 'supervisor' 
-                ? "bg-amber-600 hover:bg-amber-700" 
+              className={idToDelete?.type === 'supervisor'
+                ? "bg-amber-600 hover:bg-amber-700"
                 : "bg-red-600 hover:bg-red-700"}
             >
               {deletingOperation ? (
@@ -3359,11 +3598,11 @@ const ClientsSection: React.FC = () => {
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   {idToDelete?.type === 'supervisor' ? 'Removiendo...' : 'Eliminando...'}
                 </span>
-              ) : idToDelete?.type === 'supervisor' 
+              ) : idToDelete?.type === 'supervisor'
                 ? 'Remover Supervisor'
-                : `Eliminar ${idToDelete?.type === 'cliente' ? 'Cliente' : 
-                       idToDelete?.type === 'subservicio' ? 'Subservicio' : 
-                       'Sububicación'}`}
+                : `Eliminar ${idToDelete?.type === 'cliente' ? 'Cliente' :
+                  idToDelete?.type === 'subservicio' ? 'Subservicio' :
+                    'Sububicación'}`}
             </Button>
           </DialogFooter>
         </DialogContent>

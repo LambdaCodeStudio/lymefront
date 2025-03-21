@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ShoppingCart, Menu, X, LogOut, Search, Settings, ClipboardList, BookCheck, Bell, ChevronDown, User, Home, Heart, AlertTriangle } from 'lucide-react';
+import { ShoppingCart, Menu, X, LogOut, Settings, ClipboardList, BookCheck, Bell, ChevronDown, Home, Heart, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCartContext } from '@/providers/CartProvider';
 import { Badge } from '@/components/ui/badge';
@@ -35,7 +34,6 @@ export const ShopNavbar: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [cartItemCount, setCartItemCount] = useState(0);
-  const [searchOpen, setSearchOpen] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [userSecciones, setUserSecciones] = useState<string | null>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
@@ -43,7 +41,6 @@ export const ShopNavbar: React.FC = () => {
   const [rejectedOrders, setRejectedOrders] = useState(0);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
   
   // URL base para la API, ajustada para el nuevo backend
   const API_BASE_URL = 'http://localhost:3000/api';
@@ -126,13 +123,6 @@ export const ShopNavbar: React.FC = () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [userMenuRef]);
-  
-  // Focus search input when search opens
-  useEffect(() => {
-    if (searchOpen && searchInputRef.current) {
-      setTimeout(() => searchInputRef.current?.focus(), 100);
-    }
-  }, [searchOpen]);
   
   // Obtener el número de pedidos pendientes para supervisores o rechazados para operarios
   const fetchPendingApprovals = async (userId: string, role: string) => {
@@ -226,8 +216,8 @@ export const ShopNavbar: React.FC = () => {
   const isOperario = userRole === 'operario';
   const canAccessAdmin = isAdmin || isSupervisorDeSupervisores;
   
-  // Only show "My Orders" for specific roles (not admin or supervisor of supervisors)
-  const canViewOrders = !isAdmin && !isSupervisorDeSupervisores;
+  // Only show "My Orders" for supervisors
+  const canViewOrders = isSupervisor;
 
   // Get the user's initials for the Avatar
   const getUserInitials = () => {
@@ -239,19 +229,6 @@ export const ShopNavbar: React.FC = () => {
       return userData.usuario.substring(0, 2).toUpperCase();
     }
     return 'US';
-  };
-
-  // Manejar la búsqueda
-  const handleSearch = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const searchInput = form.querySelector('input') as HTMLInputElement;
-    const query = searchInput.value.trim();
-    
-    if (query) {
-      window.location.href = `/shop?search=${encodeURIComponent(query)}`;
-      setSearchOpen(false);
-    }
   };
 
   return (
@@ -326,14 +303,6 @@ export const ShopNavbar: React.FC = () => {
 
             {/* Action Buttons */}
             <div className="flex items-center space-x-4">
-              <button 
-                onClick={() => setSearchOpen(!searchOpen)}
-                className="text-white hover:text-[#a8e6cf] transition-colors duration-200"
-                aria-label="Buscar"
-              >
-                <Search className="w-5 h-5" />
-              </button>
-
               {/* My Orders for mobile - only for specific roles */}
               {canViewOrders && (
                 <a 
@@ -360,7 +329,7 @@ export const ShopNavbar: React.FC = () => {
               )}
 
               {/* Show badge with rejected orders for operators */}
-              {isOperario && rejectedOrders > 0 && (
+              {isSupervisor && rejectedOrders > 0 && (
                 <a 
                   href="/orders?tab=rechazados" 
                   className="relative text-white hover:text-[#d4f1f9] transition-colors duration-200"
@@ -459,7 +428,7 @@ export const ShopNavbar: React.FC = () => {
                           </a>
                         )}
                         {/* Show "Rejected Orders" for operators */}
-                        {isOperario && rejectedOrders > 0 && (
+                        {isSupervisor && rejectedOrders > 0 && (
                           <a
                             href="/orders?tab=rechazados"
                             className="flex items-center px-4 py-2 text-sm text-[#333333] hover:bg-[#d4f1f9]/30"
@@ -469,8 +438,8 @@ export const ShopNavbar: React.FC = () => {
                             <Badge className="ml-2 bg-[#F44336] text-white">{rejectedOrders}</Badge>
                           </a>
                         )}
-                        {/* Show "Created Orders" for operators */}
-                        {isOperario && (
+                        {/* Show "Created Orders" for operators and supervisors */}
+                        {(isSupervisor || isSupervisor) && (
                           <a
                             href="/orders?tab=creados"
                             className="flex items-center px-4 py-2 text-sm text-[#333333] hover:bg-[#d4f1f9]/30"
@@ -514,49 +483,6 @@ export const ShopNavbar: React.FC = () => {
           </div>
         </div>
       </header>
-
-      {/* Search Bar */}
-      <AnimatePresence>
-        {searchOpen && (
-          <motion.div 
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.2 }}
-            className="fixed top-[60px] left-0 right-0 bg-white bg-opacity-98 backdrop-blur-lg z-40 p-4 border-b border-[#3a8fb7]/20 shadow-lg"
-          >
-            <div className="container mx-auto">
-              <form onSubmit={handleSearch} className="flex items-center">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#3a8fb7] w-4 h-4" />
-                  <Input 
-                    ref={searchInputRef}
-                    type="text" 
-                    placeholder="Buscar productos..." 
-                    className="w-full pl-10 focus:ring-[#3a8fb7] focus:border-[#3a8fb7] bg-white border-[#d4f1f9] text-[#333333] placeholder:text-[#5c5c5c]"
-                  />
-                </div>
-                <Button 
-                  type="submit"
-                  size="sm" 
-                  className="ml-2 bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white font-medium"
-                >
-                  Buscar
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="ml-2 text-[#3a8fb7]"
-                  onClick={() => setSearchOpen(false)}
-                >
-                  <X className="w-5 h-5" />
-                </Button>
-              </form>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Mobile Menu */}
       <AnimatePresence>
@@ -665,7 +591,7 @@ export const ShopNavbar: React.FC = () => {
               )}
 
               {/* Show "Rejected Orders" for operators */}
-              {isOperario && rejectedOrders > 0 && (
+              {isSupervisor && rejectedOrders > 0 && (
                 <a 
                   href="/orders?tab=rechazados" 
                   className="flex items-center text-[#333333] hover:bg-[#d4f1f9]/30 hover:text-[#3a8fb7] transition-colors py-3 px-3 rounded-lg relative"
@@ -677,8 +603,8 @@ export const ShopNavbar: React.FC = () => {
                 </a>
               )}
 
-              {/* Show "Created Orders" for operators */}
-              {isOperario && (
+              {/* Show "Created Orders" for operators and supervisors */}
+              {(isSupervisor || isSupervisor) && (
                 <a 
                   href="/orders?tab=creados" 
                   className="flex items-center text-[#333333] hover:bg-[#d4f1f9]/30 hover:text-[#3a8fb7] transition-colors py-3 px-3 rounded-lg"
@@ -717,7 +643,7 @@ export const ShopNavbar: React.FC = () => {
       </AnimatePresence>
 
       {/* Space so content doesn't get hidden under the navbar */}
-      <div className={`h-16 md:h-16 ${searchOpen ? 'mb-14' : ''}`}></div>
+      <div className="h-16 md:h-16"></div>
     </>
   );
 };

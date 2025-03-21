@@ -206,7 +206,7 @@ const OrdersService = {
   // Fetch orders with filters
   async fetchOrders(filters: FilterParams = {}): Promise<Order[]> {
     const token = getAuthToken();
-    if (!token) throw new Error("No authentication token");
+    if (!token) throw new Error("No hay token de autenticación.");
 
     // Build base URL
     let url = `http://localhost:3000/api/pedido`;
@@ -264,7 +264,7 @@ const OrdersService = {
         window.location.href = '/login';
         return [];
       }
-      throw new Error(`Error fetching orders: ${response.status}`);
+      throw new Error(`Error al obtener pedidos: ${response.status}`);
     }
 
     return await response.json();
@@ -273,7 +273,7 @@ const OrdersService = {
   // Fetch order by ID
   async fetchOrderById(id: string): Promise<Order> {
     const token = getAuthToken();
-    if (!token) throw new Error("No authentication token");
+    if (!token) throw new Error("No hay token de autenticación.");
 
     const response = await fetch(`http://localhost:3000/api/pedido/${id}`, {
       headers: {
@@ -283,7 +283,7 @@ const OrdersService = {
     });
 
     if (!response.ok) {
-      throw new Error(`Error fetching order: ${response.status}`);
+      throw new Error(`Error al obtener pedidos: ${response.status}`);
     }
 
     return await response.json();
@@ -292,7 +292,7 @@ const OrdersService = {
   // Fetch supervisors
   async fetchSupervisors(): Promise<User[]> {
     const token = getAuthToken();
-    if (!token) throw new Error("No authentication token");
+    if (!token) throw new Error("No hay token de autenticación.");
 
     const response = await fetch(`http://localhost:3000/api/auth/supervisors`, {
       headers: {
@@ -302,7 +302,7 @@ const OrdersService = {
     });
 
     if (!response.ok) {
-      throw new Error(`Error fetching supervisors: ${response.status}`);
+      throw new Error(`Error al obtener supervisores: ${response.status}`);
     }
 
     const result = await response.json();
@@ -312,7 +312,7 @@ const OrdersService = {
   // Fetch products
   async fetchProducts(): Promise<Product[]> {
     const token = getAuthToken();
-    if (!token) throw new Error("No authentication token");
+    if (!token) throw new Error("No hay token de autenticación.");
 
     const response = await fetch(`http://localhost:3000/api/producto`, {
       headers: {
@@ -322,7 +322,7 @@ const OrdersService = {
     });
 
     if (!response.ok) {
-      throw new Error(`Error fetching products: ${response.status}`);
+      throw new Error(`Error al obtener productos: ${response.status}`);
     }
 
     const responseData = await response.json();
@@ -332,7 +332,7 @@ const OrdersService = {
   // Fetch single product by ID
   async fetchProductById(productId: string): Promise<Product | null> {
     const token = getAuthToken();
-    if (!token) throw new Error("No authentication token");
+    if (!token) throw new Error("No hay token de autenticación.");
 
     const response = await fetch(`http://localhost:3000/api/producto/${productId}`, {
       headers: {
@@ -342,7 +342,7 @@ const OrdersService = {
     });
 
     if (!response.ok) {
-      throw new Error(`Error fetching product: ${response.status}`);
+      throw new Error(`Error al obtener productos: ${response.status}`);
     }
 
     return await response.json();
@@ -351,7 +351,7 @@ const OrdersService = {
   // Fetch all clients
   async fetchClients(): Promise<Client[]> {
     const token = getAuthToken();
-    if (!token) throw new Error("No authentication token");
+    if (!token) throw new Error("No hay token de autenticación.");
 
     const response = await fetch(`http://localhost:3000/api/cliente`, {
       headers: {
@@ -361,7 +361,7 @@ const OrdersService = {
     });
 
     if (!response.ok) {
-      throw new Error(`Error fetching clients: ${response.status}`);
+      throw new Error(`Error al obtener clientes: ${response.status}`);
     }
 
     return await response.json();
@@ -370,7 +370,7 @@ const OrdersService = {
   // Fetch clients by supervisor
   async fetchClientsBySupervisor(supervisorId: string): Promise<Client[]> {
     const token = getAuthToken();
-    if (!token) throw new Error("No authentication token");
+    if (!token) throw new Error("No hay token de autenticación.");
 
     const response = await fetch(`http://localhost:3000/api/cliente/user/${supervisorId}`, {
       headers: {
@@ -380,7 +380,7 @@ const OrdersService = {
     });
 
     if (!response.ok) {
-      throw new Error(`Error fetching clients: ${response.status}`);
+      throw new Error(`Error al obtener clientes: ${response.status}`);
     }
 
     return await response.json();
@@ -389,7 +389,7 @@ const OrdersService = {
   // Create order
   async createOrder(data: any): Promise<Order> {
     const token = getAuthToken();
-    if (!token) throw new Error("No authentication token");
+    if (!token) throw new Error("No hay token de autenticación.");
 
     // Create complete structure for backend
     const orderData = {
@@ -433,7 +433,7 @@ const OrdersService = {
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.mensaje || `Error creating order: ${response.status}`);
+      throw new Error(errorData.mensaje || `Error al crear un pedido: ${response.status}`);
     }
 
     return await response.json();
@@ -442,7 +442,7 @@ const OrdersService = {
   // Update order
   async updateOrder(id: string, data: any): Promise<Order> {
     const token = getAuthToken();
-    if (!token) throw new Error("No authentication token");
+    if (!token) throw new Error("No hay token de autenticación.");
 
     // Create complete structure for backend (similar to createOrder)
     const orderData = {
@@ -486,7 +486,7 @@ const OrdersService = {
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.mensaje || `Error updating order: ${response.status}`);
+      throw new Error(errorData.mensaje || `Error actualizando pedido: ${response.status}`);
     }
 
     return await response.json();
@@ -495,7 +495,7 @@ const OrdersService = {
   // Delete order
   async deleteOrder(id: string): Promise<any> {
     const token = getAuthToken();
-    if (!token) throw new Error("No authentication token");
+    if (!token) throw new Error("No hay token de autenticación.");
 
     const response = await fetch(`http://localhost:3000/api/pedido/${id}`, {
       method: 'DELETE',
@@ -506,7 +506,7 @@ const OrdersService = {
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.mensaje || `Error deleting order: ${response.status}`);
+      throw new Error(errorData.mensaje || `Error eliminando pedido: ${response.status}`);
     }
 
     return await response.json();
@@ -515,7 +515,7 @@ const OrdersService = {
   // Fetch current user
   async fetchCurrentUser(): Promise<User> {
     const token = getAuthToken();
-    if (!token) throw new Error("No authentication token");
+    if (!token) throw new Error("No hay token de autenticación.");
 
     const response = await fetch(`http://localhost:3000/api/auth/me`, {
       headers: {
@@ -531,7 +531,7 @@ const OrdersService = {
         window.location.href = '/login';
         return null;
       }
-      throw new Error(`Error fetching user data: ${response.status}`);
+      throw new Error(`Error al obtener datos del usuario.: ${response.status}`);
     }
 
     const result = await response.json();
@@ -541,7 +541,7 @@ const OrdersService = {
   // Update order status
   async updateOrderStatus(id: string, status: string): Promise<Order> {
     const token = getAuthToken();
-    if (!token) throw new Error("No authentication token");
+    if (!token) throw new Error("No hay token de autenticación.");
 
     // First get the current order
     const orderResponse = await fetch(`http://localhost:3000/api/pedido/${id}`, {
@@ -552,7 +552,7 @@ const OrdersService = {
     });
 
     if (!orderResponse.ok) {
-      throw new Error(`Error fetching order: ${orderResponse.status}`);
+      throw new Error(`Error obteniendo el pedido: ${orderResponse.status}`);
     }
 
     const order = await orderResponse.json();
@@ -572,7 +572,7 @@ const OrdersService = {
 
     if (!updateResponse.ok) {
       const errorData = await updateResponse.json();
-      throw new Error(errorData.mensaje || `Error updating status: ${updateResponse.status}`);
+      throw new Error(errorData.mensaje || `Error al Actualizar el estado: ${updateResponse.status}`);
     }
 
     return await updateResponse.json();
@@ -581,7 +581,7 @@ const OrdersService = {
   // Download receipt
   async downloadReceipt(id: string): Promise<void> {
     const token = getAuthToken();
-    if (!token) throw new Error("No authentication token");
+    if (!token) throw new Error("No hay token de autenticación.");
 
     // Create request to get receipt with authentication token
     const response = await fetch(`http://localhost:3000/api/downloads/remito/${id}`, {
@@ -591,7 +591,7 @@ const OrdersService = {
     });
 
     if (!response.ok) {
-      throw new Error(`Error downloading receipt: ${response.status}`);
+      throw new Error(`Error al descargar el recibo: ${response.status}`);
     }
 
     // Get the blob (PDF file)
@@ -716,16 +716,16 @@ const ProductDetail = React.memo(({
           });
         } else if (mountedRef.current) {
           setProductDetail({
-            nombre: "Product not found",
+            nombre: "Producto no encontrado.",
             precio: 0,
             loaded: true
           });
         }
       } catch (error) {
-        console.error("Error loading product details:", error);
+        console.error("Error al cargar los detalles del producto:", error);
         if (mountedRef.current) {
           setProductDetail({
-            nombre: "Error loading",
+            nombre: "Error cargando",
             precio: 0,
             loaded: true
           });
@@ -788,7 +788,7 @@ const ProductDetailMobile = React.memo(({
     precio: number;
     loaded: boolean;
   }>({
-    nombre: "Loading...",
+    nombre: "Cargando...",
     precio: 0,
     loaded: false
   });
@@ -805,7 +805,7 @@ const ProductDetailMobile = React.memo(({
       if (!productId) {
         if (mountedRef.current) {
           setProductDetail({
-            nombre: "Invalid product ID",
+            nombre: "Producto ID invalido",
             precio: 0,
             loaded: true
           });
@@ -848,16 +848,16 @@ const ProductDetailMobile = React.memo(({
           });
         } else if (mountedRef.current) {
           setProductDetail({
-            nombre: "Product not found",
+            nombre: "Producto no encontrado.",
             precio: 0,
             loaded: true
           });
         }
       } catch (error) {
-        console.error("Error loading product details:", error);
+        console.error("Error cargando los detalles del pedido", error);
         if (mountedRef.current) {
           setProductDetail({
-            nombre: "Error loading",
+            nombre: "Error cargando",
             precio: 0,
             loaded: true
           });
@@ -981,7 +981,7 @@ const OrderTotal = React.memo(({
               }
             }
           } catch (error) {
-            console.error("Error loading products for calculation:", error);
+            console.error("Error al cargar productos para el cálculo.", error);
           }
         }
       }
@@ -1012,19 +1012,19 @@ const OrderStatusBadge = ({ status, onStatusChange, orderId }) => {
         return {
           color: 'bg-green-100 text-green-800 border-green-300',
           icon: <CheckCircle className="w-3.5 h-3.5 mr-1" />,
-          label: 'Approved'
+          label: 'Aprobado'
         };
       case 'rechazado':
         return {
           color: 'bg-red-100 text-red-800 border-red-300',
           icon: <XCircle className="w-3.5 h-3.5 mr-1" />,
-          label: 'Rejected'
+          label: 'Rechazado'
         };
       default:
         return {
           color: 'bg-yellow-100 text-yellow-800 border-yellow-300',
           icon: <Clock className="w-3.5 h-3.5 mr-1" />,
-          label: 'Pending'
+          label: 'Pendiente'
         };
     }
   };
@@ -1158,7 +1158,7 @@ const OrdersSection = () => {
     {
       refetchOnWindowFocus: false,
       onError: (error) => {
-        addNotification(`Error loading orders: ${error.message}`, "error");
+        addNotification(`Error cargando pedidos: ${error.message}`, "error");
       }
     }
   );
@@ -1170,7 +1170,7 @@ const OrdersSection = () => {
   } = useQuery('products', OrdersService.fetchProducts, {
     refetchOnWindowFocus: false,
     onError: (error) => {
-      addNotification(`Error loading products: ${error.message}`, "warning");
+      addNotification(`Error cargando productos: ${error.message}`, "warning");
     }
   });
 
@@ -1181,7 +1181,7 @@ const OrdersSection = () => {
   } = useQuery('allClients', OrdersService.fetchClients, {
     refetchOnWindowFocus: false,
     onError: (error) => {
-      addNotification(`Error loading all clients: ${error.message}`, "warning");
+      addNotification(`Error cargando todos los clientes: ${error.message}`, "warning");
     }
   });
 
@@ -1207,10 +1207,10 @@ const OrdersSection = () => {
       queryClient.invalidateQueries(['orders']);
       resetOrderForm();
       setCreateOrderModalOpen(false);
-      addNotification("Order created successfully", "success");
+      addNotification("Pedido creado exitosamente!", "success");
     },
     onError: (error) => {
-      addNotification(`Error creating order: ${error.message}`, "error");
+      addNotification(`Error creando pedido: ${error.message}`, "error");
     }
   });
 
@@ -1221,10 +1221,10 @@ const OrdersSection = () => {
         queryClient.invalidateQueries(['orders']);
         resetOrderForm();
         setCreateOrderModalOpen(false);
-        addNotification("Order updated successfully", "success");
+        addNotification("Pedido actualizando correctamente", "success");
       },
       onError: (error) => {
-        addNotification(`Error updating order: ${error.message}`, "error");
+        addNotification(`Error actualizando pedido: ${error.message}`, "error");
       }
     }
   );
@@ -1234,19 +1234,19 @@ const OrdersSection = () => {
       queryClient.invalidateQueries(['orders']);
       setOrderToDelete(null);
       setDeleteConfirmModalOpen(false);
-      addNotification("Order deleted successfully", "success");
+      addNotification("Peiddo eliminado correctamente", "success");
     },
     onError: (error) => {
-      addNotification(`Error deleting order: ${error.message}`, "error");
+      addNotification(`Error eliminado pedido: ${error.message}`, "error");
     }
   });
 
   const downloadReceiptMutation = useMutation(OrdersService.downloadReceipt, {
     onSuccess: () => {
-      addNotification("Download started", "success");
+      addNotification("Comenzando descarga...", "success");
     },
     onError: (error) => {
-      addNotification(`Error downloading receipt: ${error.message}`, "error");
+      addNotification(`Error al descargar el recibo: ${error.message}`, "error");
     }
   });
 
@@ -1273,7 +1273,7 @@ const OrdersSection = () => {
 
       return product;
     } catch (error) {
-      console.error(`Error loading product ${productId}:`, error);
+      console.error(`Error cargando producto ${productId}:`, error);
       return null;
     }
   }, [queryClient]);
@@ -1312,7 +1312,7 @@ const OrdersSection = () => {
         await Promise.all(productsPromises);
       }
     } catch (error) {
-      console.error("Error processing product queue:", error);
+      console.error("Error al procesar la cola de productos.:", error);
     } finally {
       isProcessingQueue.current = false;
 
@@ -1423,18 +1423,18 @@ const OrdersSection = () => {
   const handleCreateOrder = async () => {
     // Validate basic structure
     if (!orderForm.clienteId || !orderForm.nombreCliente) {
-      addNotification("You must select a client", "warning");
+      addNotification("Debes seleccionar un cliente.", "warning");
       return;
     }
 
     if (!orderForm.productos || orderForm.productos.length === 0) {
-      addNotification("You must add at least one product", "warning");
+      addNotification("Debes agregar al menos un producto.", "warning");
       return;
     }
 
     // Validate that there is an assigned user (selected supervisor or current user)
     if (!orderForm.userId) {
-      addNotification("Error: No user assigned", "error");
+      addNotification("Error: Usuario no asignado", "error");
       return;
     }
 
@@ -1445,7 +1445,7 @@ const OrdersSection = () => {
   // Update an existing order
   const handleUpdateOrder = async () => {
     if (!currentOrderId) {
-      addNotification("No order selected for update", "error");
+      addNotification("Ningún pedido seleccionado para actualizar.", "error");
       return;
     }
 
@@ -1477,7 +1477,7 @@ const OrdersSection = () => {
 
       // If it's a supervisor's order and not the current user, load their clients
       if (userId && userId !== currentUser?._id && isAdminOrSuperSupervisor) {
-        console.log(`Loading clients for supervisor ${userId} for editing`);
+        console.log(`Cargando clientes de supervisor ${userId} para editar`);
         setSelectedSupervisor(userId);
 
         // Force reload clients
@@ -1514,7 +1514,7 @@ const OrdersSection = () => {
         return {
           productoId: productId,
           cantidad: typeof p.cantidad === 'number' ? p.cantidad : 0,
-          nombre: nombre || "Product not found",
+          nombre: nombre || "Product no encontrado",
           precio: typeof precio === 'number' ? precio : 0
         };
       });
@@ -1584,8 +1584,8 @@ const OrdersSection = () => {
       // Open modal
       setCreateOrderModalOpen(true);
     } catch (error) {
-      console.error("Error preparing order for editing:", error);
-      addNotification(`Error preparing the order for editing: ${error.message}`, "error");
+      console.error("Error al preparar el pedido para edición.:", error);
+      addNotification(`Error al preparar el pedido para la edición: ${error.message}`, "error");
     }
   };
 
@@ -1671,7 +1671,7 @@ const OrdersSection = () => {
   // Add product to order
   const handleAddProduct = () => {
     if (!selectedProduct || selectedProduct === "none" || productQuantity <= 0) {
-      addNotification("Select a product and a valid quantity", "warning");
+      addNotification("Selecciona un producto y una cantidad válida.", "warning");
       return;
     }
 
@@ -1684,13 +1684,13 @@ const OrdersSection = () => {
 
     const product = productsMap[selectedProduct];
     if (!product) {
-      addNotification("Product not found", "warning");
+      addNotification("Producto no encontrado.", "warning");
       return;
     }
 
     // Check stock
     if (product.stock < productQuantity) {
-      addNotification(`Insufficient stock. Only ${product.stock} units available.`, "warning");
+      addNotification(`Stock insuficiente. Solo hay disponibles ${product.stock} unidades.`, "warning");
       return;
     }
 
@@ -1706,7 +1706,7 @@ const OrdersSection = () => {
 
       // Check stock for total quantity
       if (product.stock < newQuantity) {
-        addNotification(`Insufficient stock. Only ${product.stock} units available.`, "warning");
+        addNotification(`Stock insuficiente. Solo hay disponibles ${product.stock} unidades.`, "warning");
         return;
       }
 
@@ -1721,7 +1721,7 @@ const OrdersSection = () => {
         productos: updatedProducts
       }));
 
-      addNotification(`Quantity updated: ${product.nombre} (${newQuantity})`, "success");
+      addNotification(`Cantidad actualizada: ${product.nombre} (${newQuantity})`, "success");
     } else {
       // Add new product
       setOrderForm(prev => ({
@@ -1737,7 +1737,7 @@ const OrdersSection = () => {
         ]
       }));
 
-      addNotification(`Product added: ${product.nombre} (${productQuantity})`, "success");
+      addNotification(`Producto agregado: ${product.nombre} (${productQuantity})`, "success");
     }
 
     // Reset selection
@@ -1749,7 +1749,7 @@ const OrdersSection = () => {
   // Remove product from order
   const handleRemoveProduct = (index) => {
     if (index < 0 || index >= orderForm.productos.length) {
-      console.error(`Invalid product index: ${index}`);
+      console.error(`Índice de producto no válido: ${index}`);
       return;
     }
 
@@ -1776,7 +1776,7 @@ const OrdersSection = () => {
       productos: updatedProducts
     }));
 
-    addNotification(`Product removed: ${productName}`, "info");
+    addNotification(`Producto eliminado: ${productName}`, "info");
   };
 
   // Reset order form
@@ -1852,7 +1852,7 @@ const OrdersSection = () => {
   // Filter orders by date
   const handleDateFilter = async () => {
     if (!dateFilter.from || !dateFilter.to) {
-      addNotification("Select both dates to filter", "warning");
+      addNotification("Selecciona ambas fechas para filtrar", "warning");
       return;
     }
 
@@ -1932,8 +1932,8 @@ const OrdersSection = () => {
       // Open creation modal after loading clients
       setCreateOrderModalOpen(true);
     } catch (error) {
-      console.error("Error loading supervisor's clients:", error);
-      addNotification("Error loading supervisor's clients", "error");
+      console.error("Error al cargar los clientes del supervisor.", error);
+      addNotification("Error al cargar los clientes del supervisor.", "error");
     }
   };
 
@@ -2055,7 +2055,7 @@ const OrdersSection = () => {
     return (
       <div className="p-4 md:p-6 bg-[#DFEFE6]/30 min-h-[300px] flex flex-col items-center justify-center">
         <Loader2 className="w-10 h-10 text-[#29696B] animate-spin mb-4" />
-        <p className="text-[#29696B]">Loading orders...</p>
+        <p className="text-[#29696B]">Cargando pedidos...</p>
       </div>
     );
   }
@@ -2071,7 +2071,7 @@ const OrdersSection = () => {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
             <Input
               type="text"
-              placeholder="Search by client, section, user or number..."
+              placeholder="Buscar por cliente, sección, usuario, celular..."
               className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -2086,7 +2086,7 @@ const OrdersSection = () => {
               className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50"
             >
               <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshingOrders ? 'animate-spin' : ''}`} />
-              Refresh
+              Actualizar
             </Button>
 
             <Button
@@ -2095,7 +2095,7 @@ const OrdersSection = () => {
               disabled={products.length === 0 || (isAdminOrSuperSupervisor ? supervisors.length === 0 : clients.length === 0)}
             >
               <ShoppingCart className="w-4 h-4 mr-2" />
-              New Order
+              Nuevo Pedido
             </Button>
           </div>
         </div>
@@ -2103,7 +2103,7 @@ const OrdersSection = () => {
         <div className="flex flex-wrap gap-4 items-end">
           {/* Date filters */}
           <div>
-            <Label htmlFor="fechaInicio" className="text-[#29696B]">Start Date</Label>
+            <Label htmlFor="fechaInicio" className="text-[#29696B]">Fecha de inicio</Label>
             <Input
               id="fechaInicio"
               type="date"
@@ -2114,7 +2114,7 @@ const OrdersSection = () => {
           </div>
 
           <div>
-            <Label htmlFor="fechaFin" className="text-[#29696B]">End Date</Label>
+            <Label htmlFor="fechaFin" className="text-[#29696B]">Fecha de Fin</Label>
             <Input
               id="fechaFin"
               type="date"
@@ -2126,19 +2126,19 @@ const OrdersSection = () => {
 
           {/* Status filter */}
           <div>
-            <Label htmlFor="estado" className="text-[#29696B]">Status</Label>
+            <Label htmlFor="estado" className="text-[#29696B]">Estado</Label>
             <Select
               value={statusFilter}
               onValueChange={setStatusFilter}
             >
               <SelectTrigger id="estado" className="border-[#91BEAD] focus:ring-[#29696B]/20">
-                <SelectValue placeholder="All statuses" />
+                <SelectValue placeholder="Todos los estados" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="todos">All</SelectItem>
-                <SelectItem value="pendiente">Pending</SelectItem>
-                <SelectItem value="aprobado">Approved</SelectItem>
-                <SelectItem value="rechazado">Rejected</SelectItem>
+                <SelectItem value="todos">Todos</SelectItem>
+                <SelectItem value="pendiente">Pendiente</SelectItem>
+                <SelectItem value="aprobado">Aprobado</SelectItem>
+                <SelectItem value="rechazado">Rechazado</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -2152,13 +2152,13 @@ const OrdersSection = () => {
                 onValueChange={setSupervisorFilter}
               >
                 <SelectTrigger id="supervisor" className="border-[#91BEAD] focus:ring-[#29696B]/20">
-                  <SelectValue placeholder="All supervisors" />
+                  <SelectValue placeholder="Todos los supervisores" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="all">Todos</SelectItem>
                   {supervisors.map(supervisor => (
                     <SelectItem key={supervisor._id} value={supervisor._id}>
-                      {supervisor.usuario || (supervisor.nombre ? `${supervisor.nombre} ${supervisor.apellido || ''}` : 'No name')}
+                      {supervisor.usuario || (supervisor.nombre ? `${supervisor.nombre} ${supervisor.apellido || ''}` : 'Sin Nombre')}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -2168,7 +2168,7 @@ const OrdersSection = () => {
 
           {/* Client filter */}
           <div>
-            <Label htmlFor="cliente" className="text-[#29696B]">Client</Label>
+            <Label htmlFor="cliente" className="text-[#29696B]">Cliente</Label>
             <Select
               value={clientFilter.clienteId || ''}
               onValueChange={(value) => {
@@ -2201,7 +2201,7 @@ const OrdersSection = () => {
             className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50"
           >
             <Filter className="w-4 h-4 mr-2" />
-            Apply Filters
+            Aplicar Filtros
           </Button>
 
           {(dateFilter.from || dateFilter.to || searchTerm || statusFilter !== 'todos' || supervisorFilter || clientFilter.clienteId) && (
@@ -2210,7 +2210,7 @@ const OrdersSection = () => {
               onClick={clearAllFilters}
               className="text-[#7AA79C] hover:text-[#29696B] hover:bg-[#DFEFE6]/30"
             >
-              Clear filters
+              Limpiar Filtros
             </Button>
           )}
         </div>
@@ -2251,12 +2251,12 @@ const OrdersSection = () => {
 
         {showMobileFilters && (
           <div className="p-4 bg-[#DFEFE6]/30 rounded-lg border border-[#91BEAD]/20 space-y-4">
-            <h3 className="font-medium text-sm text-[#29696B]">Advanced Filters</h3>
+            <h3 className="font-medium text-sm text-[#29696B]">Filtros Avanzados</h3>
 
             {/* Date filters */}
             <div className="space-y-2">
               <div>
-                <Label htmlFor="mFechaInicio" className="text-xs text-[#29696B]">Start Date</Label>
+                <Label htmlFor="mFechaInicio" className="text-xs text-[#29696B]">Fecha de Inicio</Label>
                 <Input id="mFechaInicio"
                   type="date"
                   value={dateFilter.from}
@@ -2266,7 +2266,7 @@ const OrdersSection = () => {
               </div>
 
               <div>
-                <Label htmlFor="mFechaFin" className="text-xs text-[#29696B]">End Date</Label>
+                <Label htmlFor="mFechaFin" className="text-xs text-[#29696B]">Fecha de Fin</Label>
                 <Input
                   id="mFechaFin"
                   type="date"
@@ -2278,19 +2278,19 @@ const OrdersSection = () => {
 
               {/* Status filter */}
               <div>
-                <Label htmlFor="mEstado" className="text-xs text-[#29696B]">Status</Label>
+                <Label htmlFor="mEstado" className="text-xs text-[#29696B]">Estado</Label>
                 <Select
                   value={statusFilter}
                   onValueChange={setStatusFilter}
                 >
                   <SelectTrigger id="mEstado" className="text-sm border-[#91BEAD] focus:ring-[#29696B]/20">
-                    <SelectValue placeholder="All statuses" />
+                    <SelectValue placeholder="Todos los estados" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="todos">All</SelectItem>
-                    <SelectItem value="pendiente">Pending</SelectItem>
-                    <SelectItem value="aprobado">Approved</SelectItem>
-                    <SelectItem value="rechazado">Rejected</SelectItem>
+                    <SelectItem value="todos">Todos</SelectItem>
+                    <SelectItem value="pendiente">Pendiente</SelectItem>
+                    <SelectItem value="aprobado">Aprobado</SelectItem>
+                    <SelectItem value="rechazado">Rechazado</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -2304,13 +2304,13 @@ const OrdersSection = () => {
                     onValueChange={setSupervisorFilter}
                   >
                     <SelectTrigger id="mSupervisor" className="text-sm border-[#91BEAD] focus:ring-[#29696B]/20">
-                      <SelectValue placeholder="All supervisors" />
+                      <SelectValue placeholder="Todos los supervisores" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All</SelectItem>
+                      <SelectItem value="all">Todos</SelectItem>
                       {supervisors.map(supervisor => (
                         <SelectItem key={supervisor._id} value={supervisor._id}>
-                          {supervisor.usuario || (supervisor.nombre ? `${supervisor.nombre} ${supervisor.apellido || ''}` : 'No name')}
+                          {supervisor.usuario || (supervisor.nombre ? `${supervisor.nombre} ${supervisor.apellido || ''}` : 'Sin Nombre')}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -2320,7 +2320,7 @@ const OrdersSection = () => {
 
               {/* Client filter */}
               <div>
-                <Label htmlFor="mCliente" className="text-xs text-[#29696B]">Client</Label>
+                <Label htmlFor="mCliente" className="text-xs text-[#29696B]">Cliente</Label>
                 <Select
                   value={clientFilter.clienteId || ''}
                   onValueChange={(value) => {
@@ -2332,10 +2332,10 @@ const OrdersSection = () => {
                   }}
                 >
                   <SelectTrigger id="mCliente" className="text-sm border-[#91BEAD] focus:ring-[#29696B]/20">
-                    <SelectValue placeholder="All clients" />
+                    <SelectValue placeholder="Todos los clientes" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="all">Todos</SelectItem>
                     {allClients.map(cliente => (
                       <SelectItem key={cliente._id} value={cliente._id}>
                         {cliente.nombre || cliente.servicio}
@@ -2353,7 +2353,7 @@ const OrdersSection = () => {
                 onClick={clearAllFilters}
                 className="text-xs border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/50"
               >
-                Clear
+                Limpiar
               </Button>
 
               <Button
@@ -2361,7 +2361,7 @@ const OrdersSection = () => {
                 onClick={handleDateFilter}
                 className="text-xs bg-[#29696B] hover:bg-[#29696B]/90 text-white"
               >
-                Apply Filters
+                Aplicar Filtros
               </Button>
             </div>
           </div>
@@ -2399,7 +2399,7 @@ const OrdersSection = () => {
               {clientFilter.clienteId && (
                 <span className="flex items-center">
                   <Building className="w-3 h-3 mr-1" />
-                  {allClients.find(c => c._id === clientFilter.clienteId)?.nombre || 'Client'}
+                  {allClients.find(c => c._id === clientFilter.clienteId)?.nombre || 'Cliente'}
                 </span>
               )}
             </div>
@@ -2420,7 +2420,7 @@ const OrdersSection = () => {
       {isRefreshingOrders && (
         <div className="bg-[#DFEFE6]/30 rounded-lg p-2 mb-4 flex items-center justify-center">
           <Loader2 className="w-4 h-4 text-[#29696B] animate-spin mr-2" />
-          <span className="text-sm text-[#29696B]">Updating data...</span>
+          <span className="text-sm text-[#29696B]">Actulizando datos...</span>
         </div>
       )}
 
@@ -2432,7 +2432,7 @@ const OrdersSection = () => {
           </div>
 
           <p>
-            No orders found
+            No Existen Ordenes
             {searchTerm && ` that match "${searchTerm}"`}
             {(dateFilter.from || dateFilter.to) && " in the selected date range"}
             {statusFilter !== 'todos' && ` with status ${statusFilter}`}
@@ -2444,8 +2444,8 @@ const OrdersSection = () => {
             <p className="mt-4 text-sm text-red-500 flex items-center justify-center">
               <Info className="w-4 h-4 mr-2" />
               {clients.length === 0
-                ? "You have no assigned clients. Contact an administrator."
-                : "No products available to create orders."}
+                ? "No tienes clientes asignados. Contacta a un administrador."
+                : "No hay productos disponibles para crear pedidos."}
             </p>
           )}
         </div>
@@ -2458,28 +2458,28 @@ const OrdersSection = () => {
                 <thead className="bg-[#DFEFE6]/30">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
-                      Order #
+                      Pedido #
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
-                      Date
+                      Fecha
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
-                      Client
+                      Cliente
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
-                      Section
+                      Seccion
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
-                      User
+                      Usuario
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
-                      Status
+                      Estado
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
-                      Products
+                      Productos
                     </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-[#29696B] uppercase tracking-wider">
-                      Actions
+                      Acciones
                     </th>
                   </tr>
                 </thead>
@@ -2510,7 +2510,7 @@ const OrdersSection = () => {
                           <div className="flex items-center">
                             <Building className="w-4 h-4 text-[#7AA79C] mr-2" />
                             <div className="text-sm font-medium text-[#29696B]">
-                              {order.cliente?.nombreCliente || order.servicio || "No client"}
+                              {order.cliente?.nombreCliente || order.servicio || "Ningún Cliente"}
                             </div>
                           </div>
                         </td>
@@ -2529,7 +2529,7 @@ const OrdersSection = () => {
                               </div>
                             </div>
                           ) : (
-                            <span className="text-xs text-[#7AA79C]">No section</span>
+                            <span className="text-xs text-[#7AA79C]">Ninguna Sección</span>
                           )}
                         </td>
 
@@ -2550,8 +2550,8 @@ const OrdersSection = () => {
                           <div className="flex items-center gap-2">
                             <Badge variant="outline" className="border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/30">
                               {order.productos && Array.isArray(order.productos)
-                                ? `${order.productos.length} product${order.productos.length !== 1 ? 's' : ''}`
-                                : '0 products'}
+                                ? `${order.productos.length} Productos${order.productos.length !== 1 ? 's' : ''}`
+                                : '0 productos'}
                             </Badge>
 
                             <Button
@@ -2589,7 +2589,7 @@ const OrdersSection = () => {
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p>Download Receipt</p>
+                                  <p>Descargar Remito</p>
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
@@ -2654,9 +2654,9 @@ const OrdersSection = () => {
                                 <table className="min-w-full divide-y divide-[#91BEAD]/20">
                                   <thead className="bg-[#DFEFE6]/50">
                                     <tr>
-                                      <th className="px-4 py-2 text-left text-xs font-medium text-[#29696B]">Product</th>
-                                      <th className="px-4 py-2 text-center text-xs font-medium text-[#29696B]">Quantity</th>
-                                      <th className="px-4 py-2 text-right text-xs font-medium text-[#29696B]">Unit Price</th>
+                                      <th className="px-4 py-2 text-left text-xs font-medium text-[#29696B]">Producto</th>
+                                      <th className="px-4 py-2 text-center text-xs font-medium text-[#29696B]">Cantidad</th>
+                                      <th className="px-4 py-2 text-right text-xs font-medium text-[#29696B]">Precio x Unidad</th>
                                       <th className="px-4 py-2 text-right text-xs font-medium text-[#29696B]">Subtotal</th>
                                     </tr>
                                   </thead>
@@ -2674,7 +2674,7 @@ const OrdersSection = () => {
 
                                     {/* Total */}
                                     <tr className="bg-[#DFEFE6]/40 font-medium">
-                                      <td colSpan={3} className="px-4 py-2 text-right text-[#29696B]">Order Total:</td>
+                                      <td colSpan={3} className="px-4 py-2 text-right text-[#29696B]">Total:</td>
                                       <td className="px-4 py-2 text-right font-bold text-[#29696B]">
                                         <OrderTotal
                                           order={order}
@@ -2700,7 +2700,7 @@ const OrdersSection = () => {
                                   ) : (
                                     <Download className="w-3 h-3 mr-1" />
                                   )}
-                                  Download Receipt
+                                  Descargar Remito
                                 </Button>
                               </div>
                             </div>
@@ -2756,7 +2756,7 @@ const OrdersSection = () => {
                       <div>
                         <CardTitle className="text-sm font-medium flex items-center text-[#29696B]">
                           <Building className="w-4 h-4 text-[#7AA79C] mr-1" />
-                          {order.cliente?.nombreCliente || order.servicio || "No client"}
+                          {order.cliente?.nombreCliente || order.servicio || "Ningún cliente."}
                         </CardTitle>
 
                         {(order.cliente?.nombreSubServicio || order.seccionDelServicio) && (
@@ -2807,10 +2807,10 @@ const OrdersSection = () => {
                               }`}
                           >
                             {order.estado === 'aprobado'
-                              ? 'Approved'
+                              ? 'Aprobado'
                               : order.estado === 'rechazado'
-                                ? 'Rejected'
-                                : 'Pending'
+                                ? 'Rechazado'
+                                : 'Pendiente'
                             }
                           </span>
                         </span>
@@ -2918,19 +2918,19 @@ const OrdersSection = () => {
                         <SelectItem value="pendiente" className="text-xs">
                           <div className="flex items-center">
                             <Clock className="w-3 h-3 mr-1 text-yellow-600" />
-                            Pending
+                            Pendiente
                           </div>
                         </SelectItem>
                         <SelectItem value="aprobado" className="text-xs">
                           <div className="flex items-center">
                             <CheckCircle className="w-3 h-3 mr-1 text-green-600" />
-                            Approved
+                            Aprobado
                           </div>
                         </SelectItem>
                         <SelectItem value="rechazado" className="text-xs">
                           <div className="flex items-center">
                             <XCircle className="w-3 h-3 mr-1 text-red-600" />
-                            Rejected
+                            Rechazado
                           </div>
                         </SelectItem>
                       </SelectContent>
@@ -2972,7 +2972,7 @@ const OrdersSection = () => {
             {filteredOrders.length > itemsPerPage && (
               <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm">
                 <span className="text-[#29696B] font-medium">
-                  Page {currentPage} of {totalPages}
+                  Página {currentPage} de {totalPages}
                 </span>
               </div>
             )}
@@ -3010,22 +3010,22 @@ const OrdersSection = () => {
           <DialogHeader>
             <DialogTitle className="text-[#29696B]">
               {currentOrderId
-                ? `Edit Order #${orders.find(o => o._id === currentOrderId)?.nPedido || ''}`
+                ? `Editar pedido #${orders.find(o => o._id === currentOrderId)?.nPedido || ''}`
                 : isAdminOrSuperSupervisor && selectedSupervisor
-                  ? `New Order (For: ${supervisors.find(s => s._id === selectedSupervisor)?.usuario || 'Supervisor'})`
-                  : 'New Order'
+                  ? `Nuevo Pedido (Para: ${supervisors.find(s => s._id === selectedSupervisor)?.usuario || 'Supervisor'})`
+                  : 'Nuevo Pedido'
               }
             </DialogTitle>
             {currentOrderId && (
               <DialogDescription className="text-[#7AA79C]">
-                Modify the order details
+                Modificar los detalles del pedido
               </DialogDescription>
             )}
             {isAdminOrSuperSupervisor && selectedSupervisor && !currentOrderId && (
               <DialogDescription className="text-[#7AA79C]">
-                Creating order for supervisor: {
+                Creando pedido para el Supervisor: {
                   supervisors.find(s => s._id === selectedSupervisor)?.usuario ||
-                  'Selected supervisor'
+                  'Seleccionar Supervisor'
                 }
               </DialogDescription>
             )}
@@ -3080,12 +3080,12 @@ const OrdersSection = () => {
                   }}
                 >
                   <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
-                    <SelectValue placeholder="Select supervisor" />
+                    <SelectValue placeholder="Seleccionar Supervisor" />
                   </SelectTrigger>
                   <SelectContent>
                     {supervisors.map(supervisor => (
                       <SelectItem key={supervisor._id} value={supervisor._id}>
-                        {supervisor.usuario || "Supervisor without name"}
+                        {supervisor.usuario || "Supervisor sin nombre"}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -3097,7 +3097,7 @@ const OrdersSection = () => {
             <div>
               <h2 className="text-lg font-medium mb-4 flex items-center text-[#29696B]">
                 <Building className="w-5 h-5 mr-2 text-[#7AA79C]" />
-                Client Selection
+                Seleccionar Cliente
               </h2>
 
               {isLoadingClients ? (
@@ -3161,7 +3161,7 @@ const OrdersSection = () => {
                       className="w-full border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
                     >
                       <Building className="w-4 h-4 mr-2 text-[#7AA79C]" />
-                      Select Client
+                      Seleccionar Cliente
                     </Button>
                   )}
                 </div>
@@ -3172,7 +3172,7 @@ const OrdersSection = () => {
             <div>
               <h2 className="text-lg font-medium mb-4 flex items-center text-[#29696B]">
                 <Clock className="w-5 h-5 mr-2 text-[#7AA79C]" />
-                Order Status
+                Estado de Pedido
               </h2>
 
               <Select
@@ -3186,19 +3186,19 @@ const OrdersSection = () => {
                   <SelectItem value="pendiente">
                     <div className="flex items-center">
                       <Clock className="w-4 h-4 mr-2 text-yellow-600" />
-                      Pending
+                      Pendiente
                     </div>
                   </SelectItem>
                   <SelectItem value="aprobado">
                     <div className="flex items-center">
                       <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
-                      Approved
+                      Aprobado
                     </div>
                   </SelectItem>
                   <SelectItem value="rechazado">
                     <div className="flex items-center">
                       <XCircle className="w-4 h-4 mr-2 text-red-600" />
-                      Rejected
+                      Rechazado
                     </div>
                   </SelectItem>
                 </SelectContent>
@@ -3210,7 +3210,7 @@ const OrdersSection = () => {
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg font-medium flex items-center text-[#29696B]">
                   <ShoppingCart className="w-5 h-5 mr-2 text-[#7AA79C]" />
-                  Products
+                  Productos
                 </h2>
 
                 <Button
@@ -3220,13 +3220,13 @@ const OrdersSection = () => {
                   className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30 disabled:bg-gray-100 disabled:text-gray-400"
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Product
+                  Agregar Producto
                 </Button>
               </div>
 
               {!orderForm.productos || orderForm.productos.length === 0 ? (
                 <div className="text-center py-8 text-[#7AA79C] border border-dashed border-[#91BEAD]/40 rounded-md bg-[#DFEFE6]/10">
-                  No products in the order
+                  No hay productos en el pedido.
                 </div>
               ) : (
                 <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
@@ -3250,7 +3250,7 @@ const OrdersSection = () => {
                         <div>
                           <div className="font-medium text-[#29696B]">{nombre}</div>
                           <div className="text-sm text-[#7AA79C]">
-                            Quantity: {cantidad} x ${precio.toFixed(2)}
+                          Cantidad: {cantidad} x ${precio.toFixed(2)}
                           </div>
                         </div>
 
@@ -3285,14 +3285,14 @@ const OrdersSection = () => {
 
             {/* Notes */}
             <div>
-              <Label htmlFor="detalle" className="text-[#29696B]">Notes (optional)</Label>
+              <Label htmlFor="detalle" className="text-[#29696B]">Notas (opcional)</Label>
               <textarea
                 id="detalle"
                 value={orderForm.detalle === ' ' ? '' : orderForm.detalle}
                 onChange={(e) => setOrderForm(prev => ({ ...prev, detalle: e.target.value }))}
                 className="w-full border-[#91BEAD] rounded-md p-2 mt-1 focus:ring-[#29696B]/20 focus:border-[#29696B]"
                 rows={3}
-                placeholder="Add additional notes here..."
+                placeholder="Agrega notas adicionales aquí..."
               />
             </div>
           </div>
@@ -3326,9 +3326,9 @@ const OrdersSection = () => {
               {createOrderMutation.isLoading || updateOrderMutation.isLoading ? (
                 <span className="flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Processing...
+                  Procesando...
                 </span>
-              ) : currentOrderId ? 'Update Order' : 'Create Order'}
+              ) : currentOrderId ? 'Actualizar Pedido' : 'Crear Pedido'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -3338,9 +3338,9 @@ const OrdersSection = () => {
       <Dialog open={supervisorSelectOpen} onOpenChange={setSupervisorSelectOpen}>
         <DialogContent className="sm:max-w-md bg-white border border-[#91BEAD]/20">
           <DialogHeader>
-            <DialogTitle className="text-[#29696B]">Select Supervisor</DialogTitle>
+            <DialogTitle className="text-[#29696B]">Seleccionar Supervisor</DialogTitle>
             <DialogDescription className="text-[#7AA79C]">
-              Choose the supervisor for whom you want to create the order.
+              Elige el supervisor para quien deseas crear el pedido.
             </DialogDescription>
           </DialogHeader>
 
@@ -3352,7 +3352,7 @@ const OrdersSection = () => {
             ) : supervisors.length === 0 ? (
               <Alert className="bg-[#DFEFE6]/30 border border-[#91BEAD] text-[#29696B]">
                 <AlertDescription>
-                  No supervisors available. Contact the system administrator.
+                No hay supervisores disponibles. Contacta al administrador del sistema.
                 </AlertDescription>
               </Alert>
             ) : (
@@ -3381,7 +3381,7 @@ const OrdersSection = () => {
               onClick={() => setSupervisorSelectOpen(false)}
               className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
             >
-              Cancel
+              Cancelar
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -3391,9 +3391,9 @@ const OrdersSection = () => {
       <Dialog open={selectClientModalOpen} onOpenChange={setSelectClientModalOpen}>
         <DialogContent className="sm:max-w-md bg-white border border-[#91BEAD]/20">
           <DialogHeader>
-            <DialogTitle className="text-[#29696B]">Select Client</DialogTitle>
+            <DialogTitle className="text-[#29696B]">Seleccionar Cliente</DialogTitle>
             <DialogDescription className="text-[#7AA79C]">
-              Select the client for this order.
+              Seleccionar Cliente para este Pedido
             </DialogDescription>
           </DialogHeader>
 
@@ -3403,7 +3403,7 @@ const OrdersSection = () => {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
               <Input
                 type="text"
-                placeholder="Search clients..."
+                placeholder="Buscar Clientes..."
                 className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
               />
             </div>
@@ -3450,9 +3450,9 @@ const OrdersSection = () => {
       <Dialog open={selectSubServiceModalOpen} onOpenChange={setSelectSubServiceModalOpen}>
         <DialogContent className="sm:max-w-md bg-white border border-[#91BEAD]/20">
           <DialogHeader>
-            <DialogTitle className="text-[#29696B]">Select Subservice</DialogTitle>
+            <DialogTitle className="text-[#29696B]">Seleccionar SubServicio</DialogTitle>
             <DialogDescription className="text-[#7AA79C]">
-              Select the subservice for {selectedClient?.nombre || selectedClient?.servicio || 'this client'}.
+              Selecciona el subservicio para {selectedClient?.nombre || selectedClient?.servicio || 'this client'}.
             </DialogDescription>
           </DialogHeader>
 
@@ -3480,7 +3480,7 @@ const OrdersSection = () => {
               >
                 <div className="flex items-center justify-between">
                   <div className="font-medium text-[#29696B]">
-                    No specific subservice
+                  Ningún subservicio específico.
                   </div>
                   <Check className="w-4 h-4 text-[#7AA79C]" />
                 </div>
@@ -3532,9 +3532,9 @@ const OrdersSection = () => {
       <Dialog open={selectSubLocationModalOpen} onOpenChange={setSelectSubLocationModalOpen}>
         <DialogContent className="sm:max-w-md bg-white border border-[#91BEAD]/20">
           <DialogHeader>
-            <DialogTitle className="text-[#29696B]">Select Sublocation</DialogTitle>
+            <DialogTitle className="text-[#29696B]">Seleccionar Ubicacion</DialogTitle>
             <DialogDescription className="text-[#7AA79C]">
-              Select the sublocation for {selectedSubService?.nombre || 'this subservice'}.
+            Selecciona la sububicación para {selectedSubService?.nombre || 'this subservice'}.
             </DialogDescription>
           </DialogHeader>
 
@@ -3558,7 +3558,7 @@ const OrdersSection = () => {
               >
                 <div className="flex items-center justify-between">
                   <div className="font-medium text-[#29696B]">
-                    No specific sublocation
+                      Ninguna sububicación específica.
                   </div>
                   <Check className="w-4 h-4 text-[#7AA79C]" />
                 </div>
@@ -3602,9 +3602,9 @@ const OrdersSection = () => {
       <Dialog open={selectProductModalOpen} onOpenChange={setSelectProductModalOpen}>
         <DialogContent className="sm:max-w-md bg-white border border-[#91BEAD]/20">
           <DialogHeader>
-            <DialogTitle className="text-[#29696B]">Add Product</DialogTitle>
+            <DialogTitle className="text-[#29696B]">Agregar Producto</DialogTitle>
             <DialogDescription className="text-[#7AA79C]">
-              Select the product and quantity you want to add.
+              Selecciona el producto y la cantidad que deseas agregar.
             </DialogDescription>
           </DialogHeader>
 
@@ -3624,7 +3624,7 @@ const OrdersSection = () => {
             </div>
 
             <div>
-              <Label htmlFor="producto" className="text-[#29696B]">Product</Label>
+              <Label htmlFor="producto" className="text-[#29696B]">Producto</Label>
               <Select
                 value={selectedProduct || "none"}
                 onValueChange={setSelectedProduct}
@@ -3633,9 +3633,9 @@ const OrdersSection = () => {
                   <SelectValue placeholder="Select product" />
                 </SelectTrigger>
                 <SelectContent className="max-h-80">
-                  <SelectItem value="none" disabled>Select a product</SelectItem>
+                  <SelectItem value="none" disabled>Seleccionar Producto</SelectItem>
                   {isLoadingProducts ? (
-                    <SelectItem value="loading" disabled>Loading products...</SelectItem>
+                    <SelectItem value="loading" disabled>Cargando Productos...</SelectItem>
                   ) : products.length > 0 ? (
                     products.map(product => (
                       <SelectItem
@@ -3647,14 +3647,14 @@ const OrdersSection = () => {
                       </SelectItem>
                     ))
                   ) : (
-                    <SelectItem value="no-products" disabled>No products available</SelectItem>
+                    <SelectItem value="no-products" disabled>No hay productos disponibles.</SelectItem>
                   )}
                 </SelectContent>
               </Select>
             </div>
 
             <div>
-              <Label htmlFor="cantidad" className="text-[#29696B]">Quantity</Label>
+              <Label htmlFor="cantidad" className="text-[#29696B]">Cantidad</Label>
               <Input
                 id="cantidad"
                 type="number"
@@ -3672,15 +3672,15 @@ const OrdersSection = () => {
             {selectedProduct && selectedProduct !== "none" && productsMap[selectedProduct] && (
               <div className="p-3 bg-[#DFEFE6]/20 rounded-md border border-[#91BEAD]/30">
                 <div className="flex justify-between">
-                  <span className="text-sm font-medium text-[#29696B]">Selected product:</span>
+                  <span className="text-sm font-medium text-[#29696B]">Seleccionar Producto:</span>
                   <span className="text-sm text-[#29696B]">{productsMap[selectedProduct].nombre}</span>
                 </div>
                 <div className="flex justify-between mt-1">
-                  <span className="text-sm font-medium text-[#29696B]">Price:</span>
+                  <span className="text-sm font-medium text-[#29696B]">Precio:</span>
                   <span className="text-sm text-[#29696B]">${productsMap[selectedProduct].precio.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between mt-1">
-                  <span className="text-sm font-medium text-[#29696B]">Available stock:</span>
+                  <span className="text-sm font-medium text-[#29696B]">Stock Disponible:</span>
                   <span className="text-sm text-[#29696B]">{productsMap[selectedProduct].stock}</span>
                 </div>
                 <div className="flex justify-between mt-1">
@@ -3699,7 +3699,7 @@ const OrdersSection = () => {
               onClick={() => setSelectProductModalOpen(false)}
               className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
             >
-              Cancel
+              Cancelar
             </Button>
 
             <Button
@@ -3707,7 +3707,7 @@ const OrdersSection = () => {
               className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
               disabled={!selectedProduct || selectedProduct === "none" || productQuantity <= 0}
             >
-              Add
+              Agregar
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -3717,10 +3717,10 @@ const OrdersSection = () => {
       <ConfirmationDialog
         open={deleteConfirmModalOpen}
         onOpenChange={setDeleteConfirmModalOpen}
-        title="Delete Order?"
-        description="Are you sure you want to delete this order? This action cannot be undone and will return stock to inventory."
-        confirmText="Delete"
-        cancelText="Cancel"
+        title="Eliminar Pedido"
+        description="¿Estás seguro de que deseas eliminar este pedido? Esta acción no se puede deshacer y devolverá el stock al inventario."
+        confirmText="Eliminar"
+        cancelText="Cancelar"
         onConfirm={handleDeleteOrder}
         variant="destructive"
       />
