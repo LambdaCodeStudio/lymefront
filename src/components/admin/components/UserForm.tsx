@@ -397,11 +397,6 @@ const UserForm: React.FC<UserFormProps> = ({
                 {supervisorsError && (
                   <p className="text-red-500 text-xs mt-1">{supervisorsError}</p>
                 )}
-                {availableSupervisors.length === 0 && !supervisorsLoading && (
-                  <p className="text-yellow-600 text-xs mt-1">
-                    No hay supervisores disponibles
-                  </p>
-                )}
               </div>
             )}
 
