@@ -71,6 +71,7 @@ export interface Product {
   
   // Imagen y metadatos
   hasImage?: boolean; // No forma parte del schema pero es útil en frontend
+  imageUrl?: string; // URL relativa a la imagen del producto
   imagenInfo?: ImagenInfoType;
   
   // Estadísticas de ventas

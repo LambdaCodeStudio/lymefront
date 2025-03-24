@@ -64,8 +64,6 @@ import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { useNotification } from '@/context/NotificationContext';
 import { inventoryObservable, getAuthToken } from '@/utils/inventoryUtils';
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import OptimizedProductImage from './components/ProductImage';
-import ImageUpload from './components/ImageUpload';
 import {
   Product,
   ComboItemType,
@@ -73,21 +71,49 @@ import {
   PaginatedResponse
 } from '@/types/inventory';
 
+// Importar el componente ProductImage y las utilidades de imagen
+import ProductImage from './components/ProductImage';
+import { getProductImageUrl as utilsGetProductImageUrl, hasProductImage } from '@/utils/image-utils';
+import ImageActionButton from './components/ImageActionButton';
+
 // Definir URL base para la API
-const API_URL = "/api/";
+const API_URL = "http://localhost:3000/api/";
 
 /**
- * Obtiene la URL de la imagen para un producto
- * Sigue la misma lógica que en ProductCard para mantener consistencia
+ * Versión mejorada de getProductImageUrl que se comporta como en ProductCard
+ * Esto mantiene compatibilidad con el código existente mientras solucionamos el problema
  */
-const getProductImageUrl = (productId: string, addTimestamp = true) => {
-  if (!productId) return '/lyme.png';
+const getProductImageUrl = (product: Product | string, addTimestamp = true): string => {
+  // Si recibimos un string (ID), usamos la utilidad existente
+  if (typeof product === 'string') {
+    return utilsGetProductImageUrl(product, addTimestamp);
+  }
+  
+  // Si es un objeto Product, implementamos la lógica mejorada
+  if (!product || !product._id) return '/lyme.png';
+  
+  // Priorizar la URL directa si existe (como en ProductCard)
+  if (product.imageUrl) {
+    return addTimestamp ? `${product.imageUrl}?t=${Date.now()}` : product.imageUrl;
+  }
+  
+  // Usar la utilidad con el ID
+  return utilsGetProductImageUrl(product._id, addTimestamp);
+};
 
-  // Construir URL basada en ID
-  const url = `/images/products/${productId}.webp`;
-
-  // Agregar timestamp para evitar caché si se solicita
-  return addTimestamp ? `${url}?t=${Date.now()}` : url;
+/**
+ * Manejador de errores de carga de imágenes unificado
+ */
+const handleImageError = (
+  event: React.SyntheticEvent<HTMLImageElement, Event>,
+  productName?: string,
+  isThumbnail = true
+): void => {
+  console.warn(`Error al cargar imagen${productName ? ` para ${productName}` : ''}`);
+  const target = event.target as HTMLImageElement;
+  target.src = "/lyme.png";
+  target.className = isThumbnail ? "h-8 w-8 object-contain" : "w-full h-full object-contain p-4";
+  target.alt = "Imagen no disponible";
 };
 
 // Definir umbral de stock bajo
@@ -114,6 +140,10 @@ interface FormDataType {
   imagenPreview: string | ArrayBuffer | null;
 }
 
+/**
+ * Componente principal de la sección de inventario
+ * Permite visualizar, crear, editar y eliminar productos
+ */
 const InventorySection = () => {
   const { addNotification } = useNotification();
   const [products, setProducts] = useState<Product[]>([]);
@@ -170,7 +200,11 @@ const InventorySection = () => {
   // Estado para almacenar todos los productos disponibles para combos
   const [allAvailableProducts, setAllAvailableProducts] = useState<Product[]>([]);
 
-
+  /**
+   * Hook personalizado para retrasar la búsqueda mientras se escribe
+   * @param value - Valor a debounce
+   * @param delay - Tiempo de espera en milisegundos
+   */
   const useDebounce = (value: string, delay: number) => {
     const [debouncedValue, setDebouncedValue] = useState(value);
 
@@ -187,8 +221,9 @@ const InventorySection = () => {
     return debouncedValue;
   };
 
-  const debouncedSearchTerm = useDebounce(searchTerm, 500); // 500ms de delay
+  const debouncedSearchTerm = useDebounce(searchTerm, 200); // 200ms de delay para mejor experiencia de búsqueda por letra
 
+  // Estado inicial del formulario
   const [formData, setFormData] = useState<FormDataType>({
     nombre: '',
     descripcion: '',
@@ -219,8 +254,8 @@ const InventorySection = () => {
       { value: 'indumentaria', label: 'Indumentaria' },
       { value: 'liquidos', label: 'Líquidos' },
       { value: 'papeles', label: 'Papeles' },
-      { value: 'sinClasificarLimpieza', label: 'Sin Clasificar' },
-      { value: 'calzado', label: 'Calzado' }
+      { value: 'calzado', label: 'Calzado' },
+      { value: 'sinClasificarLimpieza', label: 'Sin Clasificar' }
     ],
     mantenimiento: [
       { value: 'iluminaria', label: 'Iluminaria' },
@@ -232,107 +267,111 @@ const InventorySection = () => {
     ]
   };
 
-  // Estados de producto
-  const estadosProducto = [
-    { value: 'activo', label: 'Activo' },
-    { value: 'discontinuado', label: 'Discontinuado' },
-    { value: 'agotado', label: 'Agotado' }
-  ];
-
   // Usar productos directamente de la respuesta de la API en lugar de filtrar localmente
   const currentProducts = products;
 
-  // Componente para input de stock con límite máximo
-  const ProductStockInput = ({
-    value,
-    onChange,
-    id = "stock",
-    required = true,
-    maxStock = 999999999,
-    isAddingStock = false,
-    onAddingStockChange = () => { },
-    currentStock = 0
-  }: {
-    value: string;
-    onChange: (value: string) => void;
-    id?: string;
-    required?: boolean;
-    maxStock?: number;
-    isAddingStock?: boolean;
-    onAddingStockChange?: (isAdding: boolean) => void;
-    currentStock?: number;
-  }) => {
-    // Simplificar el manejo de cambios para mantener el foco
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const inputValue = e.target.value;
+ /**
+ * Función para abrir el modal de edición con enfoque en la imagen
+ * @param product - Producto cuya imagen se va a editar
+ */
+const handleEditImage = (product: Product) => {
+  try {
+    // Primero establecer el producto para edición
+    setEditingProduct(product);
 
-      // Permitir campo vacío
-      if (inputValue === '') {
-        onChange('');
-        return;
-      }
+    // Detectar si es un combo
+    const isProductCombo = product.esCombo || false;
+    setIsCombo(isProductCombo);
 
-      // Verificar si es un número válido usando una expresión regular simple
-      if (!/^\d*$/.test(inputValue)) {
-        return; // Rechazar entrada no numérica sin cambiar el valor
-      }
+    // Si es combo, cargar los ítems del combo
+    if (isProductCombo && Array.isArray(product.itemsCombo)) {
+      const comboItems = product.itemsCombo.map(item => {
+        if (item.productoId && typeof item.productoId === 'object') {
+          return {
+            productoId: item.productoId._id,
+            nombre: item.productoId.nombre,
+            cantidad: item.cantidad,
+            precio: item.productoId.precio
+          };
+        } else {
+          const productId = typeof item.productoId === 'string' ? item.productoId : String(item.productoId);
+          const matchedProduct = products.find(p => p._id === productId);
+          return {
+            productoId: productId,
+            nombre: matchedProduct ? matchedProduct.nombre : 'Producto no disponible',
+            cantidad: item.cantidad,
+            precio: matchedProduct ? matchedProduct.precio : 0
+          };
+        }
+      });
+      setSelectedComboItems(comboItems);
+    } else {
+      setSelectedComboItems([]);
+    }
 
-      // Solo validar el límite máximo al perder el foco, no durante la escritura
-      if (parseInt(inputValue) > maxStock) {
-        onChange(maxStock.toString());
+    // Verificación robusta para detectar si el producto tiene imagen (usando todas las posibles señales)
+    const hasImage = product.hasImage === true || 
+                     !!product.imageUrl || 
+                     (product.imagenInfo && (!!product.imagenInfo.rutaArchivo || !!product.imagenInfo.tamano));
+
+    // Determinar la URL de la imagen para la vista previa de manera más robusta
+    let imagePreview = null;
+    if (hasImage) {
+      // Priorizar la URL explícita si existe
+      if (product.imageUrl) {
+        imagePreview = product.imageUrl;
       } else {
-        onChange(inputValue);
+        // Como alternativa, usar la función utilitaria con un timestamp para evitar caché
+        imagePreview = getProductImageUrl(product, true);
       }
-    };
+      console.log(`Imagen detectada para producto ${product._id}: ${imagePreview}`);
+    } else {
+      console.log(`No se detectó imagen para producto ${product._id}`);
+    }
 
-    return (
-      <div className="space-y-2">
-        {/* Checkbox para agregar stock */}
-        {editingProduct && (
-          <div className="mb-2 px-1">
-            <div className="flex items-center gap-2 bg-[#DFEFE6]/30 p-2 rounded-md border border-[#91BEAD]/30">
-              <Checkbox
-                id={`${id}-checkbox`}
-                checked={isAddingStock}
-                onCheckedChange={(checked) => onAddingStockChange(!!checked)}
-              />
-              <label
-                htmlFor={`${id}-checkbox`}
-                className="text-sm text-[#29696B] cursor-pointer font-medium"
-              >
-                Añadir al stock existente
-              </label>
-            </div>
-          </div>
-        )}
+    // Usar los mismos datos del producto pero enfocarse en la imagen
+    setFormData({
+      nombre: product.nombre || '',
+      descripcion: product.descripcion || '',
+      categoria: product.categoria || '',
+      subCategoria: product.subCategoria || '',
+      marca: '',
+      precio: product.precio ? product.precio.toString() : '',
+      stock: product.stock ? product.stock.toString() : '0',
+      stockMinimo: (product.stockMinimo || 5).toString(),
+      proveedor: {
+        nombre: '',
+        contacto: '',
+        telefono: '',
+        email: ''
+      },
+      estado: 'activo',
+      imagen: null,
+      imagenPreview: imagePreview
+    });
 
-        <Input
-          id={id}
-          type="number"
-          min="0"
-          max={maxStock}
-          value={value}
-          onChange={handleChange}
-          required={required}
-          className="mt-1"
-        />
+    // Abrir el modal
+    setShowModal(true);
+    
+    // Desplazar automáticamente hasta la sección de imagen
+    setTimeout(() => {
+      const imageSection = document.querySelector('[data-image-section]');
+      if (imageSection) {
+        imageSection.scrollIntoView({ behavior: 'smooth' });
+      }
+    }, 300);
+  } catch (error) {
+    console.error("Error al preparar edición de imagen:", error);
+    addNotification("Error al preparar edición de imagen", "error");
+  }
+};
 
-        {isAddingStock && (
-          <div className="mt-1 text-xs text-[#29696B] bg-[#DFEFE6]/20 p-2 rounded border border-[#91BEAD]/30">
-            <span className="font-medium">Stock actual:</span> {currentStock} unidades
-            <span className="mx-1">→</span>
-            <span className="font-medium">Stock final:</span> {currentStock + parseInt(value || '0')} unidades
-          </div>
-        )}
-
-        <p className="text-xs text-[#7AA79C]">
-          Máximo: {maxStock.toLocaleString()}
-        </p>
-      </div>
-    );
-  };
-
-  // Función mejorada para cargar productos
+  /**
+   * Función mejorada para cargar productos con filtros y paginación
+   * @param forceRefresh - Forzar recarga de productos
+   * @param page - Número de página
+   * @param limit - Límite de productos por página
+   */
   const fetchProducts = async (forceRefresh = false, page = currentPage, limit = itemsPerPage) => {
     try {
       // Solo evitamos la carga si ya está cargando y no es forzada
@@ -340,23 +379,23 @@ const InventorySection = () => {
         console.log('Ya se está cargando productos, evitando otra carga');
         return;
       }
-
+  
       console.log(`Cargando productos desde el servidor para página ${page}, límite ${limit}...`);
       setLoading(true);
       setRefreshing(forceRefresh);
       setError('');
-
+  
       const token = getAuthToken();
       if (!token) {
         console.error('No se encontró token de autenticación');
         throw new Error('No hay token de autenticación');
       }
-
+  
       // Si hay filtros activos, añadirlos a la URL
       const queryParams = new URLSearchParams();
       queryParams.append('page', page.toString());
       queryParams.append('limit', limit.toString());
-
+  
       // Prioridad de filtros: Sin Stock > Stock Bajo > Filtros normales
       if (showNoStockOnly) {
         queryParams.append('noStock', 'true');
@@ -367,33 +406,41 @@ const InventorySection = () => {
         console.log("Filtrando productos con stock bajo...");
       } else {
         // Aplicamos los filtros normales
-        if (debouncedSearchTerm) {  // Usar el término de búsqueda debounced
-          // Búsqueda progresiva usando regex
+        if (debouncedSearchTerm) {
+          // CORREGIDO: Enviar el término de búsqueda sin procesar para que funcione la búsqueda progresiva
           queryParams.append('regex', debouncedSearchTerm);
-          queryParams.append('regexFields', 'nombre,descripcion,marca,proveedor.nombre');
+          queryParams.append('regexFields', 'nombre,descripcion,marca');
           queryParams.append('regexOptions', 'i');
-
+  
           console.log(`Buscando productos que coincidan con: "${debouncedSearchTerm}"`);
         }
-
+  
         if (selectedCategory !== 'all') {
-          queryParams.append('category', selectedCategory);
+          if (selectedCategory === 'combos') {
+            // CORREGIDO: Para filtros de combos, asegurarse de que esCombo sea true
+            queryParams.append('esCombo', 'true');
+            console.log("Filtrando solo combos...");
+          } else {
+            // Para categorías normales (limpieza, mantenimiento)
+            queryParams.append('category', selectedCategory);
+            console.log(`Filtrando por categoría: ${selectedCategory}`);
+          }
         }
       }
-
+  
       // Agregar cache buster para evitar resultados en caché del servidor
       queryParams.append('_', Date.now().toString());
-
+  
       const urlWithParams = `${API_URL}producto?${queryParams.toString()}`;
       console.log(`Consultando API: ${urlWithParams}`);
-
+  
       const response = await fetch(urlWithParams, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache, no-store, must-revalidate'
         }
       });
-
+  
       if (!response.ok) {
         if (response.status === 401) {
           if (typeof window !== 'undefined') {
@@ -405,7 +452,7 @@ const InventorySection = () => {
         }
         throw new Error(`Error al cargar productos (${response.status})`);
       }
-
+  
       // Obtenemos el JSON de la respuesta
       let responseData;
       try {
@@ -414,11 +461,11 @@ const InventorySection = () => {
         console.error("Error al parsear JSON:", jsonError);
         throw new Error('Error al procesar datos de productos');
       }
-
+  
       // Manejar correctamente el formato de respuesta paginada o array simple
       let extractedProducts: Product[] = [];
       let totalItems = 0;
-
+  
       if (responseData && typeof responseData === 'object') {
         if (Array.isArray(responseData)) {
           // Si es un array directamente
@@ -436,31 +483,41 @@ const InventorySection = () => {
           totalItems = 0;
         }
       }
-
-      // Asegurarnos de que los productos tienen URLs de imágenes correctas
-      const productsWithImages = extractedProducts.map(product => ({
-        ...product,
-        // Asegurar que hasImage sea un booleano
-        hasImage: product.hasImage === true
-      }));
-
+  
+      // CORREGIDO: Procesamiento mejorado de las propiedades de imagen
+      // Normalizamos la propiedad hasImage para garantizar consistencia
+      const productsWithImages = extractedProducts.map(product => {
+        // Verificación explícita y exhaustiva de la existencia de imagen
+        const hasImage = (
+          product.hasImage === true || 
+          !!product.imageUrl || 
+          (product.imagenInfo && !!product.imagenInfo.rutaArchivo)
+        );
+        
+        return {
+          ...product,
+          // Normalizar a un booleano explícito
+          hasImage: hasImage
+        };
+      });
+  
       // Establecer productos y total
       setProducts(productsWithImages);
       setTotalCount(totalItems);
-
+  
       // Marcar carga inicial como completada
       initialFetchDone.current = true;
-
+  
       // Si hay pocos productos, mostrar una alerta
       if (extractedProducts.length === 0) {
         addNotification('No se encontraron productos', 'info');
       }
-
+  
     } catch (err: any) {
       const errorMsg = 'Error al cargar productos: ' + err.message;
       console.error(errorMsg);
       setError(errorMsg);
-
+  
       if (typeof addNotification === 'function') {
         addNotification(errorMsg, 'error');
       }
@@ -470,7 +527,43 @@ const InventorySection = () => {
     }
   };
 
-  // Función para contar productos con stock bajo
+  /**
+   * Resetear formulario
+   */
+  const resetForm = () => {
+    setFormData({
+      nombre: '',
+      descripcion: '',
+      categoria: '',
+      subCategoria: '',
+      marca: '',
+      precio: '',
+      stock: '',
+      stockMinimo: '5',
+      proveedor: {
+        nombre: '',
+        contacto: '',
+        telefono: '',
+        email: ''
+      },
+      estado: 'activo',
+      imagen: null,
+      imagenPreview: null
+    });
+    setEditingProduct(null);
+    setIsCombo(false);
+    setSelectedComboItems([]);
+    setIsAddingStock(false);
+    setHasStockIssues(false);
+    setStockWarnings([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  /**
+   * Función para contar productos con stock bajo
+   */
   const countLowStockProducts = async () => {
     try {
       setIsLowStockLoading(true);
@@ -543,7 +636,9 @@ const InventorySection = () => {
     }
   };
 
-  // Función para contar productos sin stock
+  /**
+   * Función para contar productos sin stock
+   */
   const countNoStockProducts = async () => {
     try {
       setIsNoStockLoading(true);
@@ -589,7 +684,10 @@ const InventorySection = () => {
     }
   };
 
-  // Obtener un producto por ID (para actualizar después de cambios)
+  /**
+   * Obtener un producto por ID (para actualizar después de cambios)
+   * @param productId - ID del producto a obtener
+   */
   const fetchProductById = async (productId: string): Promise<Product | null> => {
     try {
       const token = getAuthToken();
@@ -609,14 +707,27 @@ const InventorySection = () => {
       }
 
       const productData = await response.json();
-      return productData;
+      
+      // CORREGIDO: Determinar si el producto tiene imagen basado en múltiples criterios
+      const hasImage = (
+        productData.hasImage === true || 
+        !!productData.imageUrl || 
+        (productData.imagenInfo && !!productData.imagenInfo.rutaArchivo)
+      );
+      
+      return {
+        ...productData,
+        hasImage: hasImage
+      };
     } catch (error) {
       console.error(`Error al obtener producto ${productId}:`, error);
       return null;
     }
   };
 
-  // Cargar todos los productos sin paginación para los combos
+  /**
+   * Cargar todos los productos sin paginación para los combos
+   */
   const fetchAllProducts = async (): Promise<Product[]> => {
     try {
       const token = getAuthToken();
@@ -647,14 +758,21 @@ const InventorySection = () => {
         }
       }
 
-      return allProducts;
+      // CORREGIDO: Asegurar hasImage en todos los productos usando la utilidad mejorada
+      return allProducts.map(product => ({
+        ...product,
+        hasImage: hasProductImage(product)
+      }));
     } catch (error) {
       console.error('Error al cargar todos los productos:', error);
       return [];
     }
   };
 
-  // Actualizar un producto específico en el estado
+  /**
+   * Actualizar un producto específico en el estado
+   * @param updatedProduct - Producto actualizado
+   */
   const updateProductInState = (updatedProduct: Product) => {
     if (!updatedProduct || !updatedProduct._id) return;
 
@@ -668,7 +786,10 @@ const InventorySection = () => {
     });
   };
 
-  // Verificar la disponibilidad de stock para un combo
+  /**
+   * Verificar la disponibilidad de stock para un combo
+   * @param comboItems - Items del combo
+   */
   const validateComboStock = (comboItems: ComboItemType[]): { valid: boolean; warnings: string[] } => {
     const warnings: string[] = [];
     let isValid = true;
@@ -760,98 +881,6 @@ const InventorySection = () => {
     }
   }, [debouncedSearchTerm, selectedCategory, showLowStockOnly, showNoStockOnly]);
 
-  // Función segura para obtener productos filtrados
-  const getFilteredProducts = () => {
-    // Protección contra productos indefinidos o no array
-    if (!products || !Array.isArray(products)) {
-      return [];
-    }
-
-    return products.filter(product => {
-      // Verificación de seguridad para producto
-      if (!product || typeof product !== 'object') return false;
-
-      // Buscar coincidencias en nombre, descripción y proveedor (con verificación segura)
-      const matchesSearch =
-        searchTerm === '' || (
-          (product.nombre && product.nombre.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          (product.descripcion && product.descripcion.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          (product.proveedor?.nombre && product.proveedor.nombre.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          (product.marca && product.marca.toLowerCase().includes(searchTerm.toLowerCase()))
-        );
-
-      // Verificar categoría
-      const matchesCategory =
-        selectedCategory === 'all' ||
-        (product.categoria && product.categoria === selectedCategory) ||
-        (product.subCategoria && product.subCategoria === selectedCategory);
-
-      // Verificar stock bajo si el filtro está activado
-      const matchesLowStock = !showLowStockOnly || (
-        product.stock <= LOW_STOCK_THRESHOLD && product.stock > 0
-      );
-
-      // Verificar sin stock si el filtro está activado
-      const matchesNoStock = !showNoStockOnly || product.stock === 0;
-
-      return matchesSearch && matchesCategory && matchesLowStock && matchesNoStock;
-    });
-  };
-
-  // Función adaptada para convertir base64 a blob y usar FormData
-const handleImageUploadBase64 = async (productId: string) => {
-  if (!formData.imagenPreview || typeof formData.imagenPreview !== 'string') return true;
-
-  try {
-    setImageLoading(true);
-
-    const token = getAuthToken();
-    if (!token) {
-      throw new Error('No hay token de autenticación');
-    }
-
-    // Convertir base64 a Blob
-    const base64Response = await fetch(formData.imagenPreview);
-    const blob = await base64Response.blob();
-    
-    // Crear un archivo a partir del blob
-    const file = new File([blob], `${productId}.webp`, { 
-      type: 'image/webp',
-      lastModified: Date.now()
-    });
-
-    // Usar FormData para enviar el archivo
-    const formDataObj = new FormData();
-    formDataObj.append('imagen', file);
-
-    const response = await fetch(`${API_URL}producto/${productId}/imagen`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      },
-      body: formDataObj
-    });
-
-    if (!response.ok) {
-      throw new Error(`Error al subir imagen (${response.status})`);
-    }
-
-    // Actualizar el producto específico en el estado
-    const updatedProduct = await fetchProductById(productId);
-    if (updatedProduct) {
-      updateProductInState(updatedProduct);
-    }
-
-    return true;
-  } catch (error: any) {
-    console.error('Error al subir imagen:', error);
-    addNotification(`Error al subir imagen: ${error.message}`, 'error');
-    return false;
-  } finally {
-    setImageLoading(false);
-  }
-};
-
   // Cargar todos los productos al abrir el modal de combos
   useEffect(() => {
     if (showComboSelectionModal) {
@@ -876,7 +905,50 @@ const handleImageUploadBase64 = async (productId: string) => {
     }
   }, [tempSelectedItems, isCombo, allAvailableProducts]);
 
-  // Función para filtrar productos para combos
+  /**
+   * Función segura para obtener productos filtrados
+   */
+  const getFilteredProducts = () => {
+    // Protección contra productos indefinidos o no array
+    if (!products || !Array.isArray(products)) {
+      return [];
+    }
+
+    return products.filter(product => {
+      // Verificación de seguridad para producto
+      if (!product || typeof product !== 'object') return false;
+
+      // Buscar coincidencias en nombre, descripción y proveedor (con verificación segura)
+      const matchesSearch =
+        searchTerm === '' || (
+          (product.nombre && product.nombre.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (product.descripcion && product.descripcion.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (product.proveedor?.nombre && product.proveedor.nombre.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (product.marca && product.marca.toLowerCase().includes(searchTerm.toLowerCase()))
+        );
+
+      // Verificar categoría
+      const matchesCategory =
+        selectedCategory === 'all' ||
+        (selectedCategory === 'combos' && product.esCombo === true) ||
+        (product.categoria && product.categoria === selectedCategory) ||
+        (product.subCategoria && product.subCategoria === selectedCategory);
+
+      // Verificar stock bajo si el filtro está activado
+      const matchesLowStock = !showLowStockOnly || (
+        product.stock <= LOW_STOCK_THRESHOLD && product.stock > 0
+      );
+
+      // Verificar sin stock si el filtro está activado
+      const matchesNoStock = !showNoStockOnly || product.stock === 0;
+
+      return matchesSearch && matchesCategory && matchesLowStock && matchesNoStock;
+    });
+  };
+
+  /**
+   * Función para filtrar productos para combos
+   */
   const getFilteredComboProducts = () => {
     // No mostrar productos que ya son combos
     const productsToFilter = showComboSelectionModal ? allAvailableProducts : products;
@@ -907,7 +979,10 @@ const handleImageUploadBase64 = async (productId: string) => {
     });
   };
 
-  // Manejar cambio de imagen
+  /**
+   * Manejar cambio de imagen en el formulario
+   * @param e - Evento de cambio
+   */
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -946,7 +1021,9 @@ const handleImageUploadBase64 = async (productId: string) => {
     }
   };
 
-  // Eliminar imagen del formulario
+  /**
+   * Eliminar imagen del formulario
+   */
   const handleRemoveImage = () => {
     setFormData({
       ...formData,
@@ -958,52 +1035,88 @@ const handleImageUploadBase64 = async (productId: string) => {
     }
   };
 
-  // Eliminar imagen del producto ya guardado
-  const handleDeleteProductImage = async (productId: string) => {
-    try {
-      setImageLoading(true);
+  /**
+ * Eliminar imagen del producto ya guardado
+ * @param productId - ID del producto
+ */
+const handleDeleteProductImage = async (productId: string) => {
+  try {
+    setImageLoading(true);
 
-      const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('No hay token de autenticación');
+    }
+
+    console.log(`Eliminando imagen para producto ID: ${productId}`);
+
+    const response = await fetch(`${API_URL}producto/${productId}/imagen`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`
       }
+    });
 
-      const response = await fetch(`${API_URL}producto/${productId}/imagen`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+    if (!response.ok) {
+      // Intentar obtener más información sobre el error
+      let errorDetail = '';
+      try {
+        const errorData = await response.json();
+        errorDetail = errorData.message || errorData.error || '';
+      } catch (e) {
+        errorDetail = `Error ${response.status}`;
+      }
+      
+      throw new Error(`Error al eliminar imagen: ${errorDetail}`);
+    }
+
+    // Actualizar la vista del formulario para permitir subir una nueva imagen
+    setFormData(prev => ({
+      ...prev,
+      imagen: null,
+      imagenPreview: null
+    }));
+
+    // Actualizar el producto específico en el estado
+    const updatedProduct = await fetchProductById(productId);
+    if (updatedProduct) {
+      // Asegurar explícitamente que TODAS las propiedades relacionadas con la imagen sean nulas
+      updateProductInState({
+        ...updatedProduct,
+        hasImage: false,
+        imageUrl: null,
+        imagenInfo: null
       });
+    }
 
-      if (!response.ok) {
-        throw new Error(`Error al eliminar imagen (${response.status})`);
-      }
-
-      // Actualizar la vista del formulario para permitir subir una nueva imagen
+    // Notificar éxito
+    addNotification('Imagen eliminada correctamente', 'success');
+    setDeleteImageDialogOpen(false);
+    
+    // Si el modal está abierto y es el mismo producto, actualizar la vista previa
+    if (showModal && editingProduct && editingProduct._id === productId) {
       setFormData(prev => ({
         ...prev,
         imagen: null,
         imagenPreview: null
       }));
-
-      // Actualizar el producto específico en el estado
-      const updatedProduct = await fetchProductById(productId);
-      if (updatedProduct) {
-        updateProductInState(updatedProduct);
-      }
-
-      addNotification('Imagen eliminada correctamente', 'success');
-      setDeleteImageDialogOpen(false);
-    } catch (error: any) {
-      console.error('Error al eliminar la imagen:', error);
-      addNotification(`Error al eliminar la imagen: ${error.message}`, 'error');
-    } finally {
-      setImageLoading(false);
     }
-  };
+    
+    // Refrescar la lista de productos para mantener todo consistente
+    fetchProducts(true, currentPage, itemsPerPage);
+  } catch (error: any) {
+    console.error('Error al eliminar la imagen:', error);
+    addNotification(`Error al eliminar la imagen: ${error.message}`, 'error');
+  } finally {
+    setImageLoading(false);
+  }
+};
 
-  // Manejar subida de imagen después de crear/editar producto
-  const handleImageUpload = async (productId: string) => {
+  /**
+   * Manejar subida de imagen después de crear/editar producto
+   * @param productId - ID del producto
+   */
+  const handleImageUpload = async (productId: string): Promise<boolean> => {
     if (!formData.imagen) return true;
 
     try {
@@ -1017,6 +1130,9 @@ const handleImageUploadBase64 = async (productId: string) => {
       // Crear FormData para enviar la imagen
       const formDataObj = new FormData();
       formDataObj.append('imagen', formData.imagen);
+      
+      // Añadir registro para depuración
+      console.log(`Subiendo imagen para producto ID: ${productId}`);
 
       const response = await fetch(`${API_URL}producto/${productId}/imagen`, {
         method: 'POST',
@@ -1027,15 +1143,36 @@ const handleImageUploadBase64 = async (productId: string) => {
       });
 
       if (!response.ok) {
-        throw new Error(`Error al subir imagen (${response.status})`);
+        // Intentar obtener más detalles del error
+        let errorDetail = '';
+        try {
+          const errorData = await response.json();
+          errorDetail = errorData.message || errorData.error || '';
+        } catch (e) {
+          // Si no podemos parsear el error, usar el status
+          errorDetail = `Error ${response.status}`;
+        }
+        
+        throw new Error(`Error al subir imagen: ${errorDetail}`);
       }
 
-      // Actualizar el producto específico en el estado
+      // Obtener la respuesta para verificar la URL de la imagen
+      const imageResponse = await response.json();
+      
+      console.log('Respuesta del servidor:', imageResponse);
+      
+      // Actualizar el producto específico en el estado con la nueva imagen
       const updatedProduct = await fetchProductById(productId);
       if (updatedProduct) {
-        updateProductInState(updatedProduct);
+        // Asegurarnos de que las propiedades de imagen estén actualizadas
+        updateProductInState({
+          ...updatedProduct,
+          hasImage: true,
+          imageUrl: imageResponse.imageUrl || `${API_URL}images/products/${productId}.webp`
+        });
       }
 
+      addNotification('Imagen subida correctamente', 'success');
       return true;
     } catch (error: any) {
       console.error('Error al subir imagen:', error);
@@ -1046,7 +1183,10 @@ const handleImageUploadBase64 = async (productId: string) => {
     }
   };
 
-  // Agregar un ítem al combo
+  /**
+   * Agregar un ítem al combo
+   * @param product - Producto a agregar
+   */
   const handleAddComboItem = (product: Product) => {
     // Verificar si ya existe
     const existingItem = tempSelectedItems.find(item =>
@@ -1082,7 +1222,11 @@ const handleImageUploadBase64 = async (productId: string) => {
     }
   };
 
-  // Actualizar cantidad de un ítem en el combo
+  /**
+   * Actualizar cantidad de un ítem en el combo
+   * @param productId - ID del producto
+   * @param newQuantity - Nueva cantidad
+   */
   const handleUpdateComboItemQuantity = (productId: string, newQuantity: number) => {
     if (newQuantity <= 0) {
       // Si la cantidad es 0 o menos, eliminar el ítem
@@ -1110,7 +1254,10 @@ const handleImageUploadBase64 = async (productId: string) => {
     }
   };
 
-  // Calcular precio total del combo
+  /**
+   * Calcular precio total del combo
+   * @param items - Items del combo
+   */
   const calculateComboTotal = (items: ComboItemType[]) => {
     if (!Array.isArray(items)) return 0;
     return items.reduce((total, item) => {
@@ -1120,7 +1267,9 @@ const handleImageUploadBase64 = async (productId: string) => {
     }, 0);
   };
 
-  // Confirmar selección de ítems para el combo
+  /**
+   * Confirmar selección de ítems para el combo
+   */
   const confirmComboSelection = () => {
     setSelectedComboItems(tempSelectedItems);
     setShowComboSelectionModal(false);
@@ -1133,7 +1282,9 @@ const handleImageUploadBase64 = async (productId: string) => {
     }));
   };
 
-  // Abrir modal de selección de ítems para el combo
+  /**
+   * Abrir modal de selección de ítems para el combo
+   */
   const openComboSelectionModal = () => {
     // Inicializar con los ítems ya seleccionados
     setTempSelectedItems(selectedComboItems);
@@ -1141,7 +1292,10 @@ const handleImageUploadBase64 = async (productId: string) => {
     setShowComboSelectionModal(true);
   };
 
-  // Manejar envío del formulario (crear/editar)
+  /**
+   * Manejar envío del formulario (crear/editar)
+   * @param e - Evento de formulario
+   */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -1193,17 +1347,17 @@ const handleImageUploadBase64 = async (productId: string) => {
         descripcion: formData.descripcion,
         categoria: formData.categoria,
         subCategoria: formData.subCategoria,
-        marca: formData.marca,
+        marca: "", // Campo vacío como solicitado
         precio: Number(formData.precio),
         stock: finalStock,
         stockMinimo: Number(formData.stockMinimo),
         proveedor: {
-          nombre: formData.proveedor.nombre,
-          contacto: formData.proveedor.contacto,
-          telefono: formData.proveedor.telefono,
-          email: formData.proveedor.email
-        },
-        estado: formData.estado,
+          nombre: "",
+          contacto: "",
+          telefono: "",
+          email: ""
+        }, // Objeto proveedor con valores vacíos
+        estado: "activo", // Valor por defecto
         // Si es combo, incluir los ítems del combo
         esCombo: isCombo,
         itemsCombo: isCombo ? selectedComboItems.map(item => ({
@@ -1237,14 +1391,14 @@ const handleImageUploadBase64 = async (productId: string) => {
 
       // Manejar la subida de imagen de manera unificada
       if (formData.imagen) {
-        // Si tenemos un archivo, usar handleImageUpload
+        // Si tenemos un archivo, usar handleImageUpload mejorado
         const imageUploaded = await handleImageUpload(savedProduct._id);
         if (!imageUploaded) {
           console.log('Hubo un problema al subir la imagen, pero el producto se guardó correctamente');
         }
       } else if (formData.imagenPreview && typeof formData.imagenPreview === 'string' && formData.imagenPreview.startsWith('data:image')) {
         // Si tenemos una imagen en base64, convertir y usar el mismo método
-        const imageUploaded = await handleImageUploadBase64(savedProduct._id);
+        const imageUploaded = await handleImageUpload(savedProduct._id);
         if (!imageUploaded) {
           console.log('Hubo un problema al subir la imagen, pero el producto se guardó correctamente');
         }
@@ -1300,19 +1454,28 @@ const handleImageUploadBase64 = async (productId: string) => {
     }
   };
 
-  // Iniciar el proceso de eliminación mostrando el diálogo de confirmación
+  /**
+   * Iniciar el proceso de eliminación mostrando el diálogo de confirmación
+   * @param id - ID del producto a eliminar
+   */
   const confirmDelete = (id: string) => {
     setProductToDelete(id);
     setDeleteDialogOpen(true);
   };
 
-  // Confirmar eliminación de imagen
+  /**
+   * Confirmar eliminación de imagen
+   * @param id - ID del producto
+   */
   const confirmDeleteImage = (id: string) => {
     setProductToDelete(id);
     setDeleteImageDialogOpen(true);
   };
 
-  // Eliminar producto (después de confirmación)
+  /**
+   * Eliminar producto (después de confirmación)
+   * @param id - ID del producto
+   */
   const handleDelete = async (id: string) => {
     try {
       const token = getAuthToken();
@@ -1361,7 +1524,10 @@ const handleImageUploadBase64 = async (productId: string) => {
     }
   };
 
-  // Preparar edición de producto
+  /**
+   * Preparar edición de producto
+   * @param product - Producto a editar
+   */
   const handleEdit = async (product: Product) => {
     try {
       setEditingProduct(product);
@@ -1404,12 +1570,20 @@ const handleImageUploadBase64 = async (productId: string) => {
         setSelectedComboItems([]);
       }
 
-      // Preparar URL para vista previa de imagen
+      // CORREGIDO: Mejor manejo de la vista previa de imagen
       let imagePreview = null;
-
-      if (product.hasImage) {
-        // Usar la función utilitaria para obtener la URL de la imagen
-        imagePreview = getProductImageUrl(product._id, true);
+      
+      // Usar utilidad para verificar si tiene imagen
+      const hasImage = hasProductImage(product);
+      
+      if (hasImage) {
+        // Si tiene imageUrl explícita, usarla
+        if (product.imageUrl) {
+          imagePreview = product.imageUrl;
+        } else {
+          // Usar la función utilitaria para obtener la URL de la imagen
+          imagePreview = getProductImageUrl(product, true);
+        }
       }
 
       // Preparar datos del formulario para la edición
@@ -1418,17 +1592,17 @@ const handleImageUploadBase64 = async (productId: string) => {
         descripcion: product.descripcion || '',
         categoria: product.categoria || '',
         subCategoria: product.subCategoria || '',
-        marca: product.marca || '',
+        marca: '', // Campo vacío como solicitado
         precio: product.precio ? product.precio.toString() : '',
         stock: product.stock ? product.stock.toString() : '0',
         stockMinimo: (product.stockMinimo || 5).toString(),
         proveedor: {
-          nombre: product.proveedor?.nombre || '',
-          contacto: product.proveedor?.contacto || '',
-          telefono: product.proveedor?.telefono || '',
-          email: product.proveedor?.email || ''
-        },
-        estado: product.estado || 'activo',
+          nombre: '',
+          contacto: '',
+          telefono: '',
+          email: ''
+        }, // Campos vacíos
+        estado: 'activo', // Valor por defecto
         imagen: null,
         imagenPreview: imagePreview
       });
@@ -1440,39 +1614,10 @@ const handleImageUploadBase64 = async (productId: string) => {
     }
   };
 
-  // Resetear formulario
-  const resetForm = () => {
-    setFormData({
-      nombre: '',
-      descripcion: '',
-      categoria: '',
-      subCategoria: '',
-      marca: '',
-      precio: '',
-      stock: '',
-      stockMinimo: '5',
-      proveedor: {
-        nombre: '',
-        contacto: '',
-        telefono: '',
-        email: ''
-      },
-      estado: 'activo',
-      imagen: null,
-      imagenPreview: null
-    });
-    setEditingProduct(null);
-    setIsCombo(false);
-    setSelectedComboItems([]);
-    setIsAddingStock(false);
-    setHasStockIssues(false);
-    setStockWarnings([]);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  // Manejar cambio de categoría
+  /**
+   * Manejar cambio de categoría
+   * @param value - Valor de la categoría seleccionada
+   */
   const handleCategoryChange = (value: string) => {
     try {
       if (value === 'not-selected') {
@@ -1504,7 +1649,11 @@ const handleImageUploadBase64 = async (productId: string) => {
     }
   };
 
-  // Función para renderizar indicador de stock
+  /**
+   * Función para renderizar indicador de stock
+   * @param stock - Cantidad de stock
+   * @param alertaStockBajo - Flag que indica si el stock es bajo
+   */
   const renderStockIndicator = (stock: number, alertaStockBajo?: boolean) => {
     // Usar el flag alertaStockBajo del backend si está disponible
     const isLowStock = alertaStockBajo !== undefined
@@ -1547,7 +1696,10 @@ const handleImageUploadBase64 = async (productId: string) => {
   // Calcular el total de páginas
   const totalPages = Math.ceil(totalCount / itemsPerPage);
 
-  // Función para cambiar de página
+  /**
+   * Función para cambiar de página
+   * @param pageNumber - Número de página
+   */
   const handlePageChange = (pageNumber: number) => {
     // Actualizar el estado de la página actual
     setCurrentPage(pageNumber);
@@ -1571,14 +1723,18 @@ const handleImageUploadBase64 = async (productId: string) => {
     }
   }, [currentPage, totalPages]);
 
-  // Función para recargar manualmente los productos
+  /**
+   * Función para recargar manualmente los productos
+   */
   const handleManualRefresh = () => {
     fetchProducts(true);
     countLowStockProducts();
     countNoStockProducts();
   };
 
-  // Función para alternar mostrar solo productos con stock bajo
+  /**
+   * Función para alternar mostrar solo productos con stock bajo
+   */
   const toggleLowStockFilter = () => {
     // Si el filtro de sin stock está activo, lo desactivamos primero
     if (showNoStockOnly) {
@@ -1596,7 +1752,9 @@ const handleImageUploadBase64 = async (productId: string) => {
     fetchProducts(true, 1, itemsPerPage);
   };
 
-  // Función para alternar mostrar solo productos sin stock
+  /**
+   * Función para alternar mostrar solo productos sin stock
+   */
   const toggleNoStockFilter = () => {
     // Si el filtro de stock bajo está activo, lo desactivamos primero
     if (showLowStockOnly) {
@@ -1678,6 +1836,12 @@ const handleImageUploadBase64 = async (productId: string) => {
                 className="flex-1 data-[state=active]:bg-[#29696B] data-[state=active]:text-white"
               >
                 Mantenimiento
+              </TabsTrigger>
+              <TabsTrigger
+                value="combos"
+                className="flex-1 data-[state=active]:bg-[#00888A] data-[state=active]:text-white"
+              >
+                Combos
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -1865,16 +2029,13 @@ const handleImageUploadBase64 = async (productId: string) => {
                     Nombre
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
-                    Categoría/Marca
+                    Categoría/Subcategoría
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
                     Precio
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
                     Stock
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-[#29696B] uppercase tracking-wider">
-                    Estado
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-[#29696B] uppercase tracking-wider">
                     Acciones
@@ -1889,53 +2050,19 @@ const handleImageUploadBase64 = async (productId: string) => {
                       ? 'bg-yellow-50 hover:bg-yellow-100'
                       : product.stock <= 0
                         ? 'bg-red-50 hover:bg-red-100'
-                        : product.estado === 'discontinuado'
-                          ? 'bg-gray-50 hover:bg-gray-100'
-                          : ''
+                        : ''
                       }`}
                   >
                     <td className="px-6 py-4">
                       <div className="flex items-center">
-                        <div className="flex-shrink-0 h-10 w-10 mr-3">
-                          <div className="h-10 w-10 rounded-full flex items-center justify-center border border-[#91BEAD]/30 overflow-hidden">
-                            {product.hasImage ? (
-                              <img
-                                src={getProductImageUrl(product._id)}
-                                alt={product.nombre}
-                                className="h-10 w-10 object-cover"
-                                onError={(e) => {
-                                  const target = e.target as HTMLImageElement;
-                                  target.src = "/lyme.png";
-                                  target.className = "h-8 w-8 object-contain";
-                                }}
-                              />
-                            ) : (
-                              <div className="h-10 w-10 rounded-full bg-[#DFEFE6]/50 flex items-center justify-center text-xs text-[#29696B]">
-                                <img
-                                  src="/lyme.png"
-                                  alt="Lyme Logo"
-                                  className="h-8 w-8 object-contain"
-                                  onError={(e) => {
-                                    const target = e.target as HTMLImageElement;
-                                    target.style.display = 'none';
-                                    // Si la imagen falla, mostrar un ícono de fallback según el tipo de producto
-                                    if (product.esCombo) {
-                                      const parent = target.parentElement;
-                                      if (parent) {
-                                        const icon = document.createElement('div');
-                                        icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><path d="M12 22.08V12"></path><path d="M12 12 3.3 6.81"></path><path d="M12 12 20.7 6.8"></path><path d="M12 2v10"></path><path d="M3.3 6.8 12 12l8.7-5.2"></path></svg>';
-                                        parent.appendChild(icon);
-                                      }
-                                    }
-                                  }}
-                                />
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <div>
+                        <ProductImage 
+                          product={product} 
+                          size="small" 
+                          className="mr-3" 
+                        />
+                        <div className="min-w-0 max-w-[200px]">
                           <div className="flex items-center">
-                            <div className="text-sm font-medium text-[#29696B]">
+                            <div className="text-sm font-medium text-[#29696B] truncate">
                               {product.nombre}
                             </div>
                             {product.esCombo && (
@@ -1943,16 +2070,13 @@ const handleImageUploadBase64 = async (productId: string) => {
                                 Combo
                               </Badge>
                             )}
+                            {hasProductImage(product) && (
+                              <div className="ml-2 w-2 h-2 rounded-full bg-blue-500" title="Tiene imagen"></div>
+                            )}
                           </div>
                           {product.descripcion && (
-                            <div className="text-sm text-[#7AA79C] truncate max-w-xs">
+                            <div className="text-sm text-[#7AA79C] truncate">
                               {product.descripcion}
-                            </div>
-                          )}
-                          {product.proveedor?.nombre && (
-                            <div className="text-xs text-[#7AA79C] flex items-center mt-1">
-                              <Building className="w-3 h-3 mr-1" />
-                              {product.proveedor.nombre}
                             </div>
                           )}
                         </div>
@@ -1960,15 +2084,9 @@ const handleImageUploadBase64 = async (productId: string) => {
                     </td>
                     <td className="px-6 py-4 text-sm text-[#7AA79C]">
                       <Badge variant="outline" className="capitalize border-[#91BEAD] text-[#29696B]">
-                        {product.categoria}
+                        {product.esCombo ? 'Combo' : product.categoria}
                       </Badge>
                       <div className="text-xs mt-1 capitalize text-[#7AA79C]">{product.subCategoria}</div>
-                      {product.marca && (
-                        <div className="flex items-center mt-1 text-xs">
-                          <Tag className="w-3 h-3 mr-1 text-[#7AA79C]" />
-                          <span className="text-[#7AA79C]">{product.marca}</span>
-                        </div>
-                      )}
                     </td>
                     <td className="px-6 py-4 text-sm font-medium text-[#29696B]">
                       ${product.precio.toFixed(2)}
@@ -1981,25 +2099,16 @@ const handleImageUploadBase64 = async (productId: string) => {
                         </div>
                       )}
                     </td>
-                    <td className="px-6 py-4">
-                      <Badge
-                        className={`
-                          ${product.estado === 'activo'
-                            ? 'bg-green-100 text-green-800 border-green-200'
-                            : product.estado === 'discontinuado'
-                              ? 'bg-gray-100 text-gray-800 border-gray-200'
-                              : 'bg-red-100 text-red-800 border-red-200'
-                          }
-                        `}
-                      >
-                        {product.estado || 'activo'}
-                      </Badge>
-                      <div className="text-xs text-[#7AA79C] mt-1">
-                        Vendidos: {product.vendidos || 0}
-                      </div>
-                    </td>
                     <td className="px-6 py-4 text-right text-sm font-medium">
                       <div className="flex justify-end space-x-2">
+                        {/* Botón específico para gestionar imagen (solo aparece si hay imagen) */}
+                        <ImageActionButton
+                          product={product}
+                          onEdit={() => handleEditImage(product)}
+                          onDelete={() => confirmDeleteImage(product._id)}
+                          className="mr-1"
+                        />
+                        
                         <Button
                           variant="ghost"
                           size="sm"
@@ -2008,6 +2117,7 @@ const handleImageUploadBase64 = async (productId: string) => {
                         >
                           <Edit className="w-4 h-4" />
                         </Button>
+                        
                         <Button
                           variant="ghost"
                           size="sm"
@@ -2061,74 +2171,31 @@ const handleImageUploadBase64 = async (productId: string) => {
                 ? 'border-red-300 bg-red-50'
                 : product.esCombo
                   ? 'border-[#00888A]/50 bg-[#00888A]/5'
-                  : product.estado === 'discontinuado'
-                    ? 'border-gray-300 bg-gray-50'
-                    : 'border-[#91BEAD]/20 bg-white'
+                  : 'border-[#91BEAD]/20 bg-white'
               }`}
           >
             <CardHeader className="p-4 pb-2">
               <div className="flex justify-between items-center">
                 <div className="flex items-center space-x-2">
-                  <CardTitle className="text-base truncate mr-2 text-[#29696B]">{product.nombre}</CardTitle>
+                  <CardTitle className="text-base truncate mr-2 text-[#29696B] max-w-[200px]">{product.nombre}</CardTitle>
                   {product.esCombo && (
                     <Badge variant="outline" className="bg-[#00888A]/10 border-[#00888A] text-[#00888A] text-xs">
                       Combo
                     </Badge>
                   )}
+                  {hasProductImage(product) && (
+                    <div className="w-2 h-2 rounded-full bg-blue-500" title="Tiene imagen"></div>
+                  )}
                 </div>
-                <Badge
-                  className={`
-                    ${product.estado === 'activo'
-                      ? 'bg-green-100 text-green-800 border-green-200'
-                      : product.estado === 'discontinuado'
-                        ? 'bg-gray-100 text-gray-800 border-gray-200'
-                        : 'bg-red-100 text-red-800 border-red-200'
-                    }
-                  `}
-                >
-                  {product.estado || 'activo'}
-                </Badge>
               </div>
             </CardHeader>
             <CardContent className="p-4 pt-2 pb-3">
               <div className="flex gap-4 mb-3">
-                <div className="flex-shrink-0 h-16 w-16">
-                  <div className="h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center border border-[#91BEAD]/30 overflow-hidden">
-                    {product.hasImage ? (
-                      <img
-                        src={getProductImageUrl(product._id)}
-                        alt={product.nombre}
-                        className="h-16 w-16 object-cover"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.src = "/lyme.png";
-                          target.className = "h-12 w-12 object-contain";
-                        }}
-                      />
-                    ) : (
-                      <div className="h-16 w-16 rounded-md bg-[#DFEFE6]/50 flex items-center justify-center text-xs text-[#29696B]">
-                        <img
-                          src="/lyme.png"
-                          alt="Lyme Logo"
-                          className="h-12 w-12 object-contain"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = 'none';
-                            // Si la imagen falla, mostrar un ícono de fallback según el tipo de producto
-                            if (product.esCombo) {
-                              const parent = target.parentElement;
-                              if (parent) {
-                                const icon = document.createElement('div');
-                                icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><path d="M12 22.08V12"></path><path d="M12 12 3.3 6.81"></path><path d="M12 12 20.7 6.8"></path><path d="M12 2v10"></path><path d="M3.3 6.8 12 12l8.7-5.2"></path></svg>';
-                                parent.appendChild(icon);
-                              }
-                            }
-                          }}
-                        />
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <ProductImage 
+                  product={product} 
+                  size="medium" 
+                  className="flex-shrink-0"
+                />
                 <div className="flex-1 min-w-0">
                   {product.descripcion && (
                     <p className="text-sm text-[#7AA79C] line-clamp-2 mb-2">
@@ -2159,27 +2226,14 @@ const handleImageUploadBase64 = async (productId: string) => {
                     <div className="flex justify-between">
                       <span className="block">
                         <Badge variant="outline" className="capitalize text-xs border-[#91BEAD] text-[#29696B]">
-                          {product.categoria}
+                          {product.esCombo ? 'Combo' : product.categoria}
                         </Badge>
                       </span>
-                      <span className="block">Vendidos: {product.vendidos || 0}</span>
                     </div>
 
                     <div className="flex justify-between items-center mt-1">
                       <span className="capitalize">{product.subCategoria}</span>
-                      {product.marca && (
-                        <span className="flex items-center">
-                          <Tag className="w-3 h-3 mr-1" /> {product.marca}
-                        </span>
-                      )}
                     </div>
-
-                    {product.proveedor?.nombre && (
-                      <div className="mt-1 flex items-center">
-                        <Building className="w-3 h-3 mr-1" />
-                        {product.proveedor.nombre}
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
@@ -2190,833 +2244,746 @@ const handleImageUploadBase64 = async (productId: string) => {
                   <p className="text-xs font-medium text-[#29696B] mb-1">Productos en el combo:</p>
                   <div className="text-xs text-[#7AA79C] max-h-24 overflow-y-auto pr-1">
                     {product.itemsCombo.map((item, index) => {
-                      const productoNombre = item.productoId && typeof item.productoId === 'object'
-                        ? item.productoId.nombre
-                        : 'Producto';
+                     const productoNombre = item.productoId && typeof item.productoId === 'object'
+                     ? item.productoId.nombre
+                     : 'Producto';
 
-                      return (
-                        <div key={index} className="flex justify-between py-1 border-b border-[#91BEAD]/10 last:border-0">
-                          <span>{productoNombre}</span>
-                          <span>x{item.cantidad}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-            <CardFooter className="p-2 flex justify-end gap-2 bg-[#DFEFE6]/20 border-t border-[#91BEAD]/10">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleEdit(product)}
-                className="text-[#29696B] hover:bg-[#DFEFE6]"
-              >
-                <Edit className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => confirmDelete(product._id)}
-                className="text-red-600 hover:text-red-800 hover:bg-red-50"
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            </CardFooter>
-          </Card>
-        ))}
+                   return (
+                     <div key={index} className="flex justify-between py-1 border-b border-[#91BEAD]/10 last:border-0">
+                       <span>{productoNombre}</span>
+                       <span>x{item.cantidad}</span>
+                     </div>
+                   );
+                 })}
+               </div>
+             </div>
+           )}
+         </CardContent>
+         <CardFooter className="p-2 flex justify-end gap-2 bg-[#DFEFE6]/20 border-t border-[#91BEAD]/10">
+           {/* Botón específico para gestionar imagen (solo aparece si hay imagen) */}
+           <ImageActionButton
+             product={product}
+             onEdit={() => handleEditImage(product)}
+             onDelete={() => confirmDeleteImage(product._id)}
+             size="md"
+           />
+           
+           <Button
+             variant="ghost"
+             size="sm"
+             onClick={() => handleEdit(product)}
+             className="text-[#29696B] hover:bg-[#DFEFE6]"
+           >
+             <Edit className="w-4 h-4" />
+           </Button>
+           
+           <Button
+             variant="ghost"
+             size="sm"
+             onClick={() => confirmDelete(product._id)}
+             className="text-red-600 hover:text-red-800 hover:bg-red-50"
+           >
+             <Trash2 className="w-4 h-4" />
+           </Button>
+         </CardFooter>
+       </Card>
+     ))}
 
-        {/* Mensaje que muestra la página actual y el total */}
-        {!loading && totalCount > itemsPerPage && (
-          <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm">
-            <span className="text-[#29696B] font-medium">
-              Página {currentPage} de {totalPages}
-            </span>
-          </div>
-        )}
+     {/* Mensaje que muestra la página actual y el total */}
+     {!loading && totalCount > itemsPerPage && (
+       <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm">
+         <span className="text-[#29696B] font-medium">
+           Página {currentPage} de {totalPages}
+         </span>
+       </div>
+     )}
 
-        {/* Paginación duplicada al final de la lista para mayor visibilidad */}
-        {!loading && totalCount > itemsPerPage && (
-          <div className="py-4 border-t border-[#91BEAD]/20">
-            <EnhancedPagination
-              totalItems={totalCount}
-              itemsPerPage={itemsPerPage}
-              currentPage={currentPage}
-              onPageChange={handlePageChange}
-            />
-          </div>
-        )}
-      </div>
+     {/* Paginación duplicada al final de la lista para mayor visibilidad */}
+     {!loading && totalCount > itemsPerPage && (
+       <div className="py-4 border-t border-[#91BEAD]/20">
+         <EnhancedPagination
+           totalItems={totalCount}
+           itemsPerPage={itemsPerPage}
+           currentPage={currentPage}
+           onPageChange={handlePageChange}
+         />
+       </div>
+     )}
+   </div>
 
-      {/* Modal de Producto */}
-      <Dialog open={showModal} onOpenChange={setShowModal}>
-        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-auto bg-white border border-[#91BEAD]/20">
-          <DialogHeader className="sticky top-0 bg-white pt-4 pb-2 z-10">
-            <DialogTitle className="text-[#29696B] flex items-center">
-              {editingProduct ? 'Editar Producto' : (isCombo ? 'Nuevo Combo' : 'Nuevo Producto')}
-              {isCombo && (
-                <Badge className="ml-2 bg-[#00888A]/10 border-[#00888A] text-[#00888A]">
-                  Combo
-                </Badge>
-              )}
-            </DialogTitle>
-            <DialogDescription>
-              {isCombo ? 'Los combos son agrupaciones de productos individuales' : 'Complete la información del producto'}
-            </DialogDescription>
-          </DialogHeader>
+   {/* Modal de Producto */}
+   <Dialog open={showModal} onOpenChange={setShowModal}>
+     <DialogContent className="sm:max-w-md max-h-[90vh] overflow-auto bg-white border border-[#91BEAD]/20">
+       <DialogHeader className="sticky top-0 bg-white pt-4 pb-2 z-10">
+         <DialogTitle className="text-[#29696B] flex items-center">
+           {editingProduct ? 'Editar Producto' : (isCombo ? 'Nuevo Combo' : 'Nuevo Producto')}
+           {isCombo && (
+             <Badge className="ml-2 bg-[#00888A]/10 border-[#00888A] text-[#00888A]">
+               Combo
+             </Badge>
+           )}
+         </DialogTitle>
+         <DialogDescription>
+           {isCombo ? 'Los combos son agrupaciones de productos individuales' : 'Complete la información del producto'}
+         </DialogDescription>
+       </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="space-y-4 py-2">
-            <div className="grid gap-3">
-              {/* Checkbox para marcar como combo */}
-              {!editingProduct && (
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="is-combo"
-                    checked={isCombo}
-                    onCheckedChange={(checked) => {
-                      setIsCombo(!!checked);
-                      if (!checked) {
-                        setSelectedComboItems([]);
-                      }
-                    }}
-                  />
-                  <label
-                    htmlFor="is-combo"
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-[#29696B]"
-                  >
-                    Este producto es un combo
-                  </label>
-                </div>
-              )}
+       <form onSubmit={handleSubmit} className="space-y-4 py-2">
+         <div className="grid gap-3">
+           {/* Checkbox para marcar como combo */}
+           {!editingProduct && (
+             <div className="flex items-center space-x-2">
+               <Checkbox
+                 id="is-combo"
+                 checked={isCombo}
+                 onCheckedChange={(checked) => {
+                   setIsCombo(!!checked);
+                   if (!checked) {
+                     setSelectedComboItems([]);
+                   }
+                 }}
+               />
+               <label
+                 htmlFor="is-combo"
+                 className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-[#29696B]"
+               >
+                 Este producto es un combo
+               </label>
+             </div>
+           )}
 
-              <div>
-                <Label htmlFor="nombre" className="text-sm text-[#29696B]">Nombre</Label>
-                <Input
-                  id="nombre"
-                  value={formData.nombre}
-                  onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                  required
-                  className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
-                />
-              </div>
+           <div>
+             <Label htmlFor="nombre" className="text-sm text-[#29696B]">Nombre</Label>
+             <Input
+               id="nombre"
+               value={formData.nombre}
+               onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+               required
+               className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
+             />
+           </div>
 
-              <div>
-                <Label htmlFor="descripcion" className="text-sm text-[#29696B]">Descripción</Label>
-                <Textarea
-                  id="descripcion"
-                  value={formData.descripcion}
-                  onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-                  rows={2}
-                  className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
-                />
-              </div>
+           <div>
+             <Label htmlFor="descripcion" className="text-sm text-[#29696B]">Descripción</Label>
+             <Textarea
+               id="descripcion"
+               value={formData.descripcion}
+               onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
+               rows={2}
+               className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
+             />
+           </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="categoria" className="text-sm text-[#29696B]">Categoría</Label>
-                  <Select
-                    value={formData.categoria || 'not-selected'}
-                    onValueChange={(value) => {
-                      handleCategoryChange(value);
-                    }}
-                  >
-                    <SelectTrigger id="categoria" className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
-                      <SelectValue placeholder="Seleccionar categoría" />
-                    </SelectTrigger>
-                    <SelectContent className="border-[#91BEAD]">
-                      <SelectItem value="not-selected">Seleccionar categoría</SelectItem>
-                      <SelectItem value="limpieza">Limpieza</SelectItem>
-                      <SelectItem value="mantenimiento">Mantenimiento</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+           <div className="grid grid-cols-2 gap-3">
+             <div>
+               <Label htmlFor="categoria" className="text-sm text-[#29696B]">Categoría</Label>
+               <Select
+                 value={formData.categoria || 'not-selected'}
+                 onValueChange={(value) => {
+                   handleCategoryChange(value);
+                 }}
+               >
+                 <SelectTrigger id="categoria" className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
+                   <SelectValue placeholder="Seleccionar categoría" />
+                 </SelectTrigger>
+                 <SelectContent className="border-[#91BEAD]">
+                   <SelectItem value="not-selected">Seleccionar categoría</SelectItem>
+                   <SelectItem value="limpieza">Limpieza</SelectItem>
+                   <SelectItem value="mantenimiento">Mantenimiento</SelectItem>
+                 </SelectContent>
+               </Select>
+             </div>
 
-                <div>
-                  <Label htmlFor="subCategoria" className="text-sm text-[#29696B]">Subcategoría</Label>
-                  <Select
-                    value={formData.subCategoria || 'not-selected'}
-                    onValueChange={(value) => {
-                      if (value !== 'not-selected') {
-                        setFormData(prevState => ({
-                          ...prevState,
-                          subCategoria: value
-                        }));
-                      }
-                    }}
-                    disabled={!formData.categoria}
-                  >
-                    <SelectTrigger id="subCategoria" className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
-                      <SelectValue placeholder="Seleccionar subcategoría" />
-                    </SelectTrigger>
-                    <SelectContent className="border-[#91BEAD]">
-                      <SelectItem value="not-selected">Seleccionar subcategoría</SelectItem>
-                      {formData.categoria && subCategorias[formData.categoria]?.map((sub) => (
-                        <SelectItem key={sub.value} value={sub.value}>
-                          {sub.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+             <div>
+               <Label htmlFor="subCategoria" className="text-sm text-[#29696B]">Subcategoría</Label>
+               <Select
+                 value={formData.subCategoria || 'not-selected'}
+                 onValueChange={(value) => {
+                   if (value !== 'not-selected') {
+                     setFormData(prevState => ({
+                       ...prevState,
+                       subCategoria: value
+                     }));
+                   }
+                 }}
+                 disabled={!formData.categoria}
+               >
+                 <SelectTrigger id="subCategoria" className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
+                   <SelectValue placeholder="Seleccionar subcategoría" />
+                 </SelectTrigger>
+                 <SelectContent className="border-[#91BEAD]">
+                   <SelectItem value="not-selected">Seleccionar subcategoría</SelectItem>
+                   {formData.categoria && subCategorias[formData.categoria]?.map((sub) => (
+                     <SelectItem key={sub.value} value={sub.value}>
+                       {sub.label}
+                     </SelectItem>
+                   ))}
+                 </SelectContent>
+               </Select>
+             </div>
+           </div>
 
-              {/* Nuevos campos */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="marca" className="text-sm text-[#29696B]">Marca</Label>
-                  <Input
-                    id="marca"
-                    value={formData.marca}
-                    onChange={(e) => setFormData({ ...formData, marca: e.target.value })}
-                    className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="estado" className="text-sm text-[#29696B]">Estado</Label>
-                  <Select
-                    value={formData.estado}
-                    onValueChange={(value) => {
-                      setFormData(prevState => ({
-                        ...prevState,
-                        estado: value
-                      }));
-                    }}
-                  >
-                    <SelectTrigger id="estado" className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
-                      <SelectValue placeholder="Seleccionar estado" />
-                    </SelectTrigger>
-                    <SelectContent className="border-[#91BEAD]">
-                      {estadosProducto.map((estado) => (
-                        <SelectItem key={estado.value} value={estado.value}>
-                          {estado.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+           <div className="grid grid-cols-2 gap-3">
+             <div>
+               <Label htmlFor="precio" className="text-sm text-[#29696B]">Precio</Label>
+               <Input
+                 id="precio"
+                 type="number"
+                 min="0"
+                 step="0.01"
+                 value={formData.precio}
+                 onChange={(e) => setFormData({ ...formData, precio: e.target.value })}
+                 required
+                 className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
+                 maxLength={10}
+                 readOnly={isCombo} /* Campo de precio de solo lectura para combos */
+                 disabled={isCombo} /* Deshabilitado visualmente para combos */
+               />
+               {isCombo && (
+                 <p className="text-xs text-[#7AA79C] mt-1">
+                   Precio calculado automáticamente de los productos seleccionados
+                 </p>
+               )}
+             </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="precio" className="text-sm text-[#29696B]">Precio</Label>
-                  <Input
-                    id="precio"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formData.precio}
-                    onChange={(e) => setFormData({ ...formData, precio: e.target.value })}
-                    required
-                    className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
-                    maxLength={10}
-                    readOnly={isCombo} /* Campo de precio de solo lectura para combos */
-                    disabled={isCombo} /* Deshabilitado visualmente para combos */
-                  />
-                  {isCombo && (
-                    <p className="text-xs text-[#7AA79C] mt-1">
-                      Precio calculado automáticamente de los productos seleccionados
-                    </p>
-                  )}
-                </div>
+             <div>
+             <Label htmlFor="stock" className="text-sm text-[#29696B]">
+                 {editingProduct
+                   ? (isAddingStock ? "Agregar al stock" : "Stock")
+                   : "Stock"}
+               </Label>
+               {editingProduct && (
+                 <div className="mb-2 px-1">
+                   <div className="flex items-center gap-2 bg-[#DFEFE6]/30 p-2 rounded-md border border-[#91BEAD]/30">
+                     <Checkbox
+                       id="stock-checkbox"
+                       checked={isAddingStock}
+                       onCheckedChange={(checked) => setIsAddingStock(!!checked)}
+                     />
+                     <label
+                       htmlFor="stock-checkbox"
+                       className="text-sm text-[#29696B] cursor-pointer font-medium"
+                     >
+                       Añadir al stock existente
+                     </label>
+                   </div>
+                 </div>
+               )}
 
-                <div>
-                  <Label htmlFor="stock" className="text-sm text-[#29696B]">
-                    {editingProduct
-                      ? (isAddingStock ? "Agregar al stock" : "Stock")
-                      : "Stock"}
-                  </Label>
-                  {editingProduct && (
-                    <div className="mb-2 px-1">
-                      <div className="flex items-center gap-2 bg-[#DFEFE6]/30 p-2 rounded-md border border-[#91BEAD]/30">
-                        <Checkbox
-                          id="stock-checkbox"
-                          checked={isAddingStock}
-                          onCheckedChange={(checked) => setIsAddingStock(!!checked)}
-                        />
-                        <label
-                          htmlFor="stock-checkbox"
-                          className="text-sm text-[#29696B] cursor-pointer font-medium"
-                        >
-                          Añadir al stock existente
-                        </label>
-                      </div>
-                    </div>
-                  )}
+               {/* Input directo como el de precio */}
+               <Input
+                 id="stock"
+                 type="number"
+                 min="0"
+                 value={formData.stock}
+                 onChange={(e) => {
+                   // Usar la misma estructura exacta que el campo de precio
+                   setFormData({ ...formData, stock: e.target.value });
+                 }}
+                 required
+                 className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
+               />
 
-                  {/* Input directo como el de precio */}
-                  <Input
-                    id="stock"
-                    type="number"
-                    min="0"
-                    value={formData.stock}
-                    onChange={(e) => {
-                      // Usar la misma estructura exacta que el campo de precio
-                      setFormData({ ...formData, stock: e.target.value });
-                    }}
-                    required
-                    className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
-                  />
+               {/* Información adicional */}
+               {isAddingStock && editingProduct && (
+                 <div className="mt-1 text-xs text-[#29696B] bg-[#DFEFE6]/20 p-2 rounded border border-[#91BEAD]/30">
+                   <span className="font-medium">Stock actual:</span> {editingProduct.stock} unidades
+                   <span className="mx-1">→</span>
+                   <span className="font-medium">Stock final:</span> {editingProduct.stock + parseInt(formData.stock || '0')} unidades
+                 </div>
+               )}
 
-                  {/* Información adicional */}
-                  {isAddingStock && editingProduct && (
-                    <div className="mt-1 text-xs text-[#29696B] bg-[#DFEFE6]/20 p-2 rounded border border-[#91BEAD]/30">
-                      <span className="font-medium">Stock actual:</span> {editingProduct.stock} unidades
-                      <span className="mx-1">→</span>
-                      <span className="font-medium">Stock final:</span> {editingProduct.stock + parseInt(formData.stock || '0')} unidades
-                    </div>
-                  )}
+               <p className="text-xs text-[#7AA79C]">
+                 Máximo: {(999999999).toLocaleString()}
+               </p>
+             </div>
+           </div>
 
-                  <p className="text-xs text-[#7AA79C]">
-                    Máximo: {(999999999).toLocaleString()}
-                  </p>
-                </div>
-              </div>
+           {/* Campo de stock mínimo */}
+           <div>
+             <Label htmlFor="stockMinimo" className="text-sm text-[#29696B]">Stock Mínimo</Label>
+             <Input
+               id="stockMinimo"
+               type="number"
+               min="0"
+               value={formData.stockMinimo}
+               onChange={(e) => setFormData({ ...formData, stockMinimo: e.target.value })}
+               className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
+             />
+             <p className="text-xs text-[#7AA79C] mt-1">
+               El sistema alertará cuando el stock sea igual o menor a este valor
+             </p>
+           </div>
 
-              {/* Campo de stock mínimo */}
-              <div>
-                <Label htmlFor="stockMinimo" className="text-sm text-[#29696B]">Stock Mínimo</Label>
-                <Input
-                  id="stockMinimo"
-                  type="number"
-                  min="0"
-                  value={formData.stockMinimo}
-                  onChange={(e) => setFormData({ ...formData, stockMinimo: e.target.value })}
-                  className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
-                />
-                <p className="text-xs text-[#7AA79C] mt-1">
-                  El sistema alertará cuando el stock sea igual o menor a este valor
-                </p>
-              </div>
+           {/* Sección de selección de productos para el combo */}
+           {isCombo && (
+             <div className="mt-4 border rounded-md p-3 border-[#91BEAD]/30 bg-[#DFEFE6]/10">
+               <div className="flex items-center justify-between mb-2">
+                 <Label className="text-sm font-medium text-[#29696B]">Productos en el combo</Label>
+                 <Button
+                   type="button"
+                   variant="outline"
+                   size="sm"
+                   onClick={openComboSelectionModal}
+                   className="text-xs h-8 border-[#00888A] text-[#00888A] hover:bg-[#00888A]/10"
+                 >
+                   <ShoppingBag className="w-3 h-3 mr-1" />
+                   Seleccionar productos
+                 </Button>
+               </div>
 
-              {/* Información del proveedor */}
-              <div className="border rounded-md p-3 border-[#91BEAD]/30 bg-[#DFEFE6]/10">
-                <Label className="text-sm font-medium text-[#29696B] block mb-2">Información del Proveedor</Label>
+               {selectedComboItems.length === 0 ? (
+                 <div className="text-center py-4 text-sm text-[#7AA79C]">
+                   <ShoppingBag className="w-8 h-8 mx-auto mb-2 text-[#7AA79C]/50" />
+                   <p>No hay productos seleccionados</p>
+                   <p className="text-xs">Haga clic en "Seleccionar productos" para agregar elementos al combo</p>
+                 </div>
+               ) : (
+                 <div className="space-y-2">
+                   <div className="text-xs text-[#7AA79C] grid grid-cols-5 py-1 font-medium">
+                     <div className="col-span-2 pl-2">Producto</div>
+                     <div className="text-center">Precio</div>
+                     <div className="text-center">Cant.</div>
+                     <div className="text-right pr-2">Subtotal</div>
+                   </div>
+                   <div className="max-h-40 overflow-y-auto pr-1">
+                     {selectedComboItems.map((item, index) => (
+                       <div key={index} className="text-sm text-[#29696B] grid grid-cols-5 py-2 border-b border-[#91BEAD]/10 last:border-0 items-center">
+                         <div className="col-span-2 truncate pl-2">{item.nombre}</div>
+                         <div className="text-center">${(item.precio || 0).toFixed(2)}</div>
+                         <div className="text-center">{item.cantidad}</div>
+                         <div className="text-right font-medium pr-2">${((item.precio || 0) * item.cantidad).toFixed(2)}</div>
+                       </div>
+                     ))}
+                   </div>
+                   <div className="pt-2 flex justify-between text-sm font-medium text-[#29696B]">
+                     <span>Precio total de los productos:</span>
+                     <span>${calculateComboTotal(selectedComboItems).toFixed(2)}</span>
+                   </div>
 
-                <div className="space-y-3">
-                  <div>
-                    <Label htmlFor="proveedorNombre" className="text-xs text-[#7AA79C]">Nombre del Proveedor</Label>
-                    <Input
-                      id="proveedorNombre"
-                      value={formData.proveedor.nombre}
-                      onChange={(e) => setFormData({
-                        ...formData,
-                        proveedor: { ...formData.proveedor, nombre: e.target.value }
-                      })}
-                      className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
-                    />
-                  </div>
+                   {/* Alertas de stock para combos */}
+                   {stockWarnings.length > 0 && (
+                     <div className="mt-2 bg-yellow-50 border border-yellow-300 rounded-md p-2">
+                       <p className="text-xs font-medium text-yellow-800 mb-1">
+                         Advertencias de disponibilidad:
+                       </p>
+                       <ul className="text-xs text-yellow-700 list-disc pl-4 space-y-1">
+                         {stockWarnings.map((warning, index) => (
+                           <li key={index}>{warning}</li>
+                         ))}
+                       </ul>
+                     </div>
+                   )}
+                 </div>
+               )}
+             </div>
+           )}
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label htmlFor="proveedorContacto" className="text-xs text-[#7AA79C]">Persona de Contacto</Label>
-                      <Input
-                        id="proveedorContacto"
-                        value={formData.proveedor.contacto}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          proveedor: { ...formData.proveedor, contacto: e.target.value }
-                        })}
-                        className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
-                      />
-                    </div>
+           {/* Campo de imagen */}
+           <div data-image-section>
+             <Label className="text-sm text-[#29696B] block mb-2">Imagen del Producto</Label>
 
-                    <div>
-                      <Label htmlFor="proveedorTelefono" className="text-xs text-[#7AA79C]">Teléfono</Label>
-                      <Input
-                        id="proveedorTelefono"
-                        value={formData.proveedor.telefono}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          proveedor: { ...formData.proveedor, telefono: e.target.value }
-                        })}
-                        className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
-                      />
-                    </div>
-                  </div>
+             {/* Componente mejorado de subida de imágenes */}
+             {editingProduct ? (
+               <div className="mt-1 flex flex-col space-y-2">
+                 {formData.imagenPreview ? (
+                   <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
+                     {typeof formData.imagenPreview === 'string' && (
+                       <img
+                         src={formData.imagenPreview}
+                         alt="Vista previa"
+                         className="w-full h-full object-contain"
+                         onError={(e) => {
+                           console.log("Error al cargar imagen de vista previa", e);
+                           const target = e.target as HTMLImageElement;
+                           target.src = "/lyme.png";
+                           target.className = "w-full h-full object-contain p-4";
+                         }}
+                       />
+                     )}
 
-                  <div>
-                    <Label htmlFor="proveedorEmail" className="text-xs text-[#7AA79C]">Email</Label>
-                    <Input
-                      id="proveedorEmail"
-                      type="email"
-                      value={formData.proveedor.email}
-                      onChange={(e) => setFormData({
-                        ...formData,
-                        proveedor: { ...formData.proveedor, email: e.target.value }
-                      })}
-                      className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
-                    />
-                  </div>
-                </div>
-              </div>
+                     <Button
+                       type="button"
+                       variant="destructive"
+                       size="sm"
+                       onClick={() => confirmDeleteImage(editingProduct._id)}
+                       className="absolute top-2 right-2 h-8 w-8 p-0 bg-red-500 hover:bg-red-600"
+                     >
+                       <X className="h-4 w-4" />
+                     </Button>
+                   </div>
+                 ) : (
+                   <div className="flex flex-col items-center justify-center w-full">
+                     <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#91BEAD]/30 border-dashed rounded-md cursor-pointer bg-[#DFEFE6]/20 hover:bg-[#DFEFE6]/40 transition-colors">
+                       <div className="flex flex-col items-center justify-center pt-3 pb-4">
+                         <ImageIcon className="w-8 h-8 text-[#7AA79C] mb-1" />
+                         <p className="text-xs text-[#7AA79C]">
+                           Haz clic para subir una imagen
+                         </p>
+                         <p className="text-xs text-[#7AA79C]">
+                           Máximo 5MB
+                         </p>
+                       </div>
+                       <input
+                         ref={fileInputRef}
+                         type="file"
+                         accept="image/*"
+                         className="hidden"
+                         onChange={handleImageChange}
+                       />
+                     </label>
+                   </div>
+                 )}
+               </div>
+             ) : (
+               <div className="flex items-center justify-center w-full">
+                 {formData.imagenPreview ? (
+                   <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
+                     <img
+                       src={formData.imagenPreview as string}
+                       alt="Vista previa"
+                       className="w-full h-full object-contain"
+                       onError={(e) => {
+                         console.log("Error al cargar imagen de vista previa (nuevo)", e);
+                         const target = e.target as HTMLImageElement;
+                         target.src = "/lyme.png";
+                         target.className = "w-full h-full object-contain p-4";
+                       }}
+                     />
+                     <Button
+                       type="button"
+                       variant="destructive"
+                       size="sm"
+                       onClick={handleRemoveImage}
+                       className="absolute top-2 right-2 h-8 w-8 p-0 bg-red-500 hover:bg-red-600"
+                     >
+                       <X className="h-4 w-4" />
+                     </Button>
+                   </div>
+                 ) : (
+                   <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#91BEAD]/30 border-dashed rounded-md cursor-pointer bg-[#DFEFE6]/20 hover:bg-[#DFEFE6]/40 transition-colors">
+                     <div className="flex flex-col items-center justify-center pt-3 pb-4">
+                       <ImageIcon className="w-8 h-8 text-[#7AA79C] mb-1" />
+                       <p className="text-xs text-[#7AA79C]">
+                         Haz clic para subir una imagen
+                       </p>
+                       <p className="text-xs text-[#7AA79C]">
+                         Máximo 5MB
+                       </p>
+                     </div>
+                     <input
+                       ref={fileInputRef}
+                       type="file"
+                       accept="image/*"
+                       className="hidden"
+                       onChange={handleImageChange}
+                     />
+                   </label>
+                 )}
+               </div>
+             )}
+           </div>
+         </div>
+         <DialogFooter className="sticky bottom-0 bg-white pt-2 pb-4 z-10 gap-2 mt-4">
+           <Button
+             type="button"
+             variant="outline"
+             onClick={() => {
+               setShowModal(false);
+               resetForm();
+             }}
+             className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30">
+             Cancelar
+           </Button>
+           <Button
+             type="submit"
+             className={`${isCombo ? 'bg-[#00888A] hover:bg-[#00888A]/90' : 'bg-[#29696B] hover:bg-[#29696B]/90'} text-white`}
+             disabled={imageLoading || (isCombo && selectedComboItems.length === 0) || !formData.categoria || !formData.subCategoria || hasStockIssues}
+           >
+             {imageLoading ? (
+               <>
+                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                 Procesando imagen...
+               </>
+             ) : (
+               editingProduct ? 'Guardar Cambios' : (isCombo ? 'Crear Combo' : 'Crear Producto')
+             )}
+           </Button>
+         </DialogFooter>
+       </form>
+     </DialogContent>
+   </Dialog>
 
-              {/* Sección de selección de productos para el combo */}
-              {isCombo && (
-                <div className="mt-4 border rounded-md p-3 border-[#91BEAD]/30 bg-[#DFEFE6]/10">
-                  <div className="flex items-center justify-between mb-2">
-                    <Label className="text-sm font-medium text-[#29696B]">Productos en el combo</Label>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={openComboSelectionModal}
-                      className="text-xs h-8 border-[#00888A] text-[#00888A] hover:bg-[#00888A]/10"
-                    >
-                      <ShoppingBag className="w-3 h-3 mr-1" />
-                      Seleccionar productos
-                    </Button>
-                  </div>
+   {/* Modal de selección de productos para el combo - Mejorado para responsividad */}
+   <Dialog open={showComboSelectionModal} onOpenChange={setShowComboSelectionModal}>
+     <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-auto">
+       <DialogHeader>
+         <DialogTitle className="text-[#29696B]">Seleccionar productos para el combo</DialogTitle>
+         <DialogDescription>
+           Agregue los productos que formarán parte del combo.
+         </DialogDescription>
+       </DialogHeader>
 
-                  {selectedComboItems.length === 0 ? (
-                    <div className="text-center py-4 text-sm text-[#7AA79C]">
-                      <ShoppingBag className="w-8 h-8 mx-auto mb-2 text-[#7AA79C]/50" />
-                      <p>No hay productos seleccionados</p>
-                      <p className="text-xs">Haga clic en "Seleccionar productos" para agregar elementos al combo</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="text-xs text-[#7AA79C] grid grid-cols-5 py-1 font-medium">
-                        <div className="col-span-2 pl-2">Producto</div>
-                        <div className="text-center">Precio</div>
-                        <div className="text-center">Cant.</div>
-                        <div className="text-right pr-2">Subtotal</div>
-                      </div>
-                      <div className="max-h-40 overflow-y-auto pr-1">
-                        {selectedComboItems.map((item, index) => (
-                          <div key={index} className="text-sm text-[#29696B] grid grid-cols-5 py-2 border-b border-[#91BEAD]/10 last:border-0 items-center">
-                            <div className="col-span-2 truncate pl-2">{item.nombre}</div>
-                            <div className="text-center">${(item.precio || 0).toFixed(2)}</div>
-                            <div className="text-center">{item.cantidad}</div>
-                            <div className="text-right font-medium pr-2">${((item.precio || 0) * item.cantidad).toFixed(2)}</div>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="pt-2 flex justify-between text-sm font-medium text-[#29696B]">
-                        <span>Precio total de los productos:</span>
-                        <span>${calculateComboTotal(selectedComboItems).toFixed(2)}</span>
-                      </div>
+       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+         {/* Panel izquierdo: Lista de productos disponibles */}
+         <div className="space-y-4">
+           <div className="relative">
+             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
+             <Input
+               type="text"
+               placeholder="Buscar productos..."
+               value={comboSearchTerm}
+               onChange={(e) => setComboSearchTerm(e.target.value)}
+               className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
+             />
+           </div>
 
-                      {/* Alertas de stock para combos */}
-                      {stockWarnings.length > 0 && (
-                        <div className="mt-2 bg-yellow-50 border border-yellow-300 rounded-md p-2">
-                          <p className="text-xs font-medium text-yellow-800 mb-1">
-                            Advertencias de disponibilidad:
-                          </p>
-                          <ul className="text-xs text-yellow-700 list-disc pl-4 space-y-1">
-                            {stockWarnings.map((warning, index) => (
-                              <li key={index}>{warning}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
+           <div className="border rounded-md border-[#91BEAD]/30">
+             <div className="bg-[#DFEFE6]/30 p-3 text-[#29696B] font-medium text-sm">
+               Productos disponibles
+             </div>
+             <div className="max-h-[300px] overflow-y-auto">
+               <div className="divide-y divide-[#91BEAD]/20">
+                 {comboProducts.length === 0 ? (
+                   <div className="p-4 text-center text-[#7AA79C]">
+                     No hay productos disponibles
+                   </div>
+                 ) : (
+                   comboProducts.map((product) => (
+                     <div key={product._id} className="p-3 flex justify-between items-center hover:bg-[#DFEFE6]/20">
+                       <div className="flex-1 min-w-0">
+                         <div className="font-medium text-sm text-[#29696B] truncate">{product.nombre}</div>
+                         <div className="text-xs text-[#7AA79C] flex items-center gap-1 mt-1">
+                           <span>${product.precio.toFixed(2)}</span>
+                           <span>•</span>
+                           <span className={`inline-flex px-1 py-0.5 text-xs rounded-full ${product.stock <= 0
+                             ? 'bg-red-100 text-red-800'
+                             : product.alertaStockBajo
+                               ? 'bg-yellow-100 text-yellow-800'
+                               : 'bg-[#DFEFE6] text-[#29696B]'
+                             }`}>
+                             Stock: {product.stock}
+                           </span>
+                         </div>
+                       </div>
+                       <Button
+                         type="button"
+                         variant="outline"
+                         size="sm"
+                         onClick={() => handleAddComboItem(product)}
+                         className="h-8 text-[#29696B] border-[#91BEAD] hover:bg-[#DFEFE6]/30 whitespace-nowrap ml-2"
+                         disabled={product.stock <= 0}
+                       >
+                         <Plus className="w-3 h-3 mr-1" />
+                         Agregar
+                       </Button>
+                     </div>
+                   ))
+                 )}
+               </div>
+             </div>
+           </div>
+         </div>
 
-              {/* Campo de imagen */}
-              <div>
-                <Label className="text-sm text-[#29696B] block mb-2">Imagen del Producto</Label>
+         {/* Panel derecho: Productos seleccionados */}
+         <div className="space-y-4">
+           <div>
+             <h4 className="font-medium text-[#29696B] mb-2">Productos seleccionados</h4>
+             {tempSelectedItems.length === 0 ? (
+               <div className="text-center py-6 text-sm text-[#7AA79C] border rounded-md border-[#91BEAD]/30">
+                 No hay productos seleccionados
+               </div>
+             ) : (
+               <div className="border rounded-md border-[#91BEAD]/30">
+                 <div className="bg-[#DFEFE6]/30 p-3 text-[#29696B] font-medium text-sm">
+                   Lista de productos para el combo
+                 </div>
+                 <div className="max-h-[300px] overflow-y-auto">
+                   <div className="divide-y divide-[#91BEAD]/20">
+                     {tempSelectedItems.map((item, index) => (
+                       <div key={index} className="p-3">
+                         <div className="flex justify-between items-center mb-2">
+                           <div className="font-medium text-sm text-[#29696B] truncate max-w-[200px]">
+                             {item.nombre}
+                             {stockWarnings.some(w => w.includes(item.nombre)) && (
+                               <span className="ml-2">
+                                 <AlertTriangle className="inline-block w-4 h-4 text-yellow-500" />
+                               </span>
+                             )}
+                           </div>
+                           <Button
+                             type="button"
+                             variant="ghost"
+                             size="sm"
+                             onClick={() => handleUpdateComboItemQuantity(
+                               typeof item.productoId === 'string' ? item.productoId : item.productoId._id,
+                               0
+                             )}
+                             className="h-7 w-7 p-0 text-red-500 hover:bg-red-50"
+                           >
+                             <Trash2 className="w-4 h-4" />
+                           </Button>
+                         </div>
+                         <div className="flex justify-between items-center">
+                           <div className="text-xs text-[#7AA79C]">
+                             <span>${(item.precio || 0).toFixed(2)} x {item.cantidad}</span>
+                             <span className="ml-2 text-[#29696B] font-medium">= ${((item.precio || 0) * item.cantidad).toFixed(2)}</span>
+                           </div>
+                           <div className="flex items-center border rounded border-[#91BEAD]">
+                             <Button
+                               type="button"
+                               variant="ghost"
+                               size="sm"
+                               onClick={() => handleUpdateComboItemQuantity(
+                                 typeof item.productoId === 'string' ? item.productoId : item.productoId._id,
+                                 item.cantidad - 1
+                               )}
+                               className="h-7 w-7 p-0 text-[#29696B] hover:bg-[#DFEFE6]/30"
+                             >
+                               <Minus className="w-3 h-3" />
+                             </Button>
+                             <span className="w-8 text-center text-sm">{item.cantidad}</span>
+                             <Button
+                               type="button"
+                               variant="ghost"
+                               size="sm"
+                               onClick={() => handleUpdateComboItemQuantity(
+                                 typeof item.productoId === 'string' ? item.productoId : item.productoId._id,
+                                 item.cantidad + 1
+                               )}
+                               className="h-7 w-7 p-0 text-[#29696B] hover:bg-[#DFEFE6]/30"
+                             >
+                               <Plus className="w-3 h-3" />
+                             </Button>
+                           </div>
+                         </div>
+                       </div>
+                     ))}
+                   </div>
+                 </div>
+                 <div className="p-3 border-t border-[#91BEAD]/20 bg-[#DFEFE6]/20">
+                   <div className="flex justify-between items-center font-medium text-[#29696B]">
+                     <span>Total:</span>
+                     <span>${calculateComboTotal(tempSelectedItems).toFixed(2)}</span>
+                   </div>
 
-                {/* Componente mejorado de subida de imágenes */}
-                {editingProduct ? (
-                  <div className="mt-1 flex flex-col space-y-2">
-                    {formData.imagenPreview ? (
-                      <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
-                        {typeof formData.imagenPreview === 'string' && (
-                          <img
-                            src={formData.imagenPreview}
-                            alt="Vista previa"
-                            className="w-full h-full object-contain"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.src = "/lyme.png";
-                              target.className = "w-full h-full object-contain p-4";
-                            }}
-                          />
-                        )}
+                   {/* Alertas de stock para combos */}
+                   {stockWarnings.length > 0 && (
+                     <div className="mt-2 bg-yellow-50 border border-yellow-300 rounded-md p-2">
+                       <p className="text-xs font-medium text-yellow-800 mb-1">
+                         Advertencias de disponibilidad:
+                       </p>
+                       <ul className="text-xs text-yellow-700 list-disc pl-4 space-y-1">
+                         {stockWarnings.map((warning, index) => (
+                           <li key={index}>{warning}</li>
+                         ))}
+                       </ul>
+                     </div>
+                   )}
+                 </div>
+               </div>
+             )}
+           </div>
+         </div>
+       </div>
 
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => confirmDeleteImage(editingProduct._id)}
-                          className="absolute top-2 right-2 h-8 w-8 p-0 bg-red-500 hover:bg-red-600"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center w-full">
-                        <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#91BEAD]/30 border-dashed rounded-md cursor-pointer bg-[#DFEFE6]/20 hover:bg-[#DFEFE6]/40 transition-colors">
-                          <div className="flex flex-col items-center justify-center pt-3 pb-4">
-                            <ImageIcon className="w-8 h-8 text-[#7AA79C] mb-1" />
-                            <p className="text-xs text-[#7AA79C]">
-                              Haz clic para subir una imagen
-                            </p>
-                            <p className="text-xs text-[#7AA79C]">
-                              Máximo 5MB
-                            </p>
-                          </div>
-                          <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={handleImageChange}
-                          />
-                        </label>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-center w-full">
-                    {formData.imagenPreview ? (
-                      <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
-                        <img
-                          src={formData.imagenPreview as string}
-                          alt="Vista previa"
-                          className="w-full h-full object-contain"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.src = "/lyme.png";
-                            target.className = "w-full h-full object-contain p-4";
-                          }}
-                        />
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          onClick={handleRemoveImage}
-                          className="absolute top-2 right-2 h-8 w-8 p-0 bg-red-500 hover:bg-red-600"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#91BEAD]/30 border-dashed rounded-md cursor-pointer bg-[#DFEFE6]/20 hover:bg-[#DFEFE6]/40 transition-colors">
-                        <div className="flex flex-col items-center justify-center pt-3 pb-4">
-                          <ImageIcon className="w-8 h-8 text-[#7AA79C] mb-1" />
-                          <p className="text-xs text-[#7AA79C]">
-                            Haz clic para subir una imagen
-                          </p>
-                          <p className="text-xs text-[#7AA79C]">
-                            Máximo 5MB
-                          </p>
-                        </div>
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={handleImageChange}
-                        />
-                      </label>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-            <DialogFooter className="sticky bottom-0 bg-white pt-2 pb-4 z-10 gap-2 mt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setShowModal(false);
-                  resetForm();
-                }}
-                className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30">
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                className={`${isCombo ? 'bg-[#00888A] hover:bg-[#00888A]/90' : 'bg-[#29696B] hover:bg-[#29696B]/90'} text-white`}
-                disabled={imageLoading || (isCombo && selectedComboItems.length === 0) || !formData.categoria || !formData.subCategoria || hasStockIssues}
-              >
-                {imageLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Procesando imagen...
-                  </>
-                ) : (
-                  editingProduct ? 'Guardar Cambios' : (isCombo ? 'Crear Combo' : 'Crear Producto')
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+       <DialogFooter className="gap-2 mt-4">
+         <Button
+           type="button"
+           variant="outline"
+           onClick={() => setShowComboSelectionModal(false)}
+           className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
+         >
+           Cancelar
+         </Button>
+         <Button
+           type="button"
+           onClick={confirmComboSelection}
+           className="bg-[#00888A] hover:bg-[#00888A]/90 text-white"
+           disabled={tempSelectedItems.length === 0 || hasStockIssues}
+         >
+           Confirmar selección
+         </Button>
+       </DialogFooter>
+     </DialogContent>
+   </Dialog>
 
-      {/* Modal de selección de productos para el combo - Mejorado para responsividad */}
-      <Dialog open={showComboSelectionModal} onOpenChange={setShowComboSelectionModal}>
-        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-auto">
-          <DialogHeader>
-            <DialogTitle className="text-[#29696B]">Seleccionar productos para el combo</DialogTitle>
-            <DialogDescription>
-              Agregue los productos que formarán parte del combo.
-            </DialogDescription>
-          </DialogHeader>
+   {/* Diálogo de confirmación de eliminación */}
+   <ConfirmationDialog
+     open={deleteDialogOpen}
+     onOpenChange={setDeleteDialogOpen}
+     title="Eliminar producto"
+     description="¿Está seguro de que desea eliminar este producto? Esta acción no se puede deshacer."
+     confirmText="Eliminar"
+     cancelText="Cancelar"
+     onConfirm={() => productToDelete && handleDelete(productToDelete)}
+     variant="destructive"
+   />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Panel izquierdo: Lista de productos disponibles */}
-            <div className="space-y-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
-                <Input
-                  type="text"
-                  placeholder="Buscar productos..."
-                  value={comboSearchTerm}
-                  onChange={(e) => setComboSearchTerm(e.target.value)}
-                  className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
-                />
-              </div>
+   {/* Diálogo de confirmación de eliminación de imagen */}
+   <ConfirmationDialog
+     open={deleteImageDialogOpen}
+     onOpenChange={setDeleteImageDialogOpen}
+     title="Eliminar imagen"
+     description="¿Está seguro de que desea eliminar la imagen de este producto?"
+     confirmText="Eliminar"
+     cancelText="Cancelar"
+     onConfirm={() => productToDelete && handleDeleteProductImage(productToDelete)}
+     variant="destructive"
+   />
 
-              <div className="border rounded-md border-[#91BEAD]/30">
-                <div className="bg-[#DFEFE6]/30 p-3 text-[#29696B] font-medium text-sm">
-                  Productos disponibles
-                </div>
-                <div className="max-h-[300px] overflow-y-auto">
-                  <div className="divide-y divide-[#91BEAD]/20">
-                    {comboProducts.length === 0 ? (
-                      <div className="p-4 text-center text-[#7AA79C]">
-                        No hay productos disponibles
-                      </div>
-                    ) : (
-                      comboProducts.map((product) => (
-                        <div key={product._id} className="p-3 flex justify-between items-center hover:bg-[#DFEFE6]/20">
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-sm text-[#29696B] truncate">{product.nombre}</div>
-                            <div className="text-xs text-[#7AA79C] flex items-center gap-1 mt-1">
-                              <span>${product.precio.toFixed(2)}</span>
-                              <span>•</span>
-                              <span className={`inline-flex px-1 py-0.5 text-xs rounded-full ${product.stock <= 0
-                                ? 'bg-red-100 text-red-800'
-                                : product.alertaStockBajo
-                                  ? 'bg-yellow-100 text-yellow-800'
-                                  : 'bg-[#DFEFE6] text-[#29696B]'
-                                }`}>
-                                Stock: {product.stock}
-                              </span>
-                            </div>
-                          </div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleAddComboItem(product)}
-                            className="h-8 text-[#29696B] border-[#91BEAD] hover:bg-[#DFEFE6]/30 whitespace-nowrap ml-2"
-                            disabled={product.stock <= 0}
-                          >
-                            <Plus className="w-3 h-3 mr-1" />
-                            Agregar
-                          </Button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
+   {/* Botones flotantes para filtros en móviles */}
+   {!loading && (lowStockCount > 0 || noStockCount > 0) && !showLowStockOnly && !showNoStockOnly && windowWidth < 768 && (
+     <div className="fixed bottom-6 right-6 z-10 flex flex-col gap-2">
+       <TooltipProvider>
+         {lowStockCount > 0 && (
+           <Tooltip>
+             <TooltipTrigger asChild>
+               <Button
+                 onClick={toggleLowStockFilter}
+                 className="rounded-full h-14 w-14 shadow-lg bg-yellow-500 hover:bg-yellow-600 text-white"
+               >
+                 <div className="relative">
+                   <HelpCircle className="h-6 w-6" />
+                   <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                     {lowStockCount > 99 ? '99+' : lowStockCount}
+                   </span>
+                 </div>
+               </Button>
+             </TooltipTrigger>
+             <TooltipContent side="left">
+               <p>Hay {lowStockCount} productos con stock bajo</p>
+               <p className="text-xs">Toca para ver solo estos productos</p>
+             </TooltipContent>
+           </Tooltip>
+         )}
 
-            {/* Panel derecho: Productos seleccionados */}
-            <div className="space-y-4">
-              <div>
-                <h4 className="font-medium text-[#29696B] mb-2">Productos seleccionados</h4>
-                {tempSelectedItems.length === 0 ? (
-                  <div className="text-center py-6 text-sm text-[#7AA79C] border rounded-md border-[#91BEAD]/30">
-                    No hay productos seleccionados
-                  </div>
-                ) : (
-                  <div className="border rounded-md border-[#91BEAD]/30">
-                    <div className="bg-[#DFEFE6]/30 p-3 text-[#29696B] font-medium text-sm">
-                      Lista de productos para el combo
-                    </div>
-                    <div className="max-h-[300px] overflow-y-auto">
-                      <div className="divide-y divide-[#91BEAD]/20">
-                        {tempSelectedItems.map((item, index) => (
-                          <div key={index} className="p-3">
-                            <div className="flex justify-between items-center mb-2">
-                              <div className="font-medium text-sm text-[#29696B] truncate max-w-[200px]">
-                                {item.nombre}
-                                {stockWarnings.some(w => w.includes(item.nombre)) && (
-                                  <span className="ml-2">
-                                    <AlertTriangle className="inline-block w-4 h-4 text-yellow-500" />
-                                  </span>
-                                )}
-                              </div>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleUpdateComboItemQuantity(
-                                  typeof item.productoId === 'string' ? item.productoId : item.productoId._id,
-                                  0
-                                )}
-                                className="h-7 w-7 p-0 text-red-500 hover:bg-red-50"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <div className="text-xs text-[#7AA79C]">
-                                <span>${(item.precio || 0).toFixed(2)} x {item.cantidad}</span>
-                                <span className="ml-2 text-[#29696B] font-medium">= ${((item.precio || 0) * item.cantidad).toFixed(2)}</span>
-                              </div>
-                              <div className="flex items-center border rounded border-[#91BEAD]">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleUpdateComboItemQuantity(
-                                    typeof item.productoId === 'string' ? item.productoId : item.productoId._id,
-                                    item.cantidad - 1
-                                  )}
-                                  className="h-7 w-7 p-0 text-[#29696B] hover:bg-[#DFEFE6]/30"
-                                >
-                                  <Minus className="w-3 h-3" />
-                                </Button>
-                                <span className="w-8 text-center text-sm">{item.cantidad}</span>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleUpdateComboItemQuantity(
-                                    typeof item.productoId === 'string' ? item.productoId : item.productoId._id,
-                                    item.cantidad + 1
-                                  )}
-                                  className="h-7 w-7 p-0 text-[#29696B] hover:bg-[#DFEFE6]/30"
-                                >
-                                  <Plus className="w-3 h-3" />
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="p-3 border-t border-[#91BEAD]/20 bg-[#DFEFE6]/20">
-                      <div className="flex justify-between items-center font-medium text-[#29696B]">
-                        <span>Total:</span>
-                        <span>${calculateComboTotal(tempSelectedItems).toFixed(2)}</span>
-                      </div>
-
-                      {/* Alertas de stock para combos */}
-                      {stockWarnings.length > 0 && (
-                        <div className="mt-2 bg-yellow-50 border border-yellow-300 rounded-md p-2">
-                          <p className="text-xs font-medium text-yellow-800 mb-1">
-                            Advertencias de disponibilidad:
-                          </p>
-                          <ul className="text-xs text-yellow-700 list-disc pl-4 space-y-1">
-                            {stockWarnings.map((warning, index) => (
-                              <li key={index}>{warning}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2 mt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setShowComboSelectionModal(false)}
-              className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="button"
-              onClick={confirmComboSelection}
-              className="bg-[#00888A] hover:bg-[#00888A]/90 text-white"
-              disabled={tempSelectedItems.length === 0 || hasStockIssues}
-            >
-              Confirmar selección
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Diálogo de confirmación de eliminación */}
-      <ConfirmationDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
-        title="Eliminar producto"
-        description="¿Está seguro de que desea eliminar este producto? Esta acción no se puede deshacer."
-        confirmText="Eliminar"
-        cancelText="Cancelar"
-        onConfirm={() => productToDelete && handleDelete(productToDelete)}
-        variant="destructive"
-      />
-
-      {/* Diálogo de confirmación de eliminación de imagen */}
-      <ConfirmationDialog
-        open={deleteImageDialogOpen}
-        onOpenChange={setDeleteImageDialogOpen}
-        title="Eliminar imagen"
-        description="¿Está seguro de que desea eliminar la imagen de este producto?"
-        confirmText="Eliminar"
-        cancelText="Cancelar"
-        onConfirm={() => productToDelete && handleDeleteProductImage(productToDelete)}
-        variant="destructive"
-      />
-
-      {/* Botones flotantes para filtros en móviles */}
-      {!loading && (lowStockCount > 0 || noStockCount > 0) && !showLowStockOnly && !showNoStockOnly && windowWidth < 768 && (
-        <div className="fixed bottom-6 right-6 z-10 flex flex-col gap-2">
-          <TooltipProvider>
-            {lowStockCount > 0 && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    onClick={toggleLowStockFilter}
-                    className="rounded-full h-14 w-14 shadow-lg bg-yellow-500 hover:bg-yellow-600 text-white"
-                  >
-                    <div className="relative">
-                      <HelpCircle className="h-6 w-6" />
-                      <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                        {lowStockCount > 99 ? '99+' : lowStockCount}
-                      </span>
-                    </div>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="left">
-                  <p>Hay {lowStockCount} productos con stock bajo</p>
-                  <p className="text-xs">Toca para ver solo estos productos</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
-
-            {noStockCount > 0 && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    onClick={toggleNoStockFilter}
-                    className="rounded-full h-14 w-14 shadow-lg bg-red-500 hover:bg-red-600 text-white"
-                  >
-                    <div className="relative">
-                      <AlertCircle className="h-6 w-6" />
-                      <span className="absolute -top-2 -right-2 bg-white text-red-500 text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                        {noStockCount > 99 ? '99+' : noStockCount}
-                      </span>
-                    </div>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="left">
-                  <p>Hay {noStockCount} productos sin stock</p>
-                  <p className="text-xs">Toca para ver solo estos productos</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
-          </TooltipProvider>
-        </div>
-      )}
-    </div>
-  );
+         {noStockCount > 0 && (
+           <Tooltip>
+             <TooltipTrigger asChild>
+               <Button
+                 onClick={toggleNoStockFilter}
+                 className="rounded-full h-14 w-14 shadow-lg bg-red-500 hover:bg-red-600 text-white"
+               >
+                 <div className="relative">
+                   <AlertCircle className="h-6 w-6" />
+                   <span className="absolute -top-2 -right-2 bg-white text-red-500 text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                     {noStockCount > 99 ? '99+' : noStockCount}
+                   </span>
+                 </div>
+               </Button>
+             </TooltipTrigger>
+             <TooltipContent side="left">
+               <p>Hay {noStockCount} productos sin stock</p>
+               <p className="text-xs">Toca para ver solo estos productos</p>
+             </TooltipContent>
+           </Tooltip>
+         )}
+       </TooltipProvider>
+     </div>
+   )}
+ </div>
+);
 };
 
 export default InventorySection;
