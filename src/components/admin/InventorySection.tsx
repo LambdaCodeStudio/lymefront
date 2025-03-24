@@ -80,25 +80,35 @@ import ImageActionButton from './components/ImageActionButton';
 const API_URL = "http://localhost:3000/api/";
 
 /**
- * Versión mejorada de getProductImageUrl que se comporta como en ProductCard
- * Esto mantiene compatibilidad con el código existente mientras solucionamos el problema
+ * Obtiene la URL de la imagen para un producto
+ * @param productId - ID del producto o objeto producto completo
+ * @param addTimestamp - Si se debe agregar timestamp para evitar caché (default: true)
+ * @returns URL de la imagen o imagen por defecto si no existe
  */
-const getProductImageUrl = (product: Product | string, addTimestamp = true): string => {
-  // Si recibimos un string (ID), usamos la utilidad existente
+export const getProductImageUrl = (product: string | Product, addTimestamp = true): string => {
+  // Caso 1: Si es null, undefined o vacío, devolver logo
+  if (!product) return '/lyme.png';
+  
+  // Caso 2: Si product es un string (ID)
   if (typeof product === 'string') {
-    return utilsGetProductImageUrl(product, addTimestamp);
+    if (!product.trim()) return '/lyme.png';
+    const url = `/images/products/${product}.webp`;
+    return addTimestamp ? `${url}?t=${Date.now()}` : url;
   }
   
-  // Si es un objeto Product, implementamos la lógica mejorada
-  if (!product || !product._id) return '/lyme.png';
+  // Caso 3: Si product es un objeto Product
   
-  // Priorizar la URL directa si existe (como en ProductCard)
+  // Si no tiene ID o hasImage es explícitamente false, devolver logo
+  if (!product._id || product.hasImage === false) return '/lyme.png';
+  
+  // Prioridad 1: Si tiene imageUrl explícita, usarla
   if (product.imageUrl) {
     return addTimestamp ? `${product.imageUrl}?t=${Date.now()}` : product.imageUrl;
   }
   
-  // Usar la utilidad con el ID
-  return utilsGetProductImageUrl(product._id, addTimestamp);
+  // Prioridad 2: Construir URL basada en ID
+  const url = `/images/products/${product._id}.webp`;
+  return addTimestamp ? `${url}?t=${Date.now()}` : url;
 };
 
 /**
@@ -270,101 +280,104 @@ const InventorySection = () => {
   // Usar productos directamente de la respuesta de la API en lugar de filtrar localmente
   const currentProducts = products;
 
- /**
- * Función para abrir el modal de edición con enfoque en la imagen
- * @param product - Producto cuya imagen se va a editar
- */
-const handleEditImage = (product: Product) => {
-  try {
-    // Primero establecer el producto para edición
-    setEditingProduct(product);
-
-    // Detectar si es un combo
-    const isProductCombo = product.esCombo || false;
-    setIsCombo(isProductCombo);
-
-    // Si es combo, cargar los ítems del combo
-    if (isProductCombo && Array.isArray(product.itemsCombo)) {
-      const comboItems = product.itemsCombo.map(item => {
-        if (item.productoId && typeof item.productoId === 'object') {
-          return {
-            productoId: item.productoId._id,
-            nombre: item.productoId.nombre,
-            cantidad: item.cantidad,
-            precio: item.productoId.precio
-          };
-        } else {
-          const productId = typeof item.productoId === 'string' ? item.productoId : String(item.productoId);
-          const matchedProduct = products.find(p => p._id === productId);
-          return {
-            productoId: productId,
-            nombre: matchedProduct ? matchedProduct.nombre : 'Producto no disponible',
-            cantidad: item.cantidad,
-            precio: matchedProduct ? matchedProduct.precio : 0
-          };
-        }
-      });
-      setSelectedComboItems(comboItems);
-    } else {
-      setSelectedComboItems([]);
-    }
-
-    // Verificación robusta para detectar si el producto tiene imagen (usando todas las posibles señales)
-    const hasImage = product.hasImage === true || 
-                     !!product.imageUrl || 
-                     (product.imagenInfo && (!!product.imagenInfo.rutaArchivo || !!product.imagenInfo.tamano));
-
-    // Determinar la URL de la imagen para la vista previa de manera más robusta
-    let imagePreview = null;
-    if (hasImage) {
-      // Priorizar la URL explícita si existe
-      if (product.imageUrl) {
-        imagePreview = product.imageUrl;
+  const handleEdit = async (product: Product) => {
+    try {
+      console.log("Editando producto:", product);
+      
+      // Obtener la información más actualizada del producto
+      const freshProduct = await fetchProductById(product._id);
+      if (freshProduct) {
+        product = freshProduct;
+        console.log("Datos actualizados del producto:", product);
+      }
+      
+      setEditingProduct(product);
+  
+      // Detectar si es un combo
+      const isProductCombo = product.esCombo || false;
+      setIsCombo(isProductCombo);
+  
+      // Resetear el modo de adición de stock al editar
+      setIsAddingStock(false);
+  
+      // Si es combo, cargar los ítems del combo
+      if (isProductCombo && Array.isArray(product.itemsCombo)) {
+        const comboItems = product.itemsCombo.map(item => {
+          // Si el item está poblado
+          if (item.productoId && typeof item.productoId === 'object') {
+            return {
+              productoId: item.productoId._id,
+              nombre: item.productoId.nombre,
+              cantidad: item.cantidad,
+              precio: item.productoId.precio
+            };
+          }
+          // Si no está poblado, intentar recuperar la información
+          else {
+            const productId = typeof item.productoId === 'string' ? item.productoId : String(item.productoId);
+            const matchedProduct = products.find(p => p._id === productId);
+  
+            return {
+              productoId: productId,
+              nombre: matchedProduct ? matchedProduct.nombre : 'Producto no disponible',
+              cantidad: item.cantidad,
+              precio: matchedProduct ? matchedProduct.precio : 0
+            };
+          }
+        });
+  
+        setSelectedComboItems(comboItems);
       } else {
-        // Como alternativa, usar la función utilitaria con un timestamp para evitar caché
-        imagePreview = getProductImageUrl(product, true);
+        setSelectedComboItems([]);
       }
-      console.log(`Imagen detectada para producto ${product._id}: ${imagePreview}`);
-    } else {
-      console.log(`No se detectó imagen para producto ${product._id}`);
+  
+      // FIXED: Mejor detección de imágenes usando la utilidad hasProductImage
+      const hasImage = hasProductImage(product);
+      console.log("¿El producto tiene imagen?", hasImage);
+      console.log("URL de imagen:", product.imageUrl);
+      console.log("hasImage flag:", product.hasImage);
+      
+      let imagePreview = null;
+      
+      if (hasImage) {
+        // Si tiene imageUrl explícita, usarla
+        if (product.imageUrl) {
+          imagePreview = product.imageUrl;
+          console.log("Usando URL explícita:", imagePreview);
+        } else {
+          // Usar la función utilitaria para obtener la URL de la imagen con timestamp
+          imagePreview = getProductImageUrl(product, true);
+          console.log("Usando URL generada:", imagePreview);
+        }
+      }
+  
+      // Preparar datos del formulario para la edición
+      setFormData({
+        nombre: product.nombre || '',
+        descripcion: product.descripcion || '',
+        categoria: product.categoria || '',
+        subCategoria: product.subCategoria || '',
+        marca: '', // Campo vacío como solicitado
+        precio: product.precio ? product.precio.toString() : '',
+        stock: product.stock ? product.stock.toString() : '0',
+        stockMinimo: (product.stockMinimo || 5).toString(),
+        proveedor: {
+          nombre: '',
+          contacto: '',
+          telefono: '',
+          email: ''
+        }, // Campos vacíos
+        estado: 'activo', // Valor por defecto
+        imagen: null,
+        imagenPreview: imagePreview
+      });
+  
+      setShowModal(true);
+    } catch (error) {
+      console.error("Error al preparar edición:", error);
+      addNotification("Error al preparar edición del producto", "error");
     }
-
-    // Usar los mismos datos del producto pero enfocarse en la imagen
-    setFormData({
-      nombre: product.nombre || '',
-      descripcion: product.descripcion || '',
-      categoria: product.categoria || '',
-      subCategoria: product.subCategoria || '',
-      marca: '',
-      precio: product.precio ? product.precio.toString() : '',
-      stock: product.stock ? product.stock.toString() : '0',
-      stockMinimo: (product.stockMinimo || 5).toString(),
-      proveedor: {
-        nombre: '',
-        contacto: '',
-        telefono: '',
-        email: ''
-      },
-      estado: 'activo',
-      imagen: null,
-      imagenPreview: imagePreview
-    });
-
-    // Abrir el modal
-    setShowModal(true);
-    
-    // Desplazar automáticamente hasta la sección de imagen
-    setTimeout(() => {
-      const imageSection = document.querySelector('[data-image-section]');
-      if (imageSection) {
-        imageSection.scrollIntoView({ behavior: 'smooth' });
-      }
-    }, 300);
-  } catch (error) {
-    console.error("Error al preparar edición de imagen:", error);
-    addNotification("Error al preparar edición de imagen", "error");
-  }
-};
+  };
 
   /**
    * Función mejorada para cargar productos con filtros y paginación
@@ -1521,96 +1534,6 @@ const handleDeleteProductImage = async (productId: string) => {
       // Cerrar diálogo de confirmación
       setDeleteDialogOpen(false);
       setProductToDelete(null);
-    }
-  };
-
-  /**
-   * Preparar edición de producto
-   * @param product - Producto a editar
-   */
-  const handleEdit = async (product: Product) => {
-    try {
-      setEditingProduct(product);
-
-      // Detectar si es un combo
-      const isProductCombo = product.esCombo || false;
-      setIsCombo(isProductCombo);
-
-      // Resetear el modo de adición de stock al editar
-      setIsAddingStock(false);
-
-      // Si es combo, cargar los ítems del combo
-      if (isProductCombo && Array.isArray(product.itemsCombo)) {
-        const comboItems = product.itemsCombo.map(item => {
-          // Si el item está poblado
-          if (item.productoId && typeof item.productoId === 'object') {
-            return {
-              productoId: item.productoId._id,
-              nombre: item.productoId.nombre,
-              cantidad: item.cantidad,
-              precio: item.productoId.precio
-            };
-          }
-          // Si no está poblado, intentar recuperar la información
-          else {
-            const productId = typeof item.productoId === 'string' ? item.productoId : String(item.productoId);
-            const matchedProduct = products.find(p => p._id === productId);
-
-            return {
-              productoId: productId,
-              nombre: matchedProduct ? matchedProduct.nombre : 'Producto no disponible',
-              cantidad: item.cantidad,
-              precio: matchedProduct ? matchedProduct.precio : 0
-            };
-          }
-        });
-
-        setSelectedComboItems(comboItems);
-      } else {
-        setSelectedComboItems([]);
-      }
-
-      // CORREGIDO: Mejor manejo de la vista previa de imagen
-      let imagePreview = null;
-      
-      // Usar utilidad para verificar si tiene imagen
-      const hasImage = hasProductImage(product);
-      
-      if (hasImage) {
-        // Si tiene imageUrl explícita, usarla
-        if (product.imageUrl) {
-          imagePreview = product.imageUrl;
-        } else {
-          // Usar la función utilitaria para obtener la URL de la imagen
-          imagePreview = getProductImageUrl(product, true);
-        }
-      }
-
-      // Preparar datos del formulario para la edición
-      setFormData({
-        nombre: product.nombre || '',
-        descripcion: product.descripcion || '',
-        categoria: product.categoria || '',
-        subCategoria: product.subCategoria || '',
-        marca: '', // Campo vacío como solicitado
-        precio: product.precio ? product.precio.toString() : '',
-        stock: product.stock ? product.stock.toString() : '0',
-        stockMinimo: (product.stockMinimo || 5).toString(),
-        proveedor: {
-          nombre: '',
-          contacto: '',
-          telefono: '',
-          email: ''
-        }, // Campos vacíos
-        estado: 'activo', // Valor por defecto
-        imagen: null,
-        imagenPreview: imagePreview
-      });
-
-      setShowModal(true);
-    } catch (error) {
-      console.error("Error al preparar edición:", error);
-      addNotification("Error al preparar edición del producto", "error");
     }
   };
 

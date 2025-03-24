@@ -42,18 +42,18 @@ export const getProductImageUrl = (product: string | Product, addTimestamp = tru
  * @param product - Objeto producto
  * @returns true si el producto tiene imagen, false en caso contrario
  */
-  // Mejora de la función hasProductImage para ser más explícita
-  export const hasProductImage = (product: Product): boolean => {
-    if (!product) return false;
-    if (product.hasImage === false) return false; // Si explícitamente es false
-    
-    // Verificar todos los posibles indicadores de imagen
-    return (
-      product.hasImage === true || 
-      !!product.imageUrl || 
-      (product.imagenInfo && !!product.imagenInfo.rutaArchivo)
-    );
-  };
+export const hasProductImage = (product: Product): boolean => {
+  if (!product) return false;
+  if (product.hasImage === false) return false; // Si explícitamente es false
+  
+  // BUGFIX: No usar la existencia de _id como indicador de imagen
+  // Un producto puede tener ID pero no tener imagen
+  return (
+    product.hasImage === true || 
+    !!product.imageUrl || 
+    (product.imagenInfo && !!product.imagenInfo.rutaArchivo)
+  );
+};
 
 
 /**
