@@ -77,7 +77,7 @@ import { getProductImageUrl as utilsGetProductImageUrl, hasProductImage } from '
 import ImageActionButton from './components/ImageActionButton';
 
 // Definir URL base para la API
-const API_URL = "api/";
+const API_URL = "/api/";
 
 /**
  * Obtiene la URL de la imagen para un producto
@@ -1724,7 +1724,7 @@ const handleDeleteProductImage = async (productId: string) => {
       {/* Barra de herramientas */}
       <div className="flex flex-col md:flex-row justify-between items-start gap-4 bg-white rounded-xl shadow-sm p-4 border border-[#91BEAD]/20">
         <div className="w-full md:w-64">
-          {/* <div className="relative mb-4">
+          <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
             <Input
               type="text"
@@ -1733,7 +1733,7 @@ const handleDeleteProductImage = async (productId: string) => {
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
             />
-          </div> */}
+          </div>
 
           <Tabs
             defaultValue="all"
