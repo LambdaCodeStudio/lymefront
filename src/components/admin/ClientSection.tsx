@@ -98,7 +98,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 
-import Pagination from '@/components/ui/pagination';
+import Pagination from './components/Pagination';
 import { useDashboard } from '@/hooks/useDashboard';
 import type { UserRole } from '@/types/users';
 
@@ -2291,7 +2291,7 @@ const ClientsSection: React.FC = () => {
                           {client.subServicios && (
                             <span className="text-xs text-[#7AA79C] ml-2">
                               {client.subServicios.length} {client.subServicios.length === 1 ? 'subservicio' : 'subservicios'}
-                            </span>
+                              </span>
                           )}
                           {client.requiereAsignacion && (
                             <Badge variant="outline" className="ml-2 text-xs bg-amber-50 text-amber-700 border-amber-300">

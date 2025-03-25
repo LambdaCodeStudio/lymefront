@@ -72,7 +72,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import Pagination from "@/components/ui/pagination";
+import Pagination from "./components/Pagination";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { getAuthToken } from '@/utils/inventoryUtils';
 
