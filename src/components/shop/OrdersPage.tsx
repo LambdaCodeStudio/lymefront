@@ -90,8 +90,6 @@ enum OrderStatus {
   PENDING = "pendiente",
   APPROVED = "aprobado",
   REJECTED = "rechazado",
-  DELIVERED = "entregado",
-  CANCELED = "cancelado"
 }
 
 // Tipos de datos
@@ -955,17 +953,6 @@ export const OrdersPage: React.FC = () => {
                         )}
                       </>
                     )}
-                    {activeTab === "creados" && (
-                      <>
-                        <BookCheck className="h-4 w-4" />
-                        <span>Creados</span>
-                        {getCreatedOrdersCount() > 0 && (
-                          <span className="bg-[#3a8fb7] text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                            {getCreatedOrdersCount()}
-                          </span>
-                        )}
-                      </>
-                    )}
                     {activeTab === "aprobados" && (
                       <>
                         <CheckCircle2 className="h-4 w-4" />
@@ -1123,27 +1110,6 @@ export const OrdersPage: React.FC = () => {
                   className="w-full bg-[#f2f2f2] border-[#5baed1] focus:border-[#3a8fb7] text-[#333333] mt-1 transition-all duration-200"
                 />
               </div>
-              <div>
-                <label htmlFor="statusFilter" className="text-[#333333] text-sm font-medium">
-                  Estado
-                </label>
-                <Select
-                  value={statusFilter}
-                  onValueChange={setStatusFilter}
-                >
-                  <SelectTrigger id="statusFilter" className="w-full bg-[#f2f2f2] border-[#5baed1] mt-1">
-                    <SelectValue placeholder="Todos los estados" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos los estados</SelectItem>
-                    <SelectItem value="pendiente">Pendiente</SelectItem>
-                    <SelectItem value="aprobado">Aprobado</SelectItem>
-                    <SelectItem value="rechazado">Rechazado</SelectItem>
-                    <SelectItem value="entregado">Entregado</SelectItem>
-                    <SelectItem value="cancelado">Cancelado</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
               <Button
                 variant="outline"
                 onClick={filterOrdersByDate}
@@ -1206,28 +1172,6 @@ export const OrdersPage: React.FC = () => {
                   className="mt-2 p-4 bg-white rounded-lg border border-[#5baed1]/20 shadow-sm"
                 >
                   <div className="space-y-4">
-                    <div>
-                      <label htmlFor="mobileStatus" className="text-[#333333] text-sm font-medium">
-                        Estado
-                      </label>
-                      <Select
-                        value={statusFilter}
-                        onValueChange={setStatusFilter}
-                      >
-                        <SelectTrigger id="mobileStatus" className="w-full bg-[#f2f2f2] border-[#5baed1] mt-1">
-                          <SelectValue placeholder="Todos los estados" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Todos los estados</SelectItem>
-                          <SelectItem value="pendiente">Pendiente</SelectItem>
-                          <SelectItem value="aprobado">Aprobado</SelectItem>
-                          <SelectItem value="rechazado">Rechazado</SelectItem>
-                          <SelectItem value="entregado">Entregado</SelectItem>
-                          <SelectItem value="cancelado">Cancelado</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
                     <div>
                       <label htmlFor="mobileFechaInicio" className="text-[#333333] text-sm font-medium">
                         Fecha Inicio

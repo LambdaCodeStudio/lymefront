@@ -438,16 +438,6 @@ export const ShopNavbar: React.FC = () => {
                             <Badge className="ml-2 bg-[#F44336] text-white">{rejectedOrders}</Badge>
                           </a>
                         )}
-                        {/* Show "Created Orders" for operators and supervisors */}
-                        {(isSupervisor || isSupervisor) && (
-                          <a
-                            href="/orders?tab=creados"
-                            className="flex items-center px-4 py-2 text-sm text-[#333333] hover:bg-[#d4f1f9]/30"
-                          >
-                            <BookCheck className="w-4 h-4 mr-2 text-[#3a8fb7]" />
-                            Pedidos Creados
-                          </a>
-                        )}
                         {canAccessAdmin && (
                           <a
                             href="/admin"

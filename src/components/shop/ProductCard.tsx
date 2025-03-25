@@ -163,10 +163,16 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     }
   };
 
-  // Manejar cambio de cantidad con validación según categoría
+  // Manejar cambio de cantidad con validación según categoría y si es combo
   const handleQuantityChange = (newQuantity: number) => {
     // Asegurar que la cantidad sea siempre al menos 1
     newQuantity = Math.max(1, newQuantity);
+
+    // Para combos, limitamos a 1 unidad máximo
+    if (product.esCombo) {
+      setQuantity(1);
+      return;
+    }
 
     // Para productos de mantenimiento, NO limitamos por stock
     if (product.categoria === 'mantenimiento') {
@@ -485,18 +491,20 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                       handleQuantityChange(quantity - 1);
                     }}
                     aria-label="Disminuir cantidad"
+                    disabled={quantity <= 1}
                   >
                     <Minus className={`${compact ? 'h-3 w-3 sm:h-4 sm:w-4' : 'h-4 w-4'}`} />
                   </Button>
                   <Input
                     type="number"
                     min="1"
-                    max={product.categoria === 'mantenimiento' ? undefined : product.stock}
+                    max={product.esCombo ? 1 : (product.categoria === 'mantenimiento' ? undefined : product.stock)}
                     value={quantity}
                     onChange={(e) => handleQuantityChange(parseInt(e.target.value) || 1)}
                     onClick={(e) => e.stopPropagation()}
                     className={`${compact ? 'w-10 sm:w-14 h-8' : 'w-14 h-8'} text-center p-0 border-0 bg-transparent focus:ring-0 text-[#333333]`}
                     aria-label="Cantidad"
+                    readOnly={product.esCombo}
                   />
                   <Button
                     variant="ghost"
@@ -507,6 +515,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                       handleQuantityChange(quantity + 1);
                     }}
                     aria-label="Aumentar cantidad"
+                    disabled={product.esCombo || (product.categoria === 'limpieza' && quantity >= product.stock)}
                   >
                     <Plus className={`${compact ? 'h-3 w-3 sm:h-4 sm:w-4' : 'h-4 w-4'}`} />
                   </Button>

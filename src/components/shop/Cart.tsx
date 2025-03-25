@@ -22,8 +22,8 @@ import {
   ChevronDown,
   ChevronUp,
   RefreshCw,
-  X,  // Añadimos este icono para el botón de limpiar selección
-  Package  // Añadimos este icono para los combos
+  X,
+  Package
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -113,10 +113,10 @@ const CartItemImage = ({ item }) => {
 const ComboDetails = ({ item }) => {
   const [showComboItems, setShowComboItems] = useState(false);
 
-  // Verificar si es un combo usando ambas propiedades posibles
-  const isCombo = item.isCombo || item.esCombo;
-  // Obtener items del combo (manejar ambos formatos de propiedad)
-  const comboItems = item.comboItems || item.itemsCombo || [];
+  // Verificar si es un combo
+  const isCombo = item.isCombo;
+  // Obtener items del combo
+  const comboItems = item.comboItems || [];
 
   // Si no es un combo o no hay productos en el combo, no mostrar nada
   if (!isCombo || comboItems.length === 0) {
@@ -868,7 +868,6 @@ export const Cart: React.FC = () => {
   };
 
   // Actualizar cantidad con validación
-  // Actualizar cantidad con validación
   const handleQuantityChange = (id: string, newQuantity: number) => {
     // Sólo aseguramos que la cantidad sea positiva
     if (newQuantity < 1) newQuantity = 1;
@@ -876,8 +875,8 @@ export const Cart: React.FC = () => {
     // Buscar el item para verificar si es un combo o de mantenimiento
     const item = items.find(item => item.id === id);
     
-    // Verificar si es combo usando ambas propiedades posibles
-    const isCombo = item && (item.isCombo || item.esCombo);
+    // Verificar si es combo
+    const isCombo = item && item.isCombo;
   
     // Si es un combo, siempre mantener la cantidad en 1
     if (isCombo) {
@@ -1347,7 +1346,7 @@ export const Cart: React.FC = () => {
                             <div className="flex justify-between">
                               <h3 className="font-medium text-base md:text-lg text-[#3a8fb7] line-clamp-1">
                                 {item.name}
-                                {(item.isCombo || item.esCombo) && (
+                                {item.isCombo && (
                                   <Badge className="ml-2 bg-[#ffffff] text-[#3a8fb7] border border-[#3a8fb7] text-xs">
                                     <Package size={10} className="mr-1" />
                                     Combo
@@ -1375,13 +1374,13 @@ export const Cart: React.FC = () => {
                             {item.isCombo && <ComboDetails item={item} />}
 
                             <div className="flex justify-between items-center mt-2">
-                              {(item.isCombo || item.esCombo) ? (
+                              {item.isCombo ? (
                                 <div className="flex items-center">
-                                  <div className="flex items-center space-x-1 bg-white rounded-md border border-[#3a8fb7]/30">
+                                  <div className="flex items-center space-x-1 bg-white/70 rounded-md border border-[#3a8fb7]/30">
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      className="h-7 w-7 md:h-8 md:w-8 p-0 text-[#3a8fb7]"
+                                      className="h-7 w-7 md:h-8 md:w-8 p-0 text-[#3a8fb7]/50"
                                       disabled={true}
                                       title="Los combos están limitados a 1 unidad"
                                     >
@@ -1392,21 +1391,22 @@ export const Cart: React.FC = () => {
                                       value="1"
                                       readOnly
                                       disabled
-                                      className="w-10 md:w-16 h-7 md:h-8 text-center p-0 border-0 bg-transparent focus:ring-0 text-[#3a8fb7] text-xs md:text-sm"
+                                      className="w-10 md:w-16 h-7 md:h-8 text-center p-0 border-0 bg-transparent focus:ring-0 text-[#3a8fb7] text-xs md:text-sm font-bold"
                                     />
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      className="h-7 w-7 md:h-8 md:w-8 p-0 text-[#3a8fb7]"
+                                      className="h-7 w-7 md:h-8 md:w-8 p-0 text-[#3a8fb7]/50"
                                       disabled={true}
                                       title="Los combos están limitados a 1 unidad"
                                     >
                                       <Plus className="h-2 w-2 md:h-3 md:w-3 opacity-50" />
                                     </Button>
                                   </div>
-                                  <span className="ml-2 text-xs text-[#3a8fb7] italic">
+                                  <Badge className="ml-2 text-xs bg-[#d4f1f9] text-[#3a8fb7] border border-[#3a8fb7]/30">
+                                    <AlertCircle className="h-2 w-2 mr-1" />
                                     Limitado a 1 unidad
-                                  </span>
+                                  </Badge>
                                 </div>
                               ) : (
                                 <div className="flex items-center space-x-1 bg-white rounded-md border border-[#3a8fb7]/30">
@@ -1922,7 +1922,7 @@ export const Cart: React.FC = () => {
                             >
                               <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-[#3a8fb7]">
                                 <p className="flex items-center">
-                                  <Building className="w-4 h-4 mr-2 text-[#3a8fb7]" />
+                                <Building className="w-4 h-4 mr-2 text-[#3a8fb7]" />
                                   <span className="font-medium">Cliente:</span>
                                   <span className="ml-1">{orderForm.servicio}</span>
                                 </p>
