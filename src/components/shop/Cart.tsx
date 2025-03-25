@@ -289,7 +289,7 @@ interface User {
 }
 
 // URL base para API - mejor práctica que hardcodear
-const API_BASE_URL = 'http://localhost:3000';
+const API_BASE_URL = '';
 
 export const Cart: React.FC = () => {
   const { items, removeItem, updateQuantity, clearCart, totalItems, totalPrice } = useCartContext();

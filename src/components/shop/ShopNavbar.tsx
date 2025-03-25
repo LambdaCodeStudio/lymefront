@@ -43,7 +43,7 @@ export const ShopNavbar: React.FC = () => {
   const userMenuRef = useRef<HTMLDivElement>(null);
   
   // URL base para la API, ajustada para el nuevo backend
-  const API_BASE_URL = 'api';
+  const API_BASE_URL = '/api';
 
   // Obtener información del usuario del localStorage y API
   useEffect(() => {
