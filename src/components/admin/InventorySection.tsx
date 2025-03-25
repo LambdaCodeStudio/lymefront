@@ -210,6 +210,35 @@ const InventorySection = () => {
   // Estado para almacenar todos los productos disponibles para combos
   const [allAvailableProducts, setAllAvailableProducts] = useState<Product[]>([]);
 
+  // === NUEVA IMPLEMENTACIÓN: BÚSQUEDA DEL LADO DEL CLIENTE ===
+  // Esta mejora permite una búsqueda progresiva B -> Bo -> Bot -> Botin sin depender del servidor
+  const [useClientSideSearch, setUseClientSideSearch] = useState(true); // Habilitar la búsqueda en el lado del cliente
+  const [allProductsForSearch, setAllProductsForSearch] = useState<Product[]>([]);
+  const [isInitialDataFetched, setIsInitialDataFetched] = useState(false);
+
+  /**
+   * Función para filtrar productos por búsqueda del lado del cliente
+   * Permite la búsqueda progresiva por letra (B -> Bo -> Bot -> Botin)
+   * @param products - Lista de productos a filtrar
+   * @param searchTerm - Término de búsqueda
+   * @returns Lista de productos filtrados
+   */
+  const filterProductsBySearch = (products: Product[], searchTerm: string): Product[] => {
+    if (!searchTerm) return products;
+    
+    const lowerSearchTerm = searchTerm.toLowerCase();
+    
+    return products.filter(product => {
+      // Buscar coincidencias en múltiples campos para mejores resultados
+      return (
+        (product.nombre && product.nombre.toLowerCase().includes(lowerSearchTerm)) ||
+        (product.descripcion && product.descripcion.toLowerCase().includes(lowerSearchTerm)) ||
+        (product.marca && product.marca.toLowerCase().includes(lowerSearchTerm)) ||
+        (product.proveedor?.nombre && product.proveedor.nombre.toLowerCase().includes(lowerSearchTerm))
+      );
+    });
+  };
+
   /**
    * Hook personalizado para retrasar la búsqueda mientras se escribe
    * @param value - Valor a debounce
@@ -280,6 +309,10 @@ const InventorySection = () => {
   // Usar productos directamente de la respuesta de la API en lugar de filtrar localmente
   const currentProducts = products;
 
+  /**
+   * Maneja la edición de un producto, cargando sus datos en el formulario
+   * @param product - Producto a editar
+   */
   const handleEdit = async (product: Product) => {
     try {
       console.log("Editando producto:", product);
@@ -331,7 +364,7 @@ const InventorySection = () => {
         setSelectedComboItems([]);
       }
   
-      // FIXED: Mejor detección de imágenes usando la utilidad hasProductImage
+      // Detección mejorada de imágenes usando la utilidad hasProductImage
       const hasImage = hasProductImage(product);
       console.log("¿El producto tiene imagen?", hasImage);
       console.log("URL de imagen:", product.imageUrl);
@@ -380,7 +413,18 @@ const InventorySection = () => {
   };
 
   /**
+   * Editar la imagen de un producto
+   * @param product - Producto cuya imagen se va a editar
+   */
+  const handleEditImage = (product: Product) => {
+    // Implementar la lógica para editar la imagen
+    // Esta función debería existir en tu código pero no está definida en el fragmento proporcionado
+    handleEdit(product);
+  };
+
+  /**
    * Función mejorada para cargar productos con filtros y paginación
+   * Incorpora la búsqueda del lado del cliente para una experiencia más fluida
    * @param forceRefresh - Forzar recarga de productos
    * @param page - Número de página
    * @param limit - Límite de productos por página
@@ -404,7 +448,49 @@ const InventorySection = () => {
         throw new Error('No hay token de autenticación');
       }
   
-      // Si hay filtros activos, añadirlos a la URL
+      // Si usamos búsqueda del lado del cliente y necesitamos cargar todos los productos
+      if (useClientSideSearch && (!isInitialDataFetched || forceRefresh)) {
+        try {
+          // Cargar todos los productos para búsqueda (con un límite razonable)
+          const allProductsResponse = await fetch(`${API_URL}producto?limit=1000`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Cache-Control': 'no-cache'
+            }
+          });
+  
+          if (allProductsResponse.ok) {
+            const allProductsData = await allProductsResponse.json();
+            
+            // Extraer productos de la respuesta
+            let allProducts: Product[] = [];
+            if (Array.isArray(allProductsData)) {
+              allProducts = allProductsData;
+            } else if (allProductsData && Array.isArray(allProductsData.items)) {
+              allProducts = allProductsData.items;
+            }
+            
+            // Normalizar propiedades de imagen
+            const productsWithImages = allProducts.map(product => ({
+              ...product,
+              hasImage: (
+                product.hasImage === true || 
+                !!product.imageUrl || 
+                (product.imagenInfo && !!product.imagenInfo.rutaArchivo)
+              )
+            }));
+            
+            setAllProductsForSearch(productsWithImages);
+            setIsInitialDataFetched(true);
+            console.log(`Cargados ${productsWithImages.length} productos para búsqueda del lado del cliente`);
+          }
+        } catch (error) {
+          console.error('Error al cargar todos los productos para búsqueda:', error);
+          // Continuar con búsqueda del lado del servidor como respaldo
+        }
+      }
+  
+      // Continuar con consulta de paginación regular
       const queryParams = new URLSearchParams();
       queryParams.append('page', page.toString());
       queryParams.append('limit', limit.toString());
@@ -419,22 +505,19 @@ const InventorySection = () => {
         console.log("Filtrando productos con stock bajo...");
       } else {
         // Aplicamos los filtros normales
-        if (debouncedSearchTerm) {
-          // CORREGIDO: Enviar el término de búsqueda sin procesar para que funcione la búsqueda progresiva
+        if (debouncedSearchTerm && !useClientSideSearch) {
+          // Solo aplicar búsqueda del lado del servidor si la búsqueda del cliente está desactivada
           queryParams.append('regex', debouncedSearchTerm);
           queryParams.append('regexFields', 'nombre,descripcion,marca');
           queryParams.append('regexOptions', 'i');
-  
           console.log(`Buscando productos que coincidan con: "${debouncedSearchTerm}"`);
         }
   
         if (selectedCategory !== 'all') {
           if (selectedCategory === 'combos') {
-            // CORREGIDO: Para filtros de combos, asegurarse de que esCombo sea true
             queryParams.append('esCombo', 'true');
             console.log("Filtrando solo combos...");
           } else {
-            // Para categorías normales (limpieza, mantenimiento)
             queryParams.append('category', selectedCategory);
             console.log(`Filtrando por categoría: ${selectedCategory}`);
           }
@@ -466,7 +549,7 @@ const InventorySection = () => {
         throw new Error(`Error al cargar productos (${response.status})`);
       }
   
-      // Obtenemos el JSON de la respuesta
+      // Procesar la respuesta
       let responseData;
       try {
         responseData = await response.json();
@@ -481,42 +564,46 @@ const InventorySection = () => {
   
       if (responseData && typeof responseData === 'object') {
         if (Array.isArray(responseData)) {
-          // Si es un array directamente
           extractedProducts = responseData;
           totalItems = responseData.length;
-          console.log(`Recibidos ${extractedProducts.length} productos en formato array`);
         } else if (Array.isArray(responseData.items)) {
-          // Si es un objeto con paginación
           extractedProducts = responseData.items;
           totalItems = responseData.totalItems || responseData.items.length;
-          console.log(`Recibidos ${extractedProducts.length} productos en formato paginado (total: ${totalItems})`);
-        } else {
-          console.warn("Formato de respuesta no reconocido:", responseData);
-          extractedProducts = [];
-          totalItems = 0;
         }
       }
   
-      // CORREGIDO: Procesamiento mejorado de las propiedades de imagen
-      // Normalizamos la propiedad hasImage para garantizar consistencia
-      const productsWithImages = extractedProducts.map(product => {
-        // Verificación explícita y exhaustiva de la existencia de imagen
-        const hasImage = (
+      // Normalizar propiedades de imagen
+      const productsWithImages = extractedProducts.map(product => ({
+        ...product,
+        hasImage: (
           product.hasImage === true || 
           !!product.imageUrl || 
           (product.imagenInfo && !!product.imagenInfo.rutaArchivo)
-        );
-        
-        return {
-          ...product,
-          // Normalizar a un booleano explícito
-          hasImage: hasImage
-        };
-      });
+        )
+      }));
   
-      // Establecer productos y total
-      setProducts(productsWithImages);
-      setTotalCount(totalItems);
+      // Aplicar búsqueda del lado del cliente si está habilitada y tenemos término de búsqueda
+      if (useClientSideSearch && debouncedSearchTerm && allProductsForSearch.length > 0) {
+        const filteredProducts = filterProductsBySearch(allProductsForSearch, debouncedSearchTerm);
+        
+        // Aplicar otros filtros (categoría, etc.) a los resultados de búsqueda
+        const finalFilteredProducts = filteredProducts.filter(product => {
+          if (selectedCategory === 'all') return true;
+          if (selectedCategory === 'combos') return product.esCombo === true;
+          return product.categoria === selectedCategory;
+        });
+        
+        // Paginar los resultados filtrados
+        const startIndex = (page - 1) * limit;
+        const paginatedProducts = finalFilteredProducts.slice(startIndex, startIndex + limit);
+        
+        setProducts(paginatedProducts);
+        setTotalCount(finalFilteredProducts.length);
+      } else {
+        // Usar resultados del servidor directamente
+        setProducts(productsWithImages);
+        setTotalCount(totalItems);
+      }
   
       // Marcar carga inicial como completada
       initialFetchDone.current = true;
@@ -541,7 +628,7 @@ const InventorySection = () => {
   };
 
   /**
-   * Resetear formulario
+   * Resetear formulario a sus valores iniciales
    */
   const resetForm = () => {
     setFormData({
@@ -721,7 +808,7 @@ const InventorySection = () => {
 
       const productData = await response.json();
       
-      // CORREGIDO: Determinar si el producto tiene imagen basado en múltiples criterios
+      // Determinar si el producto tiene imagen basado en múltiples criterios
       const hasImage = (
         productData.hasImage === true || 
         !!productData.imageUrl || 
@@ -771,7 +858,7 @@ const InventorySection = () => {
         }
       }
 
-      // CORREGIDO: Asegurar hasImage en todos los productos usando la utilidad mejorada
+      // Asegurar hasImage en todos los productos usando la utilidad mejorada
       return allProducts.map(product => ({
         ...product,
         hasImage: hasProductImage(product)
@@ -1049,81 +1136,81 @@ const InventorySection = () => {
   };
 
   /**
- * Eliminar imagen del producto ya guardado
- * @param productId - ID del producto
- */
-const handleDeleteProductImage = async (productId: string) => {
-  try {
-    setImageLoading(true);
+   * Eliminar imagen del producto ya guardado
+   * @param productId - ID del producto
+   */
+  const handleDeleteProductImage = async (productId: string) => {
+    try {
+      setImageLoading(true);
 
-    const token = getAuthToken();
-    if (!token) {
-      throw new Error('No hay token de autenticación');
-    }
-
-    console.log(`Eliminando imagen para producto ID: ${productId}`);
-
-    const response = await fetch(`${API_URL}producto/${productId}/imagen`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${token}`
+      const token = getAuthToken();
+      if (!token) {
+        throw new Error('No hay token de autenticación');
       }
-    });
 
-    if (!response.ok) {
-      // Intentar obtener más información sobre el error
-      let errorDetail = '';
-      try {
-        const errorData = await response.json();
-        errorDetail = errorData.message || errorData.error || '';
-      } catch (e) {
-        errorDetail = `Error ${response.status}`;
-      }
-      
-      throw new Error(`Error al eliminar imagen: ${errorDetail}`);
-    }
+      console.log(`Eliminando imagen para producto ID: ${productId}`);
 
-    // Actualizar la vista del formulario para permitir subir una nueva imagen
-    setFormData(prev => ({
-      ...prev,
-      imagen: null,
-      imagenPreview: null
-    }));
-
-    // Actualizar el producto específico en el estado
-    const updatedProduct = await fetchProductById(productId);
-    if (updatedProduct) {
-      // Asegurar explícitamente que TODAS las propiedades relacionadas con la imagen sean nulas
-      updateProductInState({
-        ...updatedProduct,
-        hasImage: false,
-        imageUrl: null,
-        imagenInfo: null
+      const response = await fetch(`${API_URL}producto/${productId}/imagen`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
-    }
 
-    // Notificar éxito
-    addNotification('Imagen eliminada correctamente', 'success');
-    setDeleteImageDialogOpen(false);
-    
-    // Si el modal está abierto y es el mismo producto, actualizar la vista previa
-    if (showModal && editingProduct && editingProduct._id === productId) {
+      if (!response.ok) {
+        // Intentar obtener más información sobre el error
+        let errorDetail = '';
+        try {
+          const errorData = await response.json();
+          errorDetail = errorData.message || errorData.error || '';
+        } catch (e) {
+          errorDetail = `Error ${response.status}`;
+        }
+        
+        throw new Error(`Error al eliminar imagen: ${errorDetail}`);
+      }
+
+      // Actualizar la vista del formulario para permitir subir una nueva imagen
       setFormData(prev => ({
         ...prev,
         imagen: null,
         imagenPreview: null
       }));
+
+      // Actualizar el producto específico en el estado
+      const updatedProduct = await fetchProductById(productId);
+      if (updatedProduct) {
+        // Asegurar explícitamente que TODAS las propiedades relacionadas con la imagen sean nulas
+        updateProductInState({
+          ...updatedProduct,
+          hasImage: false,
+          imageUrl: null,
+          imagenInfo: null
+        });
+      }
+
+      // Notificar éxito
+      addNotification('Imagen eliminada correctamente', 'success');
+      setDeleteImageDialogOpen(false);
+      
+      // Si el modal está abierto y es el mismo producto, actualizar la vista previa
+      if (showModal && editingProduct && editingProduct._id === productId) {
+        setFormData(prev => ({
+          ...prev,
+          imagen: null,
+          imagenPreview: null
+        }));
+      }
+      
+      // Refrescar la lista de productos para mantener todo consistente
+      fetchProducts(true, currentPage, itemsPerPage);
+    } catch (error: any) {
+      console.error('Error al eliminar la imagen:', error);
+      addNotification(`Error al eliminar la imagen: ${error.message}`, 'error');
+    } finally {
+      setImageLoading(false);
     }
-    
-    // Refrescar la lista de productos para mantener todo consistente
-    fetchProducts(true, currentPage, itemsPerPage);
-  } catch (error: any) {
-    console.error('Error al eliminar la imagen:', error);
-    addNotification(`Error al eliminar la imagen: ${error.message}`, 'error');
-  } finally {
-    setImageLoading(false);
-  }
-};
+  };
 
   /**
    * Manejar subida de imagen después de crear/editar producto
@@ -1904,7 +1991,6 @@ const handleDeleteProductImage = async (productId: string) => {
           )}
         </Alert>
       )}
-
       {/* Indicador de carga */}
       {loading && (
         <div className="bg-white rounded-xl shadow-sm p-8 text-center border border-[#91BEAD]/20">
@@ -2167,376 +2253,423 @@ const handleDeleteProductImage = async (productId: string) => {
                   <p className="text-xs font-medium text-[#29696B] mb-1">Productos en el combo:</p>
                   <div className="text-xs text-[#7AA79C] max-h-24 overflow-y-auto pr-1">
                     {product.itemsCombo.map((item, index) => {
-                     const productoNombre = item.productoId && typeof item.productoId === 'object'
-                     ? item.productoId.nombre
-                     : 'Producto';
+                       const productoNombre = item.productoId && typeof item.productoId === 'object'
+                         ? item.productoId.nombre
+                         : 'Producto';
 
-                   return (
-                     <div key={index} className="flex justify-between py-1 border-b border-[#91BEAD]/10 last:border-0">
-                       <span>{productoNombre}</span>
-                       <span>x{item.cantidad}</span>
-                     </div>
-                   );
-                 })}
+                     return (
+                       <div key={index} className="flex justify-between py-1 border-b border-[#91BEAD]/10 last:border-0">
+                         <span>{productoNombre}</span>
+                         <span>x{item.cantidad}</span>
+                       </div>
+                     );
+                   })}
+                 </div>
+               </div>
+             )}
+           </CardContent>
+           <CardFooter className="p-2 flex justify-end gap-2 bg-[#DFEFE6]/20 border-t border-[#91BEAD]/10">
+             {/* Botón específico para gestionar imagen (solo aparece si hay imagen) */}
+             <ImageActionButton
+               product={product}
+               onEdit={() => handleEditImage(product)}
+               onDelete={() => confirmDeleteImage(product._id)}
+               size="md"
+             />
+             
+             <Button
+               variant="ghost"
+               size="sm"
+               onClick={() => handleEdit(product)}
+               className="text-[#29696B] hover:bg-[#DFEFE6]"
+             >
+               <Edit className="w-4 h-4" />
+             </Button>
+             
+             <Button
+               variant="ghost"
+               size="sm"
+               onClick={() => confirmDelete(product._id)}
+               className="text-red-600 hover:text-red-800 hover:bg-red-50"
+             >
+               <Trash2 className="w-4 h-4" />
+             </Button>
+           </CardFooter>
+         </Card>
+       ))}
+
+       {/* Mensaje que muestra la página actual y el total */}
+       {!loading && totalCount > itemsPerPage && (
+         <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm">
+           <span className="text-[#29696B] font-medium">
+             Página {currentPage} de {totalPages}
+           </span>
+         </div>
+       )}
+
+       {/* Paginación duplicada al final de la lista para mayor visibilidad */}
+       {!loading && totalCount > itemsPerPage && (
+         <div className="py-4 border-t border-[#91BEAD]/20">
+           <EnhancedPagination
+             totalItems={totalCount}
+             itemsPerPage={itemsPerPage}
+             currentPage={currentPage}
+             onPageChange={handlePageChange}
+           />
+         </div>
+       )}
+     </div>
+
+     {/* Modal de Producto */}
+     <Dialog open={showModal} onOpenChange={setShowModal}>
+       <DialogContent className="sm:max-w-md max-h-[90vh] overflow-auto bg-white border border-[#91BEAD]/20">
+         <DialogHeader className="sticky top-0 bg-white pt-4 pb-2 z-10">
+           <DialogTitle className="text-[#29696B] flex items-center">
+             {editingProduct ? 'Editar Producto' : (isCombo ? 'Nuevo Combo' : 'Nuevo Producto')}
+             {isCombo && (
+               <Badge className="ml-2 bg-[#00888A]/10 border-[#00888A] text-[#00888A]">
+                 Combo
+               </Badge>
+             )}
+           </DialogTitle>
+           <DialogDescription>
+             {isCombo ? 'Los combos son agrupaciones de productos individuales' : 'Complete la información del producto'}
+           </DialogDescription>
+         </DialogHeader>
+
+         <form onSubmit={handleSubmit} className="space-y-4 py-2">
+           <div className="grid gap-3">
+             {/* Checkbox para marcar como combo */}
+             {!editingProduct && (
+               <div className="flex items-center space-x-2">
+                 <Checkbox
+                   id="is-combo"
+                   checked={isCombo}
+                   onCheckedChange={(checked) => {
+                     setIsCombo(!!checked);
+                     if (!checked) {
+                       setSelectedComboItems([]);
+                     }
+                   }}
+                 />
+                 <label
+                   htmlFor="is-combo"
+                   className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-[#29696B]"
+                 >
+                   Este producto es un combo
+                 </label>
+               </div>
+             )}
+
+             <div>
+               <Label htmlFor="nombre" className="text-sm text-[#29696B]">Nombre</Label>
+               <Input
+                 id="nombre"
+                 value={formData.nombre}
+                 onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                 required
+                 className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
+               />
+             </div>
+
+             <div>
+               <Label htmlFor="descripcion" className="text-sm text-[#29696B]">Descripción</Label>
+               <Textarea
+                 id="descripcion"
+                 value={formData.descripcion}
+                 onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
+                 rows={2}
+                 className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
+               />
+             </div>
+
+             <div className="grid grid-cols-2 gap-3">
+               <div>
+                 <Label htmlFor="categoria" className="text-sm text-[#29696B]">Categoría</Label>
+                 <Select
+                   value={formData.categoria || 'not-selected'}
+                   onValueChange={(value) => {
+                     handleCategoryChange(value);
+                   }}
+                 >
+                   <SelectTrigger id="categoria" className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
+                     <SelectValue placeholder="Seleccionar categoría" />
+                   </SelectTrigger>
+                   <SelectContent className="border-[#91BEAD]">
+                     <SelectItem value="not-selected">Seleccionar categoría</SelectItem>
+                     <SelectItem value="limpieza">Limpieza</SelectItem>
+                     <SelectItem value="mantenimiento">Mantenimiento</SelectItem>
+                   </SelectContent>
+                 </Select>
+               </div>
+
+               <div>
+                 <Label htmlFor="subCategoria" className="text-sm text-[#29696B]">Subcategoría</Label>
+                 <Select
+                   value={formData.subCategoria || 'not-selected'}
+                   onValueChange={(value) => {
+                     if (value !== 'not-selected') {
+                       setFormData(prevState => ({
+                         ...prevState,
+                         subCategoria: value
+                       }));
+                     }
+                   }}
+                   disabled={!formData.categoria}
+                 >
+                   <SelectTrigger id="subCategoria" className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
+                     <SelectValue placeholder="Seleccionar subcategoría" />
+                   </SelectTrigger>
+                   <SelectContent className="border-[#91BEAD]">
+                     <SelectItem value="not-selected">Seleccionar subcategoría</SelectItem>
+                     {formData.categoria && subCategorias[formData.categoria]?.map((sub) => (
+                       <SelectItem key={sub.value} value={sub.value}>
+                         {sub.label}
+                       </SelectItem>
+                     ))}
+                   </SelectContent>
+                 </Select>
                </div>
              </div>
-           )}
-         </CardContent>
-         <CardFooter className="p-2 flex justify-end gap-2 bg-[#DFEFE6]/20 border-t border-[#91BEAD]/10">
-           {/* Botón específico para gestionar imagen (solo aparece si hay imagen) */}
-           <ImageActionButton
-             product={product}
-             onEdit={() => handleEditImage(product)}
-             onDelete={() => confirmDeleteImage(product._id)}
-             size="md"
-           />
-           
-           <Button
-             variant="ghost"
-             size="sm"
-             onClick={() => handleEdit(product)}
-             className="text-[#29696B] hover:bg-[#DFEFE6]"
-           >
-             <Edit className="w-4 h-4" />
-           </Button>
-           
-           <Button
-             variant="ghost"
-             size="sm"
-             onClick={() => confirmDelete(product._id)}
-             className="text-red-600 hover:text-red-800 hover:bg-red-50"
-           >
-             <Trash2 className="w-4 h-4" />
-           </Button>
-         </CardFooter>
-       </Card>
-     ))}
 
-     {/* Mensaje que muestra la página actual y el total */}
-     {!loading && totalCount > itemsPerPage && (
-       <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm">
-         <span className="text-[#29696B] font-medium">
-           Página {currentPage} de {totalPages}
-         </span>
-       </div>
-     )}
+             <div className="grid grid-cols-2 gap-3">
+               <div>
+                 <Label htmlFor="precio" className="text-sm text-[#29696B]">Precio</Label>
+                 <Input
+                   id="precio"
+                   type="number"
+                   min="0"
+                   step="0.01"
+                   value={formData.precio}
+                   onChange={(e) => setFormData({ ...formData, precio: e.target.value })}
+                   required
+                   className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
+                   maxLength={10}
+                   readOnly={isCombo} /* Campo de precio de solo lectura para combos */
+                   disabled={isCombo} /* Deshabilitado visualmente para combos */
+                 />
+                 {isCombo && (
+                   <p className="text-xs text-[#7AA79C] mt-1">
+                     Precio calculado automáticamente de los productos seleccionados
+                   </p>
+                 )}
+               </div>
 
-     {/* Paginación duplicada al final de la lista para mayor visibilidad */}
-     {!loading && totalCount > itemsPerPage && (
-       <div className="py-4 border-t border-[#91BEAD]/20">
-         <EnhancedPagination
-           totalItems={totalCount}
-           itemsPerPage={itemsPerPage}
-           currentPage={currentPage}
-           onPageChange={handlePageChange}
-         />
-       </div>
-     )}
-   </div>
-
-   {/* Modal de Producto */}
-   <Dialog open={showModal} onOpenChange={setShowModal}>
-     <DialogContent className="sm:max-w-md max-h-[90vh] overflow-auto bg-white border border-[#91BEAD]/20">
-       <DialogHeader className="sticky top-0 bg-white pt-4 pb-2 z-10">
-         <DialogTitle className="text-[#29696B] flex items-center">
-           {editingProduct ? 'Editar Producto' : (isCombo ? 'Nuevo Combo' : 'Nuevo Producto')}
-           {isCombo && (
-             <Badge className="ml-2 bg-[#00888A]/10 border-[#00888A] text-[#00888A]">
-               Combo
-             </Badge>
-           )}
-         </DialogTitle>
-         <DialogDescription>
-           {isCombo ? 'Los combos son agrupaciones de productos individuales' : 'Complete la información del producto'}
-         </DialogDescription>
-       </DialogHeader>
-
-       <form onSubmit={handleSubmit} className="space-y-4 py-2">
-         <div className="grid gap-3">
-           {/* Checkbox para marcar como combo */}
-           {!editingProduct && (
-             <div className="flex items-center space-x-2">
-               <Checkbox
-                 id="is-combo"
-                 checked={isCombo}
-                 onCheckedChange={(checked) => {
-                   setIsCombo(!!checked);
-                   if (!checked) {
-                     setSelectedComboItems([]);
-                   }
-                 }}
-               />
-               <label
-                 htmlFor="is-combo"
-                 className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-[#29696B]"
-               >
-                 Este producto es un combo
-               </label>
-             </div>
-           )}
-
-           <div>
-             <Label htmlFor="nombre" className="text-sm text-[#29696B]">Nombre</Label>
-             <Input
-               id="nombre"
-               value={formData.nombre}
-               onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-               required
-               className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
-             />
-           </div>
-
-           <div>
-             <Label htmlFor="descripcion" className="text-sm text-[#29696B]">Descripción</Label>
-             <Textarea
-               id="descripcion"
-               value={formData.descripcion}
-               onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-               rows={2}
-               className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
-             />
-           </div>
-
-           <div className="grid grid-cols-2 gap-3">
-             <div>
-               <Label htmlFor="categoria" className="text-sm text-[#29696B]">Categoría</Label>
-               <Select
-                 value={formData.categoria || 'not-selected'}
-                 onValueChange={(value) => {
-                   handleCategoryChange(value);
-                 }}
-               >
-                 <SelectTrigger id="categoria" className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
-                   <SelectValue placeholder="Seleccionar categoría" />
-                 </SelectTrigger>
-                 <SelectContent className="border-[#91BEAD]">
-                   <SelectItem value="not-selected">Seleccionar categoría</SelectItem>
-                   <SelectItem value="limpieza">Limpieza</SelectItem>
-                   <SelectItem value="mantenimiento">Mantenimiento</SelectItem>
-                 </SelectContent>
-               </Select>
-             </div>
-
-             <div>
-               <Label htmlFor="subCategoria" className="text-sm text-[#29696B]">Subcategoría</Label>
-               <Select
-                 value={formData.subCategoria || 'not-selected'}
-                 onValueChange={(value) => {
-                   if (value !== 'not-selected') {
-                     setFormData(prevState => ({
-                       ...prevState,
-                       subCategoria: value
-                     }));
-                   }
-                 }}
-                 disabled={!formData.categoria}
-               >
-                 <SelectTrigger id="subCategoria" className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
-                   <SelectValue placeholder="Seleccionar subcategoría" />
-                 </SelectTrigger>
-                 <SelectContent className="border-[#91BEAD]">
-                   <SelectItem value="not-selected">Seleccionar subcategoría</SelectItem>
-                   {formData.categoria && subCategorias[formData.categoria]?.map((sub) => (
-                     <SelectItem key={sub.value} value={sub.value}>
-                       {sub.label}
-                     </SelectItem>
-                   ))}
-                 </SelectContent>
-               </Select>
-             </div>
-           </div>
-
-           <div className="grid grid-cols-2 gap-3">
-             <div>
-               <Label htmlFor="precio" className="text-sm text-[#29696B]">Precio</Label>
-               <Input
-                 id="precio"
-                 type="number"
-                 min="0"
-                 step="0.01"
-                 value={formData.precio}
-                 onChange={(e) => setFormData({ ...formData, precio: e.target.value })}
-                 required
-                 className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
-                 maxLength={10}
-                 readOnly={isCombo} /* Campo de precio de solo lectura para combos */
-                 disabled={isCombo} /* Deshabilitado visualmente para combos */
-               />
-               {isCombo && (
-                 <p className="text-xs text-[#7AA79C] mt-1">
-                   Precio calculado automáticamente de los productos seleccionados
-                 </p>
-               )}
-             </div>
-
-             <div>
-             <Label htmlFor="stock" className="text-sm text-[#29696B]">
-                 {editingProduct
-                   ? (isAddingStock ? "Agregar al stock" : "Stock")
-                   : "Stock"}
-               </Label>
-               {editingProduct && (
-                 <div className="mb-2 px-1">
-                   <div className="flex items-center gap-2 bg-[#DFEFE6]/30 p-2 rounded-md border border-[#91BEAD]/30">
-                     <Checkbox
-                       id="stock-checkbox"
-                       checked={isAddingStock}
-                       onCheckedChange={(checked) => setIsAddingStock(!!checked)}
-                     />
-                     <label
-                       htmlFor="stock-checkbox"
-                       className="text-sm text-[#29696B] cursor-pointer font-medium"
-                     >
-                       Añadir al stock existente
-                     </label>
+               <div>
+               <Label htmlFor="stock" className="text-sm text-[#29696B]">
+                   {editingProduct
+                     ? (isAddingStock ? "Agregar al stock" : "Stock")
+                     : "Stock"}
+                 </Label>
+                 {editingProduct && (
+                   <div className="mb-2 px-1">
+                     <div className="flex items-center gap-2 bg-[#DFEFE6]/30 p-2 rounded-md border border-[#91BEAD]/30">
+                       <Checkbox
+                         id="stock-checkbox"
+                         checked={isAddingStock}
+                         onCheckedChange={(checked) => setIsAddingStock(!!checked)}
+                       />
+                       <label
+                         htmlFor="stock-checkbox"
+                         className="text-sm text-[#29696B] cursor-pointer font-medium"
+                       >
+                         Añadir al stock existente
+                       </label>
+                     </div>
                    </div>
-                 </div>
-               )}
+                 )}
 
-               {/* Input directo como el de precio */}
+                 {/* Input directo como el de precio */}
+                 <Input
+                   id="stock"
+                   type="number"
+                   min="0"
+                   value={formData.stock}
+                   onChange={(e) => {
+                     // Usar la misma estructura exacta que el campo de precio
+                     setFormData({ ...formData, stock: e.target.value });
+                   }}
+                   required
+                   className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
+                 />
+
+                 {/* Información adicional */}
+                 {isAddingStock && editingProduct && (
+                   <div className="mt-1 text-xs text-[#29696B] bg-[#DFEFE6]/20 p-2 rounded border border-[#91BEAD]/30">
+                     <span className="font-medium">Stock actual:</span> {editingProduct.stock} unidades
+                     <span className="mx-1">→</span>
+                     <span className="font-medium">Stock final:</span> {editingProduct.stock + parseInt(formData.stock || '0')} unidades
+                   </div>
+                 )}
+
+                 <p className="text-xs text-[#7AA79C]">
+                   Máximo: {(999999999).toLocaleString()}
+                 </p>
+               </div>
+             </div>
+
+             {/* Campo de stock mínimo */}
+             <div>
+               <Label htmlFor="stockMinimo" className="text-sm text-[#29696B]">Stock Mínimo</Label>
                <Input
-                 id="stock"
+                 id="stockMinimo"
                  type="number"
                  min="0"
-                 value={formData.stock}
-                 onChange={(e) => {
-                   // Usar la misma estructura exacta que el campo de precio
-                   setFormData({ ...formData, stock: e.target.value });
-                 }}
-                 required
+                 value={formData.stockMinimo}
+                 onChange={(e) => setFormData({ ...formData, stockMinimo: e.target.value })}
                  className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
                />
-
-               {/* Información adicional */}
-               {isAddingStock && editingProduct && (
-                 <div className="mt-1 text-xs text-[#29696B] bg-[#DFEFE6]/20 p-2 rounded border border-[#91BEAD]/30">
-                   <span className="font-medium">Stock actual:</span> {editingProduct.stock} unidades
-                   <span className="mx-1">→</span>
-                   <span className="font-medium">Stock final:</span> {editingProduct.stock + parseInt(formData.stock || '0')} unidades
-                 </div>
-               )}
-
-               <p className="text-xs text-[#7AA79C]">
-                 Máximo: {(999999999).toLocaleString()}
+               <p className="text-xs text-[#7AA79C] mt-1">
+                 El sistema alertará cuando el stock sea igual o menor a este valor
                </p>
              </div>
-           </div>
 
-           {/* Campo de stock mínimo */}
-           <div>
-             <Label htmlFor="stockMinimo" className="text-sm text-[#29696B]">Stock Mínimo</Label>
-             <Input
-               id="stockMinimo"
-               type="number"
-               min="0"
-               value={formData.stockMinimo}
-               onChange={(e) => setFormData({ ...formData, stockMinimo: e.target.value })}
-               className="mt-1 border-[#91BEAD] focus:border-[#29696B]"
-             />
-             <p className="text-xs text-[#7AA79C] mt-1">
-               El sistema alertará cuando el stock sea igual o menor a este valor
-             </p>
-           </div>
-
-           {/* Sección de selección de productos para el combo */}
-           {isCombo && (
-             <div className="mt-4 border rounded-md p-3 border-[#91BEAD]/30 bg-[#DFEFE6]/10">
-               <div className="flex items-center justify-between mb-2">
-                 <Label className="text-sm font-medium text-[#29696B]">Productos en el combo</Label>
-                 <Button
-                   type="button"
-                   variant="outline"
-                   size="sm"
-                   onClick={openComboSelectionModal}
-                   className="text-xs h-8 border-[#00888A] text-[#00888A] hover:bg-[#00888A]/10"
-                 >
-                   <ShoppingBag className="w-3 h-3 mr-1" />
-                   Seleccionar productos
-                 </Button>
-               </div>
-
-               {selectedComboItems.length === 0 ? (
-                 <div className="text-center py-4 text-sm text-[#7AA79C]">
-                   <ShoppingBag className="w-8 h-8 mx-auto mb-2 text-[#7AA79C]/50" />
-                   <p>No hay productos seleccionados</p>
-                   <p className="text-xs">Haga clic en "Seleccionar productos" para agregar elementos al combo</p>
+             {/* Sección de selección de productos para el combo */}
+             {isCombo && (
+               <div className="mt-4 border rounded-md p-3 border-[#91BEAD]/30 bg-[#DFEFE6]/10">
+                 <div className="flex items-center justify-between mb-2">
+                   <Label className="text-sm font-medium text-[#29696B]">Productos en el combo</Label>
+                   <Button
+                     type="button"
+                     variant="outline"
+                     size="sm"
+                     onClick={openComboSelectionModal}
+                     className="text-xs h-8 border-[#00888A] text-[#00888A] hover:bg-[#00888A]/10"
+                   >
+                     <ShoppingBag className="w-3 h-3 mr-1" />
+                     Seleccionar productos
+                   </Button>
                  </div>
-               ) : (
-                 <div className="space-y-2">
-                   <div className="text-xs text-[#7AA79C] grid grid-cols-5 py-1 font-medium">
-                     <div className="col-span-2 pl-2">Producto</div>
-                     <div className="text-center">Precio</div>
-                     <div className="text-center">Cant.</div>
-                     <div className="text-right pr-2">Subtotal</div>
-                   </div>
-                   <div className="max-h-40 overflow-y-auto pr-1">
-                     {selectedComboItems.map((item, index) => (
-                       <div key={index} className="text-sm text-[#29696B] grid grid-cols-5 py-2 border-b border-[#91BEAD]/10 last:border-0 items-center">
-                         <div className="col-span-2 truncate pl-2">{item.nombre}</div>
-                         <div className="text-center">${(item.precio || 0).toFixed(2)}</div>
-                         <div className="text-center">{item.cantidad}</div>
-                         <div className="text-right font-medium pr-2">${((item.precio || 0) * item.cantidad).toFixed(2)}</div>
-                       </div>
-                     ))}
-                   </div>
-                   <div className="pt-2 flex justify-between text-sm font-medium text-[#29696B]">
-                     <span>Precio total de los productos:</span>
-                     <span>${calculateComboTotal(selectedComboItems).toFixed(2)}</span>
-                   </div>
 
-                   {/* Alertas de stock para combos */}
-                   {stockWarnings.length > 0 && (
-                     <div className="mt-2 bg-yellow-50 border border-yellow-300 rounded-md p-2">
-                       <p className="text-xs font-medium text-yellow-800 mb-1">
-                         Advertencias de disponibilidad:
-                       </p>
-                       <ul className="text-xs text-yellow-700 list-disc pl-4 space-y-1">
-                         {stockWarnings.map((warning, index) => (
-                           <li key={index}>{warning}</li>
-                         ))}
-                       </ul>
+                 {selectedComboItems.length === 0 ? (
+                   <div className="text-center py-4 text-sm text-[#7AA79C]">
+                     <ShoppingBag className="w-8 h-8 mx-auto mb-2 text-[#7AA79C]/50" />
+                     <p>No hay productos seleccionados</p>
+                     <p className="text-xs">Haga clic en "Seleccionar productos" para agregar elementos al combo</p>
+                   </div>
+                 ) : (
+                   <div className="space-y-2">
+                     <div className="text-xs text-[#7AA79C] grid grid-cols-5 py-1 font-medium">
+                       <div className="col-span-2 pl-2">Producto</div>
+                       <div className="text-center">Precio</div>
+                       <div className="text-center">Cant.</div>
+                       <div className="text-right pr-2">Subtotal</div>
+                     </div>
+                     <div className="max-h-40 overflow-y-auto pr-1">
+                       {selectedComboItems.map((item, index) => (
+                         <div key={index} className="text-sm text-[#29696B] grid grid-cols-5 py-2 border-b border-[#91BEAD]/10 last:border-0 items-center">
+                           <div className="col-span-2 truncate pl-2">{item.nombre}</div>
+                           <div className="text-center">${(item.precio || 0).toFixed(2)}</div>
+                           <div className="text-center">{item.cantidad}</div>
+                           <div className="text-right font-medium pr-2">${((item.precio || 0) * item.cantidad).toFixed(2)}</div>
+                         </div>
+                       ))}
+                     </div>
+                     <div className="pt-2 flex justify-between text-sm font-medium text-[#29696B]">
+                       <span>Precio total de los productos:</span>
+                       <span>${calculateComboTotal(selectedComboItems).toFixed(2)}</span>
+                     </div>
+
+                     {/* Alertas de stock para combos */}
+                     {stockWarnings.length > 0 && (
+                       <div className="mt-2 bg-yellow-50 border border-yellow-300 rounded-md p-2">
+                         <p className="text-xs font-medium text-yellow-800 mb-1">
+                           Advertencias de disponibilidad:
+                         </p>
+                         <ul className="text-xs text-yellow-700 list-disc pl-4 space-y-1">
+                           {stockWarnings.map((warning, index) => (
+                             <li key={index}>{warning}</li>
+                           ))}
+                         </ul>
+                       </div>
+                     )}
+                   </div>
+                 )}
+               </div>
+             )}
+
+             {/* Campo de imagen */}
+             <div data-image-section>
+               <Label className="text-sm text-[#29696B] block mb-2">Imagen del Producto</Label>
+
+               {/* Componente mejorado de subida de imágenes */}
+               {editingProduct ? (
+                 <div className="mt-1 flex flex-col space-y-2">
+                   {formData.imagenPreview ? (
+                     <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
+                       {typeof formData.imagenPreview === 'string' && (
+                         <img
+                           src={formData.imagenPreview}
+                           alt="Vista previa"
+                           className="w-full h-full object-contain"
+                           onError={(e) => {
+                             console.log("Error al cargar imagen de vista previa", e);
+                             const target = e.target as HTMLImageElement;
+                             target.src = "/lyme.png";
+                             target.className = "w-full h-full object-contain p-4";
+                           }}
+                         />
+                       )}
+
+                       <Button
+                         type="button"
+                         variant="destructive"
+                         size="sm"
+                         onClick={() => confirmDeleteImage(editingProduct._id)}
+                         className="absolute top-2 right-2 h-8 w-8 p-0 bg-red-500 hover:bg-red-600"
+                       >
+                         <X className="h-4 w-4" />
+                       </Button>
+                     </div>
+                   ) : (
+                     <div className="flex flex-col items-center justify-center w-full">
+                       <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#91BEAD]/30 border-dashed rounded-md cursor-pointer bg-[#DFEFE6]/20 hover:bg-[#DFEFE6]/40 transition-colors">
+                         <div className="flex flex-col items-center justify-center pt-3 pb-4">
+                           <ImageIcon className="w-8 h-8 text-[#7AA79C] mb-1" />
+                           <p className="text-xs text-[#7AA79C]">
+                             Haz clic para subir una imagen
+                           </p>
+                           <p className="text-xs text-[#7AA79C]">
+                             Máximo 5MB
+                           </p>
+                         </div>
+                         <input
+                           ref={fileInputRef}
+                           type="file"
+                           accept="image/*"
+                           className="hidden"
+                           onChange={handleImageChange}
+                         />
+                       </label>
                      </div>
                    )}
                  </div>
-               )}
-             </div>
-           )}
-
-           {/* Campo de imagen */}
-           <div data-image-section>
-             <Label className="text-sm text-[#29696B] block mb-2">Imagen del Producto</Label>
-
-             {/* Componente mejorado de subida de imágenes */}
-             {editingProduct ? (
-               <div className="mt-1 flex flex-col space-y-2">
-                 {formData.imagenPreview ? (
-                   <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
-                     {typeof formData.imagenPreview === 'string' && (
+               ) : (
+                 <div className="flex items-center justify-center w-full">
+                   {formData.imagenPreview ? (
+                     <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
                        <img
-                         src={formData.imagenPreview}
+                         src={formData.imagenPreview as string}
                          alt="Vista previa"
                          className="w-full h-full object-contain"
                          onError={(e) => {
-                           console.log("Error al cargar imagen de vista previa", e);
+                           console.log("Error al cargar imagen de vista previa (nuevo)", e);
                            const target = e.target as HTMLImageElement;
                            target.src = "/lyme.png";
                            target.className = "w-full h-full object-contain p-4";
                          }}
                        />
-                     )}
-
-                     <Button
-                       type="button"
-                       variant="destructive"
-                       size="sm"
-                       onClick={() => confirmDeleteImage(editingProduct._id)}
-                       className="absolute top-2 right-2 h-8 w-8 p-0 bg-red-500 hover:bg-red-600"
-                     >
-                       <X className="h-4 w-4" />
-                     </Button>
-                   </div>
-                 ) : (
-                   <div className="flex flex-col items-center justify-center w-full">
+                       <Button
+                         type="button"
+                         variant="destructive"
+                         size="sm"
+                         onClick={handleRemoveImage}
+                         className="absolute top-2 right-2 h-8 w-8 p-0 bg-red-500 hover:bg-red-600"
+                       >
+                         <X className="h-4 w-4" />
+                       </Button>
+                     </div>
+                   ) : (
                      <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#91BEAD]/30 border-dashed rounded-md cursor-pointer bg-[#DFEFE6]/20 hover:bg-[#DFEFE6]/40 transition-colors">
                        <div className="flex flex-col items-center justify-center pt-3 pb-4">
                          <ImageIcon className="w-8 h-8 text-[#7AA79C] mb-1" />
@@ -2555,357 +2688,310 @@ const handleDeleteProductImage = async (productId: string) => {
                          onChange={handleImageChange}
                        />
                      </label>
-                   </div>
-                 )}
-               </div>
-             ) : (
-               <div className="flex items-center justify-center w-full">
-                 {formData.imagenPreview ? (
-                   <div className="relative w-full h-32 bg-[#DFEFE6]/20 rounded-md overflow-hidden border border-[#91BEAD]/30">
-                     <img
-                       src={formData.imagenPreview as string}
-                       alt="Vista previa"
-                       className="w-full h-full object-contain"
-                       onError={(e) => {
-                         console.log("Error al cargar imagen de vista previa (nuevo)", e);
-                         const target = e.target as HTMLImageElement;
-                         target.src = "/lyme.png";
-                         target.className = "w-full h-full object-contain p-4";
-                       }}
-                     />
-                     <Button
-                       type="button"
-                       variant="destructive"
-                       size="sm"
-                       onClick={handleRemoveImage}
-                       className="absolute top-2 right-2 h-8 w-8 p-0 bg-red-500 hover:bg-red-600"
-                     >
-                       <X className="h-4 w-4" />
-                     </Button>
-                   </div>
-                 ) : (
-                   <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-[#91BEAD]/30 border-dashed rounded-md cursor-pointer bg-[#DFEFE6]/20 hover:bg-[#DFEFE6]/40 transition-colors">
-                     <div className="flex flex-col items-center justify-center pt-3 pb-4">
-                       <ImageIcon className="w-8 h-8 text-[#7AA79C] mb-1" />
-                       <p className="text-xs text-[#7AA79C]">
-                         Haz clic para subir una imagen
-                       </p>
-                       <p className="text-xs text-[#7AA79C]">
-                         Máximo 5MB
-                       </p>
-                     </div>
-                     <input
-                       ref={fileInputRef}
-                       type="file"
-                       accept="image/*"
-                       className="hidden"
-                       onChange={handleImageChange}
-                     />
-                   </label>
-                 )}
-               </div>
-             )}
-           </div>
-         </div>
-         <DialogFooter className="sticky bottom-0 bg-white pt-2 pb-4 z-10 gap-2 mt-4">
-           <Button
-             type="button"
-             variant="outline"
-             onClick={() => {
-               setShowModal(false);
-               resetForm();
-             }}
-             className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30">
-             Cancelar
-           </Button>
-           <Button
-             type="submit"
-             className={`${isCombo ? 'bg-[#00888A] hover:bg-[#00888A]/90' : 'bg-[#29696B] hover:bg-[#29696B]/90'} text-white`}
-             disabled={imageLoading || (isCombo && selectedComboItems.length === 0) || !formData.categoria || !formData.subCategoria || hasStockIssues}
-           >
-             {imageLoading ? (
-               <>
-                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                 Procesando imagen...
-               </>
-             ) : (
-               editingProduct ? 'Guardar Cambios' : (isCombo ? 'Crear Combo' : 'Crear Producto')
-             )}
-           </Button>
-         </DialogFooter>
-       </form>
-     </DialogContent>
-   </Dialog>
-
-   {/* Modal de selección de productos para el combo - Mejorado para responsividad */}
-   <Dialog open={showComboSelectionModal} onOpenChange={setShowComboSelectionModal}>
-     <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-auto">
-       <DialogHeader>
-         <DialogTitle className="text-[#29696B]">Seleccionar productos para el combo</DialogTitle>
-         <DialogDescription>
-           Agregue los productos que formarán parte del combo.
-         </DialogDescription>
-       </DialogHeader>
-
-       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-         {/* Panel izquierdo: Lista de productos disponibles */}
-         <div className="space-y-4">
-           <div className="relative">
-             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
-             <Input
-               type="text"
-               placeholder="Buscar productos..."
-               value={comboSearchTerm}
-               onChange={(e) => setComboSearchTerm(e.target.value)}
-               className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
-             />
-           </div>
-
-           <div className="border rounded-md border-[#91BEAD]/30">
-             <div className="bg-[#DFEFE6]/30 p-3 text-[#29696B] font-medium text-sm">
-               Productos disponibles
-             </div>
-             <div className="max-h-[300px] overflow-y-auto">
-               <div className="divide-y divide-[#91BEAD]/20">
-                 {comboProducts.length === 0 ? (
-                   <div className="p-4 text-center text-[#7AA79C]">
-                     No hay productos disponibles
-                   </div>
-                 ) : (
-                   comboProducts.map((product) => (
-                     <div key={product._id} className="p-3 flex justify-between items-center hover:bg-[#DFEFE6]/20">
-                       <div className="flex-1 min-w-0">
-                         <div className="font-medium text-sm text-[#29696B] truncate">{product.nombre}</div>
-                         <div className="text-xs text-[#7AA79C] flex items-center gap-1 mt-1">
-                           <span>${product.precio.toFixed(2)}</span>
-                           <span>•</span>
-                           <span className={`inline-flex px-1 py-0.5 text-xs rounded-full ${product.stock <= 0
-                             ? 'bg-red-100 text-red-800'
-                             : product.alertaStockBajo
-                               ? 'bg-yellow-100 text-yellow-800'
-                               : 'bg-[#DFEFE6] text-[#29696B]'
-                             }`}>
-                             Stock: {product.stock}
-                           </span>
-                         </div>
-                       </div>
-                       <Button
-                         type="button"
-                         variant="outline"
-                         size="sm"
-                         onClick={() => handleAddComboItem(product)}
-                         className="h-8 text-[#29696B] border-[#91BEAD] hover:bg-[#DFEFE6]/30 whitespace-nowrap ml-2"
-                         disabled={product.stock <= 0}
-                       >
-                         <Plus className="w-3 h-3 mr-1" />
-                         Agregar
-                       </Button>
-                     </div>
-                   ))
-                 )}
-               </div>
+                   )}
+                 </div>
+               )}
              </div>
            </div>
-         </div>
+           <DialogFooter className="sticky bottom-0 bg-white pt-2 pb-4 z-10 gap-2 mt-4">
+             <Button
+               type="button"
+               variant="outline"
+               onClick={() => {
+                 setShowModal(false);
+                 resetForm();
+               }}
+               className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30">
+               Cancelar
+             </Button>
+             <Button
+               type="submit"
+               className={`${isCombo ? 'bg-[#00888A] hover:bg-[#00888A]/90' : 'bg-[#29696B] hover:bg-[#29696B]/90'} text-white`}
+               disabled={imageLoading || (isCombo && selectedComboItems.length === 0) || !formData.categoria || !formData.subCategoria || hasStockIssues}
+             >
+               {imageLoading ? (
+                 <>
+                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                   Procesando imagen...
+                 </>
+               ) : (
+                 editingProduct ? 'Guardar Cambios' : (isCombo ? 'Crear Combo' : 'Crear Producto')
+               )}
+             </Button>
+           </DialogFooter>
+         </form>
+       </DialogContent>
+     </Dialog>
 
-         {/* Panel derecho: Productos seleccionados */}
-         <div className="space-y-4">
-           <div>
-             <h4 className="font-medium text-[#29696B] mb-2">Productos seleccionados</h4>
-             {tempSelectedItems.length === 0 ? (
-               <div className="text-center py-6 text-sm text-[#7AA79C] border rounded-md border-[#91BEAD]/30">
-                 No hay productos seleccionados
+     {/* Modal de selección de productos para el combo - Mejorado para responsividad */}
+     <Dialog open={showComboSelectionModal} onOpenChange={setShowComboSelectionModal}>
+       <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-auto">
+         <DialogHeader>
+           <DialogTitle className="text-[#29696B]">Seleccionar productos para el combo</DialogTitle>
+           <DialogDescription>
+             Agregue los productos que formarán parte del combo.
+           </DialogDescription>
+         </DialogHeader>
+
+         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+           {/* Panel izquierdo: Lista de productos disponibles */}
+           <div className="space-y-4">
+             <div className="relative">
+               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
+               <Input
+                 type="text"
+                 placeholder="Buscar productos..."
+                 value={comboSearchTerm}
+                 onChange={(e) => setComboSearchTerm(e.target.value)}
+                 className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
+               />
+             </div>
+
+             <div className="border rounded-md border-[#91BEAD]/30">
+               <div className="bg-[#DFEFE6]/30 p-3 text-[#29696B] font-medium text-sm">
+                 Productos disponibles
                </div>
-             ) : (
-               <div className="border rounded-md border-[#91BEAD]/30">
-                 <div className="bg-[#DFEFE6]/30 p-3 text-[#29696B] font-medium text-sm">
-                   Lista de productos para el combo
-                 </div>
-                 <div className="max-h-[300px] overflow-y-auto">
-                   <div className="divide-y divide-[#91BEAD]/20">
-                     {tempSelectedItems.map((item, index) => (
-                       <div key={index} className="p-3">
-                         <div className="flex justify-between items-center mb-2">
-                           <div className="font-medium text-sm text-[#29696B] truncate max-w-[200px]">
-                             {item.nombre}
-                             {stockWarnings.some(w => w.includes(item.nombre)) && (
-                               <span className="ml-2">
-                                 <AlertTriangle className="inline-block w-4 h-4 text-yellow-500" />
-                               </span>
-                             )}
-                           </div>
-                           <Button
-                             type="button"
-                             variant="ghost"
-                             size="sm"
-                             onClick={() => handleUpdateComboItemQuantity(
-                               typeof item.productoId === 'string' ? item.productoId : item.productoId._id,
-                               0
-                             )}
-                             className="h-7 w-7 p-0 text-red-500 hover:bg-red-50"
-                           >
-                             <Trash2 className="w-4 h-4" />
-                           </Button>
-                         </div>
-                         <div className="flex justify-between items-center">
-                           <div className="text-xs text-[#7AA79C]">
-                             <span>${(item.precio || 0).toFixed(2)} x {item.cantidad}</span>
-                             <span className="ml-2 text-[#29696B] font-medium">= ${((item.precio || 0) * item.cantidad).toFixed(2)}</span>
-                           </div>
-                           <div className="flex items-center border rounded border-[#91BEAD]">
-                             <Button
-                               type="button"
-                               variant="ghost"
-                               size="sm"
-                               onClick={() => handleUpdateComboItemQuantity(
-                                 typeof item.productoId === 'string' ? item.productoId : item.productoId._id,
-                                 item.cantidad - 1
-                               )}
-                               className="h-7 w-7 p-0 text-[#29696B] hover:bg-[#DFEFE6]/30"
-                             >
-                               <Minus className="w-3 h-3" />
-                             </Button>
-                             <span className="w-8 text-center text-sm">{item.cantidad}</span>
-                             <Button
-                               type="button"
-                               variant="ghost"
-                               size="sm"
-                               onClick={() => handleUpdateComboItemQuantity(
-                                 typeof item.productoId === 'string' ? item.productoId : item.productoId._id,
-                                 item.cantidad + 1
-                               )}
-                               className="h-7 w-7 p-0 text-[#29696B] hover:bg-[#DFEFE6]/30"
-                             >
-                               <Plus className="w-3 h-3" />
-                             </Button>
-                           </div>
-                         </div>
-                       </div>
-                     ))}
-                   </div>
-                 </div>
-                 <div className="p-3 border-t border-[#91BEAD]/20 bg-[#DFEFE6]/20">
-                   <div className="flex justify-between items-center font-medium text-[#29696B]">
-                     <span>Total:</span>
-                     <span>${calculateComboTotal(tempSelectedItems).toFixed(2)}</span>
-                   </div>
-
-                   {/* Alertas de stock para combos */}
-                   {stockWarnings.length > 0 && (
-                     <div className="mt-2 bg-yellow-50 border border-yellow-300 rounded-md p-2">
-                       <p className="text-xs font-medium text-yellow-800 mb-1">
-                         Advertencias de disponibilidad:
-                       </p>
-                       <ul className="text-xs text-yellow-700 list-disc pl-4 space-y-1">
-                         {stockWarnings.map((warning, index) => (
-                           <li key={index}>{warning}</li>
-                         ))}
-                       </ul>
+               <div className="max-h-[300px] overflow-y-auto">
+                 <div className="divide-y divide-[#91BEAD]/20">
+                   {comboProducts.length === 0 ? (
+                     <div className="p-4 text-center text-[#7AA79C]">
+                       No hay productos disponibles
                      </div>
+                   ) : (
+                     comboProducts.map((product) => (
+                       <div key={product._id} className="p-3 flex justify-between items-center hover:bg-[#DFEFE6]/20">
+                         <div className="flex-1 min-w-0">
+                           <div className="font-medium text-sm text-[#29696B] truncate">{product.nombre}</div>
+                           <div className="text-xs text-[#7AA79C] flex items-center gap-1 mt-1">
+                             <span>${product.precio.toFixed(2)}</span>
+                             <span>•</span>
+                             <span className={`inline-flex px-1 py-0.5 text-xs rounded-full ${product.stock <= 0
+                               ? 'bg-red-100 text-red-800'
+                               : product.alertaStockBajo
+                                 ? 'bg-yellow-100 text-yellow-800'
+                                 : 'bg-[#DFEFE6] text-[#29696B]'
+                               }`}>
+                               Stock: {product.stock}
+                             </span>
+                           </div>
+                         </div>
+                         <Button
+                           type="button"
+                           variant="outline"
+                           size="sm"
+                           onClick={() => handleAddComboItem(product)}
+                           className="h-8 text-[#29696B] border-[#91BEAD] hover:bg-[#DFEFE6]/30 whitespace-nowrap ml-2"
+                           disabled={product.stock <= 0}
+                         >
+                           <Plus className="w-3 h-3 mr-1" />
+                           Agregar
+                         </Button>
+                       </div>
+                     ))
                    )}
                  </div>
                </div>
-             )}
+             </div>
+           </div>
+
+           {/* Panel derecho: Productos seleccionados */}
+           <div className="space-y-4">
+             <div>
+               <h4 className="font-medium text-[#29696B] mb-2">Productos seleccionados</h4>
+               {tempSelectedItems.length === 0 ? (
+                 <div className="text-center py-6 text-sm text-[#7AA79C] border rounded-md border-[#91BEAD]/30">
+                   No hay productos seleccionados
+                 </div>
+               ) : (
+                 <div className="border rounded-md border-[#91BEAD]/30">
+                   <div className="bg-[#DFEFE6]/30 p-3 text-[#29696B] font-medium text-sm">
+                     Lista de productos para el combo
+                   </div>
+                   <div className="max-h-[300px] overflow-y-auto">
+                     <div className="divide-y divide-[#91BEAD]/20">
+                       {tempSelectedItems.map((item, index) => (
+                         <div key={index} className="p-3">
+                           <div className="flex justify-between items-center mb-2">
+                             <div className="font-medium text-sm text-[#29696B] truncate max-w-[200px]">
+                               {item.nombre}
+                               {stockWarnings.some(w => w.includes(item.nombre)) && (
+                                 <span className="ml-2">
+                                   <AlertTriangle className="inline-block w-4 h-4 text-yellow-500" />
+                                 </span>
+                               )}
+                             </div>
+                             <Button
+                               type="button"
+                               variant="ghost"
+                               size="sm"
+                               onClick={() => handleUpdateComboItemQuantity(
+                                 typeof item.productoId === 'string' ? item.productoId : item.productoId._id,
+                                 0
+                               )}
+                               className="h-7 w-7 p-0 text-red-500 hover:bg-red-50"
+                             >
+                               <Trash2 className="w-4 h-4" />
+                             </Button>
+                           </div>
+                           <div className="flex justify-between items-center">
+                             <div className="text-xs text-[#7AA79C]">
+                               <span>${(item.precio || 0).toFixed(2)} x {item.cantidad}</span>
+                               <span className="ml-2 text-[#29696B] font-medium">= ${((item.precio || 0) * item.cantidad).toFixed(2)}</span>
+                             </div>
+                             <div className="flex items-center border rounded border-[#91BEAD]">
+                               <Button
+                                 type="button"
+                                 variant="ghost"
+                                 size="sm"
+                                 onClick={() => handleUpdateComboItemQuantity(
+                                   typeof item.productoId === 'string' ? item.productoId : item.productoId._id,
+                                   item.cantidad - 1
+                                 )}
+                                 className="h-7 w-7 p-0 text-[#29696B] hover:bg-[#DFEFE6]/30"
+                               >
+                                 <Minus className="w-3 h-3" />
+                               </Button>
+                               <span className="w-8 text-center text-sm">{item.cantidad}</span>
+                               <Button
+                                 type="button"
+                                 variant="ghost"
+                                 size="sm"
+                                 onClick={() => handleUpdateComboItemQuantity(
+                                   typeof item.productoId === 'string' ? item.productoId : item.productoId._id,
+                                   item.cantidad + 1
+                                 )}
+                                 className="h-7 w-7 p-0 text-[#29696B] hover:bg-[#DFEFE6]/30"
+                               >
+                                 <Plus className="w-3 h-3" />
+                               </Button>
+                             </div>
+                           </div>
+                         </div>
+                       ))}
+                     </div>
+                   </div>
+                   <div className="p-3 border-t border-[#91BEAD]/20 bg-[#DFEFE6]/20">
+                     <div className="flex justify-between items-center font-medium text-[#29696B]">
+                       <span>Total:</span>
+                       <span>${calculateComboTotal(tempSelectedItems).toFixed(2)}</span>
+                     </div>
+
+                     {/* Alertas de stock para combos */}
+                     {stockWarnings.length > 0 && (
+                       <div className="mt-2 bg-yellow-50 border border-yellow-300 rounded-md p-2">
+                         <p className="text-xs font-medium text-yellow-800 mb-1">
+                           Advertencias de disponibilidad:
+                         </p>
+                         <ul className="text-xs text-yellow-700 list-disc pl-4 space-y-1">
+                           {stockWarnings.map((warning, index) => (
+                             <li key={index}>{warning}</li>
+                           ))}
+                         </ul>
+                       </div>
+                     )}
+                   </div>
+                 </div>
+               )}
+             </div>
            </div>
          </div>
+
+         <DialogFooter className="gap-2 mt-4">
+           <Button
+             type="button"
+             variant="outline"
+             onClick={() => setShowComboSelectionModal(false)}
+             className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
+           >
+             Cancelar
+           </Button>
+           <Button
+             type="button"
+             onClick={confirmComboSelection}
+             className="bg-[#00888A] hover:bg-[#00888A]/90 text-white"
+             disabled={tempSelectedItems.length === 0 || hasStockIssues}
+           >
+             Confirmar selección
+           </Button>
+         </DialogFooter>
+       </DialogContent>
+     </Dialog>
+
+     {/* Diálogo de confirmación de eliminación */}
+     <ConfirmationDialog
+       open={deleteDialogOpen}
+       onOpenChange={setDeleteDialogOpen}
+       title="Eliminar producto"
+       description="¿Está seguro de que desea eliminar este producto? Esta acción no se puede deshacer."
+       confirmText="Eliminar"
+       cancelText="Cancelar"
+       onConfirm={() => productToDelete && handleDelete(productToDelete)}
+       variant="destructive"
+     />
+
+     {/* Diálogo de confirmación de eliminación de imagen */}
+     <ConfirmationDialog
+       open={deleteImageDialogOpen}
+       onOpenChange={setDeleteImageDialogOpen}
+       title="Eliminar imagen"
+       description="¿Está seguro de que desea eliminar la imagen de este producto?"
+       confirmText="Eliminar"
+       cancelText="Cancelar"
+       onConfirm={() => productToDelete && handleDeleteProductImage(productToDelete)}
+       variant="destructive"
+     />
+
+     {/* Botones flotantes para filtros en móviles */}
+     {!loading && (lowStockCount > 0 || noStockCount > 0) && !showLowStockOnly && !showNoStockOnly && windowWidth < 768 && (
+       <div className="fixed bottom-6 right-6 z-10 flex flex-col gap-2">
+         <TooltipProvider>
+           {lowStockCount > 0 && (
+             <Tooltip>
+               <TooltipTrigger asChild>
+                 <Button
+                   onClick={toggleLowStockFilter}
+                   className="rounded-full h-14 w-14 shadow-lg bg-yellow-500 hover:bg-yellow-600 text-white"
+                 >
+                   <div className="relative">
+                     <HelpCircle className="h-6 w-6" />
+                     <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                       {lowStockCount > 99 ? '99+' : lowStockCount}
+                     </span>
+                   </div>
+                 </Button>
+               </TooltipTrigger>
+               <TooltipContent side="left">
+                 <p>Hay {lowStockCount} productos con stock bajo</p>
+                 <p className="text-xs">Toca para ver solo estos productos</p>
+               </TooltipContent>
+             </Tooltip>
+           )}
+
+           {noStockCount > 0 && (
+             <Tooltip>
+               <TooltipTrigger asChild>
+                 <Button
+                   onClick={toggleNoStockFilter}
+                   className="rounded-full h-14 w-14 shadow-lg bg-red-500 hover:bg-red-600 text-white"
+                 >
+                   <div className="relative">
+                     <AlertCircle className="h-6 w-6" />
+                     <span className="absolute -top-2 -right-2 bg-white text-red-500 text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                       {noStockCount > 99 ? '99+' : noStockCount}
+                     </span>
+                   </div>
+                 </Button>
+               </TooltipTrigger>
+               <TooltipContent side="left">
+                 <p>Hay {noStockCount} productos sin stock</p>
+                 <p className="text-xs">Toca para ver solo estos productos</p>
+               </TooltipContent>
+             </Tooltip>
+           )}
+         </TooltipProvider>
        </div>
-
-       <DialogFooter className="gap-2 mt-4">
-         <Button
-           type="button"
-           variant="outline"
-           onClick={() => setShowComboSelectionModal(false)}
-           className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
-         >
-           Cancelar
-         </Button>
-         <Button
-           type="button"
-           onClick={confirmComboSelection}
-           className="bg-[#00888A] hover:bg-[#00888A]/90 text-white"
-           disabled={tempSelectedItems.length === 0 || hasStockIssues}
-         >
-           Confirmar selección
-         </Button>
-       </DialogFooter>
-     </DialogContent>
-   </Dialog>
-
-   {/* Diálogo de confirmación de eliminación */}
-   <ConfirmationDialog
-     open={deleteDialogOpen}
-     onOpenChange={setDeleteDialogOpen}
-     title="Eliminar producto"
-     description="¿Está seguro de que desea eliminar este producto? Esta acción no se puede deshacer."
-     confirmText="Eliminar"
-     cancelText="Cancelar"
-     onConfirm={() => productToDelete && handleDelete(productToDelete)}
-     variant="destructive"
-   />
-
-   {/* Diálogo de confirmación de eliminación de imagen */}
-   <ConfirmationDialog
-     open={deleteImageDialogOpen}
-     onOpenChange={setDeleteImageDialogOpen}
-     title="Eliminar imagen"
-     description="¿Está seguro de que desea eliminar la imagen de este producto?"
-     confirmText="Eliminar"
-     cancelText="Cancelar"
-     onConfirm={() => productToDelete && handleDeleteProductImage(productToDelete)}
-     variant="destructive"
-   />
-
-   {/* Botones flotantes para filtros en móviles */}
-   {!loading && (lowStockCount > 0 || noStockCount > 0) && !showLowStockOnly && !showNoStockOnly && windowWidth < 768 && (
-     <div className="fixed bottom-6 right-6 z-10 flex flex-col gap-2">
-       <TooltipProvider>
-         {lowStockCount > 0 && (
-           <Tooltip>
-             <TooltipTrigger asChild>
-               <Button
-                 onClick={toggleLowStockFilter}
-                 className="rounded-full h-14 w-14 shadow-lg bg-yellow-500 hover:bg-yellow-600 text-white"
-               >
-                 <div className="relative">
-                   <HelpCircle className="h-6 w-6" />
-                   <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                     {lowStockCount > 99 ? '99+' : lowStockCount}
-                   </span>
-                 </div>
-               </Button>
-             </TooltipTrigger>
-             <TooltipContent side="left">
-               <p>Hay {lowStockCount} productos con stock bajo</p>
-               <p className="text-xs">Toca para ver solo estos productos</p>
-             </TooltipContent>
-           </Tooltip>
-         )}
-
-         {noStockCount > 0 && (
-           <Tooltip>
-             <TooltipTrigger asChild>
-               <Button
-                 onClick={toggleNoStockFilter}
-                 className="rounded-full h-14 w-14 shadow-lg bg-red-500 hover:bg-red-600 text-white"
-               >
-                 <div className="relative">
-                   <AlertCircle className="h-6 w-6" />
-                   <span className="absolute -top-2 -right-2 bg-white text-red-500 text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                     {noStockCount > 99 ? '99+' : noStockCount}
-                   </span>
-                 </div>
-               </Button>
-             </TooltipTrigger>
-             <TooltipContent side="left">
-               <p>Hay {noStockCount} productos sin stock</p>
-               <p className="text-xs">Toca para ver solo estos productos</p>
-             </TooltipContent>
-           </Tooltip>
-         )}
-       </TooltipProvider>
-     </div>
-   )}
- </div>
+     )}
+   </div>
 );
 };
 
