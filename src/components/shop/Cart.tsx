@@ -21,7 +21,9 @@ import {
   Info,
   ChevronDown,
   ChevronUp,
-  RefreshCw
+  RefreshCw,
+  X,  // Añadimos este icono para el botón de limpiar selección
+  Package  // Añadimos este icono para los combos
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,7 +40,6 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
-import ProductImage from '@/components/admin/components/ProductImage';
 import { Badge } from '@/components/ui/badge';
 import {
   Accordion,
@@ -47,37 +48,165 @@ import {
   AccordionTrigger
 } from '@/components/ui/accordion';
 
-// Simple image component with error handling using React state
+// Importamos las utilidades de imagen
+import { getProductImageUrl, handleImageError } from '../../utils/image-utils';
+
+// Componente para mostrar imágenes de productos con manejo de errores
 const CartItemImage = ({ item }) => {
   const [imageError, setImageError] = useState(false);
 
-  if (imageError || !item.image) {
+  // Función para obtener la URL de la imagen
+  const getImageUrl = () => {
+    // Si el producto tiene imageUrl, usarla directamente
+    if (item.imageUrl) {
+      return item.imageUrl;
+    }
+
+    // Si tiene ID, construir URL basada en ID
+    if (item.id) {
+      return `/images/products/${item.id}.webp`;
+    }
+
+    // Fallback a logo
+    return '/lyme.png';
+  };
+
+  // Manejar errores de carga de imagen
+  const handleImgError = (e) => {
+    console.log(`Error de imagen para ítem: ${item.id}`);
+    setImageError(true);
+
+    // Establecer imagen de fallback
+    const target = e.target;
+    if (target) {
+      target.src = "/lyme.png";
+      target.className = "w-full h-full object-contain p-1";
+      target.alt = "Logo Lyme";
+    }
+  };
+
+  // Si ya sabemos que hay un error o no hay imagen, mostrar fallback directamente
+  if (imageError || !item.image && !item.id && !item.imageUrl) {
     return (
-      <ProductImage
-        productId={item.id}
-        alt={item.name}
-        width={80}
-        height={80}
-        quality={70}
-        className="w-full h-full object-cover rounded-md"
-        containerClassName="w-full h-full rounded-md"
-        fallbackClassName="w-full h-full flex items-center justify-center rounded-md"
-        placeholderText=""
-        useBase64={true}
-      />
+      <div className="w-full h-full flex items-center justify-center bg-white">
+        <img
+          src="/lyme.png"
+          alt="Logo Lyme"
+          className="w-full h-full object-contain p-1"
+        />
+      </div>
     );
   }
 
+  // Intentar mostrar la imagen con manejo de errores
   return (
     <img
-      src={`data:image/jpeg;base64,${item.image}`}
-      alt={item.name}
-      className="w-full h-full object-cover rounded-md"
-      onError={() => {
-        console.log(`Error de imagen para ítem: ${item.id}`);
-        setImageError(true);
-      }}
+      src={getImageUrl()}
+      alt={item.name || 'Producto'}
+      className="w-full h-full object-contain"
+      onError={handleImgError}
     />
+  );
+};
+
+// Componente para mostrar los detalles de un producto combo
+const ComboDetails = ({ item }) => {
+  const [showComboItems, setShowComboItems] = useState(false);
+
+  // Verificar si es un combo usando ambas propiedades posibles
+  const isCombo = item.isCombo || item.esCombo;
+  // Obtener items del combo (manejar ambos formatos de propiedad)
+  const comboItems = item.comboItems || item.itemsCombo || [];
+
+  // Si no es un combo o no hay productos en el combo, no mostrar nada
+  if (!isCombo || comboItems.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-1">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 px-2 py-0 text-xs text-[#3a8fb7] hover:bg-[#3a8fb7]/20 w-full flex justify-between items-center"
+        onClick={() => setShowComboItems(!showComboItems)}
+      >
+        <span className="flex items-center">
+          <Package className="h-3 w-3 mr-1" />
+          {showComboItems ? 'Ocultar productos del combo' : 'Ver productos del combo'}
+        </span>
+        {showComboItems ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+      </Button>
+      
+      {showComboItems && (
+        <div className="mt-1 text-xs text-[#4a4a4a] bg-[#d4f1f9]/80 rounded-md p-2 space-y-1 border border-[#3a8fb7]/30 shadow-sm">
+          <div className="font-medium mb-1 flex items-center justify-between">
+            <div className="flex items-center">
+              <PackageOpen size={12} className="mr-1 text-[#3a8fb7]" />
+              <span className="text-[#3a8fb7]">Este combo incluye:</span>
+            </div>
+            <Badge className="bg-[#3a8fb7] text-white text-[10px]">
+              {comboItems.length} productos
+            </Badge>
+          </div>
+          <ul className="space-y-1 max-h-40 overflow-y-auto scrollbar-thin scrollbar-thumb-[#3a8fb7]/40 scrollbar-track-transparent">
+            {comboItems.map((comboItem, index) => (
+              <li key={index} className="flex justify-between border-b border-[#3a8fb7]/10 pb-1 last:border-0">
+                <span className="truncate pr-2 font-medium">{comboItem.nombre || comboItem.name || 'Producto'}</span>
+                <span className="text-[#3a8fb7] font-bold">x{comboItem.cantidad || comboItem.quantity || 1}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Componente SelectWithClear para permitir limpiar las selecciones
+const SelectWithClear = ({
+  value,
+  onValueChange,
+  placeholder,
+  disabled,
+  children,
+  className,
+  canClear = true
+}) => {
+  // Función para manejar la limpieza de la selección
+  const handleClear = (e) => {
+    e.stopPropagation();
+    onValueChange("");
+  };
+
+  return (
+    <div className="relative">
+      <Select
+        value={value}
+        onValueChange={onValueChange}
+        disabled={disabled}
+      >
+        <SelectTrigger
+          className={`w-full bg-white border-2 border-[#3a8fb7] rounded-md text-[#3a8fb7] pr-8 ${className}`}
+        >
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent className="max-h-60 overflow-y-auto bg-white border-[#3a8fb7]">
+          {children}
+        </SelectContent>
+      </Select>
+
+      {canClear && value && (
+        <Button
+          type="button"
+          variant="ghost"
+          className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 w-7 p-0 text-[#4a4a4a] hover:text-[#F44336] hover:bg-transparent"
+          onClick={handleClear}
+        >
+          <X className="h-3 w-3" />
+        </Button>
+      )}
+    </div>
   );
 };
 
@@ -228,10 +357,10 @@ export const Cart: React.FC = () => {
   // Validación del formulario para desbloquear el botón de realizar pedido
   const validarFormulario = useCallback(() => {
     if (clienteSeleccionado && subServicioSeleccionado && items.length > 0) {
-      console.log('Formulario válido:', {clienteSeleccionado, subServicioSeleccionado, items});
+      console.log('Formulario válido:', { clienteSeleccionado, subServicioSeleccionado, items });
       setFormValid(true);
     } else {
-      console.log('Formulario inválido:', {clienteSeleccionado, subServicioSeleccionado, items});
+      console.log('Formulario inválido:', { clienteSeleccionado, subServicioSeleccionado, items });
       setFormValid(false);
     }
   }, [clienteSeleccionado, subServicioSeleccionado, items]);
@@ -739,18 +868,34 @@ export const Cart: React.FC = () => {
   };
 
   // Actualizar cantidad con validación
+  // Actualizar cantidad con validación
   const handleQuantityChange = (id: string, newQuantity: number) => {
     // Sólo aseguramos que la cantidad sea positiva
     if (newQuantity < 1) newQuantity = 1;
-
-    // Buscar el item para verificar si es de mantenimiento (sin límite)
+  
+    // Buscar el item para verificar si es un combo o de mantenimiento
     const item = items.find(item => item.id === id);
+    
+    // Verificar si es combo usando ambas propiedades posibles
+    const isCombo = item && (item.isCombo || item.esCombo);
+  
+    // Si es un combo, siempre mantener la cantidad en 1
+    if (isCombo) {
+      // Si intentan cambiar la cantidad de un combo, mostrar mensaje informativo
+      if (newQuantity > 1) {
+        addNotification("Los combos están limitados a 1 unidad por pedido", "info");
+      }
+      updateQuantity(id, 1);
+      return;
+    }
+    
+    // Para productos de mantenimiento (sin límite)
     if (item && item.category === 'mantenimiento') {
       // No aplicamos límite superior para productos de mantenimiento
       updateQuantity(id, newQuantity);
       return;
     }
-
+  
     // Para otros productos (como limpieza), mantenemos el comportamiento actual
     updateQuantity(id, newQuantity);
   };
@@ -758,6 +903,7 @@ export const Cart: React.FC = () => {
   // Manejar cambio de cliente seleccionado
   const handleClienteChange = (clienteId: string) => {
     setClienteSeleccionado(clienteId);
+    // Limpiar los campos dependientes
     setSubServicioSeleccionado(null);
     setSubUbicacionSeleccionada(null);
 
@@ -1199,7 +1345,15 @@ export const Cart: React.FC = () => {
                           {/* Información del producto */}
                           <div className="flex-grow">
                             <div className="flex justify-between">
-                              <h3 className="font-medium text-base md:text-lg text-[#3a8fb7] line-clamp-1">{item.name}</h3>
+                              <h3 className="font-medium text-base md:text-lg text-[#3a8fb7] line-clamp-1">
+                                {item.name}
+                                {(item.isCombo || item.esCombo) && (
+                                  <Badge className="ml-2 bg-[#ffffff] text-[#3a8fb7] border border-[#3a8fb7] text-xs">
+                                    <Package size={10} className="mr-1" />
+                                    Combo
+                                  </Badge>
+                                )}
+                              </h3>
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -1217,32 +1371,70 @@ export const Cart: React.FC = () => {
                               </p>
                             )}
 
+                            {/* Detalles del combo */}
+                            {item.isCombo && <ComboDetails item={item} />}
+
                             <div className="flex justify-between items-center mt-2">
-                              <div className="flex items-center space-x-1 bg-white rounded-md border border-[#3a8fb7]/30">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 w-7 md:h-8 md:w-8 p-0 text-[#3a8fb7]"
-                                  onClick={() => handleQuantityChange(item.id, item.quantity - 1)}
-                                >
-                                  <Minus className="h-2 w-2 md:h-3 md:w-3" />
-                                </Button>
-                                <Input
-                                  type="number"
-                                  min="1"
-                                  value={item.quantity}
-                                  onChange={(e) => handleQuantityChange(item.id, parseInt(e.target.value) || 1)}
-                                  className="w-10 md:w-16 h-7 md:h-8 text-center p-0 border-0 bg-transparent focus:ring-0 text-[#3a8fb7] text-xs md:text-sm"
-                                />
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 w-7 md:h-8 md:w-8 p-0 text-[#3a8fb7]"
-                                  onClick={() => handleQuantityChange(item.id, item.quantity + 1)}
-                                >
-                                  <Plus className="h-2 w-2 md:h-3 md:w-3" />
-                                </Button>
-                              </div>
+                              {(item.isCombo || item.esCombo) ? (
+                                <div className="flex items-center">
+                                  <div className="flex items-center space-x-1 bg-white rounded-md border border-[#3a8fb7]/30">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 w-7 md:h-8 md:w-8 p-0 text-[#3a8fb7]"
+                                      disabled={true}
+                                      title="Los combos están limitados a 1 unidad"
+                                    >
+                                      <Minus className="h-2 w-2 md:h-3 md:w-3 opacity-50" />
+                                    </Button>
+                                    <Input
+                                      type="number"
+                                      value="1"
+                                      readOnly
+                                      disabled
+                                      className="w-10 md:w-16 h-7 md:h-8 text-center p-0 border-0 bg-transparent focus:ring-0 text-[#3a8fb7] text-xs md:text-sm"
+                                    />
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 w-7 md:h-8 md:w-8 p-0 text-[#3a8fb7]"
+                                      disabled={true}
+                                      title="Los combos están limitados a 1 unidad"
+                                    >
+                                      <Plus className="h-2 w-2 md:h-3 md:w-3 opacity-50" />
+                                    </Button>
+                                  </div>
+                                  <span className="ml-2 text-xs text-[#3a8fb7] italic">
+                                    Limitado a 1 unidad
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center space-x-1 bg-white rounded-md border border-[#3a8fb7]/30">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 md:h-8 md:w-8 p-0 text-[#3a8fb7]"
+                                    onClick={() => handleQuantityChange(item.id, item.quantity - 1)}
+                                  >
+                                    <Minus className="h-2 w-2 md:h-3 md:w-3" />
+                                  </Button>
+                                  <Input
+                                    type="number"
+                                    min="1"
+                                    value={item.quantity}
+                                    onChange={(e) => handleQuantityChange(item.id, parseInt(e.target.value) || 1)}
+                                    className="w-10 md:w-16 h-7 md:h-8 text-center p-0 border-0 bg-transparent focus:ring-0 text-[#3a8fb7] text-xs md:text-sm"
+                                  />
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 md:h-8 md:w-8 p-0 text-[#3a8fb7]"
+                                    onClick={() => handleQuantityChange(item.id, item.quantity + 1)}
+                                  >
+                                    <Plus className="h-2 w-2 md:h-3 md:w-3" />
+                                  </Button>
+                                </div>
+                              )}
 
                               <div className="text-right">
                                 <div className="text-base md:text-lg font-semibold text-[#3a8fb7]">${(item.price * item.quantity).toFixed(2)}</div>
@@ -1319,45 +1511,42 @@ export const Cart: React.FC = () => {
                                     </div>
                                   )}
 
-                                  <Select
+                                  {/* Reemplazo del Select por SelectWithClear */}
+                                  <SelectWithClear
                                     value={clienteSeleccionado || ""}
                                     onValueChange={handleClienteChange}
                                     disabled={cargandoClientes}
+                                    placeholder="Selecciona un cliente"
+                                    className="h-9 text-xs"
                                   >
-                                    <SelectTrigger
-                                      className="w-full bg-white border-2 border-[#3a8fb7] rounded-md text-[#3a8fb7] h-9 text-xs"
-                                    >
-                                      <SelectValue placeholder="Selecciona un cliente" />
-                                    </SelectTrigger>
-                                    <SelectContent className="max-h-60 overflow-y-auto bg-white border-[#3a8fb7]">
-                                      {Object.entries(clientesAgrupados).map(([servicio, clientesServicio]) => (
-                                        <div key={servicio} className="px-1 py-1">
-                                          <div className="flex items-center px-2 py-1 text-xs uppercase tracking-wider font-semibold bg-[#d4f1f9] text-[#3a8fb7] rounded mb-1">
-                                            <Building className="h-3 w-3 mr-1" />
-                                            {servicio}
-                                          </div>
-
-                                          <div className="pl-1">
-                                            {clientesServicio.map(cliente => (
-                                              <SelectItem
-                                                key={cliente._id}
-                                                value={cliente._id}
-                                                className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
-                                              >
-                                                <div className="flex items-center">
-                                                  <Building className="h-3 w-3 mr-2 text-[#4a4a4a]" />
-                                                  <span>{cliente.nombre}</span>
-                                                  {cliente.seccionDelServicio && (
-                                                    <span className="ml-1 text-xs text-[#7AA79C]">({cliente.seccionDelServicio})</span>
-                                                  )}
-                                                </div>
-                                              </SelectItem>
-                                            ))}
-                                          </div>
+                                    {Object.entries(clientesAgrupados).map(([servicio, clientesServicio]) => (
+                                      <div key={servicio} className="px-1 py-1">
+                                        <div className="flex items-center px-2 py-1 text-xs uppercase tracking-wider font-semibold bg-[#d4f1f9] text-[#3a8fb7] rounded mb-1">
+                                          <Building className="h-3 w-3 mr-1" />
+                                          {servicio}
                                         </div>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
+
+                                        <div className="pl-1">
+                                          {clientesServicio.map(cliente => (
+                                            <SelectItem
+                                              key={cliente._id}
+                                              value={cliente._id}
+                                              className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
+                                            >
+                                              <div className="flex items-center">
+                                                <Building className="h-3 w-3 mr-2 text-[#4a4a4a]" />
+                                                {/* Modificamos para mostrar el nombre del cliente en lugar de la sección */}
+                                                <span>{cliente.nombre}</span>
+                                                {cliente.seccionDelServicio && (
+                                                  <span className="ml-1 text-xs text-[#7AA79C]">({cliente.seccionDelServicio})</span>
+                                                )}
+                                              </div>
+                                            </SelectItem>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </SelectWithClear>
                                 </div>
                               )}
                             </div>
@@ -1388,36 +1577,32 @@ export const Cart: React.FC = () => {
                                     Selecciona un sub-servicio
                                   </Label>
 
-                                  <Select
+                                  {/* Reemplazo del Select por SelectWithClear */}
+                                  <SelectWithClear
                                     value={subServicioSeleccionado || ""}
                                     onValueChange={handleSubServicioChange}
                                     disabled={cargandoClientes}
+                                    placeholder="Selecciona un sub-servicio"
+                                    className="h-9 text-xs"
                                   >
-                                    <SelectTrigger
-                                      className="w-full bg-white border-2 border-[#3a8fb7] rounded-md text-[#3a8fb7] h-9 text-xs"
-                                    >
-                                      <SelectValue placeholder="Selecciona un sub-servicio" />
-                                    </SelectTrigger>
-                                    <SelectContent className="max-h-48 overflow-y-auto bg-white border-[#3a8fb7]">
-                                      {subServiciosDisponibles.map(subServicio => (
-                                        <SelectItem
-                                          key={subServicio._id}
-                                          value={subServicio._id}
-                                          className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white text-xs py-1"
-                                        >
-                                          <div className="flex items-center justify-between w-full">
-                                            <span>{subServicio.nombre}</span>
+                                    {subServiciosDisponibles.map(subServicio => (
+                                      <SelectItem
+                                        key={subServicio._id}
+                                        value={subServicio._id}
+                                        className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white text-xs py-1"
+                                      >
+                                        <div className="flex items-center justify-between w-full">
+                                          <span>{subServicio.nombre}</span>
 
-                                            {subServicio.subUbicaciones && subServicio.subUbicaciones.length > 0 && (
-                                              <Badge className="ml-1 bg-[#3a8fb7] text-white text-xs px-1 py-0 h-4">
-                                                {subServicio.subUbicaciones.length}
-                                              </Badge>
-                                            )}
-                                          </div>
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
+                                          {subServicio.subUbicaciones && subServicio.subUbicaciones.length > 0 && (
+                                            <Badge className="ml-1 bg-[#3a8fb7] text-white text-xs px-1 py-0 h-4">
+                                              {subServicio.subUbicaciones.length}
+                                            </Badge>
+                                          )}
+                                        </div>
+                                      </SelectItem>
+                                    ))}
+                                  </SelectWithClear>
                                 </div>
                               )}
                             </AccordionContent>
@@ -1448,28 +1633,24 @@ export const Cart: React.FC = () => {
                                     Selecciona una sub-ubicación
                                   </Label>
 
-                                  <Select
+                                  {/* Reemplazo del Select por SelectWithClear */}
+                                  <SelectWithClear
                                     value={subUbicacionSeleccionada || ""}
                                     onValueChange={handleSubUbicacionChange}
                                     disabled={cargandoClientes}
+                                    placeholder="Selecciona una sub-ubicación"
+                                    className="h-9 text-xs"
                                   >
-                                    <SelectTrigger
-                                      className="w-full bg-white border-2 border-[#3a8fb7] rounded-md text-[#3a8fb7] h-9 text-xs"
-                                    >
-                                      <SelectValue placeholder="Selecciona una sub-ubicación" />
-                                    </SelectTrigger>
-                                    <SelectContent className="max-h-48 overflow-y-auto bg-white border-[#3a8fb7]">
-                                      {subUbicacionesDisponibles.map(subUbicacion => (
-                                        <SelectItem
-                                          key={subUbicacion._id}
-                                          value={subUbicacion._id}
-                                          className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white text-xs py-1"
-                                        >
-                                          {subUbicacion.nombre}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
+                                    {subUbicacionesDisponibles.map(subUbicacion => (
+                                      <SelectItem
+                                        key={subUbicacion._id}
+                                        value={subUbicacion._id}
+                                        className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white text-xs py-1"
+                                      >
+                                        {subUbicacion.nombre}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectWithClear>
                                 </div>
                               )}
                             </AccordionContent>
@@ -1593,52 +1774,42 @@ export const Cart: React.FC = () => {
                                 )}
 
                                 <div className="relative mt-1">
-                                  <Select
+                                  {/* Reemplazo del Select por SelectWithClear */}
+                                  <SelectWithClear
                                     value={clienteSeleccionado || ""}
                                     onValueChange={handleClienteChange}
                                     disabled={cargandoClientes}
+                                    placeholder="Selecciona un cliente"
                                   >
-                                    <SelectTrigger
-                                      className="w-full bg-white border-2 border-[#3a8fb7] rounded-md text-[#3a8fb7]"
-                                    >
-                                      <SelectValue placeholder="Selecciona un cliente" />
-                                    </SelectTrigger>
-                                    <SelectContent className="max-h-80 overflow-y-auto bg-white border-[#3a8fb7]">
-                                      {Object.entries(clientesAgrupados).map(([servicio, clientesServicio]) => (
-                                        <div key={servicio} className="px-1 py-1">
-                                          {/* Encabezado de grupo de servicio */}
-                                          <div className="flex items-center px-2 py-1.5 text-xs uppercase tracking-wider font-semibold bg-[#d4f1f9] text-[#3a8fb7] rounded mb-1">
-                                            <Building className="h-3 w-3 mr-2" />
-                                            {servicio}
-                                          </div>
-
-                                          {/* Secciones del servicio */}
-                                          <div className="pl-2">
-                                            {clientesServicio.map(cliente => (
-                                              <SelectItem
-                                                key={cliente._id}
-                                                value={cliente._id}
-                                                className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
-                                              >
-                                                <div className="flex items-center">
-                                                  {cliente.seccionDelServicio ? (
-                                                    <>
-                                                      <MapPin className="h-3 w-3 mr-2 text-[#4a4a4a]" />
-                                                      <span>{cliente.seccionDelServicio}</span></>
-                                                  ) : (
-                                                    <>
-                                                      <Check className="h-3 w-3 mr-2 text-[#4a4a4a]" />
-                                                      <span>Principal</span>
-                                                    </>
-                                                  )}
-                                                </div>
-                                              </SelectItem>
-                                            ))}
-                                          </div>
+                                    {Object.entries(clientesAgrupados).map(([servicio, clientesServicio]) => (
+                                      <div key={servicio} className="px-1 py-1">
+                                        {/* Encabezado de grupo de servicio */}
+                                        <div className="flex items-center px-2 py-1.5 text-xs uppercase tracking-wider font-semibold bg-[#d4f1f9] text-[#3a8fb7] rounded mb-1">
+                                          <Building className="h-3 w-3 mr-2" />
+                                          {servicio}
                                         </div>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
+
+                                        {/* Modificamos para mostrar el nombre del cliente en lugar de la sección */}
+                                        <div className="pl-2">
+                                          {clientesServicio.map(cliente => (
+                                            <SelectItem
+                                              key={cliente._id}
+                                              value={cliente._id}
+                                              className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
+                                            >
+                                              <div className="flex items-center">
+                                                <Building className="h-3 w-3 mr-2 text-[#4a4a4a]" />
+                                                <span>{cliente.nombre}</span>
+                                                {cliente.seccionDelServicio && (
+                                                  <span className="ml-1 text-xs text-[#7AA79C]">({cliente.seccionDelServicio})</span>
+                                                )}
+                                              </div>
+                                            </SelectItem>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </SelectWithClear>
                                 </div>
                               </div>
 
@@ -1658,37 +1829,32 @@ export const Cart: React.FC = () => {
                                   </div>
                                 ) : (
                                   <div className="relative mt-1">
-                                    <Select
+                                    {/* Reemplazo del Select por SelectWithClear */}
+                                    <SelectWithClear
                                       value={subServicioSeleccionado || ""}
                                       onValueChange={handleSubServicioChange}
                                       disabled={cargandoClientes}
+                                      placeholder="Selecciona un sub-servicio"
                                     >
-                                      <SelectTrigger
-                                        className="w-full bg-white border-2 border-[#3a8fb7] rounded-md text-[#3a8fb7]"
-                                      >
-                                        <SelectValue placeholder="Selecciona un sub-servicio" />
-                                      </SelectTrigger>
-                                      <SelectContent className="max-h-60 overflow-y-auto bg-white border-[#3a8fb7]">
-                                        {subServiciosDisponibles.map(subServicio => (
-                                          <SelectItem
-                                            key={subServicio._id}
-                                            value={subServicio._id}
-                                            className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
-                                          >
-                                            <div className="flex items-center justify-between w-full">
-                                              <span>{subServicio.nombre}</span>
+                                      {subServiciosDisponibles.map(subServicio => (
+                                        <SelectItem
+                                          key={subServicio._id}
+                                          value={subServicio._id}
+                                          className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
+                                        >
+                                          <div className="flex items-center justify-between w-full">
+                                            <span>{subServicio.nombre}</span>
 
-                                              {/* Badge para mostrar si tiene sububicaciones */}
-                                              {subServicio.subUbicaciones && subServicio.subUbicaciones.length > 0 && (
-                                                <Badge className="ml-2 bg-[#3a8fb7] text-white text-xs">
-                                                  {subServicio.subUbicaciones.length} {subServicio.subUbicaciones.length === 1 ? 'ubicación' : 'ubicaciones'}
-                                                </Badge>
-                                              )}
-                                            </div>
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
+                                            {/* Badge para mostrar si tiene sububicaciones */}
+                                            {subServicio.subUbicaciones && subServicio.subUbicaciones.length > 0 && (
+                                              <Badge className="ml-2 bg-[#3a8fb7] text-white text-xs">
+                                                {subServicio.subUbicaciones.length} {subServicio.subUbicaciones.length === 1 ? 'ubicación' : 'ubicaciones'}
+                                              </Badge>
+                                            )}
+                                          </div>
+                                        </SelectItem>
+                                      ))}
+                                    </SelectWithClear>
                                   </div>
                                 )}
                               </div>
@@ -1709,28 +1875,23 @@ export const Cart: React.FC = () => {
                                   </div>
                                 ) : (
                                   <div className="relative mt-1">
-                                    <Select
+                                    {/* Reemplazo del Select por SelectWithClear */}
+                                    <SelectWithClear
                                       value={subUbicacionSeleccionada || ""}
                                       onValueChange={handleSubUbicacionChange}
                                       disabled={cargandoClientes}
+                                      placeholder="Selecciona una sub-ubicación"
                                     >
-                                      <SelectTrigger
-                                        className="w-full bg-white border-2 border-[#3a8fb7] rounded-md text-[#3a8fb7]"
-                                      >
-                                        <SelectValue placeholder="Selecciona una sub-ubicación" />
-                                      </SelectTrigger>
-                                      <SelectContent className="max-h-60 overflow-y-auto bg-white border-[#3a8fb7]">
-                                        {subUbicacionesDisponibles.map(subUbicacion => (
-                                          <SelectItem
-                                            key={subUbicacion._id}
-                                            value={subUbicacion._id}
-                                            className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
-                                          >
-                                            {subUbicacion.nombre}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
+                                      {subUbicacionesDisponibles.map(subUbicacion => (
+                                        <SelectItem
+                                          key={subUbicacion._id}
+                                          value={subUbicacion._id}
+                                          className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
+                                        >
+                                          {subUbicacion.nombre}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectWithClear>
                                   </div>
                                 )}
                               </div>

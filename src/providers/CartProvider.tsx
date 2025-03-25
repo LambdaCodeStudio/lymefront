@@ -3,6 +3,7 @@ import { imageService } from '@/services/imageService';
 
 // Definir el tipo de un ítem del carrito
 export interface CartItem {
+  isCombo: CartItem | undefined;
   id: string;
   name: string;
   price: number;
