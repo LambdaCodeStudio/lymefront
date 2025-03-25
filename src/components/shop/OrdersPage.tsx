@@ -202,7 +202,7 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No se encontró token de autenticación');
       }
 
-      const response = await fetch('http://localhost:3000/api/auth/me', {
+      const response = await fetch('api/auth/me', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -245,7 +245,7 @@ export const OrdersPage: React.FC = () => {
 
     // Si el usuario es un supervisor, obtener pedidos específicos
     if (userRole === 'supervisor' && userId) {
-      const response = await fetch(`http://localhost:3000/api/pedido/supervisor/${userId}`, {
+      const response = await fetch(`api/pedido/supervisor/${userId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -263,7 +263,7 @@ export const OrdersPage: React.FC = () => {
     else if (userRole === 'operario' && userId) {
       try {
         // Obtener los pedidos regulares del operario
-        const regularOrdersResponse = await fetch(`http://localhost:3000/api/pedido/user/${userId}`, {
+        const regularOrdersResponse = await fetch(`api/pedido/user/${userId}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Cache-Control': 'no-cache'
@@ -280,7 +280,7 @@ export const OrdersPage: React.FC = () => {
 
         // Obtener los pedidos creados por el operario
         try {
-          const createdOrdersResponse = await fetch(`http://localhost:3000/api/pedido/operario/${userId}`, {
+          const createdOrdersResponse = await fetch(`api/pedido/operario/${userId}`, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Cache-Control': 'no-cache'
@@ -319,7 +319,7 @@ export const OrdersPage: React.FC = () => {
     }
     // Para cualquier otro rol, obtener todos los pedidos
     else {
-      const response = await fetch('http://localhost:3000/api/pedido', {
+      const response = await fetch('api/pedido', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -466,7 +466,7 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch(`http://localhost:3000/api/pedido/${orderId}`, {
+      const response = await fetch(`api/pedido/${orderId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -504,7 +504,7 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch(`http://localhost:3000/api/pedido/${orderId}`, {
+      const response = await fetch(`api/pedido/${orderId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -549,7 +549,7 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No se encontró token de autenticación');
       }
 
-      let url = `http://localhost:3000/api/pedido/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
+      let url = `api/pedido/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
 
       // Si es operario, añadir el parámetro de usuario
       if (userRole === 'operario' && userId) {
@@ -569,7 +569,7 @@ export const OrdersPage: React.FC = () => {
       // Si es operario, intentar también obtener los pedidos creados
       if (userRole === 'operario' && userId) {
         try {
-          const createdOrdersUrl = `http://localhost:3000/api/pedido/operario/${userId}/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
+          const createdOrdersUrl = `api/pedido/operario/${userId}/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
 
           const createdOrdersResponse = await fetch(createdOrdersUrl, {
             headers: { 'Authorization': `Bearer ${token}` }
@@ -661,7 +661,7 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No se encontró token de autenticación');
       }
 
-      const response = await fetch(`http://localhost:3000/api/downloads/remito/${orderId}`, {
+      const response = await fetch(`api/downloads/remito/${orderId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },

@@ -5,7 +5,7 @@ import { useNotification } from '@/context/NotificationContext';
 import { getAuthToken } from '@/utils/inventoryUtils';
 
 // API URL base
-const API_URL = "http://localhost:3000/api/";
+const API_URL = "api/";
 
 interface ImageUploadProps {
   productId: string;

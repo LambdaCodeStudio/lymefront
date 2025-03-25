@@ -83,7 +83,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const [imageError, setImageError] = useState<boolean>(false);
 
   // URL base para la API (solo usado como fallback)
-  const API_URL = 'http://localhost:3000/api';
+  const API_URL = 'api';
 
   // Función para truncar texto largo
   const truncateText = (text: string, maxLength: number) => {

@@ -13,7 +13,7 @@ import {
 } from '@/types/users';
 
 // URL base para el backend
-const API_URL = 'http://localhost:3000/api/auth/';
+const API_URL = 'api/auth/';
 
 /**
  * Obtener token de autenticación
