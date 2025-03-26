@@ -27,7 +27,10 @@ import {
   Info,
   CheckCircle,
   XCircle,
-  Clock
+  Clock,
+  PackageOpen, // Añade esta importación
+  Tag, // También añade esta porque la usamos para mostrar categorías
+  Minus // Y esta para los botones de cantidad
 } from 'lucide-react';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -212,8 +215,6 @@ const truncarTexto = (texto, longitudMaxima = 25) => {
  * Centraliza todas las llamadas API para mantener un manejo de errores y formato de solicitudes consistente
  */
 const ServicioPedidos = {
-  // URL base de la API
-  apiUrl: '/api',
 
   // Obtener pedidos con filtros
   async obtenerPedidos(filtros: FiltrosParams = {}): Promise<Pedido[]> {
@@ -326,7 +327,8 @@ const ServicioPedidos = {
     const token = getAuthToken();
     if (!token) throw new Error("No hay token de autenticación.");
 
-    const response = await fetch(`/api/producto`, {
+    // Usar un límite alto (1000) para garantizar que se traigan todos los productos
+    const response = await fetch(`/api/producto?limit=1000`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Cache-Control': 'no-cache'
@@ -338,7 +340,16 @@ const ServicioPedidos = {
     }
 
     const responseData = await response.json();
-    return responseData.items || responseData;
+
+    // Manejar diferentes formatos de respuesta (array simple o respuesta paginada)
+    let productos = [];
+    if (Array.isArray(responseData)) {
+      productos = responseData;
+    } else if (responseData && Array.isArray(responseData.items)) {
+      productos = responseData.items;
+    }
+
+    return productos;
   },
 
   // Obtener un producto por ID
@@ -662,7 +673,7 @@ const InformacionClienteUbicacion = ({ order }) => {
   const nombreCliente = order.cliente?.nombreCliente || order.servicio || "Ningún Cliente";
   const nombreSeccion = order.cliente?.nombreSubServicio || order.seccionDelServicio || "";
   const nombreSubUbicacion = order.cliente?.nombreSubUbicacion || "";
-  
+
   return (
     <div className="flex flex-col">
       <div className="flex items-center">
@@ -671,7 +682,7 @@ const InformacionClienteUbicacion = ({ order }) => {
           {truncarTexto(nombreCliente)}
         </div>
       </div>
-      
+
       {nombreSeccion && (
         <div className="flex items-center mt-1">
           <MapPin className="w-4 h-4 text-[#7AA79C] mr-2 flex-shrink-0" />
@@ -1158,6 +1169,55 @@ const OrdersSection = () => {
   const colaProductos = useRef(new Set());
   const procesandoCola = useRef(false);
 
+  /**
+ * Hook personalizado para retrasar la búsqueda mientras se escribe
+ * @param {string} valor - Valor a retrasar
+ * @param {number} retraso - Tiempo de retraso en milisegundos
+ * @returns {string} - Valor retrasado
+ */
+  const useDebounce = (valor, retraso) => {
+    const [valorRetrasado, setValorRetrasado] = useState(valor);
+
+    useEffect(() => {
+      const handler = setTimeout(() => {
+        setValorRetrasado(valor);
+      }, retraso);
+
+      return () => {
+        clearTimeout(handler);
+      };
+    }, [valor, retraso]);
+
+    return valorRetrasado;
+  };
+
+  // Estado para la búsqueda de productos
+  const [busquedaProducto, setBusquedaProducto] = useState('');
+  const busquedaProductoRetrasada = useDebounce(busquedaProducto, 300);
+
+  /**
+   * Filtra productos por término de búsqueda
+   * @param {Producto[]} productos - Lista de productos a filtrar
+   * @param {string} terminoBusqueda - Término de búsqueda
+   * @returns {Producto[]} - Productos filtrados
+   */
+  const filtrarProductosPorBusqueda = (productos, terminoBusqueda) => {
+    // Si no hay término de búsqueda o no hay productos, devolver la lista completa
+    if (!terminoBusqueda || !Array.isArray(productos) || terminoBusqueda.trim() === '')
+      return productos;
+
+    const termino = terminoBusqueda.toLowerCase();
+
+    return productos.filter(producto => {
+      return (
+        (producto.nombre && producto.nombre.toLowerCase().includes(termino)) ||
+        (producto.descripcion && producto.descripcion.toLowerCase().includes(termino)) ||
+        (producto.categoria && producto.categoria.toLowerCase().includes(termino)) ||
+        (producto.subCategoria && producto.subCategoria.toLowerCase().includes(termino))
+      );
+    });
+  };
+
   // ======== HOOKS DE REACT QUERY ========
 
   // Cargar usuario actual
@@ -1517,6 +1577,11 @@ const OrdersSection = () => {
     setModalConfirmarEliminarAbierto(true);
   };
 
+  // Productos filtrados por búsqueda (usando useMemo para optimizar rendimiento)
+  const productosFiltrados = useMemo(() => {
+    return filtrarProductosPorBusqueda(productos, busquedaProductoRetrasada);
+  }, [productos, busquedaProductoRetrasada]);
+
   // Eliminar pedido
   const manejarEliminarPedido = () => {
     if (!pedidoAEliminar) return;
@@ -1727,6 +1792,9 @@ const OrdersSection = () => {
   };
 
   // Añadir producto al pedido
+  /**
+  * Añadir producto al pedido
+  */
   const manejarAgregarProducto = () => {
     if (!productoSeleccionado || productoSeleccionado === "none" || cantidadProducto <= 0) {
       addNotification("Selecciona un producto y una cantidad válida.", "warning");
@@ -1798,9 +1866,10 @@ const OrdersSection = () => {
       addNotification(`Producto agregado: ${producto.nombre} (${cantidadProducto})`, "success");
     }
 
-    // Resetear selección
+    // Limpiar selección y búsqueda
     setProductoSeleccionado("none");
     setCantidadProducto(1);
+    setBusquedaProducto(''); // Limpiar la búsqueda
     setModalSeleccionarProductoAbierto(false);
   };
 
@@ -2783,43 +2852,50 @@ const OrdersSection = () => {
               <EsqueletoPedidos count={3} />
             ) : (
               pedidosPaginados.map(pedido => (
-                <Card key={pedido._id} className="overflow-hidden shadow-sm border border-[#91BEAD]/20">
-                  <CardHeader className="pb-2 bg-[#DFEFE6]/20">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <CardTitle className="text-sm font-medium flex items-center text-[#29696B]">
-                          <Building className="w-4 h-4 text-[#7AA79C] mr-1 flex-shrink-0" />
-                          <span className="truncate">
-                            {truncarTexto(pedido.cliente?.nombreCliente || pedido.servicio || "Ningún cliente.")}
-                          </span>
-                        </CardTitle>
-
-                        {(pedido.cliente?.nombreSubServicio || pedido.seccionDelServicio) && (
-                          <div className="text-xs text-[#7AA79C] flex items-center mt-1">
-                            <MapPin className="w-3 h-3 mr-1 flex-shrink-0" />
-                            <span className="truncate">
-                              {truncarTexto(pedido.cliente?.nombreSubServicio || pedido.seccionDelServicio)}
-                              {pedido.cliente?.nombreSubUbicacion && ` (${truncarTexto(pedido.cliente.nombreSubUbicacion, 15)})`}
-                            </span>
+                <Card 
+                key={pedido._id} 
+                className="overflow-hidden shadow-sm border border-[#91BEAD]/20 h-auto"
+              >
+                <CardHeader className="pb-2 p-3">
+                  <div className="flex justify-between items-start">
+                    <div className="w-[70%]">
+                      <CardTitle className="text-sm font-medium flex items-center text-[#29696B] line-clamp-1">
+                        <Building className="w-4 h-4 text-[#7AA79C] mr-1 flex-shrink-0" />
+                        <span className="truncate max-w-[calc(100%-20px)]">
+                          {truncarTexto(pedido.cliente?.nombreCliente || pedido.servicio || "Ningún cliente.", 18)}
+                        </span>
+                      </CardTitle>
+              
+                      {(pedido.cliente?.nombreSubServicio || pedido.seccionDelServicio) && (
+                        <div className="text-xs text-[#7AA79C] flex items-center mt-1 max-w-full">
+                          <MapPin className="w-3 h-3 mr-1 flex-shrink-0" />
+                          <div className="truncate max-w-[calc(100%-16px)]">
+                            {truncarTexto(pedido.cliente?.nombreSubServicio || pedido.seccionDelServicio, 15)}
+                            {pedido.cliente?.nombreSubUbicacion && (
+                              <span className="ml-1 hidden sm:inline">
+                                ({truncarTexto(pedido.cliente.nombreSubUbicacion, 10)})
+                              </span>
+                            )}
                           </div>
-                        )}
-                      </div>
-
-                      <div className="flex flex-col items-end gap-1">
-                        {/* Badge para número de pedido */}
-                        <Badge variant="outline" className="text-xs border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/20">
-                          <Hash className="w-3 h-3 mr-1" />
-                          {pedido.nPedido}
-                        </Badge>
-
-                        {/* Badge para fecha */}
-                        <Badge variant="outline" className="text-xs border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/20">
-                          <Calendar className="w-3 h-3 mr-1" />
-                          {new Date(pedido.fecha).toLocaleDateString()}
-                        </Badge>
-                      </div>
+                        </div>
+                      )}
                     </div>
-                  </CardHeader>
+              
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      {/* Badge para número de pedido */}
+                      <Badge variant="outline" className="text-xs border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/20">
+                        <Hash className="w-3 h-3 mr-1" />
+                        {pedido.nPedido}
+                      </Badge>
+              
+                      {/* Badge para fecha */}
+                      <Badge variant="outline" className="text-xs border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/20">
+                        <Calendar className="w-3 h-3 mr-1" />
+                        {new Date(pedido.fecha).toLocaleDateString()}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardHeader>
 
                   <CardContent className="py-2">
                     <div className="text-xs space-y-1">
@@ -2837,10 +2913,10 @@ const OrdersSection = () => {
                           Estado:
                           <span
                             className={`ml-1 ${pedido.estado === 'aprobado'
-                                ? 'text-green-600'
-                                : pedido.estado === 'rechazado'
-                                  ? 'text-red-600'
-                                  : 'text-yellow-600'
+                              ? 'text-green-600'
+                              : pedido.estado === 'rechazado'
+                                ? 'text-red-600'
+                                : 'text-yellow-600'
                               }`}
                           >
                             {pedido.estado === 'aprobado'
@@ -3635,118 +3711,167 @@ const OrdersSection = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Modal para Selección de Producto */}
+      {/* Modal para Selección de Producto (Con selector de cantidad y botones visibles en todas las pantallas) */}
       <Dialog open={modalSeleccionarProductoAbierto} onOpenChange={setModalSeleccionarProductoAbierto}>
-        <DialogContent className="sm:max-w-md bg-white border border-[#91BEAD]/20">
-          <DialogHeader>
-            <DialogTitle className="text-[#29696B]">Agregar Producto</DialogTitle>
-            <DialogDescription className="text-[#7AA79C]">
-              Selecciona el producto y la cantidad que deseas agregar.
+        <DialogContent className="max-w-lg mx-auto p-0 overflow-hidden border border-[#91BEAD]/20 bg-white max-h-[90vh] flex flex-col w-[95%] sm:w-auto">
+          <div className="p-3 border-b border-[#91BEAD]/20">
+            <DialogTitle className="text-[#29696B] text-lg mb-1">Seleccionar Producto</DialogTitle>
+            <DialogDescription className="text-[#7AA79C] text-sm">
+              Busca y selecciona el producto que deseas agregar al pedido.
             </DialogDescription>
-          </DialogHeader>
+          </div>
 
-          <div className="space-y-4 py-4">
+          <div className="p-3">
             {/* Búsqueda de productos */}
-            <div className="relative">
+            <div className="relative mb-3">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-4 h-4" />
               <Input
                 type="text"
                 placeholder="Buscar productos..."
-                className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
-                onChange={(e) => {
-                  const terminoBusqueda = e.target.value.toLowerCase();
-                  // Aquí se implementaría lógica de filtrado de productos
-                }}
+                className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20 w-full text-sm h-9"
+                value={busquedaProducto}
+                onChange={(e) => setBusquedaProducto(e.target.value)}
               />
             </div>
 
+            {/* Lista de productos */}
             <div>
-              <Label htmlFor="producto" className="text-[#29696B]">Producto</Label>
-              <Select
-                value={productoSeleccionado || "none"}
-                onValueChange={setProductoSeleccionado}
-              >
-                <SelectTrigger id="producto" className="border-[#91BEAD] focus:ring-[#29696B]/20">
-                  <SelectValue placeholder="Seleccionar producto" />
-                </SelectTrigger>
-                <SelectContent className="max-h-80">
-                  <SelectItem value="none" disabled>Seleccionar producto</SelectItem>
-                  {cargandoProductos ? (
-                    <SelectItem value="loading" disabled>Cargando productos...</SelectItem>
-                  ) : productos.length > 0 ? (
-                    productos.map(producto => (
-                      <SelectItem
-                        key={producto._id}
-                        value={producto._id}
-                        disabled={producto.stock <= 0}
-                      >
-                        {producto.nombre} - ${producto.precio.toFixed(2)} {producto.stock <= 0 ? '(Sin stock)' : `(Stock: ${producto.stock})`}
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="no-products" disabled>No hay productos disponibles.</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="cantidad" className="text-[#29696B]">Cantidad</Label>
-              <Input
-                id="cantidad"
-                type="number"
-                min="1"
-                value={cantidadProducto}
-                onChange={(e) => {
-                  const value = parseInt(e.target.value);
-                  setCantidadProducto(isNaN(value) || value < 1 ? 1 : value);
-                }}
-                className="border-[#91BEAD] focus:ring-[#29696B]/20 focus:border-[#29696B]"
-              />
-            </div>
-
-            {/* Información del producto seleccionado */}
-            {productoSeleccionado && productoSeleccionado !== "none" && mapaProductos[productoSeleccionado] && (
-              <div className="p-3 bg-[#DFEFE6]/20 rounded-md border border-[#91BEAD]/30">
-                <div className="flex justify-between">
-                  <span className="text-sm font-medium text-[#29696B]">Producto seleccionado:</span>
-                  <span className="text-sm text-[#29696B]">{mapaProductos[productoSeleccionado].nombre}</span>
-                </div>
-                <div className="flex justify-between mt-1">
-                  <span className="text-sm font-medium text-[#29696B]">Precio:</span>
-                  <span className="text-sm text-[#29696B]">${mapaProductos[productoSeleccionado].precio.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between mt-1">
-                  <span className="text-sm font-medium text-[#29696B]">Stock disponible:</span>
-                  <span className="text-sm text-[#29696B]">{mapaProductos[productoSeleccionado].stock}</span>
-                </div>
-                <div className="flex justify-between mt-1">
-                  <span className="text-sm font-medium text-[#29696B]">Total:</span>
-                  <span className="text-sm font-medium text-[#29696B]">
-                    ${(mapaProductos[productoSeleccionado].precio * cantidadProducto).toFixed(2)}
-                  </span>
-                </div>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-[#29696B] font-medium text-sm">Productos disponibles</span>
+                {productosFiltrados.length > 0 && (
+                  <Badge variant="outline" className="bg-white border-[#91BEAD] text-xs">
+                    {productosFiltrados.length} resultados
+                  </Badge>
+                )}
               </div>
-            )}
+
+              <div className="overflow-y-auto max-h-[50vh] pr-1 mb-4">
+                {cargandoProductos ? (
+                  <div className="p-4 flex justify-center">
+                    <Loader2 className="w-6 h-6 text-[#29696B] animate-spin" />
+                  </div>
+                ) : productosFiltrados.length === 0 ? (
+                  <div className="p-4 text-center text-[#7AA79C] text-sm">
+                    {productos.length > 0
+                      ? 'No hay coincidencias con la búsqueda'
+                      : 'No hay productos disponibles'}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {productosFiltrados.map(producto => (
+                      <div 
+                      key={producto._id} 
+                      className="py-2 px-3 rounded-md border border-[#91BEAD]/10 flex items-center justify-between bg-white hover:bg-[#DFEFE6]/10 transition-colors"
+                    >
+                      <div className="flex-1 min-w-0 mr-2 max-w-[65%]">
+                        <div className="font-medium text-[#29696B] text-sm truncate">
+                          {producto.nombre.toUpperCase()}
+                        </div>
+                        <div className="flex flex-wrap items-center text-xs">
+                          <span className="text-[#29696B] font-medium">${producto.precio.toFixed(2)}</span>
+                          <span className="text-[#7AA79C] ml-2">
+                            Stock: {producto.stock}
+                          </span>
+                          <span className="text-xs text-[#7AA79C] capitalize mt-0.5 w-full truncate">
+                            {producto.categoria}
+                          </span>
+                        </div>
+                      </div>
+
+                        {/* Botón de seleccionar con controles de cantidad */}
+                        <div className="flex items-center">
+                          {productoSeleccionado === producto._id ? (
+                            <div className="flex items-center border rounded border-[#91BEAD] h-8">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setCantidadProducto(Math.max(1, cantidadProducto - 1));
+                                }}
+                                className="h-8 w-6 p-0 text-[#29696B]"
+                              >
+                                <Minus className="w-3 h-3" />
+                              </Button>
+                              <Input
+                                type="number"
+                                min="1"
+                                max={producto.stock}
+                                value={cantidadProducto}
+                                onChange={(e) => {
+                                  const value = parseInt(e.target.value);
+                                  setCantidadProducto(isNaN(value) || value < 1 ? 1 :
+                                    value > producto.stock ? producto.stock : value);
+                                }}
+                                className="w-10 h-8 text-center text-xs border-0 focus:ring-0 p-0"
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setCantidadProducto(Math.min(producto.stock, cantidadProducto + 1));
+                                }}
+                                className="h-8 w-6 p-0 text-[#29696B]"
+                              >
+                                <Plus className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setProductoSeleccionado(producto._id);
+                                setCantidadProducto(1);
+                              }}
+                              disabled={producto.stock <= 0}
+                              className="h-8 text-xs text-[#29696B] border-[#91BEAD] hover:bg-[#DFEFE6]/30"
+                            >
+                              <Plus className="w-3 h-3 mr-1" />
+                              Seleccionar
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
-          <DialogFooter>
+          {/* Footer con botones visible en todos los tamaños de pantalla */}
+          <div className="sticky bottom-0 left-0 right-0 p-3 flex justify-between border-t border-[#91BEAD]/20 bg-white mt-auto">
             <Button
               variant="outline"
-              onClick={() => setModalSeleccionarProductoAbierto(false)}
-              className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
+              onClick={() => {
+                setModalSeleccionarProductoAbierto(false);
+                setBusquedaProducto('');
+                setProductoSeleccionado("none");
+              }}
+              className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30 text-sm h-9"
             >
               Cancelar
             </Button>
 
             <Button
-              onClick={manejarAgregarProducto}
-              className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
-              disabled={!productoSeleccionado || productoSeleccionado === "none" || cantidadProducto <= 0}
+              onClick={() => {
+                if (productoSeleccionado && productoSeleccionado !== "none") {
+                  manejarAgregarProducto();
+                } else {
+                  addNotification("Selecciona un producto primero", "warning");
+                }
+              }}
+              disabled={!productoSeleccionado || productoSeleccionado === "none"}
+              className="bg-[#7AA79C] hover:bg-[#7AA79C]/90 text-white text-sm h-9"
             >
-              Agregar
+              Agregar al Pedido
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 

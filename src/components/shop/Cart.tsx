@@ -48,10 +48,7 @@ import {
   AccordionTrigger
 } from '@/components/ui/accordion';
 
-// Importamos las utilidades de imagen
-import { getProductImageUrl, handleImageError } from '../../utils/image-utils';
-
-// Componente para mostrar imágenes de productos con manejo de errores
+// Componente mejorado para mostrar imágenes de productos con manejo de errores
 const CartItemImage = ({ item }) => {
   const [imageError, setImageError] = useState(false);
 
@@ -109,19 +106,51 @@ const CartItemImage = ({ item }) => {
   );
 };
 
-// Componente para mostrar los detalles de un producto combo
+// Componente mejorado para mostrar los detalles de un producto combo
 const ComboDetails = ({ item }) => {
   const [showComboItems, setShowComboItems] = useState(false);
 
   // Verificar si es un combo
   const isCombo = item.isCombo;
-  // Obtener items del combo
-  const comboItems = item.comboItems || [];
+  // Obtener items del combo - mejor manejo con diferentes formatos de datos
+  const comboItems = 
+    (item.comboItems && item.comboItems.length > 0) ? item.comboItems : 
+    (item.itemsCombo && item.itemsCombo.length > 0) ? item.itemsCombo : [];
 
   // Si no es un combo o no hay productos en el combo, no mostrar nada
   if (!isCombo || comboItems.length === 0) {
     return null;
   }
+
+  // Procesar items del combo para mostrar correctamente
+  const processedItems = comboItems.map(comboItem => {
+    let nombre = '';
+    let cantidad = 0;
+
+    // Manejar diferentes formatos de datos
+    if (typeof comboItem === 'object') {
+      if (comboItem.nombre) {
+        nombre = comboItem.nombre;
+      } else if (comboItem.name) {
+        nombre = comboItem.name;
+      } else if (comboItem.productoId) {
+        // Si es un objeto con productoId
+        if (typeof comboItem.productoId === 'object') {
+          nombre = comboItem.productoId.nombre || comboItem.productoId.name || 'Producto';
+        } else {
+          nombre = 'Producto';
+        }
+      }
+
+      // Obtener cantidad
+      cantidad = comboItem.cantidad || comboItem.quantity || 1;
+    } else {
+      nombre = 'Producto';
+      cantidad = 1;
+    }
+
+    return { nombre, cantidad };
+  });
 
   return (
     <div className="mt-1">
@@ -129,7 +158,10 @@ const ComboDetails = ({ item }) => {
         variant="ghost"
         size="sm"
         className="h-7 px-2 py-0 text-xs text-[#3a8fb7] hover:bg-[#3a8fb7]/20 w-full flex justify-between items-center"
-        onClick={() => setShowComboItems(!showComboItems)}
+        onClick={(e) => {
+          e.stopPropagation();
+          setShowComboItems(!showComboItems);
+        }}
       >
         <span className="flex items-center">
           <Package className="h-3 w-3 mr-1" />
@@ -146,14 +178,14 @@ const ComboDetails = ({ item }) => {
               <span className="text-[#3a8fb7]">Este combo incluye:</span>
             </div>
             <Badge className="bg-[#3a8fb7] text-white text-[10px]">
-              {comboItems.length} productos
+              {processedItems.length} productos
             </Badge>
           </div>
           <ul className="space-y-1 max-h-40 overflow-y-auto scrollbar-thin scrollbar-thumb-[#3a8fb7]/40 scrollbar-track-transparent">
-            {comboItems.map((comboItem, index) => (
+            {processedItems.map((comboItem, index) => (
               <li key={index} className="flex justify-between border-b border-[#3a8fb7]/10 pb-1 last:border-0">
-                <span className="truncate pr-2 font-medium">{comboItem.nombre || comboItem.name || 'Producto'}</span>
-                <span className="text-[#3a8fb7] font-bold">x{comboItem.cantidad || comboItem.quantity || 1}</span>
+                <span className="truncate pr-2 font-medium">{comboItem.nombre}</span>
+                <span className="text-[#3a8fb7] font-bold">x{comboItem.cantidad}</span>
               </li>
             ))}
           </ul>
@@ -286,6 +318,33 @@ interface User {
     nombre?: string;
     apellido?: string;
   };
+}
+
+// Interface para los items del carrito con soporte para combos
+interface CartItem {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  category?: string;
+  subcategory?: string;
+  image?: string;
+  imageUrl?: string;
+  isCombo?: boolean;
+  comboItems?: Array<{
+    nombre?: string;
+    name?: string;
+    cantidad?: number;
+    quantity?: number;
+    productoId?: any;
+  }>;
+  itemsCombo?: Array<{
+    nombre?: string;
+    name?: string;
+    cantidad?: number;
+    quantity?: number;
+    productoId?: any;
+  }>;
 }
 
 // URL base para API - mejor práctica que hardcodear
@@ -867,7 +926,7 @@ export const Cart: React.FC = () => {
     }
   };
 
-  // Actualizar cantidad con validación
+  // Actualizar cantidad con validación mejorada para manejar combos
   const handleQuantityChange = (id: string, newQuantity: number) => {
     // Sólo aseguramos que la cantidad sea positiva
     if (newQuantity < 1) newQuantity = 1;
@@ -1370,7 +1429,7 @@ export const Cart: React.FC = () => {
                               </p>
                             )}
 
-                            {/* Detalles del combo */}
+                            {/* Detalles del combo - Implementado en Paso 1 */}
                             {item.isCombo && <ComboDetails item={item} />}
 
                             <div className="flex justify-between items-center mt-2">
@@ -1643,9 +1702,250 @@ export const Cart: React.FC = () => {
                                   >
                                     {subUbicacionesDisponibles.map(subUbicacion => (
                                       <SelectItem
+                                      key={subUbicacion._id}
+                                      value={subUbicacion._id}
+                                      className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white text-xs py-1"
+                                    >
+                                      {subUbicacion.nombre}
+                                    </SelectItem>
+                                  ))}
+                                </SelectWithClear>
+                              </div>
+                            )}
+                          </AccordionContent>
+                        </AccordionItem>
+                      )}
+
+                      {/* Información adicional */}
+                      <AccordionItem value="notas" className="border-b-0">
+                        <AccordionTrigger className="py-2 px-3 bg-gradient-to-r from-[#d4f1f9]/40 to-[#a8e6cf]/40 backdrop-blur-sm border border-[#3a8fb7] rounded-lg shadow-md mb-2 text-[#3a8fb7] font-medium hover:no-underline hover:bg-[#d4f1f9]/60">
+                          <div className="flex items-center">
+                            <Info className="mr-2 h-4 w-4" />
+                            Información del pedido
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent className="bg-white/70 backdrop-blur-sm border border-[#3a8fb7] rounded-lg p-3 mb-2">
+                          <div>
+                            <Label htmlFor="notes" className="text-[#3a8fb7] text-xs font-medium">Notas adicionales</Label>
+                            <Textarea
+                              id="notes"
+                              placeholder="Instrucciones especiales, ubicación, etc."
+                              className="bg-white border-[#3a8fb7] mt-1 text-[#4a4a4a] placeholder:text-[#4a4a4a]/60 text-xs h-20"
+                              value={orderForm.notes}
+                              onChange={(e) => setOrderForm({ ...orderForm, notes: e.target.value })}
+                            />
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
+
+                    {/* Información del cliente seleccionado (móvil) */}
+                    {clienteSeleccionado && !cargandoClientes && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mt-2 p-3 rounded-md bg-[#d4f1f9]/40 border border-[#3a8fb7]/50 backdrop-blur-sm"
+                      >
+                        <div className="text-xs text-[#3a8fb7]">
+                          <p className="flex items-center">
+                            <Building className="w-3 h-3 mr-1 text-[#3a8fb7]" />
+                            <span className="font-medium">Cliente:</span>
+                            <span className="ml-1 truncate">{orderForm.servicio}</span>
+                          </p>
+
+                          {orderForm.nombreSubServicio && (
+                            <p className="flex items-center mt-1">
+                              <PackageOpen className="w-3 h-3 mr-1 text-[#3a8fb7]" />
+                              <span className="font-medium">Sub-Servicio:</span>
+                              <span className="ml-1 truncate">{orderForm.nombreSubServicio}</span>
+                            </p>
+                          )}
+
+                          {orderForm.nombreSubUbicacion && (
+                            <p className="flex items-center mt-1">
+                              <MapPin className="w-3 h-3 mr-1 text-[#3a8fb7]" />
+                              <span className="font-medium">Sub-Ubicación:</span>
+                              <span className="ml-1 truncate">{orderForm.nombreSubUbicacion}</span>
+                            </p>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </div>
+
+                  {/* Versión Desktop */}
+                  <div className="hidden md:grid md:grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Selector de clientes */}
+                    <Card className="bg-gradient-to-r from-[#d4f1f9]/40 to-[#a8e6cf]/40 backdrop-blur-sm border-[#3a8fb7] shadow-md lg:col-span-2">
+                      <CardHeader className="border-b border-[#3a8fb7]/50 py-3">
+                        <CardTitle className="text-[#3a8fb7] flex items-center text-lg">
+                          <Building className="mr-2 h-5 w-5" />
+                          Seleccionar Cliente
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4 pt-4 pb-4">
+                        {cargandoClientes ? (
+                          <div className="py-3 flex justify-center">
+                            <Loader2 className="h-6 w-6 animate-spin text-[#3a8fb7]" />
+                          </div>
+                        ) : errorClientes ? (
+                          <Alert className="bg-[#FF9800]/10 border-[#FF9800] shadow-sm">
+                            <AlertTriangle className="h-4 w-4 text-[#FF9800]" />
+                            <AlertDescription className="ml-2 text-[#3a8fb7]">
+                              {errorClientes}
+                            </AlertDescription>
+                          </Alert>
+                        ) : clientes.length === 0 ? (
+                          <div>
+                            <Alert className="bg-[#FF9800]/10 border-2 border-[#FF9800] mb-4">
+                              <AlertTriangle className="h-4 w-4 text-[#FF9800]" />
+                              <AlertDescription className="ml-2 text-[#3a8fb7] font-medium">
+                                No hay clientes asignados. Por favor, contacta con administración para que te asignen clientes antes de realizar pedidos.
+                              </AlertDescription>
+                            </Alert>
+
+                            <div className="flex justify-center mt-6">
+                              <Button
+                                onClick={() => window.location.href = '/shop'}
+                                className="bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white"
+                              >
+                                <ArrowLeft className="mr-2 h-4 w-4" />
+                                Volver a la tienda
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="grid md:grid-cols-2 gap-4">
+                            {/* Selector de cliente */}
+                            <div className="space-y-2">
+                              <Label htmlFor="clienteSelector" className="text-[#3a8fb7] font-medium flex items-center">
+                                <Building className="mr-2 h-4 w-4" />
+                                Cliente Asociado
+                                {cargandoClientes && <Loader2 className="ml-2 h-3 w-3 animate-spin text-[#3a8fb7]" />}
+                              </Label>
+
+                              {/* Indicador de operario/supervisor */}
+                              {userRole === 'operario' && supervisorName && (
+                                <div className="text-xs text-[#4a4a4a] mb-2 flex items-center">
+                                  <UserCircle2 className="h-3 w-3 mr-1 text-[#3a8fb7]" />
+                                  Mostrando clientes de: {supervisorName}
+                                </div>
+                              )}
+
+                              <div className="relative mt-1">
+                                {/* Reemplazo del Select por SelectWithClear */}
+                                <SelectWithClear
+                                  value={clienteSeleccionado || ""}
+                                  onValueChange={handleClienteChange}
+                                  disabled={cargandoClientes}
+                                  placeholder="Selecciona un cliente"
+                                >
+                                  {Object.entries(clientesAgrupados).map(([servicio, clientesServicio]) => (
+                                    <div key={servicio} className="px-1 py-1">
+                                      {/* Encabezado de grupo de servicio */}
+                                      <div className="flex items-center px-2 py-1.5 text-xs uppercase tracking-wider font-semibold bg-[#d4f1f9] text-[#3a8fb7] rounded mb-1">
+                                        <Building className="h-3 w-3 mr-2" />
+                                        {servicio}
+                                      </div>
+
+                                      {/* Modificamos para mostrar el nombre del cliente en lugar de la sección */}
+                                      <div className="pl-2">
+                                        {clientesServicio.map(cliente => (
+                                          <SelectItem
+                                            key={cliente._id}
+                                            value={cliente._id}
+                                            className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
+                                          >
+                                            <div className="flex items-center">
+                                              <Building className="h-3 w-3 mr-2 text-[#4a4a4a]" />
+                                              <span>{cliente.nombre}</span>
+                                              {cliente.seccionDelServicio && (
+                                                <span className="ml-1 text-xs text-[#7AA79C]">({cliente.seccionDelServicio})</span>
+                                              )}
+                                            </div>
+                                          </SelectItem>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </SelectWithClear>
+                              </div>
+                            </div>
+
+                            {/* Selector de SubServicio */}
+                            <div className="space-y-2">
+                              <Label htmlFor="subServicioSelector" className="text-[#3a8fb7] font-medium flex items-center">
+                                <PackageOpen className="mr-2 h-4 w-4" />
+                                Seleccionar Sub-Servicio
+                                {subServiciosDisponibles.length === 0 ? (
+                                  <Badge className="ml-2 bg-[#FF9800] text-white text-xs font-normal">No disponible</Badge>
+                                ) : null}
+                              </Label>
+
+                              {subServiciosDisponibles.length === 0 ? (
+                                <div className="text-xs text-[#4a4a4a] mt-1 italic p-2 border border-[#3a8fb7]/20 rounded bg-white/30">
+                                  El cliente seleccionado no tiene sub-servicios asignados.
+                                </div>
+                              ) : (
+                                <div className="relative mt-1">
+                                  {/* Reemplazo del Select por SelectWithClear */}
+                                  <SelectWithClear
+                                    value={subServicioSeleccionado || ""}
+                                    onValueChange={handleSubServicioChange}
+                                    disabled={cargandoClientes}
+                                    placeholder="Selecciona un sub-servicio"
+                                  >
+                                    {subServiciosDisponibles.map(subServicio => (
+                                      <SelectItem
+                                        key={subServicio._id}
+                                        value={subServicio._id}
+                                        className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
+                                      >
+                                        <div className="flex items-center justify-between w-full">
+                                          <span>{subServicio.nombre}</span>
+
+                                          {/* Badge para mostrar si tiene sububicaciones */}
+                                          {subServicio.subUbicaciones && subServicio.subUbicaciones.length > 0 && (
+                                            <Badge className="ml-2 bg-[#3a8fb7] text-white text-xs">
+                                              {subServicio.subUbicaciones.length} {subServicio.subUbicaciones.length === 1 ? 'ubicación' : 'ubicaciones'}
+                                            </Badge>
+                                          )}
+                                        </div>
+                                      </SelectItem>
+                                    ))}
+                                  </SelectWithClear>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Selector de SubUbicación y notas*/}
+                            <div className="space-y-2">
+                              <Label className="text-[#3a8fb7] font-medium flex items-center">
+                                <MapPin className="mr-2 h-4 w-4" />
+                                Seleccionar Sub-Ubicación
+                                {subUbicacionesDisponibles.length === 0 ? (
+                                  <Badge className="ml-2 bg-[#FF9800] text-white text-xs font-normal">No disponible</Badge>
+                                ) : null}
+                              </Label>
+
+                              {!subServicioSeleccionado || subUbicacionesDisponibles.length === 0 ? (
+                                <div className="text-xs text-[#4a4a4a] mt-1 italic p-2 border border-[#3a8fb7]/20 rounded bg-white/30">
+                                  {!subServicioSeleccionado ? 'Seleccione un sub-servicio primero' : 'El sub-servicio seleccionado no tiene sub-ubicaciones asignadas.'}
+                                </div>
+                              ) : (
+                                <div className="relative mt-1">
+                                  {/* Reemplazo del Select por SelectWithClear */}
+                                  <SelectWithClear
+                                    value={subUbicacionSeleccionada || ""}
+                                    onValueChange={handleSubUbicacionChange}
+                                    disabled={cargandoClientes}
+                                    placeholder="Selecciona una sub-ubicación"
+                                  >
+                                    {subUbicacionesDisponibles.map(subUbicacion => (
+                                      <SelectItem
                                         key={subUbicacion._id}
                                         value={subUbicacion._id}
-                                        className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white text-xs py-1"
+                                        className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
                                       >
                                         {subUbicacion.nombre}
                                       </SelectItem>
@@ -1653,556 +1953,343 @@ export const Cart: React.FC = () => {
                                   </SelectWithClear>
                                 </div>
                               )}
-                            </AccordionContent>
-                          </AccordionItem>
-                        )}
-
-                        {/* Información adicional */}
-                        <AccordionItem value="notas" className="border-b-0">
-                          <AccordionTrigger className="py-2 px-3 bg-gradient-to-r from-[#d4f1f9]/40 to-[#a8e6cf]/40 backdrop-blur-sm border border-[#3a8fb7] rounded-lg shadow-md mb-2 text-[#3a8fb7] font-medium hover:no-underline hover:bg-[#d4f1f9]/60">
-                            <div className="flex items-center">
-                              <Info className="mr-2 h-4 w-4" />
-                              Información del pedido
                             </div>
-                          </AccordionTrigger>
-                          <AccordionContent className="bg-white/70 backdrop-blur-sm border border-[#3a8fb7] rounded-lg p-3 mb-2">
-                            <div>
-                              <Label htmlFor="notes" className="text-[#3a8fb7] text-xs font-medium">Notas adicionales</Label>
+
+                            {/* Notas adicionales */}
+                            <div className="space-y-2">
+                              <Label htmlFor="notes" className="text-[#3a8fb7] font-medium flex items-center">
+                                <Info className="mr-2 h-4 w-4" />
+                                Notas adicionales
+                              </Label>
                               <Textarea
                                 id="notes"
-                                placeholder="Instrucciones especiales, ubicación, etc."
-                                className="bg-white border-[#3a8fb7] mt-1 text-[#4a4a4a] placeholder:text-[#4a4a4a]/60 text-xs h-20"
+                                placeholder="Instrucciones especiales, ubicación de entrega, etc."
+                                className="bg-white border-[#3a8fb7] mt-1 text-[#4a4a4a] placeholder:text-[#4a4a4a]/60 h-[calc(100%-40px)] min-h-[110px]"
                                 value={orderForm.notes}
                                 onChange={(e) => setOrderForm({ ...orderForm, notes: e.target.value })}
                               />
                             </div>
-                          </AccordionContent>
-                        </AccordionItem>
-                      </Accordion>
-
-                      {/* Información del cliente seleccionado (móvil) */}
-                      {clienteSeleccionado && !cargandoClientes && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="mt-2 p-3 rounded-md bg-[#d4f1f9]/40 border border-[#3a8fb7]/50 backdrop-blur-sm"
-                        >
-                          <div className="text-xs text-[#3a8fb7]">
-                            <p className="flex items-center">
-                              <Building className="w-3 h-3 mr-1 text-[#3a8fb7]" />
-                              <span className="font-medium">Cliente:</span>
-                              <span className="ml-1 truncate">{orderForm.servicio}</span>
-                            </p>
-
-                            {orderForm.nombreSubServicio && (
-                              <p className="flex items-center mt-1">
-                                <PackageOpen className="w-3 h-3 mr-1 text-[#3a8fb7]" />
-                                <span className="font-medium">Sub-Servicio:</span>
-                                <span className="ml-1 truncate">{orderForm.nombreSubServicio}</span>
-                              </p>
-                            )}
-
-                            {orderForm.nombreSubUbicacion && (
-                              <p className="flex items-center mt-1">
-                                <MapPin className="w-3 h-3 mr-1 text-[#3a8fb7]" />
-                                <span className="font-medium">Sub-Ubicación:</span>
-                                <span className="ml-1 truncate">{orderForm.nombreSubUbicacion}</span>
-                              </p>
-                            )}
                           </div>
-                        </motion.div>
-                      )}
-                    </div>
+                        )}
 
-                    {/* Versión Desktop */}
-                    <div className="hidden md:grid md:grid-cols-1 lg:grid-cols-2 gap-4">
-                      {/* Selector de clientes */}
-                      <Card className="bg-gradient-to-r from-[#d4f1f9]/40 to-[#a8e6cf]/40 backdrop-blur-sm border-[#3a8fb7] shadow-md lg:col-span-2">
-                        <CardHeader className="border-b border-[#3a8fb7]/50 py-3">
-                          <CardTitle className="text-[#3a8fb7] flex items-center text-lg">
-                            <Building className="mr-2 h-5 w-5" />
-                            Seleccionar Cliente
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4 pt-4 pb-4">
-                          {cargandoClientes ? (
-                            <div className="py-3 flex justify-center">
-                              <Loader2 className="h-6 w-6 animate-spin text-[#3a8fb7]" />
-                            </div>
-                          ) : errorClientes ? (
-                            <Alert className="bg-[#FF9800]/10 border-[#FF9800] shadow-sm">
-                              <AlertTriangle className="h-4 w-4 text-[#FF9800]" />
-                              <AlertDescription className="ml-2 text-[#3a8fb7]">
-                                {errorClientes}
-                              </AlertDescription>
-                            </Alert>
-                          ) : clientes.length === 0 ? (
-                            <div>
-                              <Alert className="bg-[#FF9800]/10 border-2 border-[#FF9800] mb-4">
-                                <AlertTriangle className="h-4 w-4 text-[#FF9800]" />
-                                <AlertDescription className="ml-2 text-[#3a8fb7] font-medium">
-                                  No hay clientes asignados. Por favor, contacta con administración para que te asignen clientes antes de realizar pedidos.
-                                </AlertDescription>
-                              </Alert>
+                        {/* Información del cliente seleccionado */}
+                        {clienteSeleccionado && !cargandoClientes && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="mt-4 p-3 rounded-md bg-[#d4f1f9]/40 border border-[#3a8fb7]/50 backdrop-blur-sm"
+                          >
+                            <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-[#3a8fb7]">
+                              <p className="flex items-center">
+                              <Building className="w-4 h-4 mr-2 text-[#3a8fb7]" />
+                                <span className="font-medium">Cliente:</span>
+                                <span className="ml-1">{orderForm.servicio}</span>
+                              </p>
 
-                              <div className="flex justify-center mt-6">
-                                <Button
-                                  onClick={() => window.location.href = '/shop'}
-                                  className="bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white"
-                                >
-                                  <ArrowLeft className="mr-2 h-4 w-4" />
-                                  Volver a la tienda
-                                </Button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="grid md:grid-cols-2 gap-4">
-                              {/* Selector de cliente */}
-                              <div className="space-y-2">
-                                <Label htmlFor="clienteSelector" className="text-[#3a8fb7] font-medium flex items-center">
-                                  <Building className="mr-2 h-4 w-4" />
-                                  Cliente Asociado
-                                  {cargandoClientes && <Loader2 className="ml-2 h-3 w-3 animate-spin text-[#3a8fb7]" />}
-                                </Label>
-
-                                {/* Indicador de operario/supervisor */}
-                                {userRole === 'operario' && supervisorName && (
-                                  <div className="text-xs text-[#4a4a4a] mb-2 flex items-center">
-                                    <UserCircle2 className="h-3 w-3 mr-1 text-[#3a8fb7]" />
-                                    Mostrando clientes de: {supervisorName}
-                                  </div>
-                                )}
-
-                                <div className="relative mt-1">
-                                  {/* Reemplazo del Select por SelectWithClear */}
-                                  <SelectWithClear
-                                    value={clienteSeleccionado || ""}
-                                    onValueChange={handleClienteChange}
-                                    disabled={cargandoClientes}
-                                    placeholder="Selecciona un cliente"
-                                  >
-                                    {Object.entries(clientesAgrupados).map(([servicio, clientesServicio]) => (
-                                      <div key={servicio} className="px-1 py-1">
-                                        {/* Encabezado de grupo de servicio */}
-                                        <div className="flex items-center px-2 py-1.5 text-xs uppercase tracking-wider font-semibold bg-[#d4f1f9] text-[#3a8fb7] rounded mb-1">
-                                          <Building className="h-3 w-3 mr-2" />
-                                          {servicio}
-                                        </div>
-
-                                        {/* Modificamos para mostrar el nombre del cliente en lugar de la sección */}
-                                        <div className="pl-2">
-                                          {clientesServicio.map(cliente => (
-                                            <SelectItem
-                                              key={cliente._id}
-                                              value={cliente._id}
-                                              className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
-                                            >
-                                              <div className="flex items-center">
-                                                <Building className="h-3 w-3 mr-2 text-[#4a4a4a]" />
-                                                <span>{cliente.nombre}</span>
-                                                {cliente.seccionDelServicio && (
-                                                  <span className="ml-1 text-xs text-[#7AA79C]">({cliente.seccionDelServicio})</span>
-                                                )}
-                                              </div>
-                                            </SelectItem>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </SelectWithClear>
-                                </div>
-                              </div>
-
-                              {/* Selector de SubServicio */}
-                              <div className="space-y-2">
-                                <Label htmlFor="subServicioSelector" className="text-[#3a8fb7] font-medium flex items-center">
-                                  <PackageOpen className="mr-2 h-4 w-4" />
-                                  Seleccionar Sub-Servicio
-                                  {subServiciosDisponibles.length === 0 ? (
-                                    <Badge className="ml-2 bg-[#FF9800] text-white text-xs font-normal">No disponible</Badge>
-                                  ) : null}
-                                </Label>
-
-                                {subServiciosDisponibles.length === 0 ? (
-                                  <div className="text-xs text-[#4a4a4a] mt-1 italic p-2 border border-[#3a8fb7]/20 rounded bg-white/30">
-                                    El cliente seleccionado no tiene sub-servicios asignados.
-                                  </div>
-                                ) : (
-                                  <div className="relative mt-1">
-                                    {/* Reemplazo del Select por SelectWithClear */}
-                                    <SelectWithClear
-                                      value={subServicioSeleccionado || ""}
-                                      onValueChange={handleSubServicioChange}
-                                      disabled={cargandoClientes}
-                                      placeholder="Selecciona un sub-servicio"
-                                    >
-                                      {subServiciosDisponibles.map(subServicio => (
-                                        <SelectItem
-                                          key={subServicio._id}
-                                          value={subServicio._id}
-                                          className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
-                                        >
-                                          <div className="flex items-center justify-between w-full">
-                                            <span>{subServicio.nombre}</span>
-
-                                            {/* Badge para mostrar si tiene sububicaciones */}
-                                            {subServicio.subUbicaciones && subServicio.subUbicaciones.length > 0 && (
-                                              <Badge className="ml-2 bg-[#3a8fb7] text-white text-xs">
-                                                {subServicio.subUbicaciones.length} {subServicio.subUbicaciones.length === 1 ? 'ubicación' : 'ubicaciones'}
-                                              </Badge>
-                                            )}
-                                          </div>
-                                        </SelectItem>
-                                      ))}
-                                    </SelectWithClear>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Selector de SubUbicación y notas*/}
-                              <div className="space-y-2">
-                                <Label className="text-[#3a8fb7] font-medium flex items-center">
-                                  <MapPin className="mr-2 h-4 w-4" />
-                                  Seleccionar Sub-Ubicación
-                                  {subUbicacionesDisponibles.length === 0 ? (
-                                    <Badge className="ml-2 bg-[#FF9800] text-white text-xs font-normal">No disponible</Badge>
-                                  ) : null}
-                                </Label>
-
-                                {!subServicioSeleccionado || subUbicacionesDisponibles.length === 0 ? (
-                                  <div className="text-xs text-[#4a4a4a] mt-1 italic p-2 border border-[#3a8fb7]/20 rounded bg-white/30">
-                                    {!subServicioSeleccionado ? 'Seleccione un sub-servicio primero' : 'El sub-servicio seleccionado no tiene sub-ubicaciones asignadas.'}
-                                  </div>
-                                ) : (
-                                  <div className="relative mt-1">
-                                    {/* Reemplazo del Select por SelectWithClear */}
-                                    <SelectWithClear
-                                      value={subUbicacionSeleccionada || ""}
-                                      onValueChange={handleSubUbicacionChange}
-                                      disabled={cargandoClientes}
-                                      placeholder="Selecciona una sub-ubicación"
-                                    >
-                                      {subUbicacionesDisponibles.map(subUbicacion => (
-                                        <SelectItem
-                                          key={subUbicacion._id}
-                                          value={subUbicacion._id}
-                                          className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
-                                        >
-                                          {subUbicacion.nombre}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectWithClear>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Notas adicionales */}
-                              <div className="space-y-2">
-                                <Label htmlFor="notes" className="text-[#3a8fb7] font-medium flex items-center">
-                                  <Info className="mr-2 h-4 w-4" />
-                                  Notas adicionales
-                                </Label>
-                                <Textarea
-                                  id="notes"
-                                  placeholder="Instrucciones especiales, ubicación de entrega, etc."
-                                  className="bg-white border-[#3a8fb7] mt-1 text-[#4a4a4a] placeholder:text-[#4a4a4a]/60 h-[calc(100%-40px)] min-h-[110px]"
-                                  value={orderForm.notes}
-                                  onChange={(e) => setOrderForm({ ...orderForm, notes: e.target.value })}
-                                />
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Información del cliente seleccionado */}
-                          {clienteSeleccionado && !cargandoClientes && (
-                            <motion.div
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              className="mt-4 p-3 rounded-md bg-[#d4f1f9]/40 border border-[#3a8fb7]/50 backdrop-blur-sm"
-                            >
-                              <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-[#3a8fb7]">
+                              {orderForm.nombreSubServicio && (
                                 <p className="flex items-center">
-                                <Building className="w-4 h-4 mr-2 text-[#3a8fb7]" />
-                                  <span className="font-medium">Cliente:</span>
-                                  <span className="ml-1">{orderForm.servicio}</span>
+                                  <PackageOpen className="w-4 h-4 mr-2 text-[#3a8fb7]" />
+                                  <span className="font-medium">Sub-Servicio:</span>
+                                  <span className="ml-1">{orderForm.nombreSubServicio}</span>
                                 </p>
+                              )}
 
-                                {orderForm.nombreSubServicio && (
-                                  <p className="flex items-center">
-                                    <PackageOpen className="w-4 h-4 mr-2 text-[#3a8fb7]" />
-                                    <span className="font-medium">Sub-Servicio:</span>
-                                    <span className="ml-1">{orderForm.nombreSubServicio}</span>
-                                  </p>
-                                )}
-
-                                {orderForm.nombreSubUbicacion && (
-                                  <p className="flex items-center">
-                                    <MapPin className="w-4 h-4 mr-2 text-[#3a8fb7]" />
-                                    <span className="font-medium">Sub-Ubicación:</span>
-                                    <span className="ml-1">{orderForm.nombreSubUbicacion}</span>
-                                  </p>
-                                )}
-                              </div>
-                            </motion.div>
-                          )}
-                        </CardContent>
-                      </Card>
-
-                      {orderError && (
-                        <Alert className="bg-[#F44336]/10 border-2 border-[#F44336] shadow-md lg:col-span-2">
-                          <AlertCircle className="h-5 w-5 text-[#F44336]" />
-                          <AlertDescription className="ml-2 text-[#F44336] font-medium">{orderError}</AlertDescription>
-                        </Alert>
-                      )}
-                    </div>
-                  </motion.div>
-                )}
-              </div>
-
-              {/* Botones de acción para desktop - Step 1 */}
-              {items.length > 0 && checkoutStep === 1 && (
-                <div className="mt-4 flex justify-between">
-                  <Button
-                    variant="outline"
-                    className="border-[#F44336] text-[#F44336] hover:bg-[#F44336]/10 hover:text-[#F44336] h-9 md:h-10 text-xs md:text-sm"
-                    onClick={clearCart}
-                  >
-                    <Trash2 className="mr-1 md:mr-2 h-3 w-3 md:h-4 md:w-4" />
-                    Vaciar carrito
-                  </Button>
-                </div>
-              )}
-
-              {/* Botones móviles para Step 2 */}
-              <div className="md:hidden mt-4">
-                {checkoutStep === 2 && (
-                  <div className="flex flex-col space-y-3">
-                    {/* Mostrar resumen móvil */}
-                    <Button
-                      variant="outline"
-                      className="w-full border-[#3a8fb7] text-[#3a8fb7] flex items-center justify-between h-10"
-                      onClick={() => setShowSummary(!showSummary)}
-                    >
-                      <span className="flex items-center">
-                        <ShoppingCart className="h-4 w-4 mr-2" />
-                        Resumen del pedido
-                      </span>
-                      {showSummary ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                    </Button>
-
-                    {showSummary && (
-                      <Card className="bg-white/70 backdrop-blur-sm border border-[#3a8fb7] mb-3">
-                        <CardContent className="p-3 space-y-2">
-                          {items.map((item) => (
-                            <div key={item.id} className="flex justify-between py-1 text-[#3a8fb7] text-xs">
-                              <span className="truncate mr-2 max-w-[70%]">
-                                {item.name} <span className="text-[#4a4a4a]">x{item.quantity}</span>
-                              </span>
-                              <span>${(item.price * item.quantity).toFixed(2)}</span>
+                              {orderForm.nombreSubUbicacion && (
+                                <p className="flex items-center">
+                                  <MapPin className="w-4 h-4 mr-2 text-[#3a8fb7]" />
+                                  <span className="font-medium">Sub-Ubicación:</span>
+                                  <span className="ml-1">{orderForm.nombreSubUbicacion}</span>
+                                </p>
+                              )}
                             </div>
-                          ))}
-                          <Separator className="bg-[#3a8fb7]/30 my-1" />
-                          <div className="flex justify-between font-bold text-[#3a8fb7] text-sm">
-                            <span>Total:</span>
-                            <span>${totalPrice.toFixed(2)}</span>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
+                          </motion.div>
+                        )}
+                      </CardContent>
+                    </Card>
 
                     {orderError && (
-                      <Alert className="bg-[#F44336]/10 border-2 border-[#F44336] p-2 mb-3">
-                        <AlertCircle className="h-4 w-4 text-[#F44336]" />
-                        <AlertDescription className="ml-2 text-[#F44336] text-xs font-medium">{orderError}</AlertDescription>
+                      <Alert className="bg-[#F44336]/10 border-2 border-[#F44336] shadow-md lg:col-span-2">
+                        <AlertCircle className="h-5 w-5 text-[#F44336]" />
+                        <AlertDescription className="ml-2 text-[#F44336] font-medium">{orderError}</AlertDescription>
                       </Alert>
                     )}
-
-                    <div className="flex space-x-3">
-                      <Button
-                        variant="outline"
-                        className="flex-1 border-[#3a8fb7] text-[#3a8fb7] hover:bg-[#3a8fb7]/20 h-10 text-xs"
-                        onClick={() => setCheckoutStep(1)}
-                      >
-                        <ArrowLeft className="mr-1 h-3 w-3" />
-                        Volver al carrito
-                      </Button>
-
-                      <Button
-                        onClick={processOrder}
-                        className="flex-1 bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white shadow-md shadow-[#3a8fb7]/20 h-10 text-xs"
-                        disabled={processingOrder || !formValid}
-                      >
-                        {processingOrder ? (
-                          <>
-                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                            Procesando...
-                          </>
-                        ) : userRole === 'operario' ? (
-                          <>
-                            <CreditCard className="mr-1 h-3 w-3" />
-                            Enviar pedido
-                          </>
-                        ) : (
-                          <>
-                            <CreditCard className="mr-1 h-3 w-3" />
-                            Realizar pedido
-                          </>
-                        )}
-                      </Button>
-                    </div>
-
-                    {/* Mensaje de campos requeridos si el formulario no es válido */}
-                    {!formValid && (
-                      <div className="mt-2 text-sm text-[#F44336]">
-                        <AlertTriangle className="inline-block w-3 h-3 mr-1" />
-                        Por favor, seleccione un cliente y un subservicio para continuar.
-                      </div>
-                    )}
                   </div>
-                )}
-              </div>
+                </motion.div>
+              )}
+            </div>
 
-              {/* Botones desktop para Step 2 */}
-              <div className="hidden md:block">
-                {checkoutStep === 2 && (
-                  <div className="mt-6 flex justify-between">
+            {/* Botones de acción para desktop - Step 1 */}
+            {items.length > 0 && checkoutStep === 1 && (
+              <div className="mt-4 flex justify-between">
+                <Button
+                  variant="outline"
+                  className="border-[#F44336] text-[#F44336] hover:bg-[#F44336]/10 hover:text-[#F44336] h-9 md:h-10 text-xs md:text-sm"
+                  onClick={clearCart}
+                >
+                  <Trash2 className="mr-1 md:mr-2 h-3 w-3 md:h-4 md:w-4" />
+                  Vaciar carrito
+                </Button>
+              </div>
+            )}
+
+            {/* Botones móviles para Step 2 */}
+            <div className="md:hidden mt-4">
+              {checkoutStep === 2 && (
+                <div className="flex flex-col space-y-3">
+                  {/* Mostrar resumen móvil */}
+                  <Button
+                    variant="outline"
+                    className="w-full border-[#3a8fb7] text-[#3a8fb7] flex items-center justify-between h-10"
+                    onClick={() => setShowSummary(!showSummary)}
+                  >
+                    <span className="flex items-center">
+                      <ShoppingCart className="h-4 w-4 mr-2" />
+                      Resumen del pedido
+                    </span>
+                    {showSummary ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </Button>
+
+                  {showSummary && (
+                    <Card className="bg-white/70 backdrop-blur-sm border border-[#3a8fb7] mb-3">
+                      <CardContent className="p-3 space-y-2">
+                        {items.map((item) => (
+                          <div key={item.id} className="flex justify-between py-1 text-[#3a8fb7] text-xs">
+                            <span className="truncate mr-2 max-w-[70%]">
+                              {item.name} <span className="text-[#4a4a4a]">x{item.quantity}</span>
+                              {item.isCombo && (
+                                <Badge className="ml-1 bg-[#ffffff] text-[#3a8fb7] border border-[#3a8fb7] text-[10px]">
+                                  <Package size={8} className="mr-0.5" />
+                                  Combo
+                                </Badge>
+                              )}
+                            </span>
+                            <span>${(item.price * item.quantity).toFixed(2)}</span>
+                          </div>
+                        ))}
+                        <Separator className="bg-[#3a8fb7]/30 my-1" />
+                        <div className="flex justify-between font-bold text-[#3a8fb7] text-sm">
+                          <span>Total:</span>
+                          <span>${totalPrice.toFixed(2)}</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {orderError && (
+                    <Alert className="bg-[#F44336]/10 border-2 border-[#F44336] p-2 mb-3">
+                      <AlertCircle className="h-4 w-4 text-[#F44336]" />
+                      <AlertDescription className="ml-2 text-[#F44336] text-xs font-medium">{orderError}</AlertDescription>
+                    </Alert>
+                  )}
+
+                  <div className="flex space-x-3">
                     <Button
                       variant="outline"
-                      className="border-[#3a8fb7] text-[#3a8fb7] hover:bg-[#3a8fb7]/20"
+                      className="flex-1 border-[#3a8fb7] text-[#3a8fb7] hover:bg-[#3a8fb7]/20 h-10 text-xs"
                       onClick={() => setCheckoutStep(1)}
                     >
-                      <ArrowLeft className="mr-2 h-4 w-4" />
+                      <ArrowLeft className="mr-1 h-3 w-3" />
                       Volver al carrito
                     </Button>
 
                     <Button
                       onClick={processOrder}
-                      className="bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white shadow-md shadow-[#3a8fb7]/20"
+                      className="flex-1 bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white shadow-md shadow-[#3a8fb7]/20 h-10 text-xs"
                       disabled={processingOrder || !formValid}
                     >
                       {processingOrder ? (
                         <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
                           Procesando...
                         </>
                       ) : userRole === 'operario' ? (
                         <>
-                          <CreditCard className="mr-2 h-4 w-4" />
-                          Enviar para aprobación
+                          <CreditCard className="mr-1 h-3 w-3" />
+                          Enviar pedido
                         </>
                       ) : (
                         <>
-                          <CreditCard className="mr-2 h-4 w-4" />
+                          <CreditCard className="mr-1 h-3 w-3" />
                           Realizar pedido
                         </>
                       )}
                     </Button>
                   </div>
-                )}
 
-                {/* Mensaje de campos requeridos si el formulario no es válido - desktop */}
-                {checkoutStep === 2 && !formValid && (
-                  <div className="mt-2 text-sm text-[#F44336] text-center">
-                    <AlertTriangle className="inline-block w-4 h-4 mr-1" />
-                    Por favor, seleccione un cliente y un subservicio para continuar.
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Resumen de compra */}
-            <div className="w-full lg:w-80 flex-shrink-0">
-              <div className="lg:sticky lg:top-20">
-                {/* Móvil - Botón para proceder */}
-                {checkoutStep === 1 && (
-                  <div className="block md:hidden">
-                    <Button
-                      onClick={() => setCheckoutStep(2)}
-                      className="w-full bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white shadow-md shadow-[#3a8fb7]/20 h-12 text-base mb-4"
-                    >
-                      Proceder a confirmar
-                    </Button>
-                  </div>
-                )}
-
-                <Card className="bg-gradient-to-br from-[#3a8fb7]/60 to-[#a8e6cf]/60 backdrop-blur-md border border-[#3a8fb7] shadow-lg shadow-[#3a8fb7]/10">
-                  <CardHeader className="border-b border-[#3a8fb7]/50 py-3 md:py-4">
-                    <CardTitle className="text-white text-lg">Resumen</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3 md:space-y-4 pt-4 md:pt-5">
-                    <div className="flex justify-between text-sm text-white">
-                      <span>Subtotal:</span>
-                      <span>${totalPrice.toFixed(2)}</span>
+                  {/* Mensaje de campos requeridos si el formulario no es válido */}
+                  {!formValid && (
+                    <div className="mt-2 text-sm text-[#F44336]">
+                      <AlertTriangle className="inline-block w-3 h-3 mr-1" />
+                      Por favor, seleccione un cliente y un subservicio para continuar.
                     </div>
-
-                    <div className="flex justify-between text-sm text-white">
-                      <span>Productos:</span>
-                      <span>{totalItems} {totalItems === 1 ? 'ítem' : 'ítems'}</span>
-                    </div>
-
-                    {/* Mostrar información del supervisor para operarios */}
-                    {userRole === 'operario' && supervisorName && (
-                      <div className="bg-white/20 rounded-md p-2 text-xs text-white border border-white/50">
-                        <div className="flex items-center mb-1 text-white">
-                          <UserCircle2 className="h-3 w-3 mr-1" />
-                          <span className="font-medium">Información de pedido</span>
-                        </div>
-                        <p>Supervisor: <span className="font-medium">{supervisorName}</span></p>
-                        <p className="text-white/80 text-[10px] mt-1">
-                          El pedido requiere aprobación
-                        </p>
-                      </div>
-                    )}
-
-                    <Separator className="bg-white/30" />
-
-                    <div className="flex justify-between font-semibold text-lg text-white">
-                      <span>Total:</span>
-                      <span>${totalPrice.toFixed(2)}</span>
-                    </div>
-                  </CardContent>
-
-                  <CardFooter className="px-4 py-3 md:py-4">
-                    {checkoutStep === 1 ? (
-                      <Button
-                        onClick={() => setCheckoutStep(2)}
-                        className="w-full bg-white hover:bg-[#d4f1f9] text-[#3a8fb7] shadow-md transition-all duration-300 hover:shadow-lg font-medium hidden md:flex"
-                        disabled={items.length === 0}
-                      >
-                        Proceder a confirmar el pedido
-                      </Button>
-                    ) : (
-                      <div className="w-full text-center text-xs md:text-sm text-white">
-                        <p>Revisa tu pedido y completa la información requerida.</p>
-                      </div>
-                    )}
-                  </CardFooter>
-                </Card>
-
-                {/* Políticas de pedido - Versión móvil simplificada */}
-                <div className="mt-4 p-3 md:p-4 bg-gradient-to-br from-[#d4f1f9]/20 to-[#a8e6cf]/20 backdrop-blur-sm rounded-lg border border-[#3a8fb7] shadow-md">
-                  <h3 className="flex items-center text-xs md:text-sm font-medium mb-2 text-[#3a8fb7]">
-                    <Check className="text-[#3a8fb7] mr-2 h-3 w-3 md:h-4 md:w-4" />
-                    Política de pedidos
-                  </h3>
-                  {userRole === 'operario' ? (
-                    <p className="text-xs text-[#4a4a4a]">
-                      Los pedidos requieren aprobación del supervisor antes de ser procesados.
-                    </p>
-                  ) : (
-                    <p className="text-xs text-[#4a4a4a]">
-                      Los pedidos realizados están sujetos a revisión y aprobación por el equipo administrativo.
-                      Una vez confirmado, se coordinará la entrega de los productos.
-                    </p>
                   )}
                 </div>
+              )}
+            </div>
+
+            {/* Botones desktop para Step 2 */}
+            <div className="hidden md:block">
+              {checkoutStep === 2 && (
+                <div className="mt-6 flex justify-between">
+                  <Button
+                    variant="outline"
+                    className="border-[#3a8fb7] text-[#3a8fb7] hover:bg-[#3a8fb7]/20"
+                    onClick={() => setCheckoutStep(1)}
+                  >
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Volver al carrito
+                  </Button>
+
+                  <Button
+                    onClick={processOrder}
+                    className="bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white shadow-md shadow-[#3a8fb7]/20"
+                    disabled={processingOrder || !formValid}
+                  >
+                    {processingOrder ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Procesando...
+                      </>
+                    ) : userRole === 'operario' ? (
+                      <>
+                        <CreditCard className="mr-2 h-4 w-4" />
+                        Enviar para aprobación
+                      </>
+                    ) : (
+                      <>
+                        <CreditCard className="mr-2 h-4 w-4" />
+                        Realizar pedido
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+
+              {/* Mensaje de campos requeridos si el formulario no es válido - desktop */}
+              {checkoutStep === 2 && !formValid && (
+                <div className="mt-2 text-sm text-[#F44336] text-center">
+                  <AlertTriangle className="inline-block w-4 h-4 mr-1" />
+                  Por favor, seleccione un cliente y un subservicio para continuar.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Resumen de compra */}
+          <div className="w-full lg:w-80 flex-shrink-0">
+            <div className="lg:sticky lg:top-20">
+              {/* Móvil - Botón para proceder */}
+              {checkoutStep === 1 && (
+                <div className="block md:hidden">
+                  <Button
+                    onClick={() => setCheckoutStep(2)}
+                    className="w-full bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white shadow-md shadow-[#3a8fb7]/20 h-12 text-base mb-4"
+                  >
+                    Proceder a confirmar
+                  </Button>
+                </div>
+              )}
+
+              <Card className="bg-gradient-to-br from-[#3a8fb7]/60 to-[#a8e6cf]/60 backdrop-blur-md border border-[#3a8fb7] shadow-lg shadow-[#3a8fb7]/10">
+                <CardHeader className="border-b border-[#3a8fb7]/50 py-3 md:py-4">
+                  <CardTitle className="text-white text-lg">Resumen</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 md:space-y-4 pt-4 md:pt-5">
+                  <div className="flex justify-between text-sm text-white">
+                    <span>Subtotal:</span>
+                    <span>${totalPrice.toFixed(2)}</span>
+                  </div>
+
+                  <div className="flex justify-between text-sm text-white">
+                    <span>Productos:</span>
+                    <span>{totalItems} {totalItems === 1 ? 'ítem' : 'ítems'}</span>
+                  </div>
+
+                  {/* Lista de productos en resumen - Mejorado para desktop */}
+                  <div className="hidden md:block">
+                    <Separator className="bg-white/30 my-2" />
+                    <div className="max-h-48 overflow-y-auto pr-1 space-y-1 scrollbar-thin scrollbar-thumb-white/40 scrollbar-track-transparent">
+                      {items.map((item) => (
+                        <div key={item.id} className="flex justify-between py-1 text-white text-xs">
+                          <span className="truncate mr-2 max-w-[70%] flex items-center">
+                            {item.name} 
+                            <span className="ml-1 text-white/80">x{item.quantity}</span>
+                            {item.isCombo && (
+                              <Badge className="ml-1 bg-white text-[#3a8fb7] border border-[#3a8fb7] text-[10px]">
+                                <Package size={8} className="mr-0.5" />
+                                Combo
+                              </Badge>
+                            )}
+                          </span>
+                          <span>${(item.price * item.quantity).toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Mostrar información del supervisor para operarios */}
+                  {userRole === 'operario' && supervisorName && (
+                    <div className="bg-white/20 rounded-md p-2 text-xs text-white border border-white/50">
+                      <div className="flex items-center mb-1 text-white">
+                        <UserCircle2 className="h-3 w-3 mr-1" />
+                        <span className="font-medium">Información de pedido</span>
+                      </div>
+                      <p>Supervisor: <span className="font-medium">{supervisorName}</span></p>
+                      <p className="text-white/80 text-[10px] mt-1">
+                        El pedido requiere aprobación
+                      </p>
+                    </div>
+                  )}
+
+                  <Separator className="bg-white/30" />
+
+                  <div className="flex justify-between font-semibold text-lg text-white">
+                    <span>Total:</span>
+                    <span>${totalPrice.toFixed(2)}</span>
+                  </div>
+                </CardContent>
+
+                <CardFooter className="px-4 py-3 md:py-4">
+                  {checkoutStep === 1 ? (
+                    <Button
+                      onClick={() => setCheckoutStep(2)}
+                      className="w-full bg-white hover:bg-[#d4f1f9] text-[#3a8fb7] shadow-md transition-all duration-300 hover:shadow-lg font-medium hidden md:flex"
+                      disabled={items.length === 0}
+                    >
+                      Proceder a confirmar el pedido
+                    </Button>
+                  ) : (
+                    <div className="w-full text-center text-xs md:text-sm text-white">
+                      <p>Revisa tu pedido y completa la información requerida.</p>
+                    </div>
+                  )}
+                </CardFooter>
+              </Card>
+
+              {/* Políticas de pedido - Versión móvil simplificada */}
+              <div className="mt-4 p-3 md:p-4 bg-gradient-to-br from-[#d4f1f9]/20 to-[#a8e6cf]/20 backdrop-blur-sm rounded-lg border border-[#3a8fb7] shadow-md">
+                <h3 className="flex items-center text-xs md:text-sm font-medium mb-2 text-[#3a8fb7]">
+                  <Check className="text-[#3a8fb7] mr-2 h-3 w-3 md:h-4 md:w-4" />
+                  Política de pedidos
+                </h3>
+                {userRole === 'operario' ? (
+                  <p className="text-xs text-[#4a4a4a]">
+                    Los pedidos requieren aprobación del supervisor antes de ser procesados.
+                  </p>
+                ) : (
+                  <p className="text-xs text-[#4a4a4a]">
+                    Los pedidos realizados están sujetos a revisión y aprobación por el equipo administrativo.
+                    Una vez confirmado, se coordinará la entrega de los productos.
+                  </p>
+                )}
               </div>
             </div>
           </div>
         </div>
       </div>
-    </>
-  );
+    </div>
+  </>
+);
 };
 
 export default Cart;

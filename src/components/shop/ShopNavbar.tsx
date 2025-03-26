@@ -45,7 +45,7 @@ export const ShopNavbar: React.FC = () => {
   // URL base para la API, ajustada para el nuevo backend
   const API_BASE_URL = '/api';
 
-  // Obtener información del usuario del localStorage y API
+  // Obtener informaciÃ³n del usuario del localStorage y API
   useEffect(() => {
     // Recuperar datos del localStorage
     const role = localStorage.getItem('userRole');
@@ -73,7 +73,7 @@ export const ShopNavbar: React.FC = () => {
             // El nuevo backend devuelve la estructura {success: true, user: {...}}
             setUserData(data.user);
             
-            // Actualizar localStorage con datos más recientes
+            // Actualizar localStorage con datos mÃ¡s recientes
             if (data.user.role) localStorage.setItem('userRole', data.user.role);
             if (data.user.secciones) localStorage.setItem('userSecciones', data.user.secciones);
             if (data.user.id || data.user._id) {
@@ -85,18 +85,18 @@ export const ShopNavbar: React.FC = () => {
             setUserRole(data.user.role);
             setUserSecciones(data.user.secciones);
             
-            // Si es supervisor, obtener el número de pedidos pendientes
+            // Si es supervisor, obtener el nÃºmero de pedidos pendientes
             if (data.user.role === 'supervisor') {
               fetchPendingApprovals(data.user.id || data.user._id, 'supervisor');
             }
-            // Si es operario, obtener el número de pedidos rechazados
+            // Si es operario, obtener el nÃºmero de pedidos rechazados
             else if (data.user.role === 'operario') {
               fetchPendingApprovals(data.user.id || data.user._id, 'operario');
             }
           }
         } else {
           console.warn('Error al obtener datos del usuario:', response.status);
-          // Si hay un error de autenticación, redirigir al login
+          // Si hay un error de autenticaciÃ³n, redirigir al login
           if (response.status === 401) {
             localStorage.clear();
             window.location.href = '/login';
@@ -124,7 +124,7 @@ export const ShopNavbar: React.FC = () => {
     };
   }, [userMenuRef]);
   
-  // Obtener el número de pedidos pendientes para supervisores o rechazados para operarios
+  // Obtener el nÃºmero de pedidos pendientes para supervisores o rechazados para operarios
   const fetchPendingApprovals = async (userId: string, role: string) => {
     try {
       const token = localStorage.getItem('token');
@@ -132,9 +132,9 @@ export const ShopNavbar: React.FC = () => {
       
       let endpoint = '';
       
-      // Determinar el endpoint según el rol del usuario
+      // Determinar el endpoint segÃºn el rol del usuario
       if (role === 'supervisor') {
-        // Para supervisores: obtener pedidos pendientes de aprobación
+        // Para supervisores: obtener pedidos pendientes de aprobaciÃ³n
         endpoint = `${API_BASE_URL}/pedido/supervisor/${userId}`;
       } else if (role === 'operario') {
         // Para operarios: obtener pedidos rechazados donde el operario es el creador
@@ -155,7 +155,7 @@ export const ShopNavbar: React.FC = () => {
         // Verificar que tenemos un array de pedidos
         if (Array.isArray(data)) {
           if (role === 'supervisor') {
-            // Filtrar explícitamente los pedidos con estado "pendiente"
+            // Filtrar explÃ­citamente los pedidos con estado "pendiente"
             const pendingOrders = data.filter(pedido => pedido.estado === 'pendiente');
             const pendingCount = pendingOrders.length;
             
@@ -165,7 +165,7 @@ export const ShopNavbar: React.FC = () => {
             // Actualizar el contador solo con los pedidos pendientes
             setPendingApprovals(pendingCount);
           } else if (role === 'operario') {
-            // Filtrar explícitamente los pedidos con estado "rechazado"
+            // Filtrar explÃ­citamente los pedidos con estado "rechazado"
             const rejected = data.filter(pedido => pedido.estado === 'rechazado');
             const rejectedCount = rejected.length;
             
@@ -261,7 +261,7 @@ export const ShopNavbar: React.FC = () => {
                 INICIO
               </a>
               
-              {/* Solo mostrar Limpieza si tiene permisos para esta sección */}
+              {/* Solo mostrar Limpieza si tiene permisos para esta secciÃ³n */}
               {(userSecciones === 'limpieza' || userSecciones === 'ambos') && (
                 <a 
                   href="/shop?category=limpieza" 
@@ -271,7 +271,7 @@ export const ShopNavbar: React.FC = () => {
                 </a>
               )}
               
-              {/* Solo mostrar Mantenimiento si tiene permisos para esta sección */}
+              {/* Solo mostrar Mantenimiento si tiene permisos para esta secciÃ³n */}
               {(userSecciones === 'mantenimiento' || userSecciones === 'ambos') && (
                 <a 
                   href="/shop?category=mantenimiento" 
@@ -289,7 +289,7 @@ export const ShopNavbar: React.FC = () => {
                 FAVORITOS
               </a>
               
-              {/* Mostrar "Mis Pedidos" solo para roles específicos */}
+              {/* Mostrar "Mis Pedidos" solo para roles especÃ­ficos */}
               {canViewOrders && (
                 <a 
                   href="/orders" 
@@ -453,7 +453,7 @@ export const ShopNavbar: React.FC = () => {
                           className="flex w-full items-center px-4 py-2 text-sm text-[#F44336] hover:bg-[#F44336]/10"
                         >
                           <LogOut className="w-4 h-4 mr-2" />
-                          Cerrar sesión
+                          Cerrar sesiÃ³n
                         </button>
                       </div>
                     </motion.div>
@@ -465,7 +465,7 @@ export const ShopNavbar: React.FC = () => {
               <button 
                 className="md:hidden text-white" 
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
-                aria-label={isMenuOpen ? "Cerrar menú" : "Abrir menú"}
+                aria-label={isMenuOpen ? "Cerrar menÃº" : "Abrir menÃº"}
               >
                 {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
               </button>
@@ -517,7 +517,7 @@ export const ShopNavbar: React.FC = () => {
                   className="flex items-center text-[#333333] hover:bg-[#d4f1f9]/30 hover:text-[#3a8fb7] transition-colors py-3 px-3 rounded-lg"
                   onClick={() => setIsMenuOpen(false)}
                 >
-                  <span className="w-5 h-5 mr-3 flex items-center justify-center text-[#3a8fb7]">🧹</span>
+                  <span className="w-5 h-5 mr-3 flex items-center justify-center text-[#3a8fb7]">ðŸ§¹</span>
                   <span>Limpieza</span>
                 </a>
               )}
@@ -529,7 +529,7 @@ export const ShopNavbar: React.FC = () => {
                   className="flex items-center text-[#333333] hover:bg-[#d4f1f9]/30 hover:text-[#3a8fb7] transition-colors py-3 px-3 rounded-lg"
                   onClick={() => setIsMenuOpen(false)}
                 >
-                  <span className="w-5 h-5 mr-3 flex items-center justify-center text-[#3a8fb7]">🔧</span>
+                  <span className="w-5 h-5 mr-3 flex items-center justify-center text-[#3a8fb7]">ðŸ”§</span>
                   <span>Mantenimiento</span>
                 </a>
               )}
@@ -613,7 +613,7 @@ export const ShopNavbar: React.FC = () => {
                     onClick={() => setIsMenuOpen(false)}
                   >
                     <Settings className="w-5 h-5 mr-3 text-[#3a8fb7]" />
-                    <span>Panel de Administración</span>
+                    <span>Panel de AdministraciÃ³n</span>
                   </a>
                 )}
                 <button 
@@ -624,7 +624,7 @@ export const ShopNavbar: React.FC = () => {
                   }}
                 >
                   <LogOut className="w-5 h-5 mr-3" />
-                  <span>Cerrar sesión</span>
+                  <span>Cerrar sesiÃ³n</span>
                 </button>
               </div>
             </div>
