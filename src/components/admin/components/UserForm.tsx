@@ -124,12 +124,23 @@ const UserForm: React.FC<UserFormProps> = ({
             
             setAvailableSupervisors(filteredSupervisors);
             
-            // Si estamos editando un operario, asegurarnos de que el supervisor actual esté seleccionado
-            if (editingUser && editingUser.supervisorId && !formData.supervisorId) {
-              setFormData(prev => ({
-                ...prev,
-                supervisorId: editingUser.supervisorId
-              }));
+            // Garantizar que el supervisor se establezca correctamente al editar un operario
+            // Verificamos SIEMPRE cuando estamos editando un operario, no solo cuando !formData.supervisorId
+            if (editingUser && formData.role === ROLES.OPERARIO) {
+              // Si el operario ya tiene un supervisor asignado, utilizarlo
+              if (editingUser.supervisorId) {
+                setFormData(prev => ({
+                  ...prev,
+                  supervisorId: editingUser.supervisorId
+                }));
+              } 
+              // Si no tiene supervisor y hay supervisores disponibles, seleccionar el primero
+              else if (filteredSupervisors.length > 0) {
+                setFormData(prev => ({
+                  ...prev,
+                  supervisorId: filteredSupervisors[0]._id
+                }));
+              }
             }
             
             // Verificar si hay supervisores
@@ -148,58 +159,6 @@ const UserForm: React.FC<UserFormProps> = ({
       loadSupervisors();
     }
   }, [isOpen, formData.role, editingUser]);
-
-  // Efecto para obtener información del supervisor seleccionado y actualizar secciones
-  useEffect(() => {
-    const getSupervisorInfo = async () => {
-      if (formData.role === ROLES.OPERARIO && formData.supervisorId) {
-        try {
-          // Buscar el supervisor en la lista de supervisores disponibles
-          const supervisor = availableSupervisors.find(sup => sup._id === formData.supervisorId);
-          
-          if (supervisor) {
-            setSelectedSupervisorInfo(supervisor);
-            
-            // Actualizar las secciones disponibles según las secciones del supervisor
-            if (supervisor.secciones === 'limpieza') {
-              setAvailableSections(['limpieza']);
-              // Forzar la selección de limpieza siempre, sin importar lo que hubiera antes
-              setFormData(prev => ({
-                ...prev,
-                secciones: 'limpieza'
-              }));
-            } else if (supervisor.secciones === 'mantenimiento') {
-              setAvailableSections(['mantenimiento']);
-              // Forzar la selección de mantenimiento siempre, sin importar lo que hubiera antes
-              setFormData(prev => ({
-                ...prev,
-                secciones: 'mantenimiento'
-              }));
-            } else if (supervisor.secciones === 'ambos') {
-              // Si el supervisor tiene ambos, permitir todas las opciones
-              setAvailableSections(['limpieza', 'mantenimiento', 'ambos']);
-              
-              // Si no hay una selección previa válida, establecer 'ambos' como predeterminado
-              if (!formData.secciones || !['limpieza', 'mantenimiento', 'ambos'].includes(formData.secciones)) {
-                setFormData(prev => ({
-                  ...prev,
-                  secciones: 'ambos'
-                }));
-              }
-            }
-          }
-        } catch (err) {
-          console.error('Error al obtener información del supervisor:', err);
-        }
-      } else if (formData.role !== ROLES.OPERARIO) {
-        // Resetear cuando no es operario
-        setSelectedSupervisorInfo(null);
-        setAvailableSections(['limpieza', 'mantenimiento', 'ambos']);
-      }
-    };
-    
-    getSupervisorInfo();
-  }, [formData.role, formData.supervisorId, availableSupervisors]);
   
   // Efecto para actualizar isTemporary cuando cambie el usuario editado
   useEffect(() => {
@@ -214,42 +173,60 @@ const UserForm: React.FC<UserFormProps> = ({
   }, [editingUser]);
 
   // Maneja el envío del formulario
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Asegurarnos que secciones tiene un valor válido
-    if (!formData.secciones) {
-      setFormData({
-        ...formData,
-        secciones: 'ambos'
-      });
+// Maneja el envío del formulario con limpieza agresiva de campos
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  
+  // Crear un objeto nuevo en lugar de modificar el formData
+  const submissionData: Record<string, any> = {};
+  
+  // Copiar campos básicos que siempre son válidos
+  submissionData.usuario = formData.usuario || '';
+  submissionData.nombre = formData.nombre;
+  submissionData.apellido = formData.apellido;
+  submissionData.celular = formData.celular;
+  
+  // Si se está actualizando la contraseña, incluirla
+  if (formData.password) {
+    submissionData.password = formData.password;
+  }
+  
+  // Siempre incluir rol y secciones
+  submissionData.role = formData.role;
+  submissionData.secciones = formData.secciones || 'ambos';
+  
+  // Luego, agregar campos específicos al rol SOLO si el rol actual es operario
+  if (formData.role === ROLES.OPERARIO) {
+    // Para operarios se requiere supervisor
+    if (!formData.supervisorId) {
+      setSupervisorsError('Debe seleccionar un supervisor para el operario');
+      return;
     }
     
-    // Para operarios nuevos, requerir supervisor
-    if (!editingUser && formData.role === ROLES.OPERARIO) {
-      if (!formData.supervisorId) {
-        setSupervisorsError('Debe seleccionar un supervisor para el operario');
-        return;
-      }
+    // Incluir supervisor ID para operarios
+    submissionData.supervisorId = formData.supervisorId;
+    
+    // Para operarios temporales, agregar configuración de tiempo
+    if (isTemporary) {
+      submissionData.isTemporary = true;
+      submissionData.expirationMinutes = formData.expirationMinutes || 30;
+    } else {
+      submissionData.isTemporary = false;
     }
-    
-    // Preparar datos con la configuración temporal correcta
-    const submissionData = {
-      ...formData,
-      // IMPORTANTE: Pasar el supervisorId seleccionado para operarios
-      supervisorId: formData.role === ROLES.OPERARIO ? formData.supervisorId : undefined,
-      
-      // Para operarios, agregar flag de temporal según corresponda
-      isTemporary: formData.role === ROLES.OPERARIO ? isTemporary : undefined,
-      
-      // Tiempo de expiración solo si es temporal
-      expirationMinutes: formData.role === ROLES.OPERARIO && isTemporary 
-        ? formData.expirationMinutes || 30 
-        : undefined
-    };
-    
-    await onSubmit(submissionData);
-  };
+  }
+  // Importante: NO incluir supervisorId, isTemporary o expirationMinutes para otros roles
+  
+  // Agregar log detallado para depuración
+  console.log('Datos enviados (limpios):', {
+    ...submissionData,
+    tieneRolOperario: formData.role === ROLES.OPERARIO,
+    tieneId: Boolean(editingUser?._id),
+    esTemporal: isTemporary,
+  });
+  
+  // Finalmente realizar el envío
+  await onSubmit(submissionData);
+};
 
   // Función para determinar si mostrar nombres cortos según ancho de pantalla
   const useShortNames = windowWidth < 450;

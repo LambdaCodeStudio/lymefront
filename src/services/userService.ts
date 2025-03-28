@@ -174,15 +174,12 @@ export const getUserById = async (id: string): Promise<User> => {
  * Crear un nuevo usuario
  */
 export const createUser = async (userData: CreateUserDTO): Promise<User> => {
+  // Limpiar datos según el rol para evitar errores de validación
+  const preparedData = cleanUserDataByRole(userData, userData.role);
+  
   const response = await fetchApi<{user: User}>('register', {
     method: 'POST',
-    body: JSON.stringify({
-      ...userData,
-      // Convertir undefined en valores por defecto para evitar problemas
-      isTemporary: userData.isTemporary || false,
-      password: userData.password,
-      role: userData.role
-    })
+    body: JSON.stringify(preparedData)
   });
   
   if (!response.success || !response.user) {
@@ -193,35 +190,51 @@ export const createUser = async (userData: CreateUserDTO): Promise<User> => {
 };
 
 /**
- * Actualizar usuario existente
+ * Limpia los datos del usuario según su rol para evitar campos inválidos
  */
-export const updateUser = async (id: string, userData: UpdateUserDTO): Promise<User> => {
-  // Preparar datos para envío, eliminando campos undefined
-  const cleanedUserData: Partial<UpdateUserDTO> = Object.fromEntries(
-    Object.entries(userData).filter(([_, v]) => v !== undefined)
-  );
-
-  // Campos especiales que requieren tratamiento
-  const preparedData: Partial<UpdateUserDTO> = {
-    ...cleanedUserData
-  };
-
-  // Manejar campos específicos según el rol
-  if (preparedData.role !== undefined) {
-    // Si el rol NO es operario, eliminar el supervisorId para evitar el error de validación
-    if (preparedData.role !== 'operario') {
-      delete preparedData.supervisorId;
-      delete preparedData.isTemporary;
-      delete preparedData.expirationMinutes;
-    } else {
-      // Gestión especial para operarios temporales
-      if (userData.isTemporary && userData.expirationMinutes) {
-        preparedData.expirationMinutes = userData.expirationMinutes;
+const cleanUserDataByRole = (userData: any, role: string): Record<string, any> => {
+  // Crear copia para no modificar el original
+  const cleanData: Record<string, any> = {};
+  
+  // Campos comunes para todos los roles
+  const commonFields = ['usuario', 'nombre', 'apellido', 'password', 'celular', 'secciones', 'isActive', 'role'];
+  
+  // Copiar solo campos comunes que existan en userData
+  commonFields.forEach(field => {
+    if (userData[field] !== undefined && userData[field] !== '') {
+      cleanData[field] = userData[field];
+    }
+  });
+  
+  // Agregar campos específicos según el rol
+  if (role === 'operario') {
+    // Campos exclusivos para operarios
+    if (userData.supervisorId) {
+      cleanData.supervisorId = userData.supervisorId;
+    }
+    
+    if (userData.isTemporary) {
+      cleanData.isTemporary = true;
+      
+      if (userData.expirationMinutes) {
+        cleanData.expirationMinutes = userData.expirationMinutes;
       }
     }
   }
+  // No agregamos campos específicos para otros roles
+  
+  console.log(`Datos limpiados para rol ${role}:`, cleanData);
+  return cleanData;
+};
 
-  console.log('Enviando datos de actualización:', JSON.stringify(preparedData));
+/**
+ * Actualizar usuario existente - Versión con limpieza agresiva por rol
+ */
+export const updateUser = async (id: string, userData: UpdateUserDTO): Promise<User> => {
+  // Aplicar limpieza de datos basada en el rol
+  const preparedData = cleanUserDataByRole(userData, userData.role);
+  
+  console.log('Enviando datos de actualización (limpiados agresivamente):', JSON.stringify(preparedData));
 
   try {
     const response = await fetchApi<{user: User}>(`users/${id}`, {

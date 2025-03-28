@@ -82,63 +82,52 @@ export const useUserManagement = () => {
     loadUsers();
   }, [loadUsers]);
 
-  // Manejar submit del formulario (crear o editar)
-  const handleSubmit = async (submissionData: CreateUserDTO | UpdateUserDTO) => {
-    setLoading(true);
-    setError('');
+  // Mostrar notificación
+  const showNotification = (type: 'success' | 'error', message: string) => {
+    toast({
+      title: type === 'success' ? 'Éxito' : 'Error',
+      description: message,
+      variant: type === 'success' ? 'default' : 'destructive'
+    });
+  };
+
+  // Función para actualizar la lista de usuarios
+  const fetchUsers = async () => {
+    await loadUsers();
+  };
+  
+  // Función handleSubmit para procesar creación/actualización de usuarios
+  const handleSubmit = async (userData: CreateUserDTO | UpdateUserDTO) => {
     try {
-      console.log('Procesando datos de formulario:', submissionData);
+      setLoading(true);
+      setError('');
       
+      // Log para debugging
+      console.log('Procesando usuario con datos:', userData);
+      
+      // Si estamos editando un usuario existente
       if (editingUser) {
-        // Editar usuario existente
-        const updatedUser = await userService.updateUser(editingUser._id, submissionData as UpdateUserDTO);
-        setUsers(prevUsers => 
-          prevUsers.map(user => user._id === updatedUser._id ? updatedUser : user)
-        );
-        toast({
-          title: 'Éxito',
-          description: 'Usuario actualizado correctamente',
-          variant: 'default'
-        });
+        // Actualizar el usuario - el servicio ya limpia los datos por rol
+        await userService.updateUser(editingUser._id, userData);
         
-        // Resetear formulario y cerrar modal
-        resetForm();
+        // Actualizar la lista de usuarios
+        await fetchUsers();
         setShowModal(false);
+        resetForm();
+        showNotification('success', 'Usuario actualizado correctamente');
       } else {
-        // Crear nuevo usuario
-        const newUser = await userService.createUser(submissionData as CreateUserDTO);
+        // Crear un nuevo usuario
+        await userService.createUser(userData);
         
-        // Recargar todos los usuarios para asegurar datos actualizados
-        const refreshedUsers = await userService.getAllUsers();
-        setUsers(refreshedUsers);
-        
-        toast({
-          title: 'Éxito',
-          description: 'Usuario creado correctamente',
-          variant: 'default'
-        });
-        
-        // Resetear formulario y cerrar modal
-        resetForm();
+        // Actualizar la lista de usuarios
+        await fetchUsers();
         setShowModal(false);
+        resetForm();
+        showNotification('success', 'Usuario creado correctamente');
       }
     } catch (err: any) {
       console.error('Error al procesar usuario:', err);
-      
-      // Mostrar mensaje de error más descriptivo
-      let errorMessage = 'Error al procesar el usuario';
-      if (err.message) {
-        errorMessage = err.message;
-      } else if (typeof err === 'string') {
-        errorMessage = err;
-      }
-      
-      setError(errorMessage);
-      toast({
-        title: 'Error',
-        description: errorMessage,
-        variant: 'destructive'
-      });
+      setError(err.message || 'Error desconocido');
     } finally {
       setLoading(false);
     }
@@ -156,6 +145,11 @@ export const useUserManagement = () => {
       celular: user.celular,
       isActive: user.isActive
     };
+    
+    // Solo agregar supervisorId si el usuario es operario
+    if (user.role === ROLES.OPERARIO && user.supervisorId) {
+      preparedFormData.supervisorId = user.supervisorId;
+    }
 
     setEditingUser(user);
     setFormData(preparedFormData);
