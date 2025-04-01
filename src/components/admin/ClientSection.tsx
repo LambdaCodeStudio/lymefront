@@ -103,7 +103,7 @@ import { useDashboard } from '@/hooks/useDashboard';
 import type { UserRole } from '@/types/users';
 
 // Constantes para el caché
-const CACHE_EXPIRY_TIME = 5 * 60 * 1000; // 5 minutos
+const CACHE_EXPIRY_TIME = 10 * 1000; // 10 segundos
 const CLIENTS_CACHE_KEY = 'lyme_clients_cache';
 const USERS_CACHE_KEY = 'lyme_users_cache';
 const SUPERVISORS_CACHE_KEY = 'lyme_supervisors_cache';
