@@ -7,9 +7,9 @@ import {
 } from 'lucide-react';
 
 import { QueryClient, QueryClientProvider } from 'react-query';
-import InventorySection from './InventorySection';
+import InventorySection from './inventario/InventorySection';
 import AdminUserManagement from './AdminUserManagement';
-import ClientsSection from './ClientSection';
+import ClientsSection from './clientes/ClientSection';
 import OrdersSection from './OrdersSection';
 import { DashboardContext, useDashboardState } from '@/hooks/useDashboard';
 import DashboardSection from '../../shared/DashboardSection';

@@ -3,7 +3,7 @@
  * Permite crear, editar, activar/desactivar y eliminar usuarios del sistema
  * Actualizado para usar la nueva estructura de roles del sistema
  */
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   Plus,
   AlertCircle,
@@ -20,19 +20,33 @@ import UserTable from './components/UserTable';
 import UserCard from './components/UserCard';
 import UserForm from './components/UserForm';
 import UserFilters from './components/UserFilters';
-import EnhancedPagination from './components/Pagination'; 
+import EnhancedPagination from './components/Pagination';
 
 // Importar hooks y utilidades
 import { useUserManagement } from '../../hooks/useUserManagement';
 import { getUserIdentifier, getFullName } from '@/utils/userUtils';
+import { User } from '@/types/users';
 
-// Función de filtrado actualizada para incluir el filtro por rol
+// Estilos comunes para reutilización
+const STYLES = {
+  container: "p-4 md:p-6 space-y-6",
+  toolbar: "flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-[#91BEAD]/20",
+  resultCount: "bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm text-[#29696B] flex flex-col sm:flex-row sm:justify-between items-center",
+  loading: "flex justify-center items-center py-8 bg-white rounded-xl shadow-sm border border-[#91BEAD]/20 p-6",
+  emptyState: "bg-white rounded-xl shadow-sm p-8 text-center border border-[#91BEAD]/20",
+  table: "hidden md:block bg-white rounded-xl shadow-sm overflow-hidden border border-[#91BEAD]/20",
+  mobileList: "md:hidden space-y-4",
+  paginationContainer: "bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20",
+  paginationInfo: "bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm"
+};
+
+// Función de filtrado actualizada para incluir el filtro por rol con tipado adecuado
 export const filterUsers = (
-  users,
-  searchTerm,
-  showInactiveUsers,
-  selectedRole
-) => {
+  users: User[],
+  searchTerm: string,
+  showInactiveUsers: boolean,
+  selectedRole: string | null
+): User[] => {
   return users.filter((user) => {
     // Filtrar por término de búsqueda
     const matchesSearch =
@@ -57,7 +71,7 @@ export const filterUsers = (
  */
 const UserManagementContent: React.FC = () => {
   // Referencia al contenedor de usuarios móviles
-  const mobileListRef = useRef(null);
+  const mobileListRef = useRef<HTMLDivElement>(null);
   
   // Usar el hook de gestión de usuarios que centraliza toda la lógica
   const {
@@ -85,19 +99,19 @@ const UserManagementContent: React.FC = () => {
   // Estado para la paginación
   const [currentPage, setCurrentPage] = useState(1);
   
-  // Nuevo estado para el filtro de roles
+  // Estado para el filtro de roles
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
   
   // Estados para el diálogo de confirmación de eliminación
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<string | null>(null);
   
-  // IMPORTANTE: Tamaño fijo para móviles - siempre 5 elementos por página
+  // Constantes para la paginación
   const ITEMS_PER_PAGE_MOBILE = 5;
   const ITEMS_PER_PAGE_DESKTOP = 10;
   
-  // Estado para controlar el ancho de la ventana
-  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
+  // Estado para controlar el ancho de la ventana con inicialización segura para SSR
+  const [windowWidth, setWindowWidth] = useState<number>(typeof window !== 'undefined' ? window.innerWidth : 1024);
   
   // Calculamos dinámicamente itemsPerPage basado en el ancho de la ventana
   const itemsPerPage = windowWidth < 768 ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP;
@@ -152,38 +166,51 @@ const UserManagementContent: React.FC = () => {
     }
   }, [currentPage, totalPages]);
 
-  // Función para cambiar de página
-  const handlePageChange = (pageNumber) => {
+  // Función para cambiar de página utilizando useCallback para evitar recreaciones innecesarias
+  const handlePageChange = useCallback((pageNumber: number) => {
     setCurrentPage(pageNumber);
     
     // Hacer scroll al inicio de la lista en móvil
     if (windowWidth < 768 && mobileListRef.current) {
       mobileListRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  };
+  }, [windowWidth]);
 
   // Mostrar información detallada sobre la paginación
-  const showingFromTo = filteredUsers.length > 0 
-    ? `${indexOfFirstItem + 1}-${Math.min(indexOfLastItem, filteredUsers.length)} de ${filteredUsers.length}`
-    : '0 de 0';
+  const showingFromTo = useMemo(() => {
+    if (filteredUsers.length === 0) return '0 de 0';
+    return `${indexOfFirstItem + 1}-${Math.min(indexOfLastItem, filteredUsers.length)} de ${filteredUsers.length}`;
+  }, [filteredUsers.length, indexOfFirstItem, indexOfLastItem]);
 
   // Función para mostrar el diálogo de confirmación de eliminación
-  const confirmDelete = (userId: string) => {
+  const confirmDelete = useCallback((userId: string) => {
     setUserToDelete(userId);
     setDeleteDialogOpen(true);
-  };
+  }, []);
 
   // Ejecutar la eliminación cuando se confirma
-  const executeDelete = () => {
+  const executeDelete = useCallback(() => {
     if (userToDelete) {
       handleDelete(userToDelete);
       setUserToDelete(null);
     }
     setDeleteDialogOpen(false);
-  };
+  }, [userToDelete, handleDelete]);
+
+  // Función para abrir el modal de nuevo usuario
+  const openNewUserModal = useCallback(() => {
+    resetForm();
+    setShowModal(true);
+  }, [resetForm, setShowModal]);
+
+  // Función para cerrar el modal
+  const closeUserModal = useCallback(() => {
+    setShowModal(false);
+    resetForm();
+  }, [resetForm, setShowModal]);
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className={STYLES.container}>
       {/* Contenedor de notificaciones */}
       <NotificationsContainer />
       
@@ -196,7 +223,7 @@ const UserManagementContent: React.FC = () => {
       )}
 
       {/* Barra de Herramientas */}
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-[#91BEAD]/20">
+      <div className={STYLES.toolbar}>
         <UserFilters 
           searchTerm={searchTerm}
           setSearchTerm={setSearchTerm}
@@ -208,11 +235,9 @@ const UserManagementContent: React.FC = () => {
         />
         
         <Button 
-          onClick={() => {
-            resetForm();
-            setShowModal(true);
-          }}
+          onClick={openNewUserModal}
           className="bg-[#29696B] hover:bg-[#29696B]/90 text-white px-4 py-2 rounded-lg transition-colors duration-200 flex items-center justify-center"
+          aria-label="Crear nuevo usuario"
         >
           <Plus className="w-4 h-4 mr-2" />
           <span className="hidden sm:inline">Nuevo Usuario</span>
@@ -222,7 +247,7 @@ const UserManagementContent: React.FC = () => {
 
       {/* Contador de resultados con información detallada */}
       {!loading && filteredUsers.length > 0 && (
-        <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm text-[#29696B] flex flex-col sm:flex-row sm:justify-between items-center">
+        <div className={STYLES.resultCount}>
           <span>
             Total: {filteredUsers.length} {filteredUsers.length === 1 ? 'usuario' : 'usuarios'}
           </span>
@@ -234,36 +259,35 @@ const UserManagementContent: React.FC = () => {
 
       {/* Vista de Carga */}
       {loading && users.length === 0 && (
-        <div className="flex justify-center items-center py-8 bg-white rounded-xl shadow-sm border border-[#91BEAD]/20 p-6">
-          <div className="w-8 h-8 border-4 border-[#8DB3BA] border-t-[#29696B] rounded-full animate-spin"></div>
+        <div className={STYLES.loading}>
+          <div className="w-8 h-8 border-4 border-[#8DB3BA] border-t-[#29696B] rounded-full animate-spin" aria-hidden="true"></div>
           <span className="ml-3 text-[#29696B]">Cargando usuarios...</span>
         </div>
       )}
 
       {/* Mensaje cuando no hay usuarios */}
       {!loading && filteredUsers.length === 0 && (
-        <div className="bg-white rounded-xl shadow-sm p-8 text-center border border-[#91BEAD]/20">
+        <div className={STYLES.emptyState}>
           <div className="inline-flex items-center justify-center w-12 h-12 bg-[#DFEFE6] rounded-full mb-4">
-            <Search className="w-6 h-6 text-[#29696B]" />
+            <Search className="w-6 h-6 text-[#29696B]" aria-hidden="true" />
           </div>
           <p className="text-[#7AA79C] font-medium">No se encontraron usuarios que coincidan con la búsqueda</p>
         </div>
       )}
 
       {/* Tabla para pantallas medianas y grandes */}
-      <div className="hidden md:block bg-white rounded-xl shadow-sm overflow-hidden border border-[#91BEAD]/20">
+      <div className={STYLES.table}>
         {!loading && currentUsers.length > 0 && (
           <>
-                          {/* Ahora llama a confirmDelete en lugar de handleDelete directamente */}
-              <UserTable 
-                users={currentUsers}
-                onEdit={handleEdit}
-                onDelete={confirmDelete}
-                onToggleStatus={handleToggleStatus}
-                getUserIdentifier={getUserIdentifier}
-                getFullName={getFullName}
-                currentUserRole={currentUserRole}
-              />
+            <UserTable 
+              users={currentUsers}
+              onEdit={handleEdit}
+              onDelete={confirmDelete}
+              onToggleStatus={handleToggleStatus}
+              getUserIdentifier={getUserIdentifier}
+              getFullName={getFullName}
+              currentUserRole={currentUserRole}
+            />
             
             {/* Paginación debajo de la tabla */}
             <div className="py-4 border-t border-[#91BEAD]/20">
@@ -280,10 +304,10 @@ const UserManagementContent: React.FC = () => {
       </div>
 
       {/* Vista de Tarjetas para dispositivos móviles con ID para scroll */}
-      <div ref={mobileListRef} id="mobile-users-list" className="md:hidden space-y-4">
+      <div ref={mobileListRef} id="mobile-users-list" className={STYLES.mobileList}>
         {/* Paginación visible en la parte superior para móvil */}
         {!loading && filteredUsers.length > 0 && (
-          <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20">
+          <div className={STYLES.paginationContainer}>
             <EnhancedPagination 
               totalItems={filteredUsers.length}
               itemsPerPage={itemsPerPage}
@@ -311,7 +335,7 @@ const UserManagementContent: React.FC = () => {
         
         {/* Mensaje que muestra la página actual y el total */}
         {!loading && filteredUsers.length > itemsPerPage && (
-          <div className="bg-[#DFEFE6]/30 py-2 px-4 rounded-lg text-center text-sm">
+          <div className={STYLES.paginationInfo}>
             <span className="text-[#29696B] font-medium">
               Página {currentPage} de {totalPages}
             </span>
@@ -320,7 +344,7 @@ const UserManagementContent: React.FC = () => {
         
         {/* Paginación duplicada al final de la lista para mayor visibilidad */}
         {!loading && filteredUsers.length > itemsPerPage && (
-          <div className="bg-white p-4 rounded-lg shadow-sm border border-[#91BEAD]/20 mt-2">
+          <div className={STYLES.paginationContainer + " mt-2"}>
             <EnhancedPagination 
               totalItems={filteredUsers.length}
               itemsPerPage={itemsPerPage}
@@ -334,10 +358,7 @@ const UserManagementContent: React.FC = () => {
       {/* Modal de Usuario */}
       <UserForm 
         isOpen={showModal}
-        onClose={() => {
-          setShowModal(false);
-          resetForm();
-        }}
+        onClose={closeUserModal}
         onSubmit={handleSubmit}
         availableRoles={availableRoles}
         formData={formData}

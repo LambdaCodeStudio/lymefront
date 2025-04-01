@@ -473,7 +473,7 @@ export const Cart: React.FC = () => {
 
       // Si es supervisor, filtrar por subservicios asignados
       if (userRole === 'supervisor') {
-        const response = await fetch(`${API_BASE_URL}/api/cliente/supervisor/${userId}`, {
+        const response = await fetch(`${API_BASE_URL}http://localhost:3000/api/cliente/supervisor/${userId}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Cache-Control': 'no-cache'
@@ -508,7 +508,7 @@ export const Cart: React.FC = () => {
         return { clientes: clientesFiltrados, subservicios: [] };
       } else {
         // Para otros roles, mostrar todos los clientes y subservicios
-        const response = await fetch(`${API_BASE_URL}/api/cliente`, {
+        const response = await fetch(`${API_BASE_URL}http://localhost:3000/api/cliente`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Cache-Control': 'no-cache'
@@ -538,7 +538,7 @@ export const Cart: React.FC = () => {
 
       // Try using the dedicated supervisor endpoint first (better approach)
       try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/me/supervisor`, {
+        const response = await fetch(`${API_BASE_URL}http://localhost:3000/api/auth/me/supervisor`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
@@ -570,7 +570,7 @@ export const Cart: React.FC = () => {
         // but we'll keep it as a fallback with better error handling
         try {
           // This is not recommended since regular users don't have access to this endpoint
-          const response = await fetch(`${API_BASE_URL}/api/auth/users/${userData.supervisorId}`, {
+          const response = await fetch(`${API_BASE_URL}http://localhost:3000/api/auth/users/${userData.supervisorId}`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
 
@@ -622,7 +622,7 @@ export const Cart: React.FC = () => {
       const token = getToken();
 
       // Usar el endpoint específico para operarios
-      const response = await fetch(`${API_BASE_URL}/api/cliente/mi-supervisor`, {
+      const response = await fetch(`${API_BASE_URL}http://localhost:3000/api/cliente/mi-supervisor`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -733,7 +733,7 @@ export const Cart: React.FC = () => {
       if (storedRole) setUserRole(storedRole);
       if (storedSecciones) setUserSecciones(storedSecciones);
 
-      const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+      const response = await fetch(`${API_BASE_URL}http://localhost:3000/api/auth/me`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -881,7 +881,7 @@ export const Cart: React.FC = () => {
       const token = getToken();
 
       // Realizar la solicitud con un timeout adecuado
-      const response = await fetch(`${API_BASE_URL}/api/downloads/remito/${createdOrderId}`, {
+      const response = await fetch(`${API_BASE_URL}http://localhost:3000/api/downloads/remito/${createdOrderId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },
@@ -1149,7 +1149,7 @@ export const Cart: React.FC = () => {
       setOrderData(orderData);
 
       // Enviar pedido a la API
-      const response = await fetch(`${API_BASE_URL}/api/pedido`, {
+      const response = await fetch(`${API_BASE_URL}http://localhost:3000/api/pedido`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

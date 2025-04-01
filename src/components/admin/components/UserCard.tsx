@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { UserCog, Trash2, CheckCircle, XCircle, Clock, ShieldAlert, Shield } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,64 +13,17 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { User } from '@/types/users';
 import { rolesDisplayNames } from '@/types/UserRolesConfig';
-
-// Constante con roles para usar en el componente
-const ROLES = {
-  ADMIN: 'admin',
-  SUPERVISOR_DE_SUPERVISORES: 'supervisor_de_supervisores',
-  SUPERVISOR: 'supervisor',
-  OPERARIO: 'operario'
-};
-
-// Nombres cortos para roles en pantallas muy pequeñas
-const shortRoleNames = {
-  [ROLES.ADMIN]: 'Admin',
-  [ROLES.SUPERVISOR_DE_SUPERVISORES]: 'Sup. de Sups.',
-  [ROLES.SUPERVISOR]: 'Supervisor',
-  [ROLES.OPERARIO]: 'Operario'
-};
-
-// Función para verificar si el usuario tiene fecha de expiración
-const hasExpiration = (user: User) => {
-  return user.role === ROLES.OPERARIO && user.expiresAt;
-};
-
-// Función para verificar si un usuario puede modificar a otro según jerarquía
-const canModifyUser = (currentUserRole: string, targetUserRole: string) => {
-  // Administrador puede modificar a cualquiera
-  if (currentUserRole === ROLES.ADMIN) return true;
-  
-  // Supervisor de supervisores puede modificar a supervisores y roles inferiores
-  if (currentUserRole === ROLES.SUPERVISOR_DE_SUPERVISORES) {
-    return ![ROLES.ADMIN, ROLES.SUPERVISOR_DE_SUPERVISORES].includes(targetUserRole);
-  }
-  
-  // Otros roles no pueden modificar usuarios
-  return false;
-};
-
-// Función para verificar si un usuario puede ser desactivado o eliminado
-const canDeleteOrDeactivate = (userRole: string) => userRole !== ROLES.ADMIN;
-
-// Función para obtener el nombre del creador de un usuario
-const getCreatorName = (user: User): string => {
-  // Si no hay información del creador
-  if (!user.createdBy) return '-';
-  
-  // Si createdBy es un objeto con propiedades
-  if (typeof user.createdBy === 'object' && user.createdBy !== null) {
-    if (user.createdBy.nombre && user.createdBy.apellido) {
-      return `${user.createdBy.nombre} ${user.createdBy.apellido}`;
-    } else if (user.createdBy.nombre) {
-      return user.createdBy.nombre;
-    } else if (user.createdBy.usuario) {
-      return user.createdBy.usuario;
-    }
-  }
-  
-  // Si createdBy es un string (ID) o no tiene propiedades reconocibles
-  return 'Admin';
-};
+import {
+  ROLES,
+  shortRoleNames,
+  hasExpiration,
+  canModifyUser,
+  canDeleteOrDeactivate,
+  getCreatorName,
+  getUserStatusClass,
+  getUserStatusText,
+  getRoleBadgeClass
+} from '../../../utils/userComponentUtils';
 
 interface UserCardProps {
   user: User;
@@ -98,30 +51,14 @@ const UserCard: React.FC<UserCardProps> = ({
     <Card className="overflow-hidden">
       <CardHeader className="p-4 pb-0">
         <div className="flex justify-between items-start gap-2">
-          <div className="min-w-0 flex-1"> {/* Añadido min-w-0 para permitir truncado del texto */}
+          <div className="min-w-0 flex-1"> {/* min-w-0 permite el truncado del texto */}
             <CardTitle className="text-base truncate">{getUserIdentifier(user)}</CardTitle>
             {getFullName(user) && (
               <CardDescription className="truncate">{getFullName(user)}</CardDescription>
             )}
           </div>
-          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full whitespace-nowrap
-            ${!user.isActive
-              ? 'bg-red-100 text-red-800'
-              : hasExpiration(user)
-                ? user.expiresAt && new Date(user.expiresAt) > new Date()
-                  ? 'bg-yellow-100 text-yellow-800'
-                  : 'bg-red-100 text-red-800'
-                : 'bg-green-100 text-green-800'
-            }`}
-          >
-            {!user.isActive
-              ? 'Inactivo'
-              : hasExpiration(user)
-                ? user.expiresAt && new Date(user.expiresAt) > new Date()
-                  ? 'Temporal Activo'
-                  : 'Expirado'
-                : 'Activo'
-            }
+          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full whitespace-nowrap ${getUserStatusClass(user)}`}>
+            {getUserStatusText(user)}
           </span>
         </div>
       </CardHeader>
@@ -132,16 +69,11 @@ const UserCard: React.FC<UserCardProps> = ({
             <div className="inline-block">
               <Badge 
                 variant="outline" 
-                className={`ml-1 py-0 h-5 text-xs
-                  ${user.role === ROLES.ADMIN ? 'border-purple-500 text-purple-700 bg-purple-50' : ''}
-                  ${user.role === ROLES.SUPERVISOR_DE_SUPERVISORES ? 'border-blue-500 text-blue-700 bg-blue-50' : ''}
-                  ${user.role === ROLES.SUPERVISOR ? 'border-cyan-500 text-cyan-700 bg-cyan-50' : ''}
-                  ${user.role === ROLES.OPERARIO ? 'border-green-500 text-green-700 bg-green-50' : ''}
-                `}
+                className={`ml-1 py-0 h-5 text-xs ${getRoleBadgeClass(user.role)}`}
               >
                 {/* Mostrar sólo el icono en pantallas muy pequeñas */}
-                {user.role === ROLES.ADMIN && <ShieldAlert className="w-3 h-3 mr-1 flex-shrink-0" />}
-                {user.role === ROLES.SUPERVISOR_DE_SUPERVISORES && <Shield className="w-3 h-3 mr-1 flex-shrink-0" />}
+                {user.role === ROLES.ADMIN && <ShieldAlert className="w-3 h-3 mr-1 flex-shrink-0" aria-hidden="true" />}
+                {user.role === ROLES.SUPERVISOR_DE_SUPERVISORES && <Shield className="w-3 h-3 mr-1 flex-shrink-0" aria-hidden="true" />}
                 
                 {/* Nombre corto del rol para móviles */}
                 <span className="hidden xs:inline">
@@ -159,7 +91,7 @@ const UserCard: React.FC<UserCardProps> = ({
           </div>
           {hasExpiration(user) && user.expiresAt && (
             <div className="col-span-2 flex items-center">
-              <Clock className="w-3.5 h-3.5 mr-1 text-yellow-600 flex-shrink-0" />
+              <Clock className="w-3.5 h-3.5 mr-1 text-yellow-600 flex-shrink-0" aria-hidden="true" />
               <span className="text-gray-500">Expira:</span>
               <span className="ml-1 truncate">{new Date(user.expiresAt).toLocaleString()}</span>
             </div>
@@ -187,13 +119,14 @@ const UserCard: React.FC<UserCardProps> = ({
               size="sm"
               onClick={() => onToggleStatus(user._id, !user.isActive)}
               disabled={!canDeleteOrDeactivate(user.role)}
+              aria-label={user.isActive ? "Desactivar usuario" : "Activar usuario"}
               className={`p-0 w-8 h-8 ${user.isActive ? 'text-red-600' : 'text-green-600'}
                 ${!canDeleteOrDeactivate(user.role) ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               {user.isActive ? (
-                <XCircle className="w-4 h-4" />
+                <XCircle className="w-4 h-4" aria-hidden="true" />
               ) : (
-                <CheckCircle className="w-4 h-4" />
+                <CheckCircle className="w-4 h-4" aria-hidden="true" />
               )}
             </Button>
             
@@ -201,9 +134,10 @@ const UserCard: React.FC<UserCardProps> = ({
               variant="ghost"
               size="sm"
               onClick={() => onEdit(user)}
+              aria-label="Editar usuario"
               className="p-0 w-8 h-8 text-blue-600"
             >
-              <UserCog className="w-4 h-4" />
+              <UserCog className="w-4 h-4" aria-hidden="true" />
             </Button>
             
             <Button
@@ -211,10 +145,11 @@ const UserCard: React.FC<UserCardProps> = ({
               size="sm"
               onClick={() => onDelete(user._id)}
               disabled={!canDeleteOrDeactivate(user.role)}
+              aria-label="Eliminar usuario"
               className={`p-0 w-8 h-8 text-red-600
                 ${!canDeleteOrDeactivate(user.role) ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="w-4 h-4" aria-hidden="true" />
             </Button>
           </>
         ) : (
@@ -236,4 +171,5 @@ const UserCard: React.FC<UserCardProps> = ({
   );
 };
 
-export default UserCard;
+// Usar memo para evitar re-renders innecesarios
+export default memo(UserCard);
