@@ -14,7 +14,8 @@ import {
   Shield,
   Users,
   UserPlus,
-  X
+  X,
+  MapPin
 } from 'lucide-react';
 
 // Componentes UI
