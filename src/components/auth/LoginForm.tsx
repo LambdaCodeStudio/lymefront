@@ -155,16 +155,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({ redirectPath }) => {
     // Usar el rol para determinar la ruta base
     let basePath = rolePaths[role.toLowerCase()] || '/shop';
     
-    // Si es necesario, usar secciones para rutas más específicas
-    if (role.toLowerCase() === 'operario' && secciones) {
-      // Por ejemplo, redireccionar a diferentes dashboards según la sección
-      if (secciones === 'limpieza') {
-        return `${basePath}/limpieza`;
-      } else if (secciones === 'mantenimiento') {
-        return `${basePath}/mantenimiento`;
-      }
-    }
-    
     return basePath;
   };
 
