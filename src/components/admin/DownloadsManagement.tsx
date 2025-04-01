@@ -60,8 +60,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
-import Pagination from "@/components/ui/pagination";
-import api from '@/services/api';
+import Pagination from '@/components/Pagination';
 import { inventoryObservable } from '@/utils/inventoryUtils';
 
 // Create an observable for order-related updates
@@ -318,6 +317,12 @@ const DownloadsManagement: React.FC = () => {
     } catch (error) {
       return 'Fecha inválida';
     }
+  };
+
+  // Truncate text to prevent layout breaking
+  const truncateText = (text: string, maxLength = 20) => {
+    if (!text) return '';
+    return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
   };
 
   // Window resize handling
@@ -925,6 +930,28 @@ const DownloadsManagement: React.FC = () => {
     applyFilters();
   }, [filterOptions, applyFilters]);
 
+  // Pre-load client data when selecting in dialog to avoid "Cliente no encontrado"
+  const getClientData = useCallback((clienteId: string | null) => {
+    if (!clienteId) return null;
+    return allClientes.find(c => c._id === clienteId);
+  }, [allClientes]);
+  
+  // Get subservice data
+  const getSubServicioData = useCallback((clienteId: string | null, subServicioId: string | null) => {
+    if (!clienteId || !subServicioId) return null;
+    const cliente = getClientData(clienteId);
+    if (!cliente) return null;
+    return cliente.subServicios.find(s => s._id === subServicioId);
+  }, [getClientData]);
+  
+  // Get sublocation data
+  const getSubUbicacionData = useCallback((clienteId: string | null, subServicioId: string | null, subUbicacionId: string | null) => {
+    if (!clienteId || !subServicioId || !subUbicacionId) return null;
+    const subServicio = getSubServicioData(clienteId, subServicioId);
+    if (!subServicio) return null;
+    return subServicio.subUbicaciones.find(u => u._id === subUbicacionId);
+  }, [getSubServicioData]);
+
   // Handle applying filters
   const handleApplyFilters = () => {
     setFilterOptions(tempFilterOptions);
@@ -1191,6 +1218,19 @@ const DownloadsManagement: React.FC = () => {
     return cliente.seccionDelServicio || '';
   };
 
+  // Get service and section combined for table display
+  const getServiceAndSection = (pedido: Pedido): string => {
+    const servicePart = pedido.servicio || 'N/A';
+    const sectionPart = pedido.seccionDelServicio || '';
+    const ubicacionPart = pedido.cliente?.nombreSubUbicacion || '';
+    
+    let result = servicePart;
+    if (sectionPart) result += `, ${sectionPart}`;
+    if (ubicacionPart) result += `, ${ubicacionPart}`;
+    
+    return result;
+  };
+
   // Filtered clients
   const filteredClientes = clientes.filter(cliente => {
     if (!cliente || typeof cliente !== 'object') return false;
@@ -1283,44 +1323,39 @@ const DownloadsManagement: React.FC = () => {
     return count;
   };
 
-  // Get selected item names
+  // Get selected item names - Fixed to solve the "Cliente no encontrado" issue
   const getSelectedProductoName = () => {
-    const producto = productos.find(p => p._id === filterOptions.productoId);
-    return producto ? producto.nombre : 'Producto no encontrado';
+    const producto = productos.find(p => p._id === tempFilterOptions.productoId);
+    return producto ? producto.nombre : 'Seleccionar producto';
   };
 
   const getSelectedSupervisorName = () => {
-    const supervisor = supervisores.find(s => s._id === filterOptions.supervisorId);
-    return supervisor ? supervisor.displayName : 'Supervisor no encontrado';
+    const supervisor = supervisores.find(s => s._id === tempFilterOptions.supervisorId);
+    return supervisor ? supervisor.displayName : 'Seleccionar supervisor';
   };
 
   const getSelectedClienteName = () => {
-    const cliente = allClientes.find(c => c._id === filterOptions.clienteId);
-    return cliente ? getClientName(cliente) : 'Cliente no encontrado';
+    const cliente = getClientData(tempFilterOptions.clienteId);
+    return cliente ? getClientName(cliente) : 'Seleccionar cliente';
   };
 
   const getSelectedSubServicioName = () => {
-    if (!filterOptions.clienteId || !filterOptions.subServicioId) return '';
+    if (!tempFilterOptions.clienteId || !tempFilterOptions.subServicioId) return '';
 
-    const cliente = allClientes.find(c => c._id === filterOptions.clienteId);
-    if (!cliente) return 'Subservicio no encontrado';
-
-    const subServicio = cliente.subServicios.find(s => s._id === filterOptions.subServicioId);
-    return subServicio ? subServicio.nombre : 'Subservicio no encontrado';
+    const subServicio = getSubServicioData(tempFilterOptions.clienteId, tempFilterOptions.subServicioId);
+    return subServicio ? subServicio.nombre : '';
   };
 
   const getSelectedSubUbicacionName = () => {
-    if (!filterOptions.clienteId || !filterOptions.subServicioId || !filterOptions.subUbicacionId)
+    if (!tempFilterOptions.clienteId || !tempFilterOptions.subServicioId || !tempFilterOptions.subUbicacionId)
       return '';
 
-    const cliente = allClientes.find(c => c._id === filterOptions.clienteId);
-    if (!cliente) return 'Sububicación no encontrada';
-
-    const subServicio = cliente.subServicios.find(s => s._id === filterOptions.subServicioId);
-    if (!subServicio) return 'Sububicación no encontrada';
-
-    const subUbicacion = subServicio.subUbicaciones.find(u => u._id === filterOptions.subUbicacionId);
-    return subUbicacion ? subUbicacion.nombre : 'Sububicación no encontrada';
+    const subUbicacion = getSubUbicacionData(
+      tempFilterOptions.clienteId, 
+      tempFilterOptions.subServicioId, 
+      tempFilterOptions.subUbicacionId
+    );
+    return subUbicacion ? subUbicacion.nombre : '';
   };
 
   // Componente de filtros comunes (Diálogo)
@@ -1402,7 +1437,7 @@ const DownloadsManagement: React.FC = () => {
                 >
                   {tempFilterOptions.productoId ? (
                     <span className="truncate">
-                      {productos.find(p => p._id === tempFilterOptions.productoId)?.nombre || 'Producto seleccionado'}
+                      {getSelectedProductoName()}
                     </span>
                   ) : (
                     <span className="text-muted-foreground">Seleccionar producto</span>
@@ -1508,7 +1543,7 @@ const DownloadsManagement: React.FC = () => {
                 >
                   {tempFilterOptions.supervisorId ? (
                     <span className="truncate">
-                      {supervisores.find(s => s._id === tempFilterOptions.supervisorId)?.displayName || 'Supervisor seleccionado'}
+                      {getSelectedSupervisorName()}
                     </span>
                   ) : (
                     <span className="text-muted-foreground">Seleccionar supervisor</span>
@@ -1615,9 +1650,9 @@ const DownloadsManagement: React.FC = () => {
                   {tempFilterOptions.clienteId ? (
                     <span className="truncate">
                       {getSelectedClienteName()}
-                      {tempFilterOptions.subServicioId &&
+                      {tempFilterOptions.subServicioId && getSelectedSubServicioName() &&
                         ` > ${getSelectedSubServicioName()}`}
-                      {tempFilterOptions.subUbicacionId &&
+                      {tempFilterOptions.subUbicacionId && getSelectedSubUbicacionName() &&
                         ` > ${getSelectedSubUbicacionName()}`}
                     </span>
                   ) : (
@@ -1707,7 +1742,7 @@ const DownloadsManagement: React.FC = () => {
 
                   {/* Subservice selector if client is selected */}
                   {tempFilterOptions.clienteId && (() => {
-                    const cliente = allClientes.find(c => c._id === tempFilterOptions.clienteId);
+                    const cliente = getClientData(tempFilterOptions.clienteId);
                     if (cliente && cliente.subServicios && cliente.subServicios.length > 0) {
                       return (
                         <div className="mt-4 space-y-2">
@@ -1720,7 +1755,7 @@ const DownloadsManagement: React.FC = () => {
                             onValueChange={(value) => {
                               setTempFilterOptions({
                                 ...tempFilterOptions,
-                                subServicioId: value,
+                                subServicioId: value === 'all' ? '' : value,
                                 subUbicacionId: ''
                               });
                             }}
@@ -1745,10 +1780,7 @@ const DownloadsManagement: React.FC = () => {
 
                   {/* Sublocation selector if subservice is selected */}
                   {tempFilterOptions.clienteId && tempFilterOptions.subServicioId && (() => {
-                    const cliente = allClientes.find(c => c._id === tempFilterOptions.clienteId);
-                    if (!cliente) return null;
-
-                    const subservicio = cliente.subServicios.find(s => s._id === tempFilterOptions.subServicioId);
+                    const subservicio = getSubServicioData(tempFilterOptions.clienteId, tempFilterOptions.subServicioId);
                     if (!subservicio) return null;
 
                     if (subservicio.subUbicaciones && subservicio.subUbicaciones.length > 0) {
@@ -1763,7 +1795,7 @@ const DownloadsManagement: React.FC = () => {
                             onValueChange={(value) => {
                               setTempFilterOptions({
                                 ...tempFilterOptions,
-                                subUbicacionId: value
+                                subUbicacionId: value === 'all' ? '' : value
                               });
                             }}
                           >
@@ -2062,81 +2094,81 @@ const DownloadsManagement: React.FC = () => {
 
       {/* Tab Navigation */}
       <div className="min-h-[60px]">
-  <Tabs defaultValue="excel" value={activeTab} onValueChange={handleTabChange} className="w-full">
-    <div className="w-full flex justify-start mb-4">
-      <div className="relative">
-        <Button 
-          variant="outline" 
-          className="border-[#91BEAD] bg-white w-[220px] flex justify-between items-center"
-          onClick={() => setMenuOpen(!menuOpen)}
-        >
-          <div className="flex items-center gap-2">
-            {activeTab === "excel" && <FileSpreadsheet className="w-4 h-4" />}
-            {activeTab === "remitos" && <FileText className="w-4 h-4" />}
-            {activeTab === "reporteMensual" && <Calendar className="w-4 h-4" />}
-            {activeTab === "tabla" && <Hash className="w-4 h-4" />}
-            <span>
-              {activeTab === "excel" && "Reportes Excel"}
-              {activeTab === "remitos" && "Remitos por Cliente"}
-              {activeTab === "reporteMensual" && "Reporte Mensual"}
-              {activeTab === "tabla" && "Tabla de Pedidos"}
-            </span>
-          </div>
-          <ChevronDown className={`w-4 h-4 transition-transform ${menuOpen ? 'rotate-180' : ''}`} />
-        </Button>
-        
-        {menuOpen && (
-          <div className="absolute top-full left-0 z-10 mt-1 w-[220px] rounded-md border border-[#91BEAD]/20 bg-white shadow-lg">
-            <div className="p-1">
+        <Tabs defaultValue="excel" value={activeTab} onValueChange={handleTabChange} className="w-full">
+          <div className="w-full flex justify-start mb-4">
+            <div className="relative">
               <Button 
-                variant="ghost" 
-                className={`w-full justify-start mb-1 ${activeTab === "excel" ? "bg-[#29696B] text-white" : ""}`}
-                onClick={() => {
-                  handleTabChange("excel");
-                  setMenuOpen(false);
-                }}
+                variant="outline" 
+                className="border-[#91BEAD] bg-white w-[220px] flex justify-between items-center"
+                onClick={() => setMenuOpen(!menuOpen)}
               >
-                <FileSpreadsheet className="w-4 h-4 mr-2" />
-                Reportes Excel
+                <div className="flex items-center gap-2">
+                  {activeTab === "excel" && <FileSpreadsheet className="w-4 h-4" />}
+                  {activeTab === "remitos" && <FileText className="w-4 h-4" />}
+                  {activeTab === "reporteMensual" && <Calendar className="w-4 h-4" />}
+                  {activeTab === "tabla" && <Hash className="w-4 h-4" />}
+                  <span>
+                    {activeTab === "excel" && "Reportes Excel"}
+                    {activeTab === "remitos" && "Remitos por Cliente"}
+                    {activeTab === "reporteMensual" && "Reporte Mensual"}
+                    {activeTab === "tabla" && "Tabla de Pedidos"}
+                  </span>
+                </div>
+                <ChevronDown className={`w-4 h-4 transition-transform ${menuOpen ? 'rotate-180' : ''}`} />
               </Button>
-              <Button 
-                variant="ghost" 
-                className={`w-full justify-start mb-1 ${activeTab === "remitos" ? "bg-[#29696B] text-white" : ""}`}
-                onClick={() => {
-                  handleTabChange("remitos");
-                  setMenuOpen(false);
-                }}
-              >
-                <FileText className="w-4 h-4 mr-2" />
-                Remitos por Cliente
-              </Button>
-              <Button 
-                variant="ghost" 
-                className={`w-full justify-start mb-1 ${activeTab === "reporteMensual" ? "bg-[#29696B] text-white" : ""}`}
-                onClick={() => {
-                  handleTabChange("reporteMensual");
-                  setMenuOpen(false);
-                }}
-              >
-                <Calendar className="w-4 h-4 mr-2" />
-                Reporte Mensual
-              </Button>
-              <Button 
-                variant="ghost" 
-                className={`w-full justify-start mb-1 ${activeTab === "tabla" ? "bg-[#29696B] text-white" : ""}`}
-                onClick={() => {
-                  handleTabChange("tabla");
-                  setMenuOpen(false);
-                }}
-              >
-                <Hash className="w-4 h-4 mr-2" />
-                Tabla de Pedidos
-              </Button>
+              
+              {menuOpen && (
+                <div className="absolute top-full left-0 z-10 mt-1 w-[220px] rounded-md border border-[#91BEAD]/20 bg-white shadow-lg">
+                  <div className="p-1">
+                    <Button 
+                      variant="ghost" 
+                      className={`w-full justify-start mb-1 ${activeTab === "excel" ? "bg-[#29696B] text-white" : ""}`}
+                      onClick={() => {
+                        handleTabChange("excel");
+                        setMenuOpen(false);
+                      }}
+                    >
+                      <FileSpreadsheet className="w-4 h-4 mr-2" />
+                      Reportes Excel
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      className={`w-full justify-start mb-1 ${activeTab === "remitos" ? "bg-[#29696B] text-white" : ""}`}
+                      onClick={() => {
+                        handleTabChange("remitos");
+                        setMenuOpen(false);
+                      }}
+                    >
+                      <FileText className="w-4 h-4 mr-2" />
+                      Remitos por Cliente
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      className={`w-full justify-start mb-1 ${activeTab === "reporteMensual" ? "bg-[#29696B] text-white" : ""}`}
+                      onClick={() => {
+                        handleTabChange("reporteMensual");
+                        setMenuOpen(false);
+                      }}
+                    >
+                      <Calendar className="w-4 h-4 mr-2" />
+                      Reporte Mensual
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      className={`w-full justify-start mb-1 ${activeTab === "tabla" ? "bg-[#29696B] text-white" : ""}`}
+                      onClick={() => {
+                        handleTabChange("tabla");
+                        setMenuOpen(false);
+                      }}
+                    >
+                      <Hash className="w-4 h-4 mr-2" />
+                      Tabla de Pedidos
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-        )}
-      </div>
-    </div>
 
           {/* Excel Tab */}
           <TabsContent value="excel" className="mt-4 pt-4">
@@ -2269,484 +2301,493 @@ const DownloadsManagement: React.FC = () => {
                       placeholder="Buscar por nombre..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
-                    />
-                  </div>
-                </div>
-
-                {/* Client selector */}
-                <div className="space-y-2">
-                  <Label className="text-[#29696B]">Seleccionar Cliente</Label>
-                  <Select
-                    value={selectedCliente}
-                    onValueChange={(value) => {
-                      setSelectedCliente(value);
-                      resetJerarquiaSelections();
-                    }}
-                  >
-                    <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
-                      <SelectValue placeholder="Selecciona un cliente" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {filteredClientes.length > 0 ? (
-                        filteredClientes.map((cliente) => (
-                          <SelectItem key={cliente._id} value={cliente._id}>
-                            {getClientName(cliente)}
-                          </SelectItem>
-                        ))
-                      ) : <SelectItem value="no-clientes" disabled>
-                        No hay clientes disponibles
-                      </SelectItem>
-                      }
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Subservice selector */}
-                {selectedCliente && getSubServicios().length > 0 && (
-                  <div className="space-y-2">
-                    <Label className="text-[#29696B] flex items-center gap-2">
-                      <Store className="w-4 h-4" />
-                      Seleccionar Subservicio
-                    </Label>
-                    <Select
-                      value={selectedSubServicio}
-                      onValueChange={(value) => {
-                        setSelectedSubServicio(value);
-                        setSelectedSubUbicacion('');
-                      }}
-                    >
-                      <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
-                        <SelectValue placeholder="Todos los subservicios" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todos los subservicios</SelectItem>
-                        {getSubServicios().map((subservicio) => (
-                          <SelectItem key={subservicio._id} value={subservicio._id}>
-                            {subservicio.nombre}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                {/* Sublocation selector */}
-                {selectedSubServicio && getSubUbicaciones().length > 0 && (
-                  <div className="space-y-2">
-                    <Label className="text-[#29696B] flex items-center gap-2">
-                      <MapPin className="w-4 h-4" />
-                      Seleccionar Ubicación
-                    </Label>
-                    <Select
-                      value={selectedSubUbicacion}
-                      onValueChange={setSelectedSubUbicacion}
-                    >
-                      <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
-                        <SelectValue placeholder="Todas las ubicaciones" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todas las ubicaciones</SelectItem>
-                        {getSubUbicaciones().map((sububicacion) => (
-                          <SelectItem key={sububicacion._id} value={sububicacion._id}>
-                            {sububicacion.nombre}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                {/* Order selector */}
-                {selectedCliente && (
-                  <div className="space-y-2">
-                    <Label className="text-[#29696B]">Seleccionar Pedido</Label>
-                    <Select value={selectedPedido} onValueChange={setSelectedPedido}>
-                      <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
-                        <SelectValue placeholder="Selecciona un pedido" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {pedidos.length > 0 ? (
-                          pedidos.map((pedido) => (
-                            <SelectItem key={pedido._id} value={pedido._id}>
-                              {`Pedido ${pedido.nPedido || pedido.numero || 'S/N'} - ${pedido.fecha ? new Date(pedido.fecha).toLocaleDateString() : 'Sin fecha'
-                                }`}
-                            </SelectItem>
-                          ))
-                        ) : (
-                          <SelectItem value="no-pedidos" disabled>
-                            No hay pedidos disponibles
-                          </SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                {/* Información adicional sobre otros filtros activos */}
-                {(filterOptions.productoId || filterOptions.supervisorId || filterOptions.fechaInicio || filterOptions.fechaFin) && (
-                  <div className="mt-4 p-3 bg-[#DFEFE6]/30 rounded-md text-sm text-[#29696B]">
-                    <p className="font-medium">Filtros adicionales activos:</p>
-                    <ul className="mt-1 space-y-1 list-disc list-inside text-[#7AA79C]">
-                      {filterOptions.productoId && (
-                        <li>Producto: {getSelectedProductoName()}</li>
-                      )}
-                      {filterOptions.supervisorId && (
-                        <li>Supervisor: {getSelectedSupervisorName()}</li>
-                      )}
-                      {filterOptions.fechaInicio && (
-                        <li>Desde: {new Date(filterOptions.fechaInicio).toLocaleDateString()}</li>
-                      )}
-                      {filterOptions.fechaFin && (
-                        <li>Hasta: {new Date(filterOptions.fechaFin).toLocaleDateString()}</li>
-                      )}
-                    </ul>
-                  </div>
-                )}
-              </CardContent>
-              <CardFooter className="bg-[#DFEFE6]/10 border-t border-[#91BEAD]/20">
-                <Button
-                  onClick={() => handleRemitoDownload()}
-                  disabled={isLoading || !selectedCliente || !selectedPedido}
-                  className="w-full bg-[#29696B] hover:bg-[#29696B]/90 text-white disabled:bg-[#8DB3BA] disabled:text-white/70"
-                >
-                  {isLoading ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <>
-                      <Download className="w-5 h-5 mr-2" />
-                      Descargar Remito
-                    </>
-                  )}
-                </Button>
-              </CardFooter>
-            </Card>
-          </TabsContent>
-
-          {/* Reporte Mensual Tab */}
-          <TabsContent value="reporteMensual" className="mt-4 pt-4">
-            <Card className="border border-[#91BEAD]/20 shadow-sm">
-              <CardHeader className="bg-[#DFEFE6]/20 border-b border-[#91BEAD]/20">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-[#29696B]">Reporte Mensual</CardTitle>
-                  <Calendar className="w-6 h-6 text-[#7AA79C]" />
-                </div>
-                <CardDescription className="text-[#7AA79C]">
-                  Genera un reporte jerárquico por Cliente, Subservicio y Sububicación
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="mensual-date-from" className="text-[#29696B]">Desde</Label>
-                    <div className="relative">
-                      <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-5 h-5" />
-                      <Input
-                        id="mensual-date-from"
-                        type="date"
-                        value={dateRange.from ? formatDate(dateRange.from) : ''}
-                        onChange={(e) => {
-                          const newDate = e.target.value ? new Date(e.target.value) : undefined;
-                          setDateRange(prev => ({ ...prev, from: newDate }));
-
-                          // Actualizar también los filtros
-                          if (newDate) {
-                            setFilterOptions(prev => ({ ...prev, fechaInicio: e.target.value }));
-                            setTempFilterOptions(prev => ({ ...prev, fechaInicio: e.target.value }));
-                          } else {
-                            setFilterOptions(prev => ({ ...prev, fechaInicio: '' }));
-                            setTempFilterOptions(prev => ({ ...prev, fechaInicio: '' }));
-                          }
+                      className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"/>
+                      </div>
+                    </div>
+    
+                    {/* Client selector */}
+                    <div className="space-y-2">
+                      <Label className="text-[#29696B]">Seleccionar Cliente</Label>
+                      <Select
+                        value={selectedCliente}
+                        onValueChange={(value) => {
+                          setSelectedCliente(value);
+                          resetJerarquiaSelections();
                         }}
-                        className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label htmlFor="mensual-date-to" className="text-[#29696B]">Hasta</Label>
-                    <div className="relative">
-                      <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-5 h-5" />
-                      <Input
-                        id="mensual-date-to"
-                        type="date"
-                        value={dateRange.to ? formatDate(dateRange.to) : ''}
-                        onChange={(e) => {
-                          const newDate = e.target.value ? new Date(e.target.value) : undefined;
-                          setDateRange(prev => ({ ...prev, to: newDate }));
-
-                          // Actualizar también los filtros
-                          if (newDate) {
-                            setFilterOptions(prev => ({ ...prev, fechaFin: e.target.value }));
-                            setTempFilterOptions(prev => ({ ...prev, fechaFin: e.target.value }));
-                          } else {
-                            setFilterOptions(prev => ({ ...prev, fechaFin: '' }));
-                            setTempFilterOptions(prev => ({ ...prev, fechaFin: '' }));
-                          }
-                        }}
-                        className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Cliente selector for monthly report */}
-                <div className="mt-4 space-y-2">
-                  <Label className="text-[#29696B] flex items-center gap-2">
-                    <Building className="w-4 h-4" />
-                    Cliente (opcional)
-                  </Label>
-                  <Select
-                    value={filterOptions.clienteId}
-                    onValueChange={(value) => {
-                      setFilterOptions(prev => ({ ...prev, clienteId: value }));
-                      setTempFilterOptions(prev => ({ ...prev, clienteId: value }));
-                    }}
-                  >
-                    <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
-                      <SelectValue placeholder="Todos los clientes" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos los clientes</SelectItem>
-                      {allClientes
-                        .filter(cliente => cliente.activo)
-                        .map((cliente) => (
-                          <SelectItem key={cliente._id} value={cliente._id}>
-                            {getClientName(cliente)}
+                      >
+                        <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
+                          <SelectValue placeholder="Selecciona un cliente" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {filteredClientes.length > 0 ? (
+                            filteredClientes.map((cliente) => (
+                              <SelectItem key={cliente._id} value={cliente._id}>
+                                {getClientName(cliente)}
+                              </SelectItem>
+                            ))
+                          ) : <SelectItem value="no-clientes" disabled>
+                            No hay clientes disponibles
                           </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-
-                  {filterOptions.clienteId && (
-                    <div className="mt-2 p-2 bg-[#DFEFE6]/30 rounded-md text-sm text-[#7AA79C]">
-                      El reporte se generará solo para el cliente seleccionado
+                          }
+                        </SelectContent>
+                      </Select>
                     </div>
-                  )}
-                </div>
-              </CardContent>
-              <CardFooter className="bg-[#DFEFE6]/10 border-t border-[#91BEAD]/20">
-                <Button
-                  onClick={handleReporteMensualDownload}
-                  disabled={isLoading || !dateRange.from || !dateRange.to}
-                  className="w-full bg-[#29696B] hover:bg-[#29696B]/90 text-white"
-                >
-                  {isLoading ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <>
-                      <Download className="w-5 h-5 mr-2" />
-                      Descargar Reporte Mensual
-                    </>
-                  )}
-                </Button>
-              </CardFooter>
-            </Card>
-          </TabsContent>
-
-          {/* Orders Table Tab */}
-          <TabsContent value="tabla" className="mt-4 pt-4">
-            <Card className="border border-[#91BEAD]/20 shadow-sm">
-              <CardHeader className="bg-[#DFEFE6]/20 border-b border-[#91BEAD]/20">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                  <div>
-                    <CardTitle className="text-[#29696B]">Todos los Pedidos</CardTitle>
-                    <CardDescription className="text-[#7AA79C]">
-                      Visualiza y descarga remitos de cualquier pedido
-                    </CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                {/* Desktop table view */}
-                <div className="hidden md:block rounded-md border border-[#91BEAD]/20">
-                  <Table>
-                    <TableHeader className="bg-[#DFEFE6]/30">
-                      <TableRow>
-                        <TableHead className="text-[#29696B]">Nº</TableHead>
-                        <TableHead className="text-[#29696B]">Fecha</TableHead>
-                        <TableHead className="text-[#29696B]">Servicio</TableHead>
-                        <TableHead className="hidden md:table-cell text-[#29696B]">Sección</TableHead>
-                        <TableHead className="text-right text-[#29696B]">Productos</TableHead>
-                        <TableHead className="text-right text-[#29696B]">Acciones</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {loadingPedidos ? (
-                        // Loading skeleton
-                        Array.from({ length: 5 }).map((_, index) => (
-                          <TableRow key={index}>
-                            {Array.from({ length: 6 }).map((_, cellIndex) => (
-                              <TableCell key={cellIndex}>
-                                <Skeleton className="h-6 w-full bg-[#DFEFE6]/40" />
-                              </TableCell>
+    
+                    {/* Subservice selector */}
+                    {selectedCliente && getSubServicios().length > 0 && (
+                      <div className="space-y-2">
+                        <Label className="text-[#29696B] flex items-center gap-2">
+                          <Store className="w-4 h-4" />
+                          Seleccionar Subservicio
+                        </Label>
+                        <Select
+                          value={selectedSubServicio}
+                          onValueChange={(value) => {
+                            setSelectedSubServicio(value === 'all' ? '' : value);
+                            setSelectedSubUbicacion('');
+                          }}
+                        >
+                          <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
+                            <SelectValue placeholder="Todos los subservicios" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todos los subservicios</SelectItem>
+                            {getSubServicios().map((subservicio) => (
+                              <SelectItem key={subservicio._id} value={subservicio._id}>
+                                {subservicio.nombre}
+                              </SelectItem>
                             ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+    
+                    {/* Sublocation selector */}
+                    {selectedSubServicio && getSubUbicaciones().length > 0 && (
+                      <div className="space-y-2">
+                        <Label className="text-[#29696B] flex items-center gap-2">
+                          <MapPin className="w-4 h-4" />
+                          Seleccionar Ubicación
+                        </Label>
+                        <Select
+                          value={selectedSubUbicacion}
+                          onValueChange={(value) => setSelectedSubUbicacion(value === 'all' ? '' : value)}
+                        >
+                          <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
+                            <SelectValue placeholder="Todas las ubicaciones" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todas las ubicaciones</SelectItem>
+                            {getSubUbicaciones().map((sububicacion) => (
+                              <SelectItem key={sububicacion._id} value={sububicacion._id}>
+                                {sububicacion.nombre}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+    
+                    {/* Order selector */}
+                    {selectedCliente && (
+                      <div className="space-y-2">
+                        <Label className="text-[#29696B]">Seleccionar Pedido</Label>
+                        <Select value={selectedPedido} onValueChange={setSelectedPedido}>
+                          <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
+                            <SelectValue placeholder="Selecciona un pedido" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {pedidos.length > 0 ? (
+                              pedidos.map((pedido) => (
+                                <SelectItem key={pedido._id} value={pedido._id}>
+                                  {`Pedido ${pedido.nPedido || pedido.numero || 'S/N'} - ${pedido.fecha ? new Date(pedido.fecha).toLocaleDateString() : 'Sin fecha'
+                                    }`}
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <SelectItem value="no-pedidos" disabled>
+                                No hay pedidos disponibles
+                              </SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+    
+                    {/* Información adicional sobre otros filtros activos */}
+                    {(filterOptions.productoId || filterOptions.supervisorId || filterOptions.fechaInicio || filterOptions.fechaFin) && (
+                      <div className="mt-4 p-3 bg-[#DFEFE6]/30 rounded-md text-sm text-[#29696B]">
+                        <p className="font-medium">Filtros adicionales activos:</p>
+                        <ul className="mt-1 space-y-1 list-disc list-inside text-[#7AA79C]">
+                          {filterOptions.productoId && (
+                            <li>Producto: {getSelectedProductoName()}</li>
+                          )}
+                          {filterOptions.supervisorId && (
+                            <li>Supervisor: {getSelectedSupervisorName()}</li>
+                          )}
+                          {filterOptions.fechaInicio && (
+                            <li>Desde: {new Date(filterOptions.fechaInicio).toLocaleDateString()}</li>
+                          )}
+                          {filterOptions.fechaFin && (
+                            <li>Hasta: {new Date(filterOptions.fechaFin).toLocaleDateString()}</li>
+                          )}
+                        </ul>
+                      </div>
+                    )}
+                  </CardContent>
+                  <CardFooter className="bg-[#DFEFE6]/10 border-t border-[#91BEAD]/20">
+                    <Button
+                      onClick={() => handleRemitoDownload()}
+                      disabled={isLoading || !selectedCliente || !selectedPedido}
+                      className="w-full bg-[#29696B] hover:bg-[#29696B]/90 text-white disabled:bg-[#8DB3BA] disabled:text-white/70"
+                    >
+                      {isLoading ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <>
+                          <Download className="w-5 h-5 mr-2" />
+                          Descargar Remito
+                        </>
+                      )}
+                    </Button>
+                  </CardFooter>
+                </Card>
+              </TabsContent>
+    
+              {/* Reporte Mensual Tab */}
+              <TabsContent value="reporteMensual" className="mt-4 pt-4">
+                <Card className="border border-[#91BEAD]/20 shadow-sm">
+                  <CardHeader className="bg-[#DFEFE6]/20 border-b border-[#91BEAD]/20">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-[#29696B]">Reporte Mensual</CardTitle>
+                      <Calendar className="w-6 h-6 text-[#7AA79C]" />
+                    </div>
+                    <CardDescription className="text-[#7AA79C]">
+                      Genera un reporte jerárquico por Cliente, Subservicio y Sububicación
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="mensual-date-from" className="text-[#29696B]">Desde</Label>
+                        <div className="relative">
+                          <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-5 h-5" />
+                          <Input
+                            id="mensual-date-from"
+                            type="date"
+                            value={dateRange.from ? formatDate(dateRange.from) : ''}
+                            onChange={(e) => {
+                              const newDate = e.target.value ? new Date(e.target.value) : undefined;
+                              setDateRange(prev => ({ ...prev, from: newDate }));
+    
+                              // Actualizar también los filtros
+                              if (newDate) {
+                                setFilterOptions(prev => ({ ...prev, fechaInicio: e.target.value }));
+                                setTempFilterOptions(prev => ({ ...prev, fechaInicio: e.target.value }));
+                              } else {
+                                setFilterOptions(prev => ({ ...prev, fechaInicio: '' }));
+                                setTempFilterOptions(prev => ({ ...prev, fechaInicio: '' }));
+                              }
+                            }}
+                            className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
+                          />
+                        </div>
+                      </div>
+    
+                      <div className="grid gap-2">
+                        <Label htmlFor="mensual-date-to" className="text-[#29696B]">Hasta</Label>
+                        <div className="relative">
+                          <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7AA79C] w-5 h-5" />
+                          <Input
+                            id="mensual-date-to"
+                            type="date"
+                            value={dateRange.to ? formatDate(dateRange.to) : ''}
+                            onChange={(e) => {
+                              const newDate = e.target.value ? new Date(e.target.value) : undefined;
+                              setDateRange(prev => ({ ...prev, to: newDate }));
+    
+                              // Actualizar también los filtros
+                              if (newDate) {
+                                setFilterOptions(prev => ({ ...prev, fechaFin: e.target.value }));
+                                setTempFilterOptions(prev => ({ ...prev, fechaFin: e.target.value }));
+                              } else {
+                                setFilterOptions(prev => ({ ...prev, fechaFin: '' }));
+                                setTempFilterOptions(prev => ({ ...prev, fechaFin: '' }));
+                              }
+                            }}
+                            className="pl-10 border-[#91BEAD] focus:border-[#29696B] focus:ring-[#29696B]/20"
+                          />
+                        </div>
+                      </div>
+                    </div>
+    
+                    {/* Cliente selector for monthly report */}
+                    <div className="mt-4 space-y-2">
+                      <Label className="text-[#29696B] flex items-center gap-2">
+                        <Building className="w-4 h-4" />
+                        Cliente (opcional)
+                      </Label>
+                      <Select
+                        value={filterOptions.clienteId}
+                        onValueChange={(value) => {
+                          setFilterOptions(prev => ({ ...prev, clienteId: value === 'all' ? '' : value }));
+                          setTempFilterOptions(prev => ({ ...prev, clienteId: value === 'all' ? '' : value }));
+                        }}
+                      >
+                        <SelectTrigger className="border-[#91BEAD] focus:ring-[#29696B]/20">
+                          <SelectValue placeholder="Todos los clientes" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Todos los clientes</SelectItem>
+                          {allClientes
+                            .filter(cliente => cliente.activo)
+                            .map((cliente) => (
+                              <SelectItem key={cliente._id} value={cliente._id}>
+                                {getClientName(cliente)}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+    
+                      {filterOptions.clienteId && (
+                        <div className="mt-2 p-2 bg-[#DFEFE6]/30 rounded-md text-sm text-[#7AA79C]">
+                          El reporte se generará solo para el cliente seleccionado
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                  <CardFooter className="bg-[#DFEFE6]/10 border-t border-[#91BEAD]/20">
+                    <Button
+                      onClick={handleReporteMensualDownload}
+                      disabled={isLoading || !dateRange.from || !dateRange.to}
+                      className="w-full bg-[#29696B] hover:bg-[#29696B]/90 text-white"
+                    >
+                      {isLoading ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <>
+                          <Download className="w-5 h-5 mr-2" />
+                          Descargar Reporte Mensual
+                        </>
+                      )}
+                    </Button>
+                  </CardFooter>
+                </Card>
+              </TabsContent>
+    
+              {/* Orders Table Tab */}
+              <TabsContent value="tabla" className="mt-4 pt-4">
+                <Card className="border border-[#91BEAD]/20 shadow-sm">
+                  <CardHeader className="bg-[#DFEFE6]/20 border-b border-[#91BEAD]/20">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                      <div>
+                        <CardTitle className="text-[#29696B]">Todos los Pedidos</CardTitle>
+                        <CardDescription className="text-[#7AA79C]">
+                          Visualiza y descarga remitos de cualquier pedido
+                        </CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {/* Desktop table view */}
+                    <div className="hidden md:block rounded-md border border-[#91BEAD]/20">
+                      <Table>
+                        <TableHeader className="bg-[#DFEFE6]/30">
+                          <TableRow>
+                            <TableHead className="text-[#29696B]">Nº</TableHead>
+                            <TableHead className="text-[#29696B]">Fecha</TableHead>
+                            <TableHead className="text-[#29696B]">Servicio y Ubicación</TableHead>
+                            <TableHead className="text-right text-[#29696B]">Productos</TableHead>
+                            <TableHead className="text-right text-[#29696B]">Acciones</TableHead>
                           </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {loadingPedidos ? (
+                            // Loading skeleton
+                            Array.from({ length: 5 }).map((_, index) => (
+                              <TableRow key={index}>
+                                {Array.from({ length: 5 }).map((_, cellIndex) => (
+                                  <TableCell key={cellIndex}>
+                                    <Skeleton className="h-6 w-full bg-[#DFEFE6]/40" />
+                                  </TableCell>
+                                ))}
+                              </TableRow>
+                            ))
+                          ) : filteredPedidos.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={5} className="text-center py-10 text-[#7AA79C]">
+                                No se encontraron pedidos con los filtros seleccionados
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            currentPedidos.map((pedido) => (
+                              <TableRow
+                                key={pedido._id}
+                                className="hover:bg-[#DFEFE6]/10 transition-colors"
+                              >
+                                <TableCell className="text-[#29696B] font-medium">
+                                  <div className="flex items-center">
+                                    <Hash className="w-4 h-4 text-[#7AA79C] mr-2" />
+                                    {pedido.nPedido || pedido.numero || 'S/N'}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-[#7AA79C]">{formatDisplayDate(pedido.fecha)}</TableCell>
+                                <TableCell>
+                                  {/* Unified service and section column */}
+                                  <div className="max-w-xs">
+                                    <div className="font-medium text-[#29696B]">
+                                      {truncateText(pedido.servicio || 'N/A', 25)}
+                                    </div>
+                                    {(pedido.seccionDelServicio || pedido.cliente?.nombreSubUbicacion) && (
+                                      <div className="text-xs text-[#7AA79C] mt-1">
+                                        {pedido.seccionDelServicio && truncateText(pedido.seccionDelServicio, 25)}
+                                        {pedido.seccionDelServicio && pedido.cliente?.nombreSubUbicacion && ' - '}
+                                        {pedido.cliente?.nombreSubUbicacion && truncateText(pedido.cliente.nombreSubUbicacion, 25)}
+                                      </div>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-right text-[#29696B] font-medium">
+                                  {pedido.productos?.length || 0}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleRemitoDownload(pedido._id)}
+                                    disabled={isLoading}
+                                    className="text-[#29696B] hover:bg-[#DFEFE6]/30"
+                                  >
+                                    {isLoading ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Download className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+    
+                    {/* Mobile card view */}
+                    <div ref={mobileListRef} className="md:hidden space-y-3 p-3">
+                      {/* Mobile pagination info */}
+                      {!loadingPedidos && filteredPedidos.length > 0 && (
+                        <div className="text-xs text-center text-[#7AA79C] py-1">
+                          Mostrando {showingFromTo}
+                        </div>
+                      )}
+    
+                      {loadingPedidos ? (
+                        // Loading skeleton for mobile
+                        Array.from({ length: 3 }).map((_, index) => (
+                          <div key={index} className="rounded-lg border border-[#91BEAD]/20 bg-white p-4 space-y-2">
+                            <div className="flex justify-between">
+                              <Skeleton className="h-5 w-24 bg-[#DFEFE6]/40" />
+                              <Skeleton className="h-5 w-14 bg-[#DFEFE6]/40" />
+                            </div>
+                            <Skeleton className="h-4 w-36 bg-[#DFEFE6]/40" />
+                            <div className="flex justify-between items-center pt-2">
+                              <Skeleton className="h-4 w-20 bg-[#DFEFE6]/40" />
+                              <Skeleton className="h-8 w-8 rounded-full bg-[#DFEFE6]/40" />
+                            </div>
+                          </div>
                         ))
                       ) : filteredPedidos.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={6} className="text-center py-10 text-[#7AA79C]">
-                            No se encontraron pedidos con los filtros seleccionados
-                          </TableCell>
-                        </TableRow>
+                        <div className="text-center py-8 text-[#7AA79C] bg-white rounded-lg border border-[#91BEAD]/20">
+                          No se encontraron pedidos con los filtros seleccionados
+                        </div>
                       ) : (
                         currentPedidos.map((pedido) => (
-                          <TableRow
-                            key={pedido._id}
-                            className="hover:bg-[#DFEFE6]/10 transition-colors"
-                          >
-                            <TableCell className="text-[#29696B] font-medium">
+                          <div key={pedido._id} className="rounded-lg border border-[#91BEAD]/20 bg-white overflow-hidden">
+                            <div className="p-3 bg-[#DFEFE6]/20 border-b border-[#91BEAD]/20 flex justify-between items-center">
                               <div className="flex items-center">
-                                <Hash className="w-4 h-4 text-[#7AA79C] mr-2" />
-                                {pedido.nPedido || pedido.numero || 'S/N'}
+                                <Hash className="w-4 h-4 text-[#7AA79C] mr-1.5" />
+                                <span className="font-medium text-sm text-[#29696B]">
+                                  Pedido #{pedido.nPedido || pedido.numero || 'S/N'}
+                                </span>
                               </div>
-                            </TableCell>
-                            <TableCell className="text-[#7AA79C]">{formatDisplayDate(pedido.fecha)}</TableCell>
-                            <TableCell>
-                              <Badge variant="outline" className="border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/20">
-                                {pedido.servicio || 'N/A'}
+                              <Badge variant="outline" className="border-[#91BEAD] text-xs text-[#29696B] bg-[#DFEFE6]/10">
+                                {truncateText(pedido.servicio || 'N/A', 15)}
                               </Badge>
-                            </TableCell>
-                            <TableCell className="hidden md:table-cell text-[#7AA79C]">
-                              {pedido.seccionDelServicio || '-'}
-                            </TableCell>
-                            <TableCell className="text-right text-[#29696B] font-medium">
-                              {pedido.productos?.length || 0}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleRemitoDownload(pedido._id)}
-                                disabled={isLoading}
-                                className="text-[#29696B] hover:bg-[#DFEFE6]/30"
-                              >
-                                {isLoading ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <Download className="h-4 w-4" />
+                            </div>
+                            <div className="p-3 space-y-1.5">
+                              <div className="text-xs text-[#7AA79C] flex items-center">
+                                <Calendar className="w-3.5 h-3.5 mr-1" />
+                                {formatDisplayDate(pedido.fecha)}
+                              </div>
+                              {/* Display location in mobile view */}
+                              <div className="text-xs text-[#7AA79C] flex items-center">
+                                <MapPin className="w-3.5 h-3.5 mr-1" />
+                                {pedido.seccionDelServicio ? truncateText(pedido.seccionDelServicio, 20) : '-'}
+                                {pedido.cliente?.nombreSubUbicacion && (
+                                  <span className="ml-1">
+                                    → {truncateText(pedido.cliente.nombreSubUbicacion, 15)}
+                                  </span>
                                 )}
-                              </Button>
-                            </TableCell>
-                          </TableRow>
+                              </div>
+                              <div className="pt-1.5 flex justify-between items-center">
+                                <div className="text-xs text-[#29696B]">
+                                  <span className="font-medium">{pedido.productos?.length || 0}</span> productos
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleRemitoDownload(pedido._id)}
+                                  disabled={isLoading}
+                                  className="h-8 w-8 p-0 text-[#29696B] hover:bg-[#DFEFE6]/30"
+                                >
+                                  {isLoading ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Download className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
                         ))
                       )}
-                    </TableBody>
-                  </Table>
-                </div>
-
-                {/* Mobile card view */}
-                <div ref={mobileListRef} className="md:hidden space-y-3 p-3">
-                  {/* Mobile pagination info */}
-                  {!loadingPedidos && filteredPedidos.length > 0 && (
-                    <div className="text-xs text-center text-[#7AA79C] py-1">
-                      Mostrando {showingFromTo}
+    
+                      {/* Mobile pagination */}
+                      {!loadingPedidos && filteredPedidos.length > itemsPerPage && (
+                        <div className="mt-4">
+                          <Pagination
+                            totalItems={filteredPedidos.length}
+                            itemsPerPage={itemsPerPage}
+                            currentPage={currentPage}
+                            onPageChange={handlePageChange}
+                          />
+                        </div>
+                      )}
                     </div>
-                  )}
-
-                  {loadingPedidos ? (
-                    // Loading skeleton for mobile
-                    Array.from({ length: 3 }).map((_, index) => (
-                      <div key={index} className="rounded-lg border border-[#91BEAD]/20 bg-white p-4 space-y-2">
-                        <div className="flex justify-between">
-                          <Skeleton className="h-5 w-24 bg-[#DFEFE6]/40" />
-                          <Skeleton className="h-5 w-14 bg-[#DFEFE6]/40" />
-                        </div>
-                        <Skeleton className="h-4 w-36 bg-[#DFEFE6]/40" />
-                        <div className="flex justify-between items-center pt-2">
-                          <Skeleton className="h-4 w-20 bg-[#DFEFE6]/40" />
-                          <Skeleton className="h-8 w-8 rounded-full bg-[#DFEFE6]/40" />
-                        </div>
+                  </CardContent>
+                  <CardFooter className="bg-[#DFEFE6]/10 border-t border-[#91BEAD]/20 justify-between">
+                    <div className="text-sm text-[#7AA79C]">
+                      Mostrando {currentPedidos.length} de {filteredPedidos.length} pedidos
+                    </div>
+    
+                    {/* Desktop pagination */}
+                    {!loadingPedidos && filteredPedidos.length > itemsPerPage && (
+                      <div className="hidden md:block">
+                        <Pagination
+                          totalItems={filteredPedidos.length}
+                          itemsPerPage={itemsPerPage}
+                          currentPage={currentPage}
+                          onPageChange={handlePageChange}
+                        />
                       </div>
-                    ))
-                  ) : filteredPedidos.length === 0 ? (
-                    <div className="text-center py-8 text-[#7AA79C] bg-white rounded-lg border border-[#91BEAD]/20">
-                      No se encontraron pedidos con los filtros seleccionados
-                    </div>
-                  ) : (
-                    currentPedidos.map((pedido) => (
-                      <div key={pedido._id} className="rounded-lg border border-[#91BEAD]/20 bg-white overflow-hidden">
-                        <div className="p-3 bg-[#DFEFE6]/20 border-b border-[#91BEAD]/20 flex justify-between items-center">
-                          <div className="flex items-center">
-                            <Hash className="w-4 h-4 text-[#7AA79C] mr-1.5" />
-                            <span className="font-medium text-sm text-[#29696B]">
-                              Pedido #{pedido.nPedido || pedido.numero || 'S/N'}
-                            </span>
-                          </div>
-                          <Badge variant="outline" className="border-[#91BEAD] text-xs text-[#29696B] bg-[#DFEFE6]/10">
-                            {pedido.servicio || 'N/A'}
-                          </Badge>
-                        </div>
-                        <div className="p-3 space-y-1.5">
-                          <div className="text-xs text-[#7AA79C] flex items-center">
-                            <Calendar className="w-3.5 h-3.5 mr-1" />
-                            {formatDisplayDate(pedido.fecha)}
-                          </div>
-                          {pedido.seccionDelServicio && (
-                            <div className="text-xs text-[#7AA79C] flex items-center">
-                              <MapPin className="w-3.5 h-3.5 mr-1" />
-                              {pedido.seccionDelServicio}
-                            </div>
-                          )}
-                          <div className="pt-1.5 flex justify-between items-center">
-                            <div className="text-xs text-[#29696B]">
-                              <span className="font-medium">{pedido.productos?.length || 0}</span> productos
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemitoDownload(pedido._id)}
-                              disabled={isLoading}
-                              className="h-8 w-8 p-0 text-[#29696B] hover:bg-[#DFEFE6]/30"
-                            >
-                              {isLoading ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Download className="h-4 w-4" />
-                              )}
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-
-                  {/* Mobile pagination */}
-                  {!loadingPedidos && filteredPedidos.length > itemsPerPage && (
-                    <div className="mt-4">
-                      <Pagination
-                        totalItems={filteredPedidos.length}
-                        itemsPerPage={itemsPerPage}
-                        currentPage={currentPage}
-                        onPageChange={handlePageChange}
-                      />
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-              <CardFooter className="bg-[#DFEFE6]/10 border-t border-[#91BEAD]/20 justify-between">
-                <div className="text-sm text-[#7AA79C]">
-                  Mostrando {currentPedidos.length} de {filteredPedidos.length} pedidos
-                </div>
-
-                {/* Desktop pagination */}
-                {!loadingPedidos && filteredPedidos.length > itemsPerPage && (
-                  <div className="hidden md:block">
-                    <Pagination
-                      totalItems={filteredPedidos.length}
-                      itemsPerPage={itemsPerPage}
-                      currentPage={currentPage}
-                      onPageChange={handlePageChange}
-                    />
-                  </div>
-                )}
-              </CardFooter>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
-    </div>
-  );
-};
-
-export default DownloadsManagement;
+                    )}
+                  </CardFooter>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          </div>
+        </div>
+      );
+    };
+    
+    export default DownloadsManagement;
