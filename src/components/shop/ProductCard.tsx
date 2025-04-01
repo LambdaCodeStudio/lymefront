@@ -45,7 +45,7 @@ interface Product {
   stockMinimo?: number;
   alertaStockBajo?: boolean;
   hasImage?: boolean;
-  imageUrl?: string; // URL directa a la imagen almacenada en public
+  imageUrl?: string;
   imagenInfo?: {
     mimetype?: string;
     tamano?: number;
@@ -62,9 +62,9 @@ interface ProductCardProps {
   isFavorite: boolean;
   onToggleFavorite: () => void;
   onAddToCart: (quantity: number) => void;
-  useBase64?: boolean; // Propiedad para elegir el formato de imagen (deprecated)
-  compact?: boolean; // Nueva propiedad para modo compacto en móviles
-  onShowDetails?: () => void; // Callback para mostrar detalles/modal
+  useBase64?: boolean;
+  compact?: boolean;
+  onShowDetails?: () => void;
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({
@@ -72,8 +72,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   isFavorite,
   onToggleFavorite,
   onAddToCart,
-  useBase64 = false, // Mantenido por compatibilidad
-  compact = false, // Por defecto, no usar modo compacto
+  useBase64 = false,
+  compact = false,
   onShowDetails
 }) => {
   const [quantity, setQuantity] = useState<number>(1);
@@ -82,177 +82,99 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const [expandedCombo, setExpandedCombo] = useState<boolean>(false);
   const [imageError, setImageError] = useState<boolean>(false);
 
-  // URL base para la API (solo usado como fallback)
   const API_URL = '/api';
 
-  // Función para truncar texto largo
   const truncateText = (text: string, maxLength: number) => {
     if (!text) return '';
     if (text.length <= maxLength) return text;
     return text.slice(0, maxLength) + '...';
   };
 
-  // Determinar la clase de gradiente según la categoría
   const getGradientClass = () => {
     if (product.esCombo) {
-      return 'from-[#3a8fb7]/80 to-[#5baed1]/80'; // Degradado para combos
+      return 'from-[#3a8fb7]/80 to-[#5baed1]/80';
     } else if (product.categoria === 'limpieza') {
-      return 'from-[#5baed1]/80 to-[#a8e6cf]/80'; // Degradado para limpieza
+      return 'from-[#5baed1]/80 to-[#a8e6cf]/80';
     }
-    return 'from-[#2a7a9f]/80 to-[#3a8fb7]/80'; // Degradado para mantenimiento
+    return 'from-[#2a7a9f]/80 to-[#3a8fb7]/80';
   };
 
-  // Determinar el color de borde según la categoría
   const getBorderClass = () => {
     if (product.esCombo) {
-      return 'border-[#3a8fb7]'; // Borde para combos
+      return 'border-[#3a8fb7]';
     } else if (product.categoria === 'limpieza') {
-      return 'border-[#5baed1]'; // Borde para limpieza
+      return 'border-[#5baed1]';
     }
-    return 'border-[#2a7a9f]'; // Borde para mantenimiento
+    return 'border-[#2a7a9f]';
   };
 
-  // Determinar el color del botón según la categoría
   const getButtonClass = () => {
     if (product.esCombo) {
-      return 'bg-[#3a8fb7] hover:bg-[#2a7a9f]'; // Botón especial para combos
+      return 'bg-[#3a8fb7] hover:bg-[#2a7a9f]';
     } else if (product.categoria === 'limpieza') {
-      return 'bg-[#3a8fb7] hover:bg-[#5baed1]'; // Botón para limpieza
+      return 'bg-[#3a8fb7] hover:bg-[#5baed1]';
     }
-    return 'bg-[#2a7a9f] hover:bg-[#3a8fb7]'; // Botón para mantenimiento
+    return 'bg-[#2a7a9f] hover:bg-[#3a8fb7]';
   };
 
-  // Obtener colores y estilos para el indicador de stock
-  const getStockBadgeStyle = () => {
-    // Para productos de mantenimiento, no mostramos stock específico
-    if (product.categoria === 'mantenimiento') {
-      return {
-        bg: 'bg-[#f2f2f2]',
-        text: 'text-[#3a8fb7]',
-        border: 'border-[#3a8fb7]',
-        icon: <Check size={12} className="mr-1" />,
-        label: 'Disponible'
-      };
-    }
-
-    // Para productos de limpieza - ahora usando alertaStockBajo del backend
-    if (product.stock === 0) {
-      return {
-        bg: 'bg-[#F44336]/10',
-        text: 'text-[#F44336]',
-        border: 'border-[#F44336]',
-        icon: <AlertTriangle size={12} className="mr-1" />,
-        label: 'Sin stock'
-      };
-    } else if (product.alertaStockBajo) {
-      return {
-        bg: 'bg-[#FF9800]/10',
-        text: 'text-[#FF9800]',
-        border: 'border-[#FF9800]',
-        icon: <Package size={12} className="mr-1" />,
-        label: `Stock: ${product.stock}`
-      };
-    } else {
-      return {
-        bg: 'bg-[#a8e6cf]/30',
-        text: 'text-[#2a7a9f]',
-        border: 'border-[#a8e6cf]',
-        icon: <Check size={12} className="mr-1" />,
-        label: `Stock: ${product.stock}`
-      };
-    }
-  };
-
-  // Manejar cambio de cantidad con validación según categoría y si es combo
   const handleQuantityChange = (newQuantity: number) => {
-    // Asegurar que la cantidad sea siempre al menos 1
     newQuantity = Math.max(1, newQuantity);
-
-    // Para combos, limitamos a 1 unidad máximo
     if (product.esCombo) {
       setQuantity(1);
       return;
     }
-
-    // Para productos de mantenimiento, NO limitamos por stock
     if (product.categoria === 'mantenimiento') {
-      // Sin límite superior para productos de mantenimiento
       setQuantity(newQuantity);
       return;
     }
-
-    // Para productos de limpieza y otros, limitamos según stock disponible
     const maxQuantity = product.stock;
     const limitedQuantity = Math.min(newQuantity, maxQuantity);
     setQuantity(limitedQuantity);
   };
 
-  // Manejar añadir al carrito
   const handleAddToCart = () => {
     onAddToCart(quantity);
     setShowQuantitySelector(false);
-    setQuantity(1); // Resetear a 1 después de añadir
+    setQuantity(1);
   };
 
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-    // Marcar que hubo un error con la imagen para mostrar el fallback
     setImageError(true);
-
-    // Registrar información de diagnóstico
     console.error(`Error cargando imagen: ${product.nombre} (${product._id})`);
-
-    // Verificar si el elemento sigue en el DOM antes de intentar modificarlo
     const target = e.target as HTMLImageElement;
     if (target && target.parentElement) {
-      // Si estamos en desarrollo, mostrar información de depuración
       if (process.env.NODE_ENV === 'development') {
+        // Información de depuración (si es necesario)
       }
     }
   };
 
-  // Obtener estilo del indicador de stock
-  const stockStyle = getStockBadgeStyle();
-
-  // Verificar si el producto está disponible para comprar
-  const isAvailable = product.categoria === 'mantenimiento' || product.stock > 0;
-
-  // Extraer nombres de productos del combo para mostrar
   const getComboItems = () => {
     if (!product.esCombo || !product.itemsCombo || product.itemsCombo.length === 0) {
       return [];
     }
-
     return product.itemsCombo.map(item => {
       let nombre = 'Producto';
       let cantidad = item.cantidad;
-
       if (typeof item.productoId === 'object' && item.productoId.nombre) {
         nombre = item.productoId.nombre;
       }
-
       return { nombre, cantidad };
     });
   };
 
-  // Renderizar contenido de combo
   const renderComboContent = () => {
     const comboItems = getComboItems();
     if (comboItems.length === 0) return null;
-
-    // Número de elementos a mostrar inicialmente
     const initialItemsToShow = 3;
     const hasMoreItems = comboItems.length > initialItemsToShow;
-
-    // Determinar qué elementos mostrar
     const displayedItems = expandedCombo
       ? comboItems
       : comboItems.slice(0, initialItemsToShow);
-
     const toggleExpand = (e: React.MouseEvent) => {
       e.stopPropagation();
       setExpandedCombo(!expandedCombo);
     };
-
     return (
       <div className="mt-2 text-[#333333] bg-[#d4f1f9]/50 rounded-md p-2 text-xs">
         <div className="font-medium mb-1 flex items-center justify-between">
@@ -287,38 +209,28 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     );
   };
 
-  // Toggle para mostrar/ocultar descripción completa
   const toggleDescription = (e: React.MouseEvent) => {
     e.stopPropagation();
     setShowDescription(!showDescription);
   };
 
-  // URL para imágenes - OPTIMIZADA para depuración
   const getImageUrl = () => {
-    // Si el producto tiene imageUrl, usarla directamente sin modificaciones
-    // Ya que esta URL debería estar configurada correctamente para el entorno frontend
     if (product.imageUrl) {
       return product.imageUrl;
     }
-
-    // Si no tiene imageUrl pero tiene ID, construir una URL basada en el ID
     if (product._id) {
       const url = `/images/products/${product._id}.webp`;
       return url;
     }
-
-    // Esto solo se usaría si no hay imageUrl ni ID disponible
     return `${API_URL}/producto/${product._id}/imagen`;
   };
 
-  // Verificar si el producto tiene imagen
   const hasImage = () => {
-    // Consideramos que tiene imagen si:
-    // 1. Tiene imageUrl explícitamente
-    // 2. El backend ha indicado que tiene imagen (hasImage)
-    // 3. Asumimos que tiene imagen si tiene ID (último recurso)
     return !!product.imageUrl || product.hasImage === true || !!product._id;
   };
+
+  // Determinar disponibilidad para la compra sin mostrar stock
+  const isAvailable = product.categoria === 'mantenimiento' || product.stock > 0;
 
   return (
     <motion.div
@@ -332,7 +244,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         className={`h-full flex flex-col bg-gradient-to-br ${getGradientClass()} border ${getBorderClass()} hover:shadow-lg hover:shadow-[#3a8fb7]/30 transition-all duration-300 overflow-hidden`}
         onClick={onShowDetails}
       >
-        {/* Imagen del producto - Optimizada para responsividad */}
         <div className="pt-2 sm:pt-3 px-2 sm:px-3">
           <div className="aspect-square w-full rounded-lg overflow-hidden bg-white relative">
             {hasImage() && !imageError ? (
@@ -343,12 +254,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                   className="w-full h-full object-contain"
                   loading="lazy"
                   onError={handleImageError}
-                  onLoad={() => {
-                  }}
                 />
               </div>
             ) : (
-              // Fallback cuando no hay imagen o hubo un error
               <div className="flex items-center justify-center w-full h-full">
                 <img
                   src="/lyme.png"
@@ -361,7 +269,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               </div>
             )}
 
-            {/* Badge de combo */}
             {product.esCombo && (
               <Badge
                 className="absolute top-2 left-2 z-10 bg-[#ffffff] text-[#3a8fb7] border border-[#3a8fb7]"
@@ -371,7 +278,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               </Badge>
             )}
 
-            {/* Badge de estado si está discontinuado o agotado */}
             {product.estado && product.estado !== 'activo' && (
               <Badge
                 className={`absolute ${product.esCombo ? 'top-9' : 'top-2'} right-2 z-10 
@@ -382,46 +288,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 {product.estado === 'discontinuado' ? 'Discontinuado' : 'Agotado'}
               </Badge>
             )}
-
-            {/* Indicador de stock - Con diseño adaptable */}
-            {(product.categoria === 'limpieza' || product.categoria === 'mantenimiento') && (
-              <Badge className={`absolute ${product.esCombo ? 'top-9' : 'top-2'} left-2 z-10
-                ${stockStyle.bg} ${stockStyle.text} border ${stockStyle.border}
-                ${compact ? 'text-xs px-1.5 py-0.5' : ''} transition-all`}>
-                {compact ? (
-                  <span>{product.categoria === 'mantenimiento' ? 'Disponible' : `Stock: ${product.stock}`}</span>
-                ) : (
-                  <>
-                    {stockStyle.icon}
-                    {stockStyle.label}
-                  </>
-                )}
-              </Badge>
-            )}
-
-            {/* Botón de favorito - Adaptable y con área táctil adecuada */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className={`absolute top-2 right-2 z-10 bg-white/70 hover:bg-[#a8e6cf]/30 rounded-full 
-                ${compact ? 'h-7 w-7 sm:h-8 sm:w-8' : 'h-8 w-8'} 
-                ${isFavorite ? 'text-[#FF9800]' : 'text-[#5c5c5c]'} 
-                transition-all duration-200 touch-manipulation`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleFavorite();
-              }}
-              aria-label={isFavorite ? "Quitar de favoritos" : "Añadir a favoritos"}
-            >
-              <Heart className={isFavorite ? 'fill-current' : ''} size={compact ? 16 : 18} />
-            </Button>
           </div>
         </div>
 
         <CardContent className={`flex-grow ${compact ? 'pt-2 px-2 sm:px-3' : 'pt-3 sm:pt-4 px-3'}`}>
-          {/* Badge de categoría - Ahora siempre visible, mostrando Limpieza o Mantenimiento */}
           <div className="flex flex-wrap gap-1 mb-1 sm:mb-2">
-            {/* Badge de categoría principal */}
             <Badge
               variant="outline"
               className={`text-xs border-[#3a8fb7] text-[#333333] bg-white/60
@@ -429,8 +300,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             >
               {product.categoria === 'mantenimiento' ? 'Mantenimiento' : 'Limpieza'}
             </Badge>
-
-            {/* Badge de subcategoría - Opcional */}
             {product.subCategoria && (
               <Badge
                 variant="outline"
@@ -442,13 +311,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             )}
           </div>
 
-          {/* Nombre del producto - Ahora sin truncar */}
           <h3 className={`font-medium text-[#333333] 
             ${compact ? 'text-sm sm:text-base' : 'text-base sm:text-lg'} mb-1`}>
             {product.nombre}
           </h3>
 
-          {/* Descripción - Con expansión controlada */}
           {product.descripcion && (
             <div className="relative">
               <p className={`text-sm text-[#4a4a4a] ${showDescription ? '' : 'line-clamp-2'} 
@@ -468,13 +335,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             </div>
           )}
 
-          {/* Mostrar elementos del combo con expansión/contracción */}
           {product.esCombo && renderComboContent()}
 
-          {/* Precio - Con formato adaptable */}
-          <div className={`font-bold text-[#FFFFFF] ${compact ? 'text-base sm:text-lg mt-1' : 'text-xl mt-2'}`}>
-            ${product.precio.toFixed(2)}
-          </div>
+          {/* Se ha eliminado la sección que muestra el precio */}
         </CardContent>
 
         <CardFooter className={compact ? "pt-1 pb-2 sm:pb-3 px-2 sm:px-3" : "pt-2 pb-3 sm:pb-4 px-3"}>
@@ -529,9 +392,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                   aria-label={`Añadir ${quantity} ${quantity > 1 ? 'unidades' : 'unidad'} al carrito`}
                 >
                   <ShoppingCart size={compact ? 14 : 16} className="mr-1 sm:mr-2" />
-                  {compact ?
-                    `Añadir (${quantity})` :
-                    `Agregar ${quantity} ${quantity > 1 ? 'unidades' : 'unidad'}`}
+                  {compact ? `Añadir (${quantity})` : `Agregar ${quantity} ${quantity > 1 ? 'unidades' : 'unidad'}`}
                 </Button>
               </div>
             ) : (
@@ -553,15 +414,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               disabled
               className={`w-full bg-[#878787] text-white cursor-not-allowed 
                 ${compact ? 'text-xs sm:text-sm py-1 h-8 sm:h-9' : 'h-9 sm:h-10'}`}
-              aria-label="Sin stock disponible"
+              aria-label="Producto no disponible"
             >
               <AlertTriangle size={compact ? 14 : 16} className="mr-1 sm:mr-2" />
-              Sin stock disponible
+              Producto no disponible
             </Button>
           )}
         </CardFooter>
 
-        {/* Botón para mostrar detalles completos - Optimizado para táctil */}
         {onShowDetails && (
           <TooltipProvider>
             <Tooltip>

@@ -94,7 +94,7 @@ const ProductList: React.FC<ProductListProps> = ({
       </div>
     );
   }
-  
+
   // Mostrar mensaje de error
   if (error) {
     return (

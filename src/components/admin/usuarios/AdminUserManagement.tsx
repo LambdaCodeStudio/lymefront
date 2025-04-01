@@ -20,10 +20,10 @@ import UserTable from './components/UserTable';
 import UserCard from './components/UserCard';
 import UserForm from './components/UserForm';
 import UserFilters from './components/UserFilters';
-import EnhancedPagination from './components/Pagination';
+import EnhancedPagination from '../components/Pagination';
 
 // Importar hooks y utilidades
-import { useUserManagement } from '../../hooks/useUserManagement';
+import { useUserManagement } from '../../../hooks/useUserManagement';
 import { getUserIdentifier, getFullName } from '@/utils/userUtils';
 import { User } from '@/types/users';
 

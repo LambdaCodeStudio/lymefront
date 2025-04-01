@@ -1,5 +1,5 @@
 // InventorySection.tsx
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,8 +28,10 @@ import {
 } from './utils/constants';
 
 /**
- * Componente principal optimizado para la sección de inventario
- * VERSIÓN OPTIMIZADA para prevenir actualizaciones múltiples
+ * Componente principal OPTIMIZADO para la sección de inventario
+ * - Reducción de las recargas innecesarias
+ * - Mejor manejo de dependencias de efectos
+ * - Optimización de callbacks para evitar recreaciones
  */
 const InventorySection: React.FC = () => {
   // Estado de la UI
@@ -43,21 +45,21 @@ const InventorySection: React.FC = () => {
   const [deleteImageDialogOpen, setDeleteImageDialogOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<string | null>(null);
   
-  // Referencias
-  const mobileListRef = useRef<HTMLDivElement>(null);
-  const initialFetchDone = useRef(false);
-  const isInitialMount = useRef(true);
-  const filtersChanged = useRef(false);
-  const filterUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isUpdatePending = useRef(false);
+  // Referencias para controlar el estado de montaje y evitar carreras
+  const isMounted = useRef(true);
+  const initialRenderComplete = useRef(false);
+  const observerSetup = useRef(false);
+  const lastFetchTimestamp = useRef(0);
   
   // Contextos
   const { addNotification } = useNotification();
   
-  // Determinar tamaño de página basado en el ancho de la ventana
-  const itemsPerPage = windowWidth < 768 ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP;
+  // Determinar tamaño de página basado en el ancho de la ventana (memoizado)
+  const itemsPerPage = useMemo(() => 
+    windowWidth < 768 ? ITEMS_PER_PAGE_MOBILE : ITEMS_PER_PAGE_DESKTOP,
+  [windowWidth]);
   
-  // Hooks para API y filtros
+  // Hooks para API
   const {
     products,
     loading,
@@ -80,50 +82,42 @@ const InventorySection: React.FC = () => {
     deleteProduct,
     fetchProductById,
     
-    deleteProductImage
+    deleteProductImage,
+    
+    countLowStockProducts,
+    countNoStockProducts
   } = useProductAPI({ itemsPerPage });
   
-  /**
-   * Función mejorada para actualizar productos cuando cambian los filtros
-   * Usa un timeout para agrupar múltiples cambios en una sola actualización
-   */
-  const scheduleFilterUpdate = useCallback(() => {
-    // Si ya hay una actualización pendiente, no programar otra
-    if (isUpdatePending.current) return;
-    
-    // Marcar que hay una actualización pendiente
-    isUpdatePending.current = true;
-    
-    // Limpiar cualquier timeout previo
-    if (filterUpdateTimeoutRef.current) {
-      clearTimeout(filterUpdateTimeoutRef.current);
+  // Manejador estable para cuando cambian los filtros
+  const handleFiltersChanged = useCallback((params: URLSearchParams) => {
+    // Evitar fetchs demasiado frecuentes (mínimo 50ms entre ellos)
+    const now = Date.now();
+    if (now - lastFetchTimestamp.current < 50) {
+      return;
     }
     
-    // Programar la actualización con un delay
-    filterUpdateTimeoutRef.current = setTimeout(() => {
-      if (!isInitialMount.current && initialFetchDone.current) {
-        console.log('Filtros cambiados, actualizando productos...');
-        fetchProducts(true, 1, itemsPerPage, {
-          searchTerm: debouncedSearchTerm,
-          category: selectedCategory,
-          showLowStockOnly,
-          showNoStockOnly
-        });
-      }
-      
-      // Marcar que ya no hay una actualización pendiente
-      isUpdatePending.current = false;
-    }, 300); // 300ms de espera para agrupar múltiples cambios
+    // Registrar el timestamp de esta solicitud
+    lastFetchTimestamp.current = now;
+    
+    // El trabajo principal ahora lo hace el hook - solo necesitamos obtener los parámetros
+    const searchTerm = params.get('regex') || '';
+    const category = params.get('category') || (params.get('esCombo') === 'true' ? 'combos' : 'all');
+    const showLowStock = params.get('lowStock') === 'true';
+    const showNoStock = params.get('noStock') === 'true';
+    
+    // Hacer fetch con estos parámetros (solo después del montaje inicial)
+    if (initialRenderComplete.current) {
+      console.log('Filtros cambiados, solicitando actualización de productos');
+      fetchProducts(true, 1, itemsPerPage, {
+        searchTerm,
+        category,
+        showLowStockOnly: showLowStock,
+        showNoStockOnly: showNoStock
+      });
+    }
   }, [fetchProducts, itemsPerPage]);
   
-  // Callback simplificado que marca que los filtros han cambiado
-  const handleFilterChange = useCallback(() => {
-    if (!isInitialMount.current) {
-      filtersChanged.current = true;
-      scheduleFilterUpdate();
-    }
-  }, [scheduleFilterUpdate]);
-  
+  // Hook de filtros
   const {
     searchTerm,
     selectedCategory,
@@ -138,9 +132,18 @@ const InventorySection: React.FC = () => {
     toggleNoStockFilter
   } = useProductFilters({
     clientSideFiltering: false,
-    onFiltersChange: handleFilterChange, // Callback simplificado 
+    onFiltersChange: handleFiltersChanged,
     itemsPerPage
   });
+  
+  // ========== EFECTOS OPTIMIZADOS ==========
+  
+  // Efecto para cleanup al desmontar el componente
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
   
   // Efecto para actualizar el ancho de la ventana
   useEffect(() => {
@@ -160,41 +163,42 @@ const InventorySection: React.FC = () => {
     }
   }, [windowWidth, setCurrentPage]);
   
-  // Cargar productos iniciales
+  // Efecto para cargar datos iniciales y configurar observador
+  // Solo se ejecuta una vez al montar el componente
   useEffect(() => {
     console.log('InventorySection: Componente montado, iniciando carga de productos...');
     
-    // Cargar productos inmediatamente al montar el componente
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      initialFetchDone.current = true;
-      fetchProducts(true);
+    // Cargar productos inmediatamente al montar
+    fetchProducts(true);
+    
+    // Cargar contadores de stock
+    countLowStockProducts();
+    countNoStockProducts();
+    
+    // Marcar que la renderización inicial está completa
+    initialRenderComplete.current = true;
+    
+    // Configurar observador solo una vez
+    if (!observerSetup.current) {
+      const unsubscribe = inventoryObservable.subscribe(() => {
+        if (isMounted.current) {
+          console.log('InventorySection: Actualización de inventario notificada por observable');
+          fetchProducts(true);
+          countLowStockProducts();
+          countNoStockCount();
+        }
+      });
+      
+      observerSetup.current = true;
+      
+      // Cleanup
+      return () => {
+        unsubscribe();
+      };
     }
-    
-    // Suscribirse a actualizaciones
-    const unsubscribe = inventoryObservable.subscribe(() => {
-      console.log('InventorySection: Actualización de inventario notificada por observable');
-      fetchProducts(true);
-    });
-    
-    // Limpiar suscripción y timeouts al desmontar
-    return () => {
-      unsubscribe();
-      if (filterUpdateTimeoutRef.current) {
-        clearTimeout(filterUpdateTimeoutRef.current);
-      }
-    };
   }, []); // Dependencia vacía para que solo se ejecute al montar
   
-  /**
-   * Efecto para manejar cambios en filtros - OPTIMIZADO
-   * Ahora usando scheduleFilterUpdate para agrupar múltiples cambios
-   */
-  useEffect(() => {
-    if (!isInitialMount.current && initialFetchDone.current) {
-      scheduleFilterUpdate();
-    }
-  }, [debouncedSearchTerm, selectedCategory, showLowStockOnly, showNoStockOnly, scheduleFilterUpdate]);
+  // ========== CALLBACKS ESTABLES ==========
   
   /**
    * Función para abrir el modal de creación/edición
@@ -226,7 +230,14 @@ const InventorySection: React.FC = () => {
       
       // Mostrar mensaje de éxito
       setSuccessMessage(MESSAGES.PRODUCT_SAVED(!!editingProduct));
-      setTimeout(() => setSuccessMessage(''), SUCCESS_MESSAGE_TIMEOUT);
+      setTimeout(() => {
+        if (isMounted.current) {
+          setSuccessMessage('');
+        }
+      }, SUCCESS_MESSAGE_TIMEOUT);
+      
+      // Volver a cargar los datos después de guardar
+      handleManualRefresh();
       
       // Cerrar modal y resetear estado
       setShowModal(false);
@@ -237,7 +248,7 @@ const InventorySection: React.FC = () => {
       console.error('Error al guardar producto:', error);
       addNotification(`Error: ${error.message}`, 'error');
     }
-  }, [editingProduct, createProduct, updateProduct, addNotification]);
+  }, [editingProduct, createProduct, updateProduct, addNotification, handleManualRefresh]);
   
   /**
    * Inicia el proceso de eliminación de un producto
@@ -258,7 +269,15 @@ const InventorySection: React.FC = () => {
       
       addNotification(MESSAGES.PRODUCT_DELETED, 'success');
       setSuccessMessage(MESSAGES.PRODUCT_DELETED);
-      setTimeout(() => setSuccessMessage(''), SUCCESS_MESSAGE_TIMEOUT);
+      setTimeout(() => {
+        if (isMounted.current) {
+          setSuccessMessage('');
+        }
+      }, SUCCESS_MESSAGE_TIMEOUT);
+      
+      // Actualizar contadores después de eliminar
+      countLowStockProducts();
+      countNoStockProducts();
     } catch (error: any) {
       console.error('Error al eliminar producto:', error);
       addNotification(`Error: ${error.message}`, 'error');
@@ -266,7 +285,7 @@ const InventorySection: React.FC = () => {
       setDeleteDialogOpen(false);
       setProductToDelete(null);
     }
-  }, [productToDelete, deleteProduct, addNotification]);
+  }, [productToDelete, deleteProduct, addNotification, countLowStockProducts, countNoStockProducts]);
   
   /**
    * Inicia el proceso de eliminación de una imagen
@@ -305,27 +324,75 @@ const InventorySection: React.FC = () => {
   }, [productToDelete, deleteProductImage, addNotification, showModal, editingProduct, fetchProductById]);
 
   /**
-   * Manejadores de cambio de filtros optimizados
-   * Ahora usando callbacks memorizados que no se recrean en cada renderizado
+   * Handlers de cambio de categoría optimizado
    */
   const handleCategoryChange = useCallback((category: string) => {
     setSelectedCategory(category);
   }, [setSelectedCategory]);
   
+  /**
+   * Handler de cambio de búsqueda optimizado
+   */
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
   }, [setSearchTerm]);
 
-  /**
-   * Handlers de stock toggle con memoización
-   */
-  const handleLowStockToggle = useCallback(() => {
-    toggleLowStockFilter();
-  }, [toggleLowStockFilter]);
+  // Memoizamos props para ProductList para evitar renders innecesarios
+  const productListProps = useMemo(() => ({
+    products,
+    loading,
+    error: error,
+    totalCount,
+    currentPage,
+    itemsPerPage,
+    windowWidth,
+    searchTerm,
+    selectedCategory,
+    showLowStockOnly,
+    showNoStockOnly,
+    onEdit: handleOpenModal,
+    onDelete: confirmDeleteProduct,
+    onEditImage: handleOpenModal,
+    onDeleteImage: confirmDeleteImage,
+    onPageChange: handlePageChange
+  }), [
+    products, 
+    loading, 
+    error, 
+    totalCount,
+    currentPage,
+    itemsPerPage,
+    windowWidth,
+    searchTerm,
+    selectedCategory,
+    showLowStockOnly,
+    showNoStockOnly,
+    handleOpenModal,
+    confirmDeleteProduct,
+    confirmDeleteImage,
+    handlePageChange
+  ]);
 
-  const handleNoStockToggle = useCallback(() => {
-    toggleNoStockFilter();
-  }, [toggleNoStockFilter]);
+  // Memoizamos props para StockFilters para evitar renders innecesarios
+  const stockFiltersProps = useMemo(() => ({
+    showLowStockOnly,
+    showNoStockOnly,
+    lowStockCount,
+    noStockCount,
+    isLowStockLoading,
+    isNoStockLoading,
+    onLowStockToggle: toggleLowStockFilter,
+    onNoStockToggle: toggleNoStockFilter
+  }), [
+    showLowStockOnly,
+    showNoStockOnly,
+    lowStockCount,
+    noStockCount,
+    isLowStockLoading,
+    isNoStockLoading,
+    toggleLowStockFilter,
+    toggleNoStockFilter
+  ]);
 
   return (
     <div className="p-4 md:p-6 space-y-6 bg-[#DFEFE6]/30">
@@ -398,16 +465,7 @@ const InventorySection: React.FC = () => {
 
         <div className="w-full md:w-auto flex flex-wrap gap-2">
           {/* Filtros de stock */}
-          <StockFilters
-            showLowStockOnly={showLowStockOnly}
-            showNoStockOnly={showNoStockOnly}
-            lowStockCount={lowStockCount}
-            noStockCount={noStockCount}
-            isLowStockLoading={isLowStockLoading}
-            isNoStockLoading={isNoStockLoading}
-            onLowStockToggle={handleLowStockToggle}
-            onNoStockToggle={handleNoStockToggle}
-          />
+          <StockFilters {...stockFiltersProps} />
 
           {/* Botón de recarga manual */}
           <Button
@@ -449,24 +507,7 @@ const InventorySection: React.FC = () => {
       </div>
 
       {/* Lista de productos */}
-      <ProductList
-        products={products}
-        loading={loading}
-        error={error}
-        totalCount={totalCount}
-        currentPage={currentPage}
-        itemsPerPage={itemsPerPage}
-        windowWidth={windowWidth}
-        searchTerm={searchTerm}
-        selectedCategory={selectedCategory}
-        showLowStockOnly={showLowStockOnly}
-        showNoStockOnly={showNoStockOnly}
-        onEdit={handleOpenModal}
-        onDelete={confirmDeleteProduct}
-        onEditImage={handleOpenModal}
-        onDeleteImage={confirmDeleteImage}
-        onPageChange={handlePageChange}
-      />
+      <ProductList {...productListProps} />
 
       {/* Formulario modal de producto */}
       <ProductForm
@@ -509,14 +550,7 @@ const InventorySection: React.FC = () => {
       {!loading && (lowStockCount > 0 || noStockCount > 0) && 
        !showLowStockOnly && !showNoStockOnly && windowWidth < 768 && (
         <StockFilters
-          showLowStockOnly={showLowStockOnly}
-          showNoStockOnly={showNoStockOnly}
-          lowStockCount={lowStockCount}
-          noStockCount={noStockCount}
-          isLowStockLoading={isLowStockLoading}
-          isNoStockLoading={isNoStockLoading}
-          onLowStockToggle={handleLowStockToggle}
-          onNoStockToggle={handleNoStockToggle}
+          {...stockFiltersProps}
           isMobile={true}
         />
       )}

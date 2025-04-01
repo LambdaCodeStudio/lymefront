@@ -1,5 +1,5 @@
 // hooks/useProductAPI.ts
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { 
   Product, 
   ApiResponse, 
@@ -30,7 +30,7 @@ interface UseProductAPIReturn {
   
   setCurrentPage: (page: number) => void;
   handlePageChange: (page: number) => void;
-  fetchProducts: (forceRefresh?: boolean, page?: number, limit?: number) => Promise<void>;
+  fetchProducts: (forceRefresh?: boolean, page?: number, limit?: number, filters?: any) => Promise<void>;
   handleManualRefresh: () => void;
   
   // CRUD operations
@@ -49,7 +49,10 @@ interface UseProductAPIReturn {
 }
 
 /**
- * Hook personalizado para gestionar la comunicación con API de productos
+ * Hook personalizado optimizado para gestionar la comunicación con API de productos
+ * - Implementa memorización de funciones
+ * - Reduce dependencias circulares
+ * - Evita re-renderizados innecesarios
  */
 export const useProductAPI = ({
   itemsPerPage
@@ -71,6 +74,24 @@ export const useProductAPI = ({
   const [noStockCount, setNoStockCount] = useState(0);
   const [isNoStockLoading, setIsNoStockLoading] = useState(false);
   
+  // Referencias para evitar recargas innecesarias
+  const lastFetchParams = useRef<{
+    page: number;
+    limit: number;
+    filters?: any;
+    timestamp: number;
+  }>({ page: 1, limit: itemsPerPage, timestamp: 0 });
+  
+  const isMounted = useRef(true);
+  const lastFetchPromise = useRef<Promise<void> | null>(null);
+  
+  // Efecto de limpieza al desmontar
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+
   /**
    * Función para normalizar productos
    * Asegura que todos los productos tengan propiedades consistentes
@@ -88,6 +109,7 @@ export const useProductAPI = ({
   
   /**
    * Obtiene las cabeceras de autenticación para las peticiones
+   * Esta función no tiene dependencias, por lo que solo se crea una vez
    */
   const getAuthHeaders = useCallback((): HeadersInit | undefined => {
     const token = getAuthToken();
@@ -103,6 +125,7 @@ export const useProductAPI = ({
   
   /**
    * Maneja errores de respuesta HTTP
+   * Esta función no tiene dependencias, por lo que solo se crea una vez
    */
   const handleApiError = useCallback((response: Response): Promise<ApiError> => {
     if (response.status === 401) {
@@ -166,7 +189,7 @@ export const useProductAPI = ({
 
   /**
    * Subir imagen de producto
-   * IMPORTANTE: Movida para evitar el error de referencia circular
+   * Optimizada para evitar dependencias circulares
    */
   const uploadProductImage = useCallback(async (
     productId: string, 
@@ -194,9 +217,10 @@ export const useProductAPI = ({
       
       const imageResponse = await response.json();
       
-      // Actualizar el producto en el estado local
+      // Actualizar el producto en el estado local usando una función que no depende de productos actuales
       const updatedProduct = await fetchProductById(productId);
-      if (updatedProduct) {
+      
+      if (updatedProduct && isMounted.current) {
         setProducts(prevProducts => 
           prevProducts.map(product => 
             product._id === productId 
@@ -235,8 +259,8 @@ export const useProductAPI = ({
       }
       
       // Actualizar el producto en el estado local
-      const updatedProduct = await fetchProductById(productId);
-      if (updatedProduct) {
+      // Aquí usamos una función que no depende de productos
+      if (isMounted.current) {
         setProducts(prevProducts => 
           prevProducts.map(product => 
             product._id === productId 
@@ -256,10 +280,62 @@ export const useProductAPI = ({
       console.error(`Error al eliminar imagen para producto ${productId}:`, error);
       throw error;
     }
-  }, [getAuthHeaders, handleApiError, fetchProductById]);
+  }, [getAuthHeaders, handleApiError]);
+
+  /**
+   * Construye los parámetros de consulta para la API (extraído de fetchProducts)
+   * Al extraer esta lógica, reducimos las dependencias de fetchProducts
+   */
+  const buildQueryParams = useCallback((
+    page: number, 
+    limit: number, 
+    filters?: {
+      searchTerm?: string,
+      category?: string,
+      showLowStockOnly?: boolean,
+      showNoStockOnly?: boolean
+    }
+  ): URLSearchParams => {
+    const queryParams = new URLSearchParams();
+    queryParams.append('page', page.toString());
+    queryParams.append('limit', limit.toString());
+    
+    // Aplicar filtros
+    if (filters) {
+      // Priorizar filtros de stock
+      if (filters.showNoStockOnly) {
+        queryParams.append('noStock', 'true');
+      } else if (filters.showLowStockOnly) {
+        queryParams.append('lowStock', 'true');
+        queryParams.append('threshold', LOW_STOCK_THRESHOLD.toString());
+      } else {
+        // Búsqueda
+        if (filters.searchTerm) {
+          queryParams.append('regex', filters.searchTerm);
+          queryParams.append('regexFields', 'nombre,descripcion,marca');
+          queryParams.append('regexOptions', 'i');
+        }
+        
+        // Categoría
+        if (filters.category && filters.category !== 'all') {
+          if (filters.category === 'combos') {
+            queryParams.append('esCombo', 'true');
+          } else {
+            queryParams.append('category', filters.category);
+          }
+        }
+      }
+    }
+    
+    // Cache buster
+    queryParams.append('_', Date.now().toString());
+    
+    return queryParams;
+  }, []);
 
   /**
    * Carga productos del servidor con paginación y filtros
+   * Versión optimizada que evita múltiples cargas redundantes
    */
   const fetchProducts = useCallback(async (
     forceRefresh = false, 
@@ -272,57 +348,59 @@ export const useProductAPI = ({
       showNoStockOnly?: boolean
     }
   ) => {
-    // Evitar cargas redundantes
-    if (loading && !forceRefresh) {
-      console.log('Ya se está cargando productos, evitando otra carga');
+    // Validar si ya hay una carga en progreso o si estamos solicitando los mismos datos
+    const now = Date.now();
+    
+    // Evitar cargas redundantes muy cercanas en el tiempo (dentro de 200ms) con los mismos parámetros
+    if (!forceRefresh && 
+        lastFetchParams.current.page === page && 
+        lastFetchParams.current.limit === limit &&
+        JSON.stringify(lastFetchParams.current.filters) === JSON.stringify(filters) && 
+        now - lastFetchParams.current.timestamp < 200) {
+      console.log('Evitando carga redundante con los mismos parámetros (dentro de 200ms)');
       return;
     }
     
+    // Si hay una carga en progreso, volvemos a intentarlo cuando termine
+    if (loading && !forceRefresh && lastFetchPromise.current) {
+      console.log('Ya se está cargando productos, esperando a que termine...');
+      await lastFetchPromise.current;
+      
+      // Si los parámetros son distintos, realizamos una nueva carga
+      if (lastFetchParams.current.page !== page || 
+          lastFetchParams.current.limit !== limit ||
+          JSON.stringify(lastFetchParams.current.filters) !== JSON.stringify(filters)) {
+        return fetchProducts(true, page, limit, filters);
+      }
+      return;
+    }
+    
+    // Guardar los parámetros de esta carga
+    lastFetchParams.current = { page, limit, filters, timestamp: now };
+    
+    // Crear una promesa para el seguimiento de esta carga
+    let resolvePromise: () => void;
+    lastFetchPromise.current = new Promise<void>(resolve => {
+      resolvePromise = resolve;
+    });
+    
     try {
+      if (!isMounted.current) return;
+      
       setLoading(true);
       setRefreshing(forceRefresh);
       setError('');
       
       const headers = getAuthHeaders();
       
-      // Construir parámetros de consulta
-      const queryParams = new URLSearchParams();
-      queryParams.append('page', page.toString());
-      queryParams.append('limit', limit.toString());
-      
-      // Aplicar filtros
-      if (filters) {
-        // Priorizar filtros de stock
-        if (filters.showNoStockOnly) {
-          queryParams.append('noStock', 'true');
-        } else if (filters.showLowStockOnly) {
-          queryParams.append('lowStock', 'true');
-          queryParams.append('threshold', LOW_STOCK_THRESHOLD.toString());
-        } else {
-          // Búsqueda
-          if (filters.searchTerm) {
-            queryParams.append('regex', filters.searchTerm);
-            queryParams.append('regexFields', 'nombre,descripcion,marca');
-            queryParams.append('regexOptions', 'i');
-          }
-          
-          // Categoría
-          if (filters.category && filters.category !== 'all') {
-            if (filters.category === 'combos') {
-              queryParams.append('esCombo', 'true');
-            } else {
-              queryParams.append('category', filters.category);
-            }
-          }
-        }
-      }
-      
-      // Cache buster
-      queryParams.append('_', Date.now().toString());
+      // Construir parámetros de consulta (usando la función extraída)
+      const queryParams = buildQueryParams(page, limit, filters);
       
       const response = await fetch(`${API_URL}producto?${queryParams.toString()}`, {
         headers
       });
+      
+      if (!isMounted.current) return;
       
       if (!response.ok) {
         const errorData = await handleApiError(response);
@@ -330,6 +408,8 @@ export const useProductAPI = ({
       }
       
       const responseData = await response.json();
+      
+      if (!isMounted.current) return;
       
       // Procesar la respuesta paginada
       let extractedProducts: Product[] = [];
@@ -352,19 +432,28 @@ export const useProductAPI = ({
       setTotalCount(totalItems);
       
     } catch (err: any) {
+      if (!isMounted.current) return;
+      
       const errorMsg = `Error al cargar productos: ${err.message}`;
       console.error(errorMsg);
       setError(errorMsg);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (isMounted.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
+      
+      // Resolver la promesa de esta carga
+      if (resolvePromise) resolvePromise();
     }
-  }, [currentPage, itemsPerPage, loading, normalizeProducts, getAuthHeaders, handleApiError]);
+  }, [currentPage, itemsPerPage, normalizeProducts, getAuthHeaders, handleApiError, buildQueryParams]);
 
   /**
    * Contar productos con stock bajo
    */
   const countLowStockProducts = useCallback(async (): Promise<number> => {
+    if (isLowStockLoading) return lowStockCount;
+    
     try {
       setIsLowStockLoading(true);
       
@@ -384,7 +473,9 @@ export const useProductAPI = ({
       
       // El endpoint debe devolver un objeto con la propiedad 'count'
       if (data && typeof data.count === 'number') {
-        setLowStockCount(data.count);
+        if (isMounted.current) {
+          setLowStockCount(data.count);
+        }
         return data.count;
       }
       
@@ -397,17 +488,23 @@ export const useProductAPI = ({
         product => product.stock <= LOW_STOCK_THRESHOLD && product.stock > 0
       ).length;
       
-      setLowStockCount(lowStockEstimate);
+      if (isMounted.current) {
+        setLowStockCount(lowStockEstimate);
+      }
       return lowStockEstimate;
     } finally {
-      setIsLowStockLoading(false);
+      if (isMounted.current) {
+        setIsLowStockLoading(false);
+      }
     }
-  }, [products, getAuthHeaders, handleApiError]);
+  }, [products, getAuthHeaders, handleApiError, isLowStockLoading, lowStockCount]);
 
   /**
    * Contar productos sin stock
    */
   const countNoStockProducts = useCallback(async (): Promise<number> => {
+    if (isNoStockLoading) return noStockCount;
+    
     try {
       setIsNoStockLoading(true);
       
@@ -426,25 +523,33 @@ export const useProductAPI = ({
       
       // Verificar si hay datos paginados
       if (data && typeof data.totalItems === 'number') {
-        setNoStockCount(data.totalItems);
+        if (isMounted.current) {
+          setNoStockCount(data.totalItems);
+        }
         return data.totalItems;
       }
       
       // Contar productos si es un array
       const count = Array.isArray(data) ? data.length : 0;
-      setNoStockCount(count);
+      if (isMounted.current) {
+        setNoStockCount(count);
+      }
       return count;
     } catch (error) {
       console.error("Error al contar productos sin stock:", error);
       
       // Estimación local como fallback
       const noStockEstimate = products.filter(product => product.stock === 0).length;
-      setNoStockCount(noStockEstimate);
+      if (isMounted.current) {
+        setNoStockCount(noStockEstimate);
+      }
       return noStockEstimate;
     } finally {
-      setIsNoStockLoading(false);
+      if (isMounted.current) {
+        setIsNoStockLoading(false);
+      }
     }
-  }, [products, getAuthHeaders, handleApiError]);
+  }, [products, getAuthHeaders, handleApiError, isNoStockLoading, noStockCount]);
 
   /**
    * Crear un nuevo producto
@@ -477,20 +582,18 @@ export const useProductAPI = ({
         await uploadProductImage(savedProduct._id, imageFile);
       }
       
-      // Actualizar la interfaz
-      fetchProducts(true, 1, itemsPerPage);
-      countLowStockProducts();
-      countNoStockProducts();
-      
       // Notificar a otros componentes
       inventoryObservable.notify();
+      
+      // No volvemos a cargar los productos dentro de esta función
+      // para evitar múltiples llamadas a fetchProducts
       
       return savedProduct;
     } catch (error: any) {
       console.error('Error al crear producto:', error);
       throw error;
     }
-  }, [getAuthHeaders, handleApiError, fetchProducts, uploadProductImage, countLowStockProducts, countNoStockProducts, itemsPerPage]);
+  }, [getAuthHeaders, handleApiError, uploadProductImage]);
 
   /**
    * Actualizar un producto existente
@@ -524,20 +627,18 @@ export const useProductAPI = ({
         await uploadProductImage(updatedProduct._id, imageFile);
       }
       
-      // Actualizar la interfaz
-      fetchProducts(true, currentPage, itemsPerPage);
-      countLowStockProducts();
-      countNoStockProducts();
-      
       // Notificar a otros componentes
       inventoryObservable.notify();
+      
+      // No volvemos a cargar los productos dentro de esta función
+      // para evitar múltiples llamadas a fetchProducts
       
       return updatedProduct;
     } catch (error: any) {
       console.error(`Error al actualizar producto ${id}:`, error);
       throw error;
     }
-  }, [getAuthHeaders, handleApiError, currentPage, itemsPerPage, fetchProducts, uploadProductImage, countLowStockProducts, countNoStockProducts]);
+  }, [getAuthHeaders, handleApiError, uploadProductImage]);
 
   /**
    * Eliminar un producto
@@ -556,42 +657,56 @@ export const useProductAPI = ({
         throw new Error(errorData.message);
       }
       
-      // Actualizar estado local
-      setProducts(prevProducts => prevProducts.filter(product => product._id !== id));
-      
-      // Actualizar contadores
-      countLowStockProducts();
-      countNoStockProducts();
+      // Actualizar estado local - forma óptima sin dependencias adicionales
+      if (isMounted.current) {
+        setProducts(prevProducts => prevProducts.filter(product => product._id !== id));
+      }
       
       // Notificar a otros componentes
       inventoryObservable.notify();
+      
+      // No volvemos a cargar los contadores dentro de esta función
+      // para evitar múltiples llamadas API
       
       return true;
     } catch (error: any) {
       console.error(`Error al eliminar producto ${id}:`, error);
       throw error;
     }
-  }, [getAuthHeaders, handleApiError, countLowStockProducts, countNoStockProducts]);
+  }, [getAuthHeaders, handleApiError]);
 
   /**
    * Función para manejar cambio de página
    */
   const handlePageChange = useCallback((pageNumber: number) => {
     setCurrentPage(pageNumber);
-    fetchProducts(true, pageNumber, itemsPerPage);
+    
+    // No llamamos a fetchProducts aquí para evitar la doble carga
+    // El componente consumidor debe capturar el cambio y hacer la llamada
     
     // Scroll hacia arriba
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [itemsPerPage, fetchProducts]);
+  }, []);
 
   /**
    * Función para actualizar manualmente los productos
    */
   const handleManualRefresh = useCallback(() => {
+    // Usar una única llamada force refresh
     fetchProducts(true);
+    
+    // Actualizar contadores
     countLowStockProducts();
     countNoStockProducts();
   }, [fetchProducts, countLowStockProducts, countNoStockProducts]);
+
+  // Efecto para escuchar cambios en currentPage
+  useEffect(() => {
+    // Este es el único lugar donde deberíamos llamar a fetchProducts automáticamente
+    if (!isNaN(currentPage) && currentPage > 0) {
+      fetchProducts(false, currentPage, itemsPerPage);
+    }
+  }, [currentPage, itemsPerPage, fetchProducts]);
 
   return {
     // Estado

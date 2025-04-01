@@ -23,7 +23,7 @@ import {
   getUserStatusClass,
   getUserStatusText,
   getRoleBadgeClass
-} from '../../../utils/userComponentUtils';
+} from '../../../../utils/userComponentUtils';
 
 interface UserCardProps {
   user: User;

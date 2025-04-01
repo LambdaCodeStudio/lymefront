@@ -50,7 +50,7 @@ interface UseProductFiltersReturn {
 
 /**
  * Hook personalizado para gestionar filtros de productos
- * Permite filtrado del lado del cliente o del servidor
+ * VERSIÓN OPTIMIZADA para reducir recargas
  * 
  * @param clientSideFiltering - Si el filtrado debe realizarse en el cliente
  * @param productsData - Datos de productos completos (requerido si clientSideFiltering es true)
@@ -73,11 +73,33 @@ export const useProductFilters = ({
   const [sortDir, setSortDir] = useState(1); // 1: asc, -1: desc
   const [currentPage, setCurrentPage] = useState(1);
   
-  // Refs para debounce
+  // Refs para control de estado
+  const isInitialMount = useRef(true);
   const searchTermTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastNotifiedFilters = useRef<string>('');
+  const filtersChangedSinceLastNotification = useRef(false);
+  const notificationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Limpieza al desmontar el componente
+  useEffect(() => {
+    return () => {
+      if (searchTermTimeoutRef.current) {
+        clearTimeout(searchTermTimeoutRef.current);
+      }
+      if (notificationTimeoutRef.current) {
+        clearTimeout(notificationTimeoutRef.current);
+      }
+    };
+  }, []);
   
   // Debounce para searchTerm
   useEffect(() => {
+    // Primera vez no hacemos nada
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    
     // Limpiar timeout existente
     if (searchTermTimeoutRef.current) {
       clearTimeout(searchTermTimeoutRef.current);
@@ -92,52 +114,45 @@ export const useProductFilters = ({
         setCurrentPage(1);
       }
     }, DEBOUNCE_DELAY);
-    
-    // Limpiar el timeout al desmontar
-    return () => {
-      if (searchTermTimeoutRef.current) {
-        clearTimeout(searchTermTimeoutRef.current);
-      }
-    };
   }, [searchTerm, currentPage]);
   
   /**
-   * Toggle para el filtro de stock bajo
+   * Toggle para el filtro de stock bajo - versión estable
    */
   const toggleLowStockFilter = useCallback(() => {
-    // Si el filtro de sin stock está activo, desactivarlo
-    if (showNoStockOnly) {
-      setShowNoStockOnly(false);
-    }
-    
-    // Invertir estado del filtro de stock bajo
-    setShowLowStockOnly(prev => !prev);
+    setShowLowStockOnly(prev => {
+      // Si activamos este filtro, desactivamos el otro
+      if (!prev) {
+        setShowNoStockOnly(false);
+      }
+      return !prev;
+    });
     
     // Volver a la primera página
     setCurrentPage(1);
-  }, [showNoStockOnly]);
+  }, []);
   
   /**
-   * Toggle para el filtro de sin stock
+   * Toggle para el filtro de sin stock - versión estable
    */
   const toggleNoStockFilter = useCallback(() => {
-    // Si el filtro de stock bajo está activo, desactivarlo
-    if (showLowStockOnly) {
-      setShowLowStockOnly(false);
-    }
-    
-    // Invertir estado del filtro de sin stock
-    setShowNoStockOnly(prev => !prev);
+    setShowNoStockOnly(prev => {
+      // Si activamos este filtro, desactivamos el otro
+      if (!prev) {
+        setShowLowStockOnly(false);
+      }
+      return !prev;
+    });
     
     // Volver a la primera página
     setCurrentPage(1);
-  }, [showLowStockOnly]);
+  }, []);
   
   /**
-   * Construye un objeto URLSearchParams para la API
+   * Parámetros de filtro memorizados para evitar recreaciones en cada renderizado
    */
-  const buildSearchParams = useCallback(() => {
-    return buildProductQueryParams({
+  const filterParams = useMemo(() => {
+    return {
       searchTerm: debouncedSearchTerm,
       category: selectedCategory,
       showLowStockOnly,
@@ -146,7 +161,7 @@ export const useProductFilters = ({
       limit: itemsPerPage,
       sortBy,
       sortDir
-    });
+    };
   }, [
     debouncedSearchTerm, 
     selectedCategory, 
@@ -159,12 +174,19 @@ export const useProductFilters = ({
   ]);
   
   /**
+   * Construye un objeto URLSearchParams para la API
+   * Versión memoizada para evitar recreaciones innecesarias
+   */
+  const searchParams = useMemo(() => {
+    return buildProductQueryParams(filterParams);
+  }, [filterParams]);
+  
+  /**
    * Construye un string de consulta para la API
    */
   const buildQueryString = useCallback(() => {
-    const params = buildSearchParams();
-    return params.toString();
-  }, [buildSearchParams]);
+    return searchParams.toString();
+  }, [searchParams]);
   
   /**
    * Resetea todos los filtros a sus valores por defecto
@@ -190,42 +212,46 @@ export const useProductFilters = ({
       };
     }
     
-    const { filteredProducts, totalCount } = applyAllFilters(productsData, {
-      searchTerm: debouncedSearchTerm,
-      category: selectedCategory,
-      showLowStockOnly,
-      showNoStockOnly,
-      sortBy,
-      sortDir,
-      page: currentPage,
-      itemsPerPage
-    });
+    const { filteredProducts, totalCount } = applyAllFilters(productsData, filterParams);
     
     return {
       filteredProducts,
       totalCount,
       totalPages: Math.ceil(totalCount / itemsPerPage)
     };
-  }, [
-    clientSideFiltering,
-    productsData,
-    debouncedSearchTerm,
-    selectedCategory,
-    showLowStockOnly,
-    showNoStockOnly,
-    sortBy,
-    sortDir,
-    currentPage,
-    itemsPerPage
-  ]);
+  }, [clientSideFiltering, productsData, filterParams, itemsPerPage]);
   
-  // Notificar cambios en los filtros
+  // Notificar cambios en los filtros de manera eficiente
+  // Limitamos la frecuencia de notificaciones para no sobrecargar
   useEffect(() => {
-    if (onFiltersChange) {
-      const params = buildSearchParams();
-      onFiltersChange(params);
+    if (!onFiltersChange) return;
+    
+    // Verificamos si realmente han cambiado los parámetros
+    const currentFilterString = JSON.stringify(filterParams);
+    if (currentFilterString === lastNotifiedFilters.current) {
+      return;
     }
-  }, [buildSearchParams, onFiltersChange]);
+    
+    // Marcar que hay cambios pendientes de notificar
+    filtersChangedSinceLastNotification.current = true;
+    
+    // Si ya hay un timeout programado, no hacer nada
+    if (notificationTimeoutRef.current) {
+      return;
+    }
+    
+    // Programar una notificación para no sobrecargar con actualizaciones
+    notificationTimeoutRef.current = setTimeout(() => {
+      // Si ha habido cambios desde la última notificación
+      if (filtersChangedSinceLastNotification.current) {
+        onFiltersChange(searchParams);
+        lastNotifiedFilters.current = JSON.stringify(filterParams);
+        filtersChangedSinceLastNotification.current = false;
+      }
+      
+      notificationTimeoutRef.current = null;
+    }, 50); // Pequeño delay para agrupar cambios
+  }, [filterParams, searchParams, onFiltersChange]);
   
   return {
     // Estado

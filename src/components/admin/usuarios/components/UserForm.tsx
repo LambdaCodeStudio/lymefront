@@ -22,7 +22,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { User, CreateUserDTO, UpdateUserDTO } from '@/types/users';
 import userService from '@/services/userService';
-import { ROLES } from '../../../utils/userComponentUtils';
+import { ROLES } from '../../../../utils/userComponentUtils';
 
 // Nombres cortos de roles para el formulario
 const shortRoleLabels = {

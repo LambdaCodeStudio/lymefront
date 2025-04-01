@@ -8,7 +8,7 @@ import {
 
 import { QueryClient, QueryClientProvider } from 'react-query';
 import InventorySection from './inventario/InventorySection';
-import AdminUserManagement from './AdminUserManagement';
+import AdminUserManagement from './usuarios/AdminUserManagement';
 import ClientsSection from './clientes/ClientSection';
 import OrdersSection from './OrdersSection';
 import { DashboardContext, useDashboardState } from '@/hooks/useDashboard';

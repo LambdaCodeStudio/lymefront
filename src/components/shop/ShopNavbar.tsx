@@ -453,7 +453,7 @@ export const ShopNavbar: React.FC = () => {
                           className="flex w-full items-center px-4 py-2 text-sm text-[#F44336] hover:bg-[#F44336]/10"
                         >
                           <LogOut className="w-4 h-4 mr-2" />
-                          Cerrar sesiÃ³n
+                          Cerrar sesión
                         </button>
                       </div>
                     </motion.div>

@@ -15,7 +15,8 @@ import {
   Users,
   UserPlus,
   X,
-  MapPin
+  MapPin,
+  Mail
 } from 'lucide-react';
 
 // Componentes UI
