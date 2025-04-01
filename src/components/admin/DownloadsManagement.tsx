@@ -60,7 +60,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
-import Pagination from '@/components/Pagination';
+import Pagination from './components/Pagination';
 import { inventoryObservable } from '@/utils/inventoryUtils';
 
 // Create an observable for order-related updates
