@@ -65,8 +65,8 @@ import { inventoryObservable } from '@/utils/inventoryUtils';
 
 // Create an observable for order-related updates
 const pedidosObservable = {
-  observers: [],
-  subscribe(callback) {
+  observers: [] as Array<() => void>,
+  subscribe(callback: () => void) {
     this.observers.push(callback);
     return () => {
       this.observers = this.observers.filter(obs => obs !== callback);
