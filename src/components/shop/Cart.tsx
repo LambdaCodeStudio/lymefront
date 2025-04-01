@@ -14,7 +14,6 @@ import {
   MapPin,
   AlertCircle,
   AlertTriangle,
-  Download,
   Clock,
   UserCircle2,
   PackageOpen,
@@ -113,7 +112,7 @@ const ComboDetails = ({ item }) => {
   // Verificar si es un combo
   const isCombo = item.isCombo;
   // Obtener items del combo - mejor manejo con diferentes formatos de datos
-  const comboItems = 
+  const comboItems =
     (item.comboItems && item.comboItems.length > 0) ? item.comboItems : 
     (item.itemsCombo && item.itemsCombo.length > 0) ? item.itemsCombo : [];
 
@@ -359,7 +358,6 @@ export const Cart: React.FC = () => {
   const [orderError, setOrderError] = useState<string | null>(null);
   const [createdOrderId, setCreatedOrderId] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number>(30);
-  const [isDownloadingRemito, setIsDownloadingRemito] = useState<boolean>(false);
   const [orderData, setOrderData] = useState<any>(null);
   const [showSummary, setShowSummary] = useState<boolean>(false);
   const [refreshingSupervisor, setRefreshingSupervisor] = useState<boolean>(false);
@@ -376,6 +374,11 @@ export const Cart: React.FC = () => {
   const [subUbicacionesDisponibles, setSubUbicacionesDisponibles] = useState<SubUbicacion[]>([]);
   const [cargandoClientes, setCargandoClientes] = useState<boolean>(false);
   const [errorClientes, setErrorClientes] = useState<string | null>(null);
+
+  // Estados para filtros de búsqueda
+  const [clienteSearchTerm, setClienteSearchTerm] = useState<string>('');
+  const [subServicioSearchTerm, setSubServicioSearchTerm] = useState<string>('');
+  const [subUbicacionSearchTerm, setSubUbicacionSearchTerm] = useState<string>('');
 
   // Estado para formulario de checkout
   const [orderForm, setOrderForm] = useState({
@@ -869,63 +872,6 @@ export const Cart: React.FC = () => {
     }
   };
 
-  // Función para descargar el remito del pedido creado
-  const handleRemitoDownload = async () => {
-    if (!createdOrderId) {
-      console.log('No se puede descargar el remito: ID de pedido no disponible');
-      return;
-    }
-
-    try {
-      setIsDownloadingRemito(true);
-      const token = getToken();
-
-      // Realizar la solicitud con un timeout adecuado
-      const response = await fetch(`${API_BASE_URL}/api/downloads/remito/${createdOrderId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        method: 'GET'
-      });
-
-      // Verificar si la respuesta es válida
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Error ${response.status}: ${errorText}`);
-      }
-
-      // Convertir la respuesta a blob
-      const blob = await response.blob();
-
-      // Verificar que el blob no esté vacío
-      if (!blob || blob.size === 0) {
-        throw new Error('La respuesta del servidor está vacía');
-      }
-
-      // Crear URL y descargar
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `remito_${createdOrderId}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-
-      // Limpiar
-      setTimeout(() => {
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-      }, 100);
-
-      console.log('Remito descargado correctamente');
-      addNotification('Remito descargado correctamente', 'success');
-    } catch (error) {
-      console.error('Error al descargar remito:', error);
-      addNotification(`Error al descargar remito: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
-    } finally {
-      setIsDownloadingRemito(false);
-    }
-  };
-
   // Actualizar cantidad con validación mejorada para manejar combos
   const handleQuantityChange = (id: string, newQuantity: number) => {
     // Sólo aseguramos que la cantidad sea positiva
@@ -1305,19 +1251,6 @@ export const Cart: React.FC = () => {
               {/* Botones de acción */}
               <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 justify-center mb-3 md:mb-4">
                 <Button
-                  className="bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white shadow-md shadow-[#3a8fb7]/20 text-xs md:text-sm h-9"
-                  onClick={handleRemitoDownload}
-                  disabled={isDownloadingRemito}
-                >
-                  {isDownloadingRemito ? (
-                    <Loader2 className="h-3 w-3 md:h-4 md:w-4 mr-1 animate-spin" />
-                  ) : (
-                    <Download className="h-3 w-3 md:h-4 md:w-4 mr-1" />
-                  )}
-                  Descargar Remito
-                </Button>
-
-                <Button
                   variant="outline"
                   className="border-[#3a8fb7] text-[#3a8fb7] hover:bg-[#3a8fb7]/20 text-xs md:text-sm h-9"
                   onClick={() => window.location.href = '/shop'}
@@ -1562,7 +1495,6 @@ export const Cart: React.FC = () => {
                                     {cargandoClientes && <Loader2 className="ml-1 h-3 w-3 animate-spin text-[#3a8fb7]" />}
                                   </Label>
 
-                                  {/* Indicador de operario/supervisor */}
                                   {userRole === 'operario' && supervisorName && (
                                     <div className="text-xs text-[#4a4a4a] mb-2 flex items-center">
                                       <UserCircle2 className="h-3 w-3 mr-1 text-[#3a8fb7]" />
@@ -1570,42 +1502,42 @@ export const Cart: React.FC = () => {
                                     </div>
                                   )}
 
-                                  {/* Reemplazo del Select por SelectWithClear */}
-                                  <SelectWithClear
-                                    value={clienteSeleccionado || ""}
-                                    onValueChange={handleClienteChange}
-                                    disabled={cargandoClientes}
-                                    placeholder="Selecciona un cliente"
-                                    className="h-9 text-xs"
-                                  >
-                                    {Object.entries(clientesAgrupados).map(([servicio, clientesServicio]) => (
-                                      <div key={servicio} className="px-1 py-1">
-                                        <div className="flex items-center px-2 py-1 text-xs uppercase tracking-wider font-semibold bg-[#d4f1f9] text-[#3a8fb7] rounded mb-1">
-                                          <Building className="h-3 w-3 mr-1" />
-                                          {servicio}
-                                        </div>
+                                  <Input type="text" placeholder="Buscar cliente..." value={clienteSearchTerm} onChange={(e) => setClienteSearchTerm(e.target.value)} className="w-full border border-[#3a8fb7] text-[#3a8fb7] placeholder:text-[#3a8fb7]/60 text-xs px-2 py-1 rounded-md" />
+                                   <SelectWithClear
+                                     value={clienteSeleccionado || ""}
+                                     onValueChange={handleClienteChange}
+                                     disabled={cargandoClientes}
+                                     placeholder="Selecciona un cliente"
+                                     className="h-9 text-xs"
+                                   >
+                                     {Object.entries(clientesAgrupados).map(([servicio, clientesServicio]) => (
+                                       <div key={servicio} className="px-1 py-1">
+                                         <div className="flex items-center px-2 py-1 text-xs uppercase tracking-wider font-semibold bg-[#d4f1f9] text-[#3a8fb7] rounded mb-1">
+                                           <Building className="h-3 w-3 mr-1" />
+                                           {servicio}
+                                         </div>
 
-                                        <div className="pl-1">
-                                          {clientesServicio.map(cliente => (
-                                            <SelectItem
-                                              key={cliente._id}
-                                              value={cliente._id}
-                                              className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
-                                            >
-                                              <div className="flex items-center">
-                                                <Building className="h-3 w-3 mr-2 text-[#4a4a4a]" />
-                                                {/* Modificamos para mostrar el nombre del cliente en lugar de la sección */}
-                                                <span>{cliente.nombre}</span>
-                                                {cliente.seccionDelServicio && (
-                                                  <span className="ml-1 text-xs text-[#7AA79C]">({cliente.seccionDelServicio})</span>
-                                                )}
-                                              </div>
-                                            </SelectItem>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </SelectWithClear>
+                                         <div className="pl-1">
+                                           {clientesServicio.filter(cliente => cliente.nombre.toLowerCase().includes(clienteSearchTerm.toLowerCase()) || (cliente.seccionDelServicio && cliente.seccionDelServicio.toLowerCase().includes(clienteSearchTerm.toLowerCase()))).map(cliente => (
+                                             <SelectItem
+                                               key={cliente._id}
+                                               value={cliente._id}
+                                               className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
+                                             >
+                                               <div className="flex items-center">
+                                                 <Building className="h-3 w-3 mr-2 text-[#4a4a4a]" />
+                                                 {/* Modificamos para mostrar el nombre del cliente en lugar de la sección */}
+                                                 <span>{cliente.nombre}</span>
+                                                 {cliente.seccionDelServicio && (
+                                                   <span className="ml-1 text-xs text-[#7AA79C]">({cliente.seccionDelServicio})</span>
+                                                 )}
+                                               </div>
+                                             </SelectItem>
+                                           ))}
+                                         </div>
+                                       </div>
+                                     ))}
+                                   </SelectWithClear>
                                 </div>
                               )}
                             </div>
@@ -1636,7 +1568,7 @@ export const Cart: React.FC = () => {
                                     Selecciona un sub-servicio
                                   </Label>
 
-                                  {/* Reemplazo del Select por SelectWithClear */}
+                                  <Input type="text" placeholder="Buscar sub-servicio..." value={subServicioSearchTerm} onChange={(e) => setSubServicioSearchTerm(e.target.value)} className="w-full border border-[#3a8fb7] text-[#3a8fb7] placeholder:text-[#3a8fb7]/60 text-xs px-2 py-1 rounded-md" />
                                   <SelectWithClear
                                     value={subServicioSeleccionado || ""}
                                     onValueChange={handleSubServicioChange}
@@ -1644,7 +1576,7 @@ export const Cart: React.FC = () => {
                                     placeholder="Selecciona un sub-servicio"
                                     className="h-9 text-xs"
                                   >
-                                    {subServiciosDisponibles.map(subServicio => (
+                                    {subServiciosDisponibles.filter(subServicio => subServicio.nombre.toLowerCase().includes(subServicioSearchTerm.toLowerCase())).map(subServicio => (
                                       <SelectItem
                                         key={subServicio._id}
                                         value={subServicio._id}
@@ -1692,7 +1624,7 @@ export const Cart: React.FC = () => {
                                     Selecciona una sub-ubicación
                                   </Label>
 
-                                  {/* Reemplazo del Select por SelectWithClear */}
+                                  <Input type="text" placeholder="Buscar sub-ubicación..." value={subUbicacionSearchTerm} onChange={(e) => setSubUbicacionSearchTerm(e.target.value)} className="w-full border border-[#3a8fb7] text-[#3a8fb7] placeholder:text-[#3a8fb7]/60 text-xs px-2 py-1 rounded-md" />
                                   <SelectWithClear
                                     value={subUbicacionSeleccionada || ""}
                                     onValueChange={handleSubUbicacionChange}
@@ -1700,252 +1632,11 @@ export const Cart: React.FC = () => {
                                     placeholder="Selecciona una sub-ubicación"
                                     className="h-9 text-xs"
                                   >
-                                    {subUbicacionesDisponibles.map(subUbicacion => (
-                                      <SelectItem
-                                      key={subUbicacion._id}
-                                      value={subUbicacion._id}
-                                      className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white text-xs py-1"
-                                    >
-                                      {subUbicacion.nombre}
-                                    </SelectItem>
-                                  ))}
-                                </SelectWithClear>
-                              </div>
-                            )}
-                          </AccordionContent>
-                        </AccordionItem>
-                      )}
-
-                      {/* Información adicional */}
-                      <AccordionItem value="notas" className="border-b-0">
-                        <AccordionTrigger className="py-2 px-3 bg-gradient-to-r from-[#d4f1f9]/40 to-[#a8e6cf]/40 backdrop-blur-sm border border-[#3a8fb7] rounded-lg shadow-md mb-2 text-[#3a8fb7] font-medium hover:no-underline hover:bg-[#d4f1f9]/60">
-                          <div className="flex items-center">
-                            <Info className="mr-2 h-4 w-4" />
-                            Información del pedido
-                          </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="bg-white/70 backdrop-blur-sm border border-[#3a8fb7] rounded-lg p-3 mb-2">
-                          <div>
-                            <Label htmlFor="notes" className="text-[#3a8fb7] text-xs font-medium">Notas adicionales</Label>
-                            <Textarea
-                              id="notes"
-                              placeholder="Instrucciones especiales, ubicación, etc."
-                              className="bg-white border-[#3a8fb7] mt-1 text-[#4a4a4a] placeholder:text-[#4a4a4a]/60 text-xs h-20"
-                              value={orderForm.notes}
-                              onChange={(e) => setOrderForm({ ...orderForm, notes: e.target.value })}
-                            />
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
-                    </Accordion>
-
-                    {/* Información del cliente seleccionado (móvil) */}
-                    {clienteSeleccionado && !cargandoClientes && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="mt-2 p-3 rounded-md bg-[#d4f1f9]/40 border border-[#3a8fb7]/50 backdrop-blur-sm"
-                      >
-                        <div className="text-xs text-[#3a8fb7]">
-                          <p className="flex items-center">
-                            <Building className="w-3 h-3 mr-1 text-[#3a8fb7]" />
-                            <span className="font-medium">Cliente:</span>
-                            <span className="ml-1 truncate">{orderForm.servicio}</span>
-                          </p>
-
-                          {orderForm.nombreSubServicio && (
-                            <p className="flex items-center mt-1">
-                              <PackageOpen className="w-3 h-3 mr-1 text-[#3a8fb7]" />
-                              <span className="font-medium">Sub-Servicio:</span>
-                              <span className="ml-1 truncate">{orderForm.nombreSubServicio}</span>
-                            </p>
-                          )}
-
-                          {orderForm.nombreSubUbicacion && (
-                            <p className="flex items-center mt-1">
-                              <MapPin className="w-3 h-3 mr-1 text-[#3a8fb7]" />
-                              <span className="font-medium">Sub-Ubicación:</span>
-                              <span className="ml-1 truncate">{orderForm.nombreSubUbicacion}</span>
-                            </p>
-                          )}
-                        </div>
-                      </motion.div>
-                    )}
-                  </div>
-
-                  {/* Versión Desktop */}
-                  <div className="hidden md:grid md:grid-cols-1 lg:grid-cols-2 gap-4">
-                    {/* Selector de clientes */}
-                    <Card className="bg-gradient-to-r from-[#d4f1f9]/40 to-[#a8e6cf]/40 backdrop-blur-sm border-[#3a8fb7] shadow-md lg:col-span-2">
-                      <CardHeader className="border-b border-[#3a8fb7]/50 py-3">
-                        <CardTitle className="text-[#3a8fb7] flex items-center text-lg">
-                          <Building className="mr-2 h-5 w-5" />
-                          Seleccionar Cliente
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-4 pt-4 pb-4">
-                        {cargandoClientes ? (
-                          <div className="py-3 flex justify-center">
-                            <Loader2 className="h-6 w-6 animate-spin text-[#3a8fb7]" />
-                          </div>
-                        ) : errorClientes ? (
-                          <Alert className="bg-[#FF9800]/10 border-[#FF9800] shadow-sm">
-                            <AlertTriangle className="h-4 w-4 text-[#FF9800]" />
-                            <AlertDescription className="ml-2 text-[#3a8fb7]">
-                              {errorClientes}
-                            </AlertDescription>
-                          </Alert>
-                        ) : clientes.length === 0 ? (
-                          <div>
-                            <Alert className="bg-[#FF9800]/10 border-2 border-[#FF9800] mb-4">
-                              <AlertTriangle className="h-4 w-4 text-[#FF9800]" />
-                              <AlertDescription className="ml-2 text-[#3a8fb7] font-medium">
-                                No hay clientes asignados. Por favor, contacta con administración para que te asignen clientes antes de realizar pedidos.
-                              </AlertDescription>
-                            </Alert>
-
-                            <div className="flex justify-center mt-6">
-                              <Button
-                                onClick={() => window.location.href = '/shop'}
-                                className="bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white"
-                              >
-                                <ArrowLeft className="mr-2 h-4 w-4" />
-                                Volver a la tienda
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="grid md:grid-cols-2 gap-4">
-                            {/* Selector de cliente */}
-                            <div className="space-y-2">
-                              <Label htmlFor="clienteSelector" className="text-[#3a8fb7] font-medium flex items-center">
-                                <Building className="mr-2 h-4 w-4" />
-                                Cliente Asociado
-                                {cargandoClientes && <Loader2 className="ml-2 h-3 w-3 animate-spin text-[#3a8fb7]" />}
-                              </Label>
-
-                              {/* Indicador de operario/supervisor */}
-                              {userRole === 'operario' && supervisorName && (
-                                <div className="text-xs text-[#4a4a4a] mb-2 flex items-center">
-                                  <UserCircle2 className="h-3 w-3 mr-1 text-[#3a8fb7]" />
-                                  Mostrando clientes de: {supervisorName}
-                                </div>
-                              )}
-
-                              <div className="relative mt-1">
-                                {/* Reemplazo del Select por SelectWithClear */}
-                                <SelectWithClear
-                                  value={clienteSeleccionado || ""}
-                                  onValueChange={handleClienteChange}
-                                  disabled={cargandoClientes}
-                                  placeholder="Selecciona un cliente"
-                                >
-                                  {Object.entries(clientesAgrupados).map(([servicio, clientesServicio]) => (
-                                    <div key={servicio} className="px-1 py-1">
-                                      {/* Encabezado de grupo de servicio */}
-                                      <div className="flex items-center px-2 py-1.5 text-xs uppercase tracking-wider font-semibold bg-[#d4f1f9] text-[#3a8fb7] rounded mb-1">
-                                        <Building className="h-3 w-3 mr-2" />
-                                        {servicio}
-                                      </div>
-
-                                      {/* Modificamos para mostrar el nombre del cliente en lugar de la sección */}
-                                      <div className="pl-2">
-                                        {clientesServicio.map(cliente => (
-                                          <SelectItem
-                                            key={cliente._id}
-                                            value={cliente._id}
-                                            className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
-                                          >
-                                            <div className="flex items-center">
-                                              <Building className="h-3 w-3 mr-2 text-[#4a4a4a]" />
-                                              <span>{cliente.nombre}</span>
-                                              {cliente.seccionDelServicio && (
-                                                <span className="ml-1 text-xs text-[#7AA79C]">({cliente.seccionDelServicio})</span>
-                                              )}
-                                            </div>
-                                          </SelectItem>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </SelectWithClear>
-                              </div>
-                            </div>
-
-                            {/* Selector de SubServicio */}
-                            <div className="space-y-2">
-                              <Label htmlFor="subServicioSelector" className="text-[#3a8fb7] font-medium flex items-center">
-                                <PackageOpen className="mr-2 h-4 w-4" />
-                                Seleccionar Sub-Servicio
-                                {subServiciosDisponibles.length === 0 ? (
-                                  <Badge className="ml-2 bg-[#FF9800] text-white text-xs font-normal">No disponible</Badge>
-                                ) : null}
-                              </Label>
-
-                              {subServiciosDisponibles.length === 0 ? (
-                                <div className="text-xs text-[#4a4a4a] mt-1 italic p-2 border border-[#3a8fb7]/20 rounded bg-white/30">
-                                  El cliente seleccionado no tiene sub-servicios asignados.
-                                </div>
-                              ) : (
-                                <div className="relative mt-1">
-                                  {/* Reemplazo del Select por SelectWithClear */}
-                                  <SelectWithClear
-                                    value={subServicioSeleccionado || ""}
-                                    onValueChange={handleSubServicioChange}
-                                    disabled={cargandoClientes}
-                                    placeholder="Selecciona un sub-servicio"
-                                  >
-                                    {subServiciosDisponibles.map(subServicio => (
-                                      <SelectItem
-                                        key={subServicio._id}
-                                        value={subServicio._id}
-                                        className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
-                                      >
-                                        <div className="flex items-center justify-between w-full">
-                                          <span>{subServicio.nombre}</span>
-
-                                          {/* Badge para mostrar si tiene sububicaciones */}
-                                          {subServicio.subUbicaciones && subServicio.subUbicaciones.length > 0 && (
-                                            <Badge className="ml-2 bg-[#3a8fb7] text-white text-xs">
-                                              {subServicio.subUbicaciones.length} {subServicio.subUbicaciones.length === 1 ? 'ubicación' : 'ubicaciones'}
-                                            </Badge>
-                                          )}
-                                        </div>
-                                      </SelectItem>
-                                    ))}
-                                  </SelectWithClear>
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Selector de SubUbicación y notas*/}
-                            <div className="space-y-2">
-                              <Label className="text-[#3a8fb7] font-medium flex items-center">
-                                <MapPin className="mr-2 h-4 w-4" />
-                                Seleccionar Sub-Ubicación
-                                {subUbicacionesDisponibles.length === 0 ? (
-                                  <Badge className="ml-2 bg-[#FF9800] text-white text-xs font-normal">No disponible</Badge>
-                                ) : null}
-                              </Label>
-
-                              {!subServicioSeleccionado || subUbicacionesDisponibles.length === 0 ? (
-                                <div className="text-xs text-[#4a4a4a] mt-1 italic p-2 border border-[#3a8fb7]/20 rounded bg-white/30">
-                                  {!subServicioSeleccionado ? 'Seleccione un sub-servicio primero' : 'El sub-servicio seleccionado no tiene sub-ubicaciones asignadas.'}
-                                </div>
-                              ) : (
-                                <div className="relative mt-1">
-                                  {/* Reemplazo del Select por SelectWithClear */}
-                                  <SelectWithClear
-                                    value={subUbicacionSeleccionada || ""}
-                                    onValueChange={handleSubUbicacionChange}
-                                    disabled={cargandoClientes}
-                                    placeholder="Selecciona una sub-ubicación"
-                                  >
-                                    {subUbicacionesDisponibles.map(subUbicacion => (
+                                    {subUbicacionesDisponibles.filter(subUbicacion => subUbicacion.nombre.toLowerCase().includes(subUbicacionSearchTerm.toLowerCase())).map(subUbicacion => (
                                       <SelectItem
                                         key={subUbicacion._id}
                                         value={subUbicacion._id}
-                                        className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
+                                        className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white text-xs py-1"
                                       >
                                         {subUbicacion.nombre}
                                       </SelectItem>
@@ -1953,84 +1644,327 @@ export const Cart: React.FC = () => {
                                   </SelectWithClear>
                                 </div>
                               )}
-                            </div>
+                            </AccordionContent>
+                          </AccordionItem>
+                        )}
 
-                            {/* Notas adicionales */}
-                            <div className="space-y-2">
-                              <Label htmlFor="notes" className="text-[#3a8fb7] font-medium flex items-center">
-                                <Info className="mr-2 h-4 w-4" />
-                                Notas adicionales
-                              </Label>
+                        {/* Información adicional */}
+                        <AccordionItem value="notas" className="border-b-0">
+                          <AccordionTrigger className="py-2 px-3 bg-gradient-to-r from-[#d4f1f9]/40 to-[#a8e6cf]/40 backdrop-blur-sm border border-[#3a8fb7] rounded-lg shadow-md mb-2 text-[#3a8fb7] font-medium hover:no-underline hover:bg-[#d4f1f9]/60">
+                            <div className="flex items-center">
+                              <Info className="mr-2 h-4 w-4" />
+                              Información del pedido
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent className="bg-white/70 backdrop-blur-sm border border-[#3a8fb7] rounded-lg p-3 mb-2">
+                            <div>
+                              <Label htmlFor="notes" className="text-[#3a8fb7] text-xs font-medium">Notas adicionales</Label>
                               <Textarea
                                 id="notes"
-                                placeholder="Instrucciones especiales, ubicación de entrega, etc."
-                                className="bg-white border-[#3a8fb7] mt-1 text-[#4a4a4a] placeholder:text-[#4a4a4a]/60 h-[calc(100%-40px)] min-h-[110px]"
+                                placeholder="Instrucciones especiales, ubicación, etc."
+                                className="bg-white border-[#3a8fb7] mt-1 text-[#4a4a4a] placeholder:text-[#4a4a4a]/60 text-xs h-20"
                                 value={orderForm.notes}
                                 onChange={(e) => setOrderForm({ ...orderForm, notes: e.target.value })}
                               />
                             </div>
-                          </div>
-                        )}
+                          </AccordionContent>
+                        </AccordionItem>
+                      </Accordion>
 
-                        {/* Información del cliente seleccionado */}
-                        {clienteSeleccionado && !cargandoClientes && (
-                          <motion.div
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="mt-4 p-3 rounded-md bg-[#d4f1f9]/40 border border-[#3a8fb7]/50 backdrop-blur-sm"
-                          >
-                            <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-[#3a8fb7]">
-                              <p className="flex items-center">
-                              <Building className="w-4 h-4 mr-2 text-[#3a8fb7]" />
-                                <span className="font-medium">Cliente:</span>
-                                <span className="ml-1">{orderForm.servicio}</span>
+                      {/* Información del cliente seleccionado (móvil) */}
+                      {clienteSeleccionado && !cargandoClientes && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="mt-2 p-3 rounded-md bg-[#d4f1f9]/40 border border-[#3a8fb7]/50 backdrop-blur-sm"
+                        >
+                          <div className="text-xs text-[#3a8fb7]">
+                            <p className="flex items-center">
+                              <Building className="w-3 h-3 mr-1 text-[#3a8fb7]" />
+                              <span className="font-medium">Cliente:</span>
+                              <span className="ml-1 truncate">{orderForm.servicio}</span>
+                            </p>
+
+                            {orderForm.nombreSubServicio && (
+                              <p className="flex items-center mt-1">
+                                <PackageOpen className="w-3 h-3 mr-1 text-[#3a8fb7]" />
+                                <span className="font-medium">Sub-Servicio:</span>
+                                <span className="ml-1 truncate">{orderForm.nombreSubServicio}</span>
                               </p>
+                            )}
 
-                              {orderForm.nombreSubServicio && (
-                                <p className="flex items-center">
-                                  <PackageOpen className="w-4 h-4 mr-2 text-[#3a8fb7]" />
-                                  <span className="font-medium">Sub-Servicio:</span>
-                                  <span className="ml-1">{orderForm.nombreSubServicio}</span>
-                                </p>
-                              )}
+                            {orderForm.nombreSubUbicacion && (
+                              <p className="flex items-center mt-1">
+                                <MapPin className="w-3 h-3 mr-1 text-[#3a8fb7]" />
+                                <span className="font-medium">Sub-Ubicación:</span>
+                                <span className="ml-1 truncate">{orderForm.nombreSubUbicacion}</span>
+                              </p>
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </div>
 
-                              {orderForm.nombreSubUbicacion && (
-                                <p className="flex items-center">
-                                  <MapPin className="w-4 h-4 mr-2 text-[#3a8fb7]" />
-                                  <span className="font-medium">Sub-Ubicación:</span>
-                                  <span className="ml-1">{orderForm.nombreSubUbicacion}</span>
-                                </p>
-                              )}
+                    {/* Versión Desktop */}
+                    <div className="hidden md:grid md:grid-cols-1 lg:grid-cols-2 gap-4">
+                      {/* Selector de clientes */}
+                      <Card className="bg-gradient-to-r from-[#d4f1f9]/40 to-[#a8e6cf]/40 backdrop-blur-sm border-[#3a8fb7] shadow-md lg:col-span-2">
+                        <CardHeader className="border-b border-[#3a8fb7]/50 py-3">
+                          <CardTitle className="text-[#3a8fb7] flex items-center text-lg">
+                            <Building className="mr-2 h-5 w-5" />
+                            Seleccionar Cliente
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4 pt-4 pb-4">
+                          {cargandoClientes ? (
+                            <div className="py-3 flex justify-center">
+                              <Loader2 className="h-6 w-6 animate-spin text-[#3a8fb7]" />
                             </div>
-                          </motion.div>
-                        )}
-                      </CardContent>
-                    </Card>
+                          ) : errorClientes ? (
+                            <Alert className="bg-[#FF9800]/10 border-[#FF9800] shadow-sm">
+                              <AlertTriangle className="h-4 w-4 text-[#FF9800]" />
+                              <AlertDescription className="ml-2 text-[#3a8fb7]">
+                                {errorClientes}
+                              </AlertDescription>
+                            </Alert>
+                          ) : clientes.length === 0 ? (
+                            <div>
+                              <Alert className="bg-[#FF9800]/10 border-2 border-[#FF9800] mb-4">
+                                <AlertTriangle className="h-4 w-4 text-[#FF9800]" />
+                                <AlertDescription className="ml-2 text-[#3a8fb7] font-medium">
+                                  No hay clientes asignados. Por favor, contacta con administración para que te asignen clientes antes de realizar pedidos.
+                                </AlertDescription>
+                              </Alert>
 
-                    {orderError && (
-                      <Alert className="bg-[#F44336]/10 border-2 border-[#F44336] shadow-md lg:col-span-2">
-                        <AlertCircle className="h-5 w-5 text-[#F44336]" />
-                        <AlertDescription className="ml-2 text-[#F44336] font-medium">{orderError}</AlertDescription>
-                      </Alert>
-                    )}
-                  </div>
-                </motion.div>
+                              <div className="flex justify-center mt-6">
+                                <Button
+                                  onClick={() => window.location.href = '/shop'}
+                                  className="bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white"
+                                >
+                                  <ArrowLeft className="mr-2 h-4 w-4" />
+                                  Volver a la tienda
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="grid md:grid-cols-2 gap-4">
+                              {/* Selector de cliente */}
+                              <div className="space-y-2">
+                                <Label htmlFor="clienteSelector" className="text-[#3a8fb7] font-medium flex items-center">
+                                  <Building className="mr-2 h-4 w-4" />
+                                  Cliente Asociado
+                                  {cargandoClientes && <Loader2 className="ml-2 h-3 w-3 animate-spin text-[#3a8fb7]" />}
+                                </Label>
+
+                                {userRole === 'operario' && supervisorName && (
+                                  <div className="text-xs text-[#4a4a4a] mb-2 flex items-center">
+                                    <UserCircle2 className="h-3 w-3 mr-1 text-[#3a8fb7]" />
+                                    Mostrando clientes de: {supervisorName}
+                                  </div>
+                                )}
+                                <Input type="text" placeholder="Buscar cliente..." value={clienteSearchTerm} onChange={(e) => setClienteSearchTerm(e.target.value)} className="w-full border border-[#3a8fb7] text-[#3a8fb7] placeholder:text-[#3a8fb7]/60 text-sm px-2 py-1 rounded-md" />
+                                <div className="relative mt-1">
+                                  <SelectWithClear
+                                    value={clienteSeleccionado || ""}
+                                    onValueChange={handleClienteChange}
+                                    disabled={cargandoClientes}
+                                    placeholder="Selecciona un cliente"
+                                  >
+                                    {Object.entries(clientesAgrupados).map(([servicio, clientesServicio]) => (
+                                      <div key={servicio} className="px-1 py-1">
+                                        {/* Encabezado de grupo de servicio */}
+                                        <div className="flex items-center px-2 py-1.5 text-xs uppercase tracking-wider font-semibold bg-[#d4f1f9] text-[#3a8fb7] rounded mb-1">
+                                          <Building className="h-3 w-3 mr-2" />
+                                          {servicio}
+                                        </div>
+
+                                        {/* Modificamos para mostrar el nombre del cliente en lugar de la sección */}
+                                        <div className="pl-2">
+                                          {clientesServicio.filter(cliente => cliente.nombre.toLowerCase().includes(clienteSearchTerm.toLowerCase()) || (cliente.seccionDelServicio && cliente.seccionDelServicio.toLowerCase().includes(clienteSearchTerm.toLowerCase()))).map(cliente => (
+                                            <SelectItem
+                                              key={cliente._id}
+                                              value={cliente._id}
+                                              className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
+                                            >
+                                              <div className="flex items-center">
+                                                <Building className="h-3 w-3 mr-2 text-[#4a4a4a]" />
+                                                <span>{cliente.nombre}</span>
+                                                {cliente.seccionDelServicio && (
+                                                  <span className="ml-1 text-xs text-[#7AA79C]">({cliente.seccionDelServicio})</span>
+                                                )}
+                                              </div>
+                                            </SelectItem>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </SelectWithClear>
+                                </div>
+                              </div>
+
+                              {/* Selector de SubServicio */}
+                              <div className="space-y-2">
+                                <Label htmlFor="subServicioSelector" className="text-[#3a8fb7] font-medium flex items-center">
+                                  <PackageOpen className="mr-2 h-4 w-4" />
+                                  Seleccionar Sub-Servicio
+                                  {subServiciosDisponibles.length === 0 ? (
+                                    <Badge className="ml-2 bg-[#FF9800] text-white text-xs font-normal">No disponible</Badge>
+                                  ) : null}
+                                </Label>
+
+                                {subServiciosDisponibles.length === 0 ? (
+                                  <div className="text-xs text-[#4a4a4a] mt-1 italic p-2 border border-[#3a8fb7]/20 rounded bg-white/30">
+                                    El cliente seleccionado no tiene sub-servicios asignados.
+                                  </div>
+                                ) : (
+                                  <div className="space-y-2">
+                                    <Input type="text" placeholder="Buscar sub-servicio..." value={subServicioSearchTerm} onChange={(e) => setSubServicioSearchTerm(e.target.value)} className="w-full border border-[#3a8fb7] text-[#3a8fb7] placeholder:text-[#3a8fb7]/60 text-xs px-2 py-1 rounded-md" />
+                                    <div className="relative">
+                                      <SelectWithClear
+                                        value={subServicioSeleccionado || ""}
+                                        onValueChange={handleSubServicioChange}
+                                        disabled={cargandoClientes}
+                                        placeholder="Selecciona un sub-servicio"
+                                      >
+                                        {subServiciosDisponibles.filter(subServicio => subServicio.nombre.toLowerCase().includes(subServicioSearchTerm.toLowerCase())).map(subServicio => (
+                                          <SelectItem
+                                            key={subServicio._id}
+                                            value={subServicio._id}
+                                            className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
+                                          >
+                                            <div className="flex items-center justify-between w-full">
+                                              <span>{subServicio.nombre}</span>
+
+                                              {/* Badge para mostrar si tiene sububicaciones */}
+                                              {subServicio.subUbicaciones && subServicio.subUbicaciones.length > 0 && (
+                                                <Badge className="ml-2 bg-[#3a8fb7] text-white text-xs">
+                                                  {subServicio.subUbicaciones.length} {subServicio.subUbicaciones.length === 1 ? 'ubicación' : 'ubicaciones'}
+                                                </Badge>
+                                              )}
+                                            </div>
+                                          </SelectItem>
+                                        ))}
+                                      </SelectWithClear>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Selector de SubUbicación y notas*/}
+                              <div className="space-y-2">
+                                <Label className="text-[#3a8fb7] font-medium flex items-center">
+                                  <MapPin className="mr-2 h-4 w-4" />
+                                  Seleccionar Sub-Ubicación
+                                  {subUbicacionesDisponibles.length === 0 ? (
+                                    <Badge className="ml-2 bg-[#FF9800] text-white text-xs font-normal">No disponible</Badge>
+                                  ) : null}
+                                </Label>
+
+                                {!subServicioSeleccionado || subUbicacionesDisponibles.length === 0 ? (
+                                  <div className="text-xs text-[#4a4a4a] mt-1 italic p-2 border border-[#3a8fb7]/20 rounded bg-white/30">
+                                    {!subServicioSeleccionado ? 'Seleccione un sub-servicio primero' : 'El sub-servicio seleccionado no tiene sub-ubicaciones asignadas.'}
+                                  </div>
+                                ) : (
+                                  <div className="space-y-2">
+                                    <Input type="text" placeholder="Buscar sub-ubicación..." value={subUbicacionSearchTerm} onChange={(e) => setSubUbicacionSearchTerm(e.target.value)} className="w-full border border-[#3a8fb7] text-[#3a8fb7] placeholder:text-[#3a8fb7]/60 text-xs px-2 py-1 rounded-md" />
+                                    <div className="relative">
+                                      <SelectWithClear
+                                        value={subUbicacionSeleccionada || ""}
+                                        onValueChange={handleSubUbicacionChange}
+                                        disabled={cargandoClientes}
+                                        placeholder="Selecciona una sub-ubicación"
+                                      >
+                                        {subUbicacionesDisponibles.filter(subUbicacion => subUbicacion.nombre.toLowerCase().includes(subUbicacionSearchTerm.toLowerCase())).map(subUbicacion => (
+                                          <SelectItem
+                                            key={subUbicacion._id}
+                                            value={subUbicacion._id}
+                                            className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
+                                          >
+                                            {subUbicacion.nombre}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectWithClear>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Notas adicionales */}
+                              <div className="space-y-2">
+                                <Label htmlFor="notes" className="text-[#3a8fb7] font-medium flex items-center">
+                                  <Info className="mr-2 h-4 w-4" />
+                                  Notas adicionales
+                                </Label>
+                                <Textarea
+                                  id="notes"
+                                  placeholder="Instrucciones especiales, ubicación de entrega, etc."
+                                  className="bg-white border-[#3a8fb7] mt-1 text-[#4a4a4a] placeholder:text-[#4a4a4a]/60 h-[calc(100%-40px)] min-h-[110px]"
+                                  value={orderForm.notes}
+                                  onChange={(e) => setOrderForm({ ...orderForm, notes: e.target.value })}
+                                />
+                              </div>
+                            </div>
+                          )}
+                          {/* Información del cliente seleccionado */}
+                          {clienteSeleccionado && !cargandoClientes && (
+                            <motion.div
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="mt-4 p-3 rounded-md bg-[#d4f1f9]/40 border border-[#3a8fb7]/50 backdrop-blur-sm"
+                            >
+                              <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-[#3a8fb7]">
+                                <p className="flex items-center">
+                                  <Building className="w-4 h-4 mr-2 text-[#3a8fb7]" />
+                                  <span className="font-medium">Cliente:</span>
+                                  <span className="ml-1">{orderForm.servicio}</span>
+                                </p>
+
+                                {orderForm.nombreSubServicio && (
+                                  <p className="flex items-center">
+                                    <PackageOpen className="w-4 h-4 mr-2 text-[#3a8fb7]" />
+                                    <span className="font-medium">Sub-Servicio:</span>
+                                    <span className="ml-1">{orderForm.nombreSubServicio}</span>
+                                  </p>
+                                )}
+
+                                {orderForm.nombreSubUbicacion && (
+                                  <p className="flex items-center">
+                                    <MapPin className="w-4 h-4 mr-2 text-[#3a8fb7]" />
+                                    <span className="font-medium">Sub-Ubicación:</span>
+                                    <span className="ml-1">{orderForm.nombreSubUbicacion}</span>
+                                  </p>
+                                )}
+                              </div>
+                            </motion.div>
+                          )}
+                        </CardContent>
+                      </Card>
+
+                      {orderError && (
+                        <Alert className="bg-[#F44336]/10 border-2 border-[#F44336] shadow-md lg:col-span-2">
+                          <AlertCircle className="h-5 w-5 text-[#F44336]" />
+                          <AlertDescription className="ml-2 text-[#F44336] font-medium">{orderError}</AlertDescription>
+                        </Alert>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+
+              {/* Botones de acción para desktop - Step 1 */}
+              {items.length > 0 && checkoutStep === 1 && (
+                <div className="mt-4 flex justify-between">
+                  <Button
+                    variant="outline"
+                    className="border-[#F44336] text-[#F44336] hover:bg-[#F44336]/10 hover:text-[#F44336] h-9 md:h-10 text-xs md:text-sm"
+                    onClick={clearCart}
+                  >
+                    <Trash2 className="mr-1 md:mr-2 h-3 w-3 md:h-4 md:w-4" />
+                    Vaciar carrito
+                  </Button>
+                </div>
               )}
             </div>
-
-            {/* Botones de acción para desktop - Step 1 */}
-            {items.length > 0 && checkoutStep === 1 && (
-              <div className="mt-4 flex justify-between">
-                <Button
-                  variant="outline"
-                  className="border-[#F44336] text-[#F44336] hover:bg-[#F44336]/10 hover:text-[#F44336] h-9 md:h-10 text-xs md:text-sm"
-                  onClick={clearCart}
-                >
-                  <Trash2 className="mr-1 md:mr-2 h-3 w-3 md:h-4 md:w-4" />
-                  Vaciar carrito
-                </Button>
-              </div>
-            )}
 
             {/* Botones móviles para Step 2 */}
             <div className="md:hidden mt-4">
@@ -2116,7 +2050,7 @@ export const Cart: React.FC = () => {
                     </Button>
                   </div>
 
-                  {/* Mensaje de campos requeridos si el formulario no es válido */}
+                  {/* Mensaje de campos requeridos si el formulario no es válido  */}
                   {!formValid && (
                     <div className="mt-2 text-sm text-[#F44336]">
                       <AlertTriangle className="inline-block w-3 h-3 mr-1" />
@@ -2287,9 +2221,8 @@ export const Cart: React.FC = () => {
           </div>
         </div>
       </div>
-    </div>
-  </>
-);
+    </>
+  );
 };
 
 export default Cart;
