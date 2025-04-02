@@ -407,28 +407,35 @@ useEffect(() => {
         if (userData.role === ROLES.OPERARIO && userData.supervisorId) {
           console.log('Actualizando subservicios para operario:', selectedSubservicios.length);
           
-          // Si cambió el supervisor, necesitamos un enfoque diferente
-          const supervisorChanged = previousSupervisorId !== null && 
-                                   previousSupervisorId !== userData.supervisorId;
+          // Si cambió el supervisor o no, necesitamos obtener los subservicios actuales
+          // para eliminar los que ya no están seleccionados
+          console.log('Obteniendo subservicios actuales del operario para actualizar');
           
-          if (supervisorChanged) {
-            console.log('El supervisor cambió de', previousSupervisorId, 'a', userData.supervisorId);
-            
-            // 1. Cargar los subservicios actuales del operario
-            const currentSubservicios = await clientService.getSubserviciosByOperarioId(editingUser._id);
-            
-            // 2. Eliminar todas las asignaciones actuales
-            if (currentSubservicios && Array.isArray(currentSubservicios)) {
-              for (const cliente of currentSubservicios) {
-                const clienteId = cliente.clienteId || cliente._id;
-                for (const subserv of cliente.subServicios || []) {
+          // 1. Cargar los subservicios actuales del operario
+          const currentSubservicios = await clientService.getSubserviciosByOperarioId(editingUser._id);
+          
+          // 2. Crear un mapa de los subservicios seleccionados actualmente para búsqueda rápida
+          const seleccionadosMap = new Map();
+          selectedSubservicios.forEach(item => {
+            const key = `${item.clienteId.toString()}_${item.subServicioId.toString()}`;
+            seleccionadosMap.set(key, true);
+          });
+          
+          // 3. Eliminar las asignaciones de subservicios que ya no están seleccionados
+          if (currentSubservicios && Array.isArray(currentSubservicios)) {
+            for (const cliente of currentSubservicios) {
+              const clienteId = cliente.clienteId || cliente._id;
+              for (const subserv of cliente.subServicios || []) {
+                const key = `${clienteId.toString()}_${subserv._id.toString()}`;
+                // Si este subservicio ya no está en los seleccionados, eliminarlo
+                if (!seleccionadosMap.has(key)) {
                   try {
                     await clientService.removeOperarioFromSubservicio(
                       clienteId, 
                       subserv._id, 
                       editingUser._id
                     );
-                    console.log(`Eliminada asignación antigua: ${clienteId}/${subserv._id}`);
+                    console.log(`Eliminada asignación deseleccionada: ${clienteId}/${subserv._id}`);
                   } catch (err) {
                     console.error('Error al eliminar asignación:', err);
                   }
@@ -437,7 +444,7 @@ useEffect(() => {
             }
           }
           
-          // 3. Asignar los subservicios seleccionados actuales
+          // 4. Asignar los subservicios seleccionados actuales
           let asignacionesExitosas = 0;
           let errores = 0;
           

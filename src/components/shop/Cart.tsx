@@ -2,28 +2,9 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useCartContext } from '@/providers/CartProvider';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ShoppingCart,
-  Trash2,
-  Plus,
-  Minus,
-  ArrowLeft,
-  Check,
-  CreditCard,
-  Loader2,
-  Building,
-  MapPin,
-  AlertCircle,
-  AlertTriangle,
-  Clock,
-  UserCircle2,
-  PackageOpen,
-  Info,
-  ChevronDown,
-  ChevronUp,
-  RefreshCw,
-  X,
-  Package,
-  Search
+  ShoppingCart, Trash2, Plus, Minus, ArrowLeft, Check, CreditCard, Loader2, Building,
+  MapPin, AlertCircle, AlertTriangle, Clock, UserCircle2, PackageOpen, Info,
+  ChevronDown, ChevronUp, RefreshCw, X, Package, Search
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,265 +15,15 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ShopNavbar } from './ShopNavbar';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
 import { Badge } from '@/components/ui/badge';
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger
+  Accordion, AccordionContent, AccordionItem, AccordionTrigger
 } from '@/components/ui/accordion';
 
-// Componente mejorado para mostrar imágenes de productos con manejo de errores
-const CartItemImage = ({ item }) => {
-  const [imageError, setImageError] = useState(false);
-
-  // Función para obtener la URL de la imagen
-  const getImageUrl = () => {
-    // Si el producto tiene imageUrl, usarla directamente
-    if (item.imageUrl) {
-      return item.imageUrl;
-    }
-
-    // Si tiene ID, construir URL basada en ID
-    if (item.id) {
-      return `/images/products/${item.id}.webp`;
-    }
-
-    // Fallback a logo
-    return '/lyme.png';
-  };
-
-  // Manejar errores de carga de imagen
-  const handleImgError = (e) => {
-    console.log(`Error de imagen para ítem: ${item.id}`);
-    setImageError(true);
-
-    // Establecer imagen de fallback
-    const target = e.target;
-    if (target) {
-      target.src = "/lyme.png";
-      target.className = "w-full h-full object-contain p-1";
-      target.alt = "Logo Lyme";
-    }
-  };
-
-  // Si ya sabemos que hay un error o no hay imagen, mostrar fallback directamente
-  if (imageError || !item.image && !item.id && !item.imageUrl) {
-    return (
-      <div className="w-full h-full flex items-center justify-center bg-white">
-        <img
-          src="/lyme.png"
-          alt="Logo Lyme"
-          className="w-full h-full object-contain p-1"
-        />
-      </div>
-    );
-  }
-
-  // Intentar mostrar la imagen con manejo de errores
-  return (
-    <img
-      src={getImageUrl()}
-      alt={item.name || 'Producto'}
-      className="w-full h-full object-contain"
-      onError={handleImgError}
-    />
-  );
-};
-
-// Componente mejorado para mostrar los detalles de un producto combo
-const ComboDetails = ({ item }) => {
-  const [showComboItems, setShowComboItems] = useState(false);
-
-  // Verificar si es un combo
-  const isCombo = item.isCombo;
-  // Obtener items del combo - mejor manejo con diferentes formatos de datos
-  const comboItems = 
-    (item.comboItems && item.comboItems.length > 0) ? item.comboItems : 
-    (item.itemsCombo && item.itemsCombo.length > 0) ? item.itemsCombo : [];
-
-  // Si no es un combo o no hay productos en el combo, no mostrar nada
-  if (!isCombo || comboItems.length === 0) {
-    return null;
-  }
-
-  // Procesar items del combo para mostrar correctamente
-  const processedItems = comboItems.map(comboItem => {
-    let nombre = '';
-    let cantidad = 0;
-
-    // Manejar diferentes formatos de datos
-    if (typeof comboItem === 'object') {
-      if (comboItem.nombre) {
-        nombre = comboItem.nombre;
-      } else if (comboItem.name) {
-        nombre = comboItem.name;
-      } else if (comboItem.productoId) {
-        // Si es un objeto con productoId
-        if (typeof comboItem.productoId === 'object') {
-          nombre = comboItem.productoId.nombre || comboItem.productoId.name || 'Producto';
-        } else {
-          nombre = 'Producto';
-        }
-      }
-
-      // Obtener cantidad
-      cantidad = comboItem.cantidad || comboItem.quantity || 1;
-    } else {
-      nombre = 'Producto';
-      cantidad = 1;
-    }
-
-    return { nombre, cantidad };
-  });
-
-  return (
-    <div className="mt-1">
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-7 px-2 py-0 text-xs text-[#3a8fb7] hover:bg-[#3a8fb7]/20 w-full flex justify-between items-center"
-        onClick={(e) => {
-          e.stopPropagation();
-          setShowComboItems(!showComboItems);
-        }}
-      >
-        <span className="flex items-center">
-          <Package className="h-3 w-3 mr-1" />
-          {showComboItems ? 'Ocultar productos del combo' : 'Ver productos del combo'}
-        </span>
-        {showComboItems ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-      </Button>
-      
-      {showComboItems && (
-        <div className="mt-1 text-xs text-[#4a4a4a] bg-[#d4f1f9]/80 rounded-md p-2 space-y-1 border border-[#3a8fb7]/30 shadow-sm">
-          <div className="font-medium mb-1 flex items-center justify-between">
-            <div className="flex items-center">
-              <PackageOpen size={12} className="mr-1 text-[#3a8fb7]" />
-              <span className="text-[#3a8fb7]">Este combo incluye:</span>
-            </div>
-            <Badge className="bg-[#3a8fb7] text-white text-[10px]">
-              {processedItems.length} productos
-            </Badge>
-          </div>
-          <ul className="space-y-1 max-h-40 overflow-y-auto scrollbar-thin scrollbar-thumb-[#3a8fb7]/40 scrollbar-track-transparent">
-            {processedItems.map((comboItem, index) => (
-              <li key={index} className="flex justify-between border-b border-[#3a8fb7]/10 pb-1 last:border-0">
-                <span className="truncate pr-2 font-medium">{comboItem.nombre}</span>
-                <span className="text-[#3a8fb7] font-bold">x{comboItem.cantidad}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// Componente SearchInput para buscador con icono y borrado
-const SearchInput = ({ 
-  value, 
-  onChange, 
-  placeholder, 
-  className = "", 
-  disabled = false,
-  onClear
-}) => {
-  return (
-    <div className={`relative ${className}`}>
-      <div className="absolute left-2 top-1/2 transform -translate-y-1/2 text-[#3a8fb7]">
-        <Search className="h-3 w-3 md:h-4 md:w-4" />
-      </div>
-      <Input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="pl-8 pr-8 bg-white/80 border-[#3a8fb7] text-xs md:text-sm placeholder:text-[#3a8fb7]/60 h-8 md:h-9"
-        disabled={disabled}
-      />
-      {value && (
-        <Button
-          type="button"
-          variant="ghost"
-          className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0 text-[#4a4a4a] hover:text-[#F44336] hover:bg-transparent"
-          onClick={onClear}
-        >
-          <X className="h-3 w-3" />
-        </Button>
-      )}
-    </div>
-  );
-};
-
-// Componente SelectWithClear para permitir limpiar las selecciones
-const SelectWithClear = ({
-  value,
-  onValueChange,
-  placeholder,
-  disabled,
-  children,
-  className,
-  canClear = true
-}) => {
-  // Función para manejar la limpieza de la selección
-  const handleClear = (e) => {
-    e.stopPropagation();
-    onValueChange("");
-  };
-
-  return (
-    <div className="relative">
-      <Select
-        value={value}
-        onValueChange={onValueChange}
-        disabled={disabled}
-      >
-        <SelectTrigger
-          className={`w-full bg-white border-2 border-[#3a8fb7] rounded-md text-[#3a8fb7] pr-8 ${className}`}
-        >
-          <SelectValue placeholder={placeholder} />
-        </SelectTrigger>
-        <SelectContent className="max-h-60 overflow-y-auto bg-white border-[#3a8fb7]">
-          {children}
-        </SelectContent>
-      </Select>
-
-      {canClear && value && (
-        <Button
-          type="button"
-          variant="ghost"
-          className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 w-7 p-0 text-[#4a4a4a] hover:text-[#F44336] hover:bg-transparent"
-          onClick={handleClear}
-        >
-          <X className="h-3 w-3" />
-        </Button>
-      )}
-    </div>
-  );
-};
-
-// Manejamos el caso cuando useNotification no está disponible
-const useNotificationSafe = () => {
-  try {
-    // Importación dinámica para evitar errores si no está disponible
-    const { useNotification } = require('@/context/NotificationContext');
-    return useNotification();
-  } catch (error) {
-    // Fallback cuando no está disponible
-    return {
-      addNotification: (message, type) => {
-        console.log(`Notificación (${type}): ${message}`);
-      }
-    };
-  }
-};
+// API base URL - Extraído para fácil configuración
+const API_BASE_URL = 'http://localhost:3000';
 
 // Interfaces para la estructura jerárquica de clientes
 interface SubUbicacion {
@@ -305,15 +36,22 @@ interface SubServicio {
   _id: string;
   nombre: string;
   descripcion?: string;
-  supervisorId?: string | {
+  supervisorId?: string[] | {
     _id: string;
     nombre?: string;
     apellido?: string;
     email?: string;
     usuario?: string;
-  };
+  }[];
   subUbicaciones: SubUbicacion[];
-  isSelected?: boolean; // Para marcar selección del operario
+  operarios?: string[] | {
+    _id: string;
+    nombre?: string;
+    apellido?: string;
+    email?: string;
+    usuario?: string;
+  }[];
+  isSelected?: boolean; 
 }
 
 interface Cliente {
@@ -333,7 +71,7 @@ interface Cliente {
   telefono?: string;
   email?: string;
   activo?: boolean;
-  isExpanded?: boolean; // Para UI de expansión
+  isExpanded?: boolean;
 }
 
 // Interface para el usuario
@@ -393,12 +131,403 @@ interface SubservicioAsignado {
   nombreSubServicio: string;
 }
 
-// URL base para API
-const API_BASE_URL = 'http://localhost:3000';
+// Componente CartItemImage - Optimizado con memoización
+const CartItemImage = React.memo(({ item }: { item: CartItem }) => {
+  const [imageError, setImageError] = useState(false);
+
+  // Función para obtener la URL de la imagen
+  const getImageUrl = () => {
+    if (item.imageUrl) return item.imageUrl;
+    if (item.id) return `/images/products/${item.id}.webp`;
+    return '/lyme.png';
+  };
+
+  // Manejar errores de carga de imagen
+  const handleImgError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    setImageError(true);
+    const target = e.currentTarget;
+    target.src = "/lyme.png";
+    target.className = "w-full h-full object-contain p-1";
+    target.alt = "Logo Lyme";
+  };
+
+  if (imageError || (!item.image && !item.id && !item.imageUrl)) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-white">
+        <img
+          src="/lyme.png"
+          alt="Logo Lyme"
+          className="w-full h-full object-contain p-1"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={getImageUrl()}
+      alt={item.name || 'Producto'}
+      className="w-full h-full object-contain"
+      onError={handleImgError}
+    />
+  );
+});
+
+CartItemImage.displayName = 'CartItemImage';
+
+// Componente ComboDetails - Optimizado con memoización
+const ComboDetails = React.memo(({ item }: { item: CartItem }) => {
+  const [showComboItems, setShowComboItems] = useState(false);
+  const isCombo = item.isCombo;
+  const comboItems = 
+    (item.comboItems && item.comboItems.length > 0) ? item.comboItems : 
+    (item.itemsCombo && item.itemsCombo.length > 0) ? item.itemsCombo : [];
+
+  if (!isCombo || comboItems.length === 0) {
+    return null;
+  }
+
+  const processedItems = comboItems.map(comboItem => {
+    let nombre = '';
+    let cantidad = 0;
+
+    if (typeof comboItem === 'object') {
+      if (comboItem.nombre) {
+        nombre = comboItem.nombre;
+      } else if (comboItem.name) {
+        nombre = comboItem.name;
+      } else if (comboItem.productoId) {
+        if (typeof comboItem.productoId === 'object') {
+          nombre = comboItem.productoId.nombre || comboItem.productoId.name || 'Producto';
+        } else {
+          nombre = 'Producto';
+        }
+      }
+      cantidad = comboItem.cantidad || comboItem.quantity || 1;
+    } else {
+      nombre = 'Producto';
+      cantidad = 1;
+    }
+
+    return { nombre, cantidad };
+  });
+
+  return (
+    <div className="mt-1">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 px-2 py-0 text-xs text-[#3a8fb7] hover:bg-[#3a8fb7]/20 w-full flex justify-between items-center"
+        onClick={(e) => {
+          e.stopPropagation();
+          setShowComboItems(!showComboItems);
+        }}
+      >
+        <span className="flex items-center">
+          <Package className="h-3 w-3 mr-1" />
+          {showComboItems ? 'Ocultar productos del combo' : 'Ver productos del combo'}
+        </span>
+        {showComboItems ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+      </Button>
+      
+      {showComboItems && (
+        <div className="mt-1 text-xs text-[#4a4a4a] bg-[#d4f1f9]/80 rounded-md p-2 space-y-1 border border-[#3a8fb7]/30 shadow-sm">
+          <div className="font-medium mb-1 flex items-center justify-between">
+            <div className="flex items-center">
+              <PackageOpen size={12} className="mr-1 text-[#3a8fb7]" />
+              <span className="text-[#3a8fb7]">Este combo incluye:</span>
+            </div>
+            <Badge className="bg-[#3a8fb7] text-white text-[10px]">
+              {processedItems.length} productos
+            </Badge>
+          </div>
+          <ul className="space-y-1 max-h-40 overflow-y-auto scrollbar-thin scrollbar-thumb-[#3a8fb7]/40 scrollbar-track-transparent">
+            {processedItems.map((comboItem, index) => (
+              <li key={index} className="flex justify-between border-b border-[#3a8fb7]/10 pb-1 last:border-0">
+                <span className="truncate pr-2 font-medium">{comboItem.nombre}</span>
+                <span className="text-[#3a8fb7] font-bold">x{comboItem.cantidad}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+});
+
+ComboDetails.displayName = 'ComboDetails';
+
+// Componente SearchInput - Reutilizable
+const SearchInput = ({ 
+  value, 
+  onChange, 
+  placeholder, 
+  className = "", 
+  disabled = false,
+  onClear
+}: {
+  value: string,
+  onChange: (value: string) => void,
+  placeholder: string,
+  className?: string,
+  disabled?: boolean,
+  onClear: () => void
+}) => {
+  return (
+    <div className={`relative ${className}`}>
+      <div className="absolute left-2 top-1/2 transform -translate-y-1/2 text-[#3a8fb7]">
+        <Search className="h-3 w-3 md:h-4 md:w-4" />
+      </div>
+      <Input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="pl-8 pr-8 bg-white/80 border-[#3a8fb7] text-xs md:text-sm placeholder:text-[#3a8fb7]/60 h-8 md:h-9"
+        disabled={disabled}
+      />
+      {value && (
+        <Button
+          type="button"
+          variant="ghost"
+          className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0 text-[#4a4a4a] hover:text-[#F44336] hover:bg-transparent"
+          onClick={onClear}
+        >
+          <X className="h-3 w-3" />
+        </Button>
+      )}
+    </div>
+  );
+};
+
+// Componente SelectWithClear - Reutilizable
+const SelectWithClear = ({
+  value,
+  onValueChange,
+  placeholder,
+  disabled,
+  children,
+  className,
+  canClear = true
+}: {
+  value: string, 
+  onValueChange: (value: string) => void,
+  placeholder: string,
+  disabled?: boolean,
+  children: React.ReactNode,
+  className?: string,
+  canClear?: boolean
+}) => {
+  const handleClear = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onValueChange("");
+  };
+
+  return (
+    <div className="relative">
+      <Select
+        value={value}
+        onValueChange={onValueChange}
+        disabled={disabled}
+      >
+        <SelectTrigger
+          className={`w-full bg-white border-2 border-[#3a8fb7] rounded-md text-[#3a8fb7] pr-8 ${className}`}
+        >
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent className="max-h-60 overflow-y-auto bg-white border-[#3a8fb7]">
+          {children}
+        </SelectContent>
+      </Select>
+
+      {canClear && value && (
+        <Button
+          type="button"
+          variant="ghost"
+          className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 w-7 p-0 text-[#4a4a4a] hover:text-[#F44336] hover:bg-transparent"
+          onClick={handleClear}
+        >
+          <X className="h-3 w-3" />
+        </Button>
+      )}
+    </div>
+  );
+};
+
+// Hook para notificaciones con manejo seguro
+const useNotificationSafe = () => {
+  try {
+    const { useNotification } = require('@/context/NotificationContext');
+    return useNotification();
+  } catch (error) {
+    return {
+      addNotification: (message: string, type: string) => {
+        console.log(`Notificación (${type}): ${message}`);
+      }
+    };
+  }
+};
+
+// Hook personalizado para la API
+const useApi = () => {
+  const getToken = useCallback(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      throw new Error('No hay token de autenticación. Por favor, inicie sesión nuevamente.');
+    }
+    return token;
+  }, []);
+
+  const fetchWithAuth = useCallback(async (endpoint: string, options: RequestInit = {}) => {
+    try {
+      const token = getToken();
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        ...options.headers
+      };
+
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        ...options,
+        headers
+      });
+
+      if (!response.ok) {
+        const statusCode = response.status;
+        let errorMessage = '';
+        
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.mensaje || errorData.message || `Error (${statusCode})`;
+        } catch (e) {
+          errorMessage = `Error del servidor (${statusCode})`;
+        }
+        
+        throw new Error(errorMessage);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error(`Error en API (${endpoint}):`, error);
+      throw error;
+    }
+  }, []);
+
+  return { fetchWithAuth };
+};
+
+// Hook personalizado para la gestión de usuarios
+const useUser = () => {
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [userSecciones, setUserSecciones] = useState<string | null>(null);
+  const { fetchWithAuth } = useApi();
+
+  // Función para validar que un ID sea válido para la aplicación
+  const isValidMongoId = useCallback((id: string | null | undefined): boolean => {
+    if (!id) return false;
+    
+    // Extraer el ID si está en formato "$oid"
+    if (typeof id === 'string' && id.includes('$oid')) {
+      try {
+        const parsed = JSON.parse(id);
+        if (parsed && parsed.$oid) {
+          id = parsed.$oid;
+        }
+      } catch (e) {
+        // Si no se puede parsear, seguimos con la validación normal
+      }
+    }
+    
+    // Validamos el formato estándar de MongoDB (24 caracteres hexadecimales)
+    // o el formato alternativo de 32 caracteres
+    return /^[0-9a-fA-F]{24}$/.test(id) || /^[0-9a-fA-F]{32}$/.test(id);
+  }, []);
+
+  // Función optimizada para obtener información del usuario actual
+  const fetchCurrentUser = useCallback(async () => {
+    try {
+      // Recuperar información desde localStorage
+      const storedRole = localStorage.getItem('userRole');
+      const storedUserId = localStorage.getItem('userId');
+      const storedSecciones = localStorage.getItem('userSecciones');
+      
+      // Establecer estados con datos del localStorage inmediatamente
+      if (storedRole) setUserRole(storedRole);
+      if (storedSecciones) setUserSecciones(storedSecciones);
+      
+      if (storedUserId) {
+        const basicUser = {
+          _id: storedUserId,
+          id: storedUserId,
+          role: storedRole || '',
+          secciones: storedSecciones || ''
+        };
+        
+        setCurrentUser(basicUser);
+      }
+      
+      // Obtener datos frescos de la API
+      try {
+        const userData = await fetchWithAuth('/api/auth/me');
+        
+        // El nuevo backend devuelve la estructura {success: true, user: {...}}
+        const user = userData && userData.success && userData.user ? userData.user : userData;
+        
+        // Asegurarse de que el ID esté disponible en el formato correcto
+        if (user._id) {
+          user.id = user._id; // Compatibilidad
+        } else if (user.id) {
+          user._id = user.id; // Compatibilidad
+        }
+        
+        setCurrentUser(user);
+        
+        // Guardar datos frescos en localStorage
+        if (user._id) {
+          localStorage.setItem('userId', user._id.toString());
+        }
+        
+        if (user.role) {
+          localStorage.setItem('userRole', user.role);
+          setUserRole(user.role);
+        }
+        
+        if (user.secciones) {
+          localStorage.setItem('userSecciones', user.secciones);
+          setUserSecciones(user.secciones);
+        }
+        
+        return user;
+      } catch (error) {
+        console.warn('Error al obtener información de API, usando localStorage:', error);
+        // Devolver datos de localStorage
+        return storedUserId ? { _id: storedUserId, role: storedRole } : null;
+      }
+    } catch (error) {
+      console.error('Error al obtener información del usuario:', error);
+      
+      // Si hay datos en localStorage, seguir usándolos a pesar del error
+      const storedUserId = localStorage.getItem('userId');
+      const storedRole = localStorage.getItem('userRole');
+      
+      if (storedUserId && storedRole) {
+        return { _id: storedUserId, role: storedRole };
+      }
+      
+      throw error;
+    }
+  }, [fetchWithAuth]);
+
+  return { currentUser, userRole, userSecciones, isValidMongoId, fetchCurrentUser, setCurrentUser, setUserRole, setUserSecciones };
+};
 
 export const Cart: React.FC = () => {
   const { items, removeItem, updateQuantity, clearCart, totalItems, totalPrice } = useCartContext();
   const { addNotification } = useNotificationSafe();
+  const { fetchWithAuth } = useApi();
+  const { currentUser, userRole, userSecciones, isValidMongoId, fetchCurrentUser } = useUser();
+  
   const [checkoutStep, setCheckoutStep] = useState<number>(1);
   const [processingOrder, setProcessingOrder] = useState<boolean>(false);
   const [orderComplete, setOrderComplete] = useState<boolean>(false);
@@ -421,7 +550,7 @@ export const Cart: React.FC = () => {
   const [cargandoClientes, setCargandoClientes] = useState<boolean>(false);
   const [errorClientes, setErrorClientes] = useState<string | null>(null);
   
-  // Nuevo estado para subservicios asignados al operario
+  // Estado para subservicios asignados al operario
   const [subserviciosAsignados, setSubserviciosAsignados] = useState<SubservicioAsignado[]>([]);
 
   // Estados para búsquedas
@@ -438,25 +567,24 @@ export const Cart: React.FC = () => {
     nombreSubUbicacion: ''
   });
 
-  // Estados para manejo de usuario
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [userRole, setUserRole] = useState<string | null>(null);
-  const [userSecciones, setUserSecciones] = useState<string | null>(null);
+  // Estados para manejo de supervisor
   const [supervisorId, setSupervisorId] = useState<string | null>(null);
   const [supervisorName, setSupervisorName] = useState<string | null>(null);
+  
 
   // Ref para controlar si ya se inicializó
   const initializedRef = useRef(false);
 
-  // Filtrar clientes basados en búsqueda
+  // Filtrar clientes basados en búsqueda - Optimizado con useMemo
   const clientesFiltrados = useMemo(() => {
     if (!clienteSearch.trim()) return clientesAgrupados;
     
     const resultado: Record<string, Cliente[]> = {};
+    const searchLower = clienteSearch.toLowerCase();
     
     Object.entries(clientesAgrupados).forEach(([servicio, clientesServicio]) => {
       const clientesFiltrados = clientesServicio.filter(cliente => 
-        cliente.nombre.toLowerCase().includes(clienteSearch.toLowerCase())
+        cliente.nombre.toLowerCase().includes(searchLower)
       );
       
       if (clientesFiltrados.length > 0) {
@@ -467,48 +595,34 @@ export const Cart: React.FC = () => {
     return resultado;
   }, [clientesAgrupados, clienteSearch]);
 
-  // Filtrar subservicios basados en búsqueda
+  // Filtrar subservicios basados en búsqueda - Optimizado con useMemo
   const subServiciosFiltrados = useMemo(() => {
     if (!subServicioSearch.trim()) return subServiciosDisponibles;
     
+    const searchLower = subServicioSearch.toLowerCase();
     return subServiciosDisponibles.filter(subServicio => 
-      subServicio.nombre.toLowerCase().includes(subServicioSearch.toLowerCase())
+      subServicio.nombre.toLowerCase().includes(searchLower)
     );
   }, [subServiciosDisponibles, subServicioSearch]);
 
-  // Filtrar sububicaciones basados en búsqueda
+  // Filtrar sububicaciones basados en búsqueda - Optimizado con useMemo
   const subUbicacionesFiltradas = useMemo(() => {
     if (!subUbicacionSearch.trim()) return subUbicacionesDisponibles;
     
+    const searchLower = subUbicacionSearch.toLowerCase();
     return subUbicacionesDisponibles.filter(subUbicacion => 
-      subUbicacion.nombre.toLowerCase().includes(subUbicacionSearch.toLowerCase())
+      subUbicacion.nombre.toLowerCase().includes(searchLower)
     );
   }, [subUbicacionesDisponibles, subUbicacionSearch]);
 
-  // Función para obtener token
-  const getToken = useCallback(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      throw new Error('No hay token de autenticación. Por favor, inicie sesión nuevamente.');
-    }
-    return token;
-  }, []);
-
-  // Obtener clientes del usuario al cargar el componente
-  useEffect(() => {
-    if (!initializedRef.current) {
-      initializedRef.current = true;
-      initializeCart();
-    }
-  }, []);
-
-  // Validación del formulario para desbloquear el botón de realizar pedido
+  // Validación del formulario - Optimizada con useCallback
   const validarFormulario = useCallback(() => {
-    if (clienteSeleccionado && subServicioSeleccionado && items.length > 0) {
-      console.log('Formulario válido:', { clienteSeleccionado, subServicioSeleccionado, items });
+    const clienteValido = clienteSeleccionado || localStorage.getItem('lastClienteSeleccionado');
+    const subservicioValido = subServicioSeleccionado || localStorage.getItem('lastSubServicioSeleccionado');
+    
+    if (clienteValido && subservicioValido && items.length > 0) {
       setFormValid(true);
     } else {
-      console.log('Formulario inválido:', { clienteSeleccionado, subServicioSeleccionado, items });
       setFormValid(false);
     }
   }, [clienteSeleccionado, subServicioSeleccionado, items]);
@@ -518,309 +632,17 @@ export const Cart: React.FC = () => {
     validarFormulario();
   }, [clienteSeleccionado, subServicioSeleccionado, items, validarFormulario]);
 
-  // Función de inicialización asíncrona
-  const initializeCart = async () => {
-    try {
-      // Obtener información del usuario primero
-      const userData = await fetchCurrentUser();
-
-      if (userData) {
-        // Si el usuario es un operario, obtener los clientes a través del supervisor
-        if (userData.role === 'operario') {
-          // Obtener información del supervisor primero
-          await fetchSupervisorInfo(userData);
-
-          // Luego obtener los subservicios asignados al operario
-          await fetchSubserviciosAsignadosOperario();
-        } else {
-          // Para supervisores y otros roles, cargar clientes con filtrado adecuado
-          const { clientes } = await fetchClientesYSubserviciosFiltrados();
-          if (clientes && clientes.length > 0) {
-            processClientesData(clientes);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error inicializando carrito:', error);
-      setErrorClientes(error instanceof Error ? error.message : 'Error al inicializar el carrito');
-    }
-  };
-
-  // Función para obtener Clientes y SubServicios con el nuevo sistema de filtrado
-  const fetchClientesYSubserviciosFiltrados = async () => {
-    try {
-      setCargandoClientes(true);
-      setErrorClientes(null);
-
-      const token = getToken();
-      const userId = localStorage.getItem('userId');
-      const userRole = localStorage.getItem('userRole');
-
-      if (!token || !userId) {
-        throw new Error('No hay token de autenticación');
-      }
-
-      // Si es supervisor, filtrar por subservicios asignados
-      if (userRole === 'supervisor') {
-        const response = await fetch(`${API_BASE_URL}/api/cliente/supervisor/${userId}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Cache-Control': 'no-cache'
-          }
-        });
-
-        if (!response.ok) {
-          throw new Error('Error al cargar clientes');
-        }
-
-        const clientesData = await response.json();
-
-        // Filtrar para incluir solo subservicios donde este supervisor está asignado
-        const clientesFiltrados = clientesData.map(cliente => {
-          // Solo incluir subservicios donde el supervisor está asignado
-          const subserviciosFiltrados = cliente.subServicios.filter(subservicio =>
-            typeof subservicio.supervisorId === 'object'
-              ? subservicio.supervisorId?._id === userId
-              : subservicio.supervisorId === userId
-          );
-
-          // Si este cliente tiene al menos un subservicio asignado a este supervisor
-          if (subserviciosFiltrados.length > 0) {
-            return {
-              ...cliente,
-              subServicios: subserviciosFiltrados
-            };
-          }
-          return null;
-        }).filter(Boolean) as Cliente[]; // Eliminar clientes sin subservicios asignados
-
-        return { clientes: clientesFiltrados, subservicios: [] };
-      } else {
-        // Para otros roles, mostrar todos los clientes y subservicios
-        const response = await fetch(`${API_BASE_URL}/api/cliente`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Cache-Control': 'no-cache'
-          }
-        });
-
-        if (!response.ok) {
-          throw new Error('Error al cargar clientes');
-        }
-
-        const clientesData = await response.json();
-        return { clientes: clientesData, subservicios: [] };
-      }
-    } catch (error) {
-      console.error('Error al cargar clientes y subservicios:', error);
-      throw error;
-    } finally {
-      setCargandoClientes(false);
-    }
-  };
-
-  // Función para obtener información del supervisor de un operario
-  const fetchSupervisorInfo = async (userData: User) => {
-    try {
-      setRefreshingSupervisor(true);
-      const token = getToken();
-
-      // Usar el endpoint dedicado para obtener información del supervisor
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/me/supervisor`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-
-          if (data.success && data.supervisor) {
-            const supervisor = data.supervisor;
-            const displayName =
-              supervisor.nombre && supervisor.apellido
-                ? `${supervisor.nombre} ${supervisor.apellido}`
-                : supervisor.usuario || supervisor.email || 'Supervisor';
-
-            setSupervisorName(displayName);
-            setSupervisorId(supervisor._id);
-            return supervisor;
-          }
-        } else {
-          console.warn('No se pudo obtener información del supervisor via endpoint específico:',
-            await response.text());
-        }
-      } catch (error) {
-        console.warn('Error al obtener supervisor mediante endpoint específico:', error);
-      }
-
-      // Alternativa: Verificar si el usuario tiene un supervisorId asignado directamente
-      if (userData.supervisorId) {
-        try {
-          const response = await fetch(`${API_BASE_URL}/api/auth/users/${userData.supervisorId}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            const supervisor = data.success && data.user ? data.user : data;
-
-            const displayName =
-              supervisor.nombre && supervisor.apellido
-                ? `${supervisor.nombre} ${supervisor.apellido}`
-                : supervisor.usuario || supervisor.email || 'Supervisor';
-
-            setSupervisorName(displayName);
-            setSupervisorId(userData.supervisorId);
-            return supervisor;
-          } else {
-            // Ignorar errores de permiso silenciosamente, ya que es esperado para usuarios regulares
-            const statusCode = response.status;
-            if (statusCode !== 403) {
-              console.warn('No se pudo obtener información del supervisor asignado:',
-                await response.text());
-            }
-          }
-        } catch (error) {
-          console.warn('Error al obtener supervisor mediante ID:', error);
-        }
-      }
-
-      // Si llegamos aquí, no se encontró información del supervisor
-      setSupervisorName('No asignado');
-      setSupervisorId(null);
-      return null;
-    } catch (error) {
-      console.error('Error al obtener información del supervisor:', error);
-      setSupervisorName('No asignado');
-      setSupervisorId(null);
-      return null;
-    } finally {
-      setRefreshingSupervisor(false);
-    }
-  };
-
-  // Nueva función para obtener los subservicios asignados al operario
-  const fetchSubserviciosAsignadosOperario = async () => {
-    try {
-      setCargandoClientes(true);
-      setErrorClientes(null);
-
-      const token = getToken();
-
-      // Usar el endpoint para mis-subservicios (específico para operarios)
-      const response = await fetch(`${API_BASE_URL}/api/cliente/mis-subservicios`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!response.ok) {
-        const errorCode = response.status;
-        let errorMessage = '';
-
-        try {
-          // Intentar obtener un objeto JSON con el error
-          const errorData = await response.json();
-          errorMessage = errorData.mensaje || errorData.message || errorData.error || 'Error desconocido';
-
-          if (errorMessage.includes("No tienes subservicios") ||
-              errorMessage.includes("no eres un operario")) {
-            setErrorClientes('No tienes subservicios asignados. Por favor, contacta con tu supervisor.');
-            return;
-          }
-        } catch (jsonError) {
-          // Si no es JSON, intentar obtener texto
-          errorMessage = await response.text();
-        }
-
-        if (errorCode === 404) {
-          setErrorClientes('No tienes subservicios asignados. Por favor, contacta con tu supervisor.');
-          return;
-        } else {
-          setErrorClientes(`No se pudieron cargar tus subservicios: ${errorMessage}`);
-          return;
-        }
-      }
-
-      // Procesar la respuesta de subservicios asignados
-      const asignacionesData = await response.json();
+  // Inicializar carrito al montar el componente
+  useEffect(() => {
+    if (!initializedRef.current) {
+      initializedRef.current = true;
       
-      if (!asignacionesData || asignacionesData.length === 0) {
-        setErrorClientes('No tienes subservicios asignados. Por favor, contacta con tu supervisor.');
-        return;
-      }
-
-      // Transformar la respuesta del backend en nuestro formato
-      const clientesConSubservicios: Cliente[] = [];
-      const asignaciones: SubservicioAsignado[] = [];
-
-      // Procesar cada asignación de cliente con sus subservicios
-      asignacionesData.forEach((asignacion: any) => {
-        // Extraer datos del cliente
-        const cliente: Cliente = {
-          _id: asignacion.clienteId,
-          nombre: asignacion.nombreCliente || 'Cliente sin nombre',
-          servicio: asignacion.nombreCliente || 'Cliente sin nombre',
-          seccionDelServicio: '',
-          userId: [],
-          subServicios: [],
-          isExpanded: true // Por defecto expandido para mejor UX
-        };
-
-        // Agregar los subservicios asignados a este cliente
-        if (asignacion.subServicios && asignacion.subServicios.length > 0) {
-          asignacion.subServicios.forEach((subserv: any) => {
-            // Agregar al listado de subservicios del cliente
-            cliente.subServicios.push({
-              _id: subserv._id,
-              nombre: subserv.nombre || 'Subservicio sin nombre',
-              subUbicaciones: subserv.subUbicaciones || [],
-              isSelected: true // Estos son los asignados al operario
-            });
-
-            // Agregar a la lista de asignaciones
-            asignaciones.push({
-              clienteId: cliente._id,
-              subServicioId: subserv._id,
-              nombreCliente: cliente.nombre,
-              nombreSubServicio: subserv.nombre || 'Subservicio sin nombre'
-            });
-          });
-        }
-
-        clientesConSubservicios.push(cliente);
-      });
-
-      // Guardar datos procesados
-      setSubserviciosAsignados(asignaciones);
-      processClientesData(clientesConSubservicios);
-
-    } catch (error) {
-      console.error('Error al cargar subservicios asignados al operario:', error);
-      setErrorClientes('No se pudieron cargar tus subservicios asignados. Por favor, intenta nuevamente.');
-    } finally {
-      setCargandoClientes(false);
+      // Verificar si hay userID en localStorage y si es válido
+      const storedUserId = localStorage.getItem('userId');
+      
+      initializeCart();
     }
-  };
-
-  // Función para refrescar la información del supervisor
-  const handleRefreshSupervisor = async () => {
-    if (!currentUser || userRole !== 'operario') return;
-
-    try {
-      setRefreshingSupervisor(true);
-      setErrorClientes(null);
-
-      await fetchSupervisorInfo(currentUser);
-      await fetchSubserviciosAsignadosOperario();
-
-      addNotification('Información actualizada correctamente', 'success');
-    } catch (error) {
-      console.error('Error al actualizar información:', error);
-      setErrorClientes('Error al actualizar la información. Por favor, intenta nuevamente.');
-      addNotification('Error al actualizar la información', 'error');
-    } finally {
-      setRefreshingSupervisor(false);
-    }
-  };
+  }, []);
 
   // Contador para redirección automática tras completar pedido
   useEffect(() => {
@@ -840,101 +662,394 @@ export const Cart: React.FC = () => {
     }
   }, [orderComplete]);
 
-  // Función para obtener información del usuario actual
-  const fetchCurrentUser = async () => {
+  /**
+   * Método optimizado para inicializar el carrito con filtrado por roles
+   */
+  const initializeCart = async () => {
     try {
-      const token = getToken();
-
-      // Recuperar información desde localStorage primero (para agilidad)
-      const storedRole = localStorage.getItem('userRole');
-      const storedSecciones = localStorage.getItem('userSecciones');
-
-      if (storedRole) setUserRole(storedRole);
-      if (storedSecciones) setUserSecciones(storedSecciones);
-
-      const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error al obtener información del usuario (${response.status})`);
+      console.log('Inicializando carrito...');
+      setCargandoClientes(true);
+      setErrorClientes(null);
+      
+      // Obtener información del usuario
+      const userData = await fetchCurrentUser();
+      
+      // Verificar si tenemos un usuario con rol definido
+      const role = userRole || userData?.role || localStorage.getItem('userRole');
+      
+      if (!role) {
+        console.error('No se pudo determinar el rol del usuario');
+        setErrorClientes('No se pudo determinar tu rol. Por favor, inicia sesión nuevamente.');
+        return;
       }
-
-      const userData = await response.json();
-
-      // El nuevo backend devuelve la estructura {success: true, user: {...}}
-      const user = userData.success && userData.user ? userData.user : userData;
-
-      setCurrentUser(user);
-
-      // Guardar datos frescos en localStorage
-      if (user.role) {
-        localStorage.setItem('userRole', user.role);
-        setUserRole(user.role);
+      
+      // Verificar que tenemos un ID de usuario válido
+      const userId = currentUser?._id || currentUser?.id || localStorage.getItem('userId');
+      if (!userId || !isValidMongoId(userId)) {
+        console.error('No se encontró un ID de usuario válido');
+        setErrorClientes('No se pudo determinar tu identidad. Por favor, inicia sesión nuevamente.');
+        return;
       }
-
-      if (user.secciones) {
-        localStorage.setItem('userSecciones', user.secciones);
-        setUserSecciones(user.secciones);
+      
+      console.log(`Inicializando flujo para rol: ${role} con userId: ${userId}`);
+      
+      try {
+        switch (role) {
+          case 'operario':
+            // Para operarios: obtener supervisor y subservicios asignados
+            if (currentUser) {
+              await fetchSupervisorInfo(currentUser);
+            }
+            await fetchSubserviciosAsignadosOperario(userId); // Pasar el userId validado
+            break;
+            
+          case 'supervisor':
+            // Para supervisores: obtener sólo clientes y subservicios asignados
+            await fetchClientesAsignadosSupervisor();
+            break;
+            
+          case 'admin':
+          case 'supervisor_de_supervisores':
+          default:
+            // Para admin y otros roles: obtener todos los clientes
+            await fetchTodosLosClientes();
+            break;
+        }
+      } catch (fetchError: any) {
+        console.error('Error obteniendo datos para el rol:', fetchError);
+        setErrorClientes(`Error cargando datos: ${fetchError.message}`);
+        alert('Error cargando datos. Por favor, recarga la página o contacta con soporte técnico.');
       }
-
-      return user;
-    } catch (error) {
-      console.error('Error al obtener información del usuario:', error);
-
-      // Limpiar datos en caso de error
-      localStorage.removeItem('userRole');
-      localStorage.removeItem('userSecciones');
-      setUserRole(null);
-      setUserSecciones(null);
-      setCurrentUser(null);
-      setSupervisorName(null);
-      setSupervisorId(null);
-
-      throw error;
+    } catch (error: any) {
+      console.error('Error inicializando carrito:', error);
+      setErrorClientes(error instanceof Error ? error.message : 'Error desconocido');
+    } finally {
+      setCargandoClientes(false);
     }
   };
 
-  // Procesar datos de clientes 
+  /**
+   * Función para obtener clientes y subservicios asignados a un supervisor
+   */
+  const fetchClientesAsignadosSupervisor = async () => {
+    try {
+      setErrorClientes(null);
+      // Intentamos obtener el ID de todas las fuentes posibles
+      const userId = currentUser?._id || currentUser?.id || localStorage.getItem('userId');
+      
+      // Si no hay ID, mostramos un mensaje claro
+      if (!userId) {
+        setErrorClientes('No se pudo determinar tu identificación. Por favor, inicia sesión nuevamente.');
+        return;
+      }
+      
+      // Validamos que el userId tenga un formato válido
+      if (!isValidMongoId(userId)) {
+        console.warn(`ID de usuario con formato no válido: ${userId}`);
+        setErrorClientes('Tu sesión parece estar desactualizada. Por favor, cierra sesión e inicia nuevamente.');
+        return;
+      }
+      
+      console.log(`Obteniendo clientes asignados al supervisor: ${userId}`);
+      
+      // Usar la API optimizada que filtra clientes por supervisorId en el backend
+      const clientesData = await fetchWithAuth(`/api/cliente/supervisor/${userId}`);
+      
+      console.log(`Recibidos ${Array.isArray(clientesData) ? clientesData.length : 'N/A'} clientes del supervisor`);
+      
+      if (!clientesData || (Array.isArray(clientesData) && clientesData.length === 0)) {
+        setErrorClientes('No tienes clientes asignados como supervisor.');
+        return;
+      }
+      
+      // Procesar los clientes obtenidos
+      processClientesData(clientesData);
+      
+    } catch (error: any) {
+      console.error('Error al obtener clientes del supervisor:', error);
+      setErrorClientes(error instanceof Error ? error.message : 'Error desconocido');
+    }
+  };
+
+  /**
+   * Función para obtener información del supervisor asignado al operario
+   */
+  // Esta función se redefine más adelante con una implementación mejorada
+
+  /**
+   * Función para obtener subservicios asignados a un operario (optimizada)
+   */
+  const fetchSubserviciosAsignadosOperario = async (userId: string) => { // El parámetro userId se mantiene por compatibilidad
+    try {
+      setErrorClientes(null);
+      
+      console.log(`Solicitando subservicios asignados al operario: ${userId}`);
+      
+      // En lugar de usar /mis-subservicios que depende del token, usamos la ruta directa
+      // que acepta un ID explícito como parámetro
+      const subserviciosData = await fetchWithAuth(`/api/cliente/subservicios/operario/${userId}`); 
+      
+      console.log(`Recibidos ${Array.isArray(subserviciosData) ? subserviciosData.length : 'N/A'} subservicios del operario`);
+      
+      if (!subserviciosData || (Array.isArray(subserviciosData) && subserviciosData.length === 0)) {
+        setErrorClientes('No tienes subservicios asignados. Contacta con tu supervisor.');
+        return;
+      }
+      
+      // Construir estructura de clientes a partir de subservicios asignados
+      const clientesMap = new Map<string, Cliente>();
+      setSubserviciosAsignados([]);
+      
+      // Procesar cada asignación
+      subserviciosData.forEach((entry: any) => {
+        if (!entry.clienteId || (!entry.nombreCliente && !entry.nombre)) {
+          console.warn('Datos de asignación incompletos:', entry);
+          return;
+        }
+        
+        const clienteId = entry.clienteId;
+        const nombreCliente = entry.nombreCliente || entry.nombre || 'Cliente sin nombre';
+        
+        // Crear o actualizar cliente en el mapa
+        if (!clientesMap.has(clienteId)) {
+          clientesMap.set(clienteId, {
+            _id: clienteId,
+            nombre: nombreCliente,
+            servicio: entry.servicio || nombreCliente,
+            seccionDelServicio: entry.seccionDelServicio || '',
+            userId: [],
+            subServicios: [],
+            isExpanded: true
+          });
+        }
+        
+        // Añadir subservicios al cliente
+        const subServiciosArray = Array.isArray(entry.subServicios) ? entry.subServicios : 
+                              entry.subservicios && Array.isArray(entry.subservicios) ? entry.subservicios : [];
+        
+        if (subServiciosArray.length > 0) {
+          const clienteObj = clientesMap.get(clienteId)!;
+          
+          subServiciosArray.forEach((subserv: any) => {
+            if (!subserv || !subserv._id) {
+              console.warn('Subservicio inválido:', subserv);
+              return;
+            }
+            
+            // Verificar que el subservicio no esté ya añadido
+            const subservExists = clienteObj.subServicios.some(s => s._id === subserv._id);
+            if (!subservExists) {
+              clienteObj.subServicios.push({
+                _id: subserv._id,
+                nombre: subserv.nombre || 'Subservicio sin nombre',
+                descripcion: subserv.descripcion || '',
+                supervisorId: subserv.supervisorId || undefined,
+                subUbicaciones: Array.isArray(subserv.subUbicaciones) ? subserv.subUbicaciones : [],
+                operarios: Array.isArray(subserv.operarios) ? subserv.operarios : [],
+                isSelected: true // Marcar como seleccionado para la UI
+              });
+              
+              // Añadir a la lista de asignaciones
+              setSubserviciosAsignados(prev => [...prev, {
+                clienteId: clienteId,
+                subServicioId: subserv._id,
+                nombreCliente: nombreCliente,
+                nombreSubServicio: subserv.nombre || 'Subservicio sin nombre'
+              }]);
+            }
+          });
+        }
+      });
+      
+      // Convertir el mapa a array de clientes
+      const clientesArray = Array.from(clientesMap.values());
+      console.log(`Construidos ${clientesArray.length} clientes a partir de subservicios asignados`);
+      
+      if (clientesArray.length === 0) {
+        setErrorClientes('No se encontraron clientes con subservicios asignados para tu usuario.');
+        return;
+      }
+      
+      // Procesar los clientes construidos
+      processClientesData(clientesArray);
+      
+    } catch (error: any) {
+      console.error('Error al obtener subservicios asignados al operario:', error);
+      setErrorClientes(error instanceof Error ? error.message : 'Error desconocido');
+    }
+  };
+
+  /**
+   * Función para obtener todos los clientes (admin y supervisor de supervisores)
+   */
+  const fetchTodosLosClientes = async () => {
+    try {
+      setErrorClientes(null);
+      
+      console.log('Obteniendo todos los clientes (admin/supervisor de supervisores)');
+      
+      const clientesData = await fetchWithAuth('/api/cliente');
+      
+      console.log(`Recibidos ${Array.isArray(clientesData) ? clientesData.length : 'N/A'} clientes totales`);
+      
+      if (!clientesData || (Array.isArray(clientesData) && clientesData.length === 0)) {
+        setErrorClientes('No hay clientes disponibles en el sistema.');
+        return;
+      }
+      
+      // Procesar los clientes obtenidos (sin filtrado adicional)
+      processClientesData(clientesData);
+      
+    } catch (error: any) {
+      console.error('Error al obtener todos los clientes:', error);
+      setErrorClientes(error instanceof Error ? error.message : 'Error desconocido');
+    }
+  };
+
+  // Función optimizada para obtener información del supervisor
+  /**
+   * Función optimizada para obtener información del supervisor
+   */
+  const fetchSupervisorInfo = async (userData: User) => {
+    try {
+      setRefreshingSupervisor(true);
+      console.log('Obteniendo información del supervisor para:', userData);
+
+      // Verificar si el usuario tiene un supervisorId asignado
+      const supervisorIdStr = typeof userData.supervisorId === 'string' ? userData.supervisorId : null;
+      
+      if (supervisorIdStr) {
+        console.log('SupervisorId encontrado:', supervisorIdStr);
+
+        // Verificar si el ID es válido
+        if (!isValidMongoId(supervisorIdStr)) {
+          console.warn('ID de supervisor no válido:', supervisorIdStr);
+          setSupervisorName('Supervisor desconocido');
+          setSupervisorId(null);
+          return null;
+        }
+        
+        // Usar el endpoint de usuarios para obtener información del supervisor
+        try {
+          // Llamada directa a la API de usuarios con el ID del supervisor
+          const supervisorData = await fetchWithAuth(`/api/usuarios/${supervisorIdStr}`);
+          
+          if (supervisorData) {
+            console.log('Datos del supervisor obtenidos:', supervisorData);
+            
+            // Construir el nombre para mostrar
+            const displayName =
+              supervisorData.nombre 
+                ? `${supervisorData.nombre} ${supervisorData.apellido || ''}`.trim()
+                : supervisorData.usuario || supervisorData.email || 'Supervisor';
+
+            console.log('Nombre del supervisor establecido:', displayName);
+            
+            setSupervisorName(displayName);
+            setSupervisorId(supervisorIdStr);
+            return supervisorData;
+          }
+        } catch (error) {
+          console.error('Error al obtener información del supervisor:', error);
+        }
+      } else {
+        console.warn('Usuario no tiene supervisorId asignado');
+      }
+
+      // Si llegamos aquí, no se encontró información del supervisor
+      setSupervisorName('Supervisor');
+      setSupervisorId(null);
+      return null;
+    } catch (error) {
+      console.error('Error al obtener información del supervisor:', error);
+      setSupervisorName('Supervisor');
+      setSupervisorId(null);
+      return null;
+    } finally {
+      setRefreshingSupervisor(false);
+    }
+  };
+
+  /**
+   * Función para refrescar la información del supervisor
+   */
+  const handleRefreshSupervisor = useCallback(async () => {
+    if (!currentUser || userRole !== 'operario') return;
+
+    try {
+      setRefreshingSupervisor(true);
+      setErrorClientes(null);
+
+      await fetchSupervisorInfo(currentUser);
+      await fetchSubserviciosAsignadosOperario(currentUser._id); // Pasar el userId validado
+
+      addNotification('Información actualizada correctamente', 'success');
+    } catch (error: any) {
+      console.error('Error al actualizar información:', error);
+      setErrorClientes('Error al actualizar la información. Por favor, intenta nuevamente.');
+      addNotification('Error al actualizar la información', 'error');
+    } finally {
+      setRefreshingSupervisor(false);
+    }
+  }, [fetchCurrentUser, addNotification, currentUser, userRole, fetchSubserviciosAsignadosOperario]);
+
+  /**
+   * Versión optimizada de processClientesData que maneja correctamente
+   * el filtrado por secciones y la preselección de elementos
+   */
   const processClientesData = (data: Cliente[]) => {
     if (!data || data.length === 0) {
+      console.warn('No hay clientes disponibles para procesar');
       setErrorClientes('No hay clientes disponibles. Por favor, contacta con administración.');
       return;
     }
 
-    console.log(`Se obtuvieron ${data.length} clientes`);
+    console.log(`Procesando ${data.length} clientes`);
 
     // Filtrar clientes según la sección del usuario si es necesario
     let clientesFiltrados = data;
     if (userSecciones && userSecciones !== 'ambos') {
-      // Mostrar solo clientes que coincidan con la sección del usuario
       clientesFiltrados = data.filter(cliente => {
-        // Obtener la categoría del cliente (normalizada)
-        const categoriaCliente = (cliente.servicio || '').toLowerCase();
+        const categoriaCliente = (cliente.servicio || cliente.nombre || '').toLowerCase();
 
-        // Si es limpieza y el usuario tiene acceso a limpieza
         if (categoriaCliente.includes('limpieza') && userSecciones === 'limpieza') return true;
-
-        // Si es mantenimiento y el usuario tiene acceso a mantenimiento
         if (categoriaCliente.includes('mantenimiento') && userSecciones === 'mantenimiento') return true;
 
-        return false;
+        return !categoriaCliente.includes('limpieza') && !categoriaCliente.includes('mantenimiento');
       });
 
       console.log(`Filtrados ${clientesFiltrados.length} clientes por sección ${userSecciones}`);
     }
 
-    // Si aún no hay clientes después del filtrado
+    // Verificar si tenemos clientes después del filtrado
     if (clientesFiltrados.length === 0) {
       setErrorClientes(`No hay clientes disponibles para la sección ${userSecciones}. Contacte con administración.`);
       return;
     }
 
+    // Asegurar estructuras de datos correctas
+    clientesFiltrados = clientesFiltrados.map(cliente => {
+      // Validar subServicios
+      if (!cliente.subServicios) {
+        cliente.subServicios = [];
+      } else if (!Array.isArray(cliente.subServicios)) {
+        console.warn(`Cliente ${cliente._id}: subServicios en formato incorrecto`);
+        cliente.subServicios = [];
+      }
+      
+      // Asegurar campos requeridos
+      if (!cliente.nombre) cliente.nombre = 'Cliente sin nombre';
+      if (!cliente.servicio) cliente.servicio = cliente.nombre;
+      
+      return cliente;
+    });
+
+    // Actualizar estado con los clientes filtrados
     setClientes(clientesFiltrados);
 
-    // Agrupar clientes por servicio con mejora visual
+    // Agrupar clientes por servicio
     const agrupados = clientesFiltrados.reduce((acc, cliente) => {
-      const servicioKey = cliente.servicio || 'Sin categoría';
+      const servicioKey = cliente.servicio || cliente.nombre || 'Sin categoría';
       if (!acc[servicioKey]) {
         acc[servicioKey] = [];
       }
@@ -942,65 +1057,94 @@ export const Cart: React.FC = () => {
       return acc;
     }, {} as Record<string, Cliente[]>);
 
-    // Ordenar servicios para tener un orden consistente
+    // Ordenar servicios
     const serviciosOrdenados = Object.keys(agrupados).sort((a, b) => {
       const orden = ['limpieza', 'mantenimiento', 'Sin categoría'];
       const idxA = orden.findIndex(o => a.toLowerCase().includes(o));
       const idxB = orden.findIndex(o => b.toLowerCase().includes(o));
 
-      // Si ambos tienen una categoría reconocida, ordenar por ella
       if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-
-      // Si solo uno tiene categoría reconocida, ponerlo primero
       if (idxA !== -1) return -1;
       if (idxB !== -1) return 1;
-
-      // Si ninguno tiene categoría reconocida, ordenar alfabéticamente
       return a.localeCompare(b);
     });
 
-    // Crear un nuevo objeto de agrupados ordenado
+    // Crear objeto ordenado
     const agrupadosOrdenados: Record<string, Cliente[]> = {};
     serviciosOrdenados.forEach(servicio => {
       agrupadosOrdenados[servicio] = agrupados[servicio].sort((a, b) => {
-        // Ordenar por sección del servicio
         return (a.seccionDelServicio || '').localeCompare(b.seccionDelServicio || '');
       });
     });
 
     setClientesAgrupados(agrupadosOrdenados);
 
-    // Si hay al menos un cliente, seleccionarlo por defecto
+    // Si hay clientes, preseleccionar el primero y sus datos relacionados
     if (clientesFiltrados.length > 0) {
-      setClienteSeleccionado(clientesFiltrados[0]._id);
+      const primerCliente = clientesFiltrados[0];
+      setClienteSeleccionado(primerCliente._id);
       setOrderForm(prev => ({
         ...prev,
-        servicio: clientesFiltrados[0].servicio || clientesFiltrados[0].nombre,
-        seccionDelServicio: clientesFiltrados[0].seccionDelServicio || ''
+        servicio: primerCliente.servicio || primerCliente.nombre,
+        seccionDelServicio: primerCliente.seccionDelServicio || ''
       }));
 
-      // Cargar subservicios del cliente seleccionado por defecto
-      if (clientesFiltrados[0].subServicios && clientesFiltrados[0].subServicios.length > 0) {
-        setSubServiciosDisponibles(clientesFiltrados[0].subServicios);
+      console.log(`Preseleccionando cliente: ${primerCliente.nombre} (${primerCliente._id})`);
 
-        // Para operarios, preseleccionar el primer subservicio asignado
-        if (userRole === 'operario' && clientesFiltrados[0].subServicios.some(s => s.isSelected)) {
-          const primerSubservicioAsignado = clientesFiltrados[0].subServicios.find(s => s.isSelected);
-          if (primerSubservicioAsignado) {
+      // Preseleccionar subservicios según el rol
+      if (primerCliente.subServicios && primerCliente.subServicios.length > 0) {
+        if (userRole === 'operario') {
+          // Para operarios, mostrar solo subservicios asignados (marcados como isSelected)
+          const subserviciosFiltrados = primerCliente.subServicios.filter(ss => ss.isSelected === true);
+          console.log(`Operario: ${subserviciosFiltrados.length} subservicios asignados`);
+          
+          setSubServiciosDisponibles(subserviciosFiltrados);
+          
+          // Preseleccionar el primer subservicio asignado
+          if (subserviciosFiltrados.length > 0) {
+            const primerSubservicioAsignado = subserviciosFiltrados[0];
             setSubServicioSeleccionado(primerSubservicioAsignado._id);
             setOrderForm(prev => ({
               ...prev,
               nombreSubServicio: primerSubservicioAsignado.nombre
             }));
 
-            // Cargar sububicaciones si existen
+            // Cargar sububicaciones
             if (primerSubservicioAsignado.subUbicaciones && primerSubservicioAsignado.subUbicaciones.length > 0) {
               setSubUbicacionesDisponibles(primerSubservicioAsignado.subUbicaciones);
+            } else {
+              setSubUbicacionesDisponibles([]);
+            }
+          } else {
+            setSubServiciosDisponibles([]);
+            setSubServicioSeleccionado(null);
+          }
+        } else {
+          // Para supervisores y admins, mostrar todos los subservicios
+          console.log(`${userRole}: ${primerCliente.subServicios.length} subservicios disponibles`);
+          setSubServiciosDisponibles(primerCliente.subServicios);
+          
+          // Preseleccionar el primer subservicio
+          if (primerCliente.subServicios.length > 0) {
+            const primerSubservicio = primerCliente.subServicios[0];
+            setSubServicioSeleccionado(primerSubservicio._id);
+            setOrderForm(prev => ({
+              ...prev,
+              nombreSubServicio: primerSubservicio.nombre
+            }));
+
+            // Cargar sububicaciones
+            if (primerSubservicio.subUbicaciones && primerSubservicio.subUbicaciones.length > 0) {
+              setSubUbicacionesDisponibles(primerSubservicio.subUbicaciones);
+            } else {
+              setSubUbicacionesDisponibles([]);
             }
           }
         }
       } else {
+        console.log(`Cliente sin subservicios`);
         setSubServiciosDisponibles([]);
+        setSubServicioSeleccionado(null);
       }
     }
   };
@@ -1037,45 +1181,80 @@ export const Cart: React.FC = () => {
     updateQuantity(id, newQuantity);
   };
 
-  // Manejar cambio de cliente seleccionado
+  // Función para manejar cambio de cliente con filtrado correcto de subservicios
   const handleClienteChange = (clienteId: string) => {
+    console.log(`Seleccionando cliente: ${clienteId}`);
     setClienteSeleccionado(clienteId);
-    // Limpiar los campos dependientes
+    
+    // Limpiar campos dependientes
     setSubServicioSeleccionado(null);
     setSubUbicacionSeleccionada(null);
-    // Resetear las búsquedas
+    setSubUbicacionesDisponibles([]);
+    
+    // Resetear búsquedas
     setSubServicioSearch('');
     setSubUbicacionSearch('');
 
-    // Encontrar el cliente seleccionado y actualizar el formulario
+    // Buscar el cliente seleccionado
     const clienteSeleccionadoObj = clientes.find(c => c._id === clienteId);
-    if (clienteSeleccionadoObj) {
-      // Actualizar formulario con datos del cliente
-      setOrderForm(prev => ({
-        ...prev,
-        servicio: clienteSeleccionadoObj.nombre || clienteSeleccionadoObj.servicio,
-        seccionDelServicio: clienteSeleccionadoObj.seccionDelServicio || '',
-        nombreSubServicio: '',
-        nombreSubUbicacion: ''
-      }));
+    if (!clienteSeleccionadoObj) {
+      console.warn(`Cliente ${clienteId} no encontrado en la lista`);
+      return;
+    }
 
-      // Actualizar subservicios disponibles
-      if (clienteSeleccionadoObj.subServicios && clienteSeleccionadoObj.subServicios.length > 0) {
-        // Para operarios, mostrar solo subservicios asignados
-        if (userRole === 'operario') {
-          const subserviciosFiltrados = clienteSeleccionadoObj.subServicios.filter(subServ => 
-            subServ.isSelected
-          );
-          setSubServiciosDisponibles(subserviciosFiltrados);
-        } else {
-          setSubServiciosDisponibles(clienteSeleccionadoObj.subServicios);
+    // Actualizar formulario
+    setOrderForm(prev => ({
+      ...prev,
+      servicio: clienteSeleccionadoObj.nombre || clienteSeleccionadoObj.servicio,
+      seccionDelServicio: clienteSeleccionadoObj.seccionDelServicio || '',
+      nombreSubServicio: '',
+      nombreSubUbicacion: ''
+    }));
+
+    // Actualizar subservicios según el rol
+    if (clienteSeleccionadoObj.subServicios && clienteSeleccionadoObj.subServicios.length > 0) {
+      if (userRole === 'operario') {
+        // Para operarios, solo mostrar subservicios asignados
+        const subserviciosFiltrados = clienteSeleccionadoObj.subServicios.filter(ss => ss.isSelected === true);
+        console.log(`Filtrando para operario: ${subserviciosFiltrados.length} subservicios asignados`);
+        setSubServiciosDisponibles(subserviciosFiltrados);
+        
+        // Preseleccionar el primer subservicio si hay alguno
+        if (subserviciosFiltrados.length > 0) {
+          setSubServicioSeleccionado(subserviciosFiltrados[0]._id);
+          setOrderForm(prev => ({
+            ...prev,
+            nombreSubServicio: subserviciosFiltrados[0].nombre
+          }));
+          
+          // Cargar sububicaciones si existen
+          if (subserviciosFiltrados[0].subUbicaciones && subserviciosFiltrados[0].subUbicaciones.length > 0) {
+            setSubUbicacionesDisponibles(subserviciosFiltrados[0].subUbicaciones);
+          }
         }
       } else {
-        setSubServiciosDisponibles([]);
+        // Para otros roles, mostrar todos los subservicios
+        console.log(`Mostrando ${clienteSeleccionadoObj.subServicios.length} subservicios para ${userRole}`);
+        setSubServiciosDisponibles(clienteSeleccionadoObj.subServicios);
+        
+        // Preseleccionar el primer subservicio
+        if (clienteSeleccionadoObj.subServicios.length > 0) {
+          setSubServicioSeleccionado(clienteSeleccionadoObj.subServicios[0]._id);
+          setOrderForm(prev => ({
+            ...prev,
+            nombreSubServicio: clienteSeleccionadoObj.subServicios[0].nombre
+          }));
+          
+          // Cargar sububicaciones si existen
+          if (clienteSeleccionadoObj.subServicios[0].subUbicaciones && 
+              clienteSeleccionadoObj.subServicios[0].subUbicaciones.length > 0) {
+            setSubUbicacionesDisponibles(clienteSeleccionadoObj.subServicios[0].subUbicaciones);
+          }
+        }
       }
-
-      // Limpiar sububicaciones
-      setSubUbicacionesDisponibles([]);
+    } else {
+      console.log(`Cliente ${clienteId} no tiene subservicios`);
+      setSubServiciosDisponibles([]);
     }
   };
 
@@ -1119,7 +1298,7 @@ export const Cart: React.FC = () => {
     }
   };
 
-  // Procesamiento de pedido
+  // Procesamiento de pedido - Optimizado
   const processOrder = async () => {
     // Validaciones previas
     if (items.length === 0) {
@@ -1165,9 +1344,6 @@ export const Cart: React.FC = () => {
     setOrderError(null);
 
     try {
-      // Obtener token de autenticación
-      const token = getToken();
-
       // Determinar el ID de usuario para el pedido y el ID real del usuario
       let orderUserId;
       let actualUserId = currentUser?._id || currentUser?.id;
@@ -1234,7 +1410,16 @@ export const Cart: React.FC = () => {
 
         // Siempre usar el supervisor asignado al subservicio (si existe)
         if (subServicio.supervisorId) {
-          if (typeof subServicio.supervisorId === 'string') {
+          // Verificación mejorada para array de supervisores
+          if (Array.isArray(subServicio.supervisorId) && subServicio.supervisorId.length > 0) {
+            // Usar el primer supervisor del array
+            const firstSupervisor = subServicio.supervisorId[0];
+            if (typeof firstSupervisor === 'string') {
+              orderData.supervisorId = firstSupervisor;
+            } else if (typeof firstSupervisor === 'object' && firstSupervisor._id) {
+              orderData.supervisorId = firstSupervisor._id;
+            }
+          } else if (typeof subServicio.supervisorId === 'string') {
             orderData.supervisorId = subServicio.supervisorId;
           } else if (typeof subServicio.supervisorId === 'object' && subServicio.supervisorId._id) {
             orderData.supervisorId = subServicio.supervisorId._id;
@@ -1255,28 +1440,12 @@ export const Cart: React.FC = () => {
       setOrderData(orderData);
 
       // Enviar pedido a la API
-      const response = await fetch(`${API_BASE_URL}/api/pedido`, {
+      const pedidoCreado = await fetchWithAuth('/api/pedido', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
         body: JSON.stringify(orderData)
       });
 
-      if (!response.ok) {
-        let errorMessage = 'Error al crear el pedido';
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.mensaje || errorData.message || `Error (status: ${response.status})`;
-        } catch (e) {
-          errorMessage = `Error al crear el pedido (status: ${response.status})`;
-        }
-        throw new Error(errorMessage);
-      }
-
       // Obtener datos del pedido creado para guardar el ID
-      const pedidoCreado = await response.json();
       setCreatedOrderId(pedidoCreado._id);
 
       // Pedido creado correctamente
@@ -1291,7 +1460,7 @@ export const Cart: React.FC = () => {
           addNotification('Pedido realizado exitosamente', 'success');
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error al procesar pedido:', error);
       setOrderError(error instanceof Error ? error.message : 'Hubo un problema al procesar tu pedido. Por favor, intenta nuevamente.');
 
@@ -1364,7 +1533,7 @@ export const Cart: React.FC = () => {
               {userRole === 'operario' && supervisorName && (
                 <div className="mb-3 md:mb-4 p-2 bg-white/10 border border-[#3a8fb7] rounded-lg">
                   <p className="flex items-center justify-center text-[#3a8fb7] text-xs md:text-sm">
-                    <UserCircle2 className="h-3 w-3 md:h-4 md:w-4 mr-1 md:mr-2" />
+                    <UserCircle2 className="h-3 w-3 mr-1" />
                     Pedido enviado a: <span className="font-bold ml-1">{supervisorName}</span>
                   </p>
                 </div>
@@ -1374,13 +1543,13 @@ export const Cart: React.FC = () => {
               {orderData && orderData.cliente && (
                 <div className="mb-3 md:mb-4 bg-white/10 border border-[#3a8fb7] rounded-lg p-3 text-left">
                   <h3 className="text-[#3a8fb7] font-semibold flex items-center mb-2 text-xs md:text-sm">
-                    <Info className="h-3 w-3 md:h-4 md:w-4 mr-1 md:mr-2" />
+                    <Info className="h-3 w-3 mr-1" />
                     Información del pedido
                   </h3>
 
                   <div className="space-y-1 text-xs md:text-sm text-[#4a4a4a]">
                     <div className="flex items-start">
-                      <Building className="h-3 w-3 md:h-4 md:w-4 mr-1 md:mr-2 mt-0.5 text-[#3a8fb7]" />
+                      <Building className="h-3 w-3 mr-1 text-[#3a8fb7]" />
                       <div>
                         <p className="font-medium">Cliente:</p>
                         <p>{orderData.cliente.nombreCliente}</p>
@@ -1389,7 +1558,7 @@ export const Cart: React.FC = () => {
 
                     {orderData.cliente.nombreSubServicio && (
                       <div className="flex items-start">
-                        <PackageOpen className="h-3 w-3 md:h-4 md:w-4 mr-1 md:mr-2 mt-0.5 text-[#3a8fb7]" />
+                        <PackageOpen className="h-3 w-3 mr-1 text-[#3a8fb7]" />
                         <div>
                           <p className="font-medium">Sub-Servicio:</p>
                           <p>{orderData.cliente.nombreSubServicio}</p>
@@ -1399,7 +1568,7 @@ export const Cart: React.FC = () => {
 
                     {orderData.cliente.nombreSubUbicacion && (
                       <div className="flex items-start">
-                        <MapPin className="h-3 w-3 md:h-4 md:w-4 mr-1 md:mr-2 mt-0.5 text-[#3a8fb7]" />
+                        <MapPin className="h-3 w-3 mr-1 text-[#3a8fb7]" />
                         <div>
                           <p className="font-medium">Sub-Ubicación:</p>
                           <p>{orderData.cliente.nombreSubUbicacion}</p>
@@ -1437,6 +1606,7 @@ export const Cart: React.FC = () => {
     );
   }
 
+  // Vista principal del carrito
   return (
     <>
       <ShopNavbar />
@@ -1526,7 +1696,7 @@ export const Cart: React.FC = () => {
                               </p>
                             )}
 
-                            {/* Detalles del combo - Implementado en Paso 1 */}
+                            {/* Detalles del combo */}
                             {item.isCombo && <ComboDetails item={item} />}
 
                             <div className="flex justify-between items-center mt-2">
@@ -1677,7 +1847,7 @@ export const Cart: React.FC = () => {
                                     </div>
                                   )}
 
-                                  {/* Reemplazo del Select por SelectWithClear */}
+                                  {/* Select de cliente */}
                                   <SelectWithClear
                                     value={clienteSeleccionado || ""}
                                     onValueChange={handleClienteChange}
@@ -1726,7 +1896,7 @@ export const Cart: React.FC = () => {
                                 <PackageOpen className="mr-2 h-4 w-4" />
                                 Seleccionar Sub-Servicio
                                 {subServiciosDisponibles.length === 0 ? (
-                                  <Badge className="ml-2 bg-[#FF9800] text-white text-xs font-normal px-1.5 py-0">No disponible</Badge>
+                                  <Badge className="ml-2 bg-[#FF9800] text-white text-xs font-normal">No disponible</Badge>
                                 ) : null}
                               </div>
                             </AccordionTrigger>
@@ -1754,7 +1924,7 @@ export const Cart: React.FC = () => {
                                     className="mb-2"
                                   />
 
-                                  {/* Reemplazo del Select por SelectWithClear */}
+                                  {/* Select de subservicio */}
                                   <SelectWithClear
                                     value={subServicioSeleccionado || ""}
                                     onValueChange={handleSubServicioChange}
@@ -1774,7 +1944,7 @@ export const Cart: React.FC = () => {
                                           {subServicio.subUbicaciones && subServicio.subUbicaciones.length > 0 && (
                                             <Badge className="ml-1 bg-[#3a8fb7] text-white text-xs px-1 py-0 h-4">
                                               {subServicio.subUbicaciones.length}
-                                            </Badge>
+                                              </Badge>
                                           )}
 
                                           {/* Indicador de asignación para operarios */}
@@ -1799,7 +1969,7 @@ export const Cart: React.FC = () => {
                                 <MapPin className="mr-2 h-4 w-4" />
                                 Seleccionar Sub-Ubicación
                                 {subUbicacionesDisponibles.length === 0 ? (
-                                  <Badge className="ml-2 bg-[#FF9800] text-white text-xs font-normal px-1.5 py-0">No disponible</Badge>
+                                  <Badge className="ml-2 bg-[#FF9800] text-white text-xs font-normal">No disponible</Badge>
                                 ) : null}
                               </div>
                             </AccordionTrigger>
@@ -1807,8 +1977,7 @@ export const Cart: React.FC = () => {
                               {subUbicacionesDisponibles.length === 0 ? (
                                 <div className="text-xs text-[#4a4a4a] italic p-2 border border-[#3a8fb7]/20 rounded bg-white/30">
                                   El sub-servicio seleccionado no tiene sub-ubicaciones asignadas.
-                                </div>
-                              ) : (
+                                </div> ) : (
                                 <div className="space-y-2">
                                   <Label htmlFor="subUbicacionSelector" className="text-[#3a8fb7] font-medium flex items-center text-xs">
                                     <MapPin className="mr-1 h-3 w-3" />
@@ -1825,7 +1994,7 @@ export const Cart: React.FC = () => {
                                     className="mb-2"
                                   />
 
-                                  {/* Reemplazo del Select por SelectWithClear */}
+                                  {/* Select de sububicación */}
                                   <SelectWithClear
                                     value={subUbicacionSeleccionada || ""}
                                     onValueChange={handleSubUbicacionChange}
@@ -1835,291 +2004,9 @@ export const Cart: React.FC = () => {
                                   >
                                     {subUbicacionesFiltradas.map(subUbicacion => (
                                       <SelectItem
-                                      key={subUbicacion._id}
-                                      value={subUbicacion._id}
-                                      className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white text-xs py-1"
-                                    >
-                                      {subUbicacion.nombre}
-                                    </SelectItem>
-                                  ))}
-                                </SelectWithClear>
-                              </div>
-                            )}
-                          </AccordionContent>
-                        </AccordionItem>
-                      )}
-
-                      {/* Información adicional */}
-                      <AccordionItem value="notas" className="border-b-0">
-                        <AccordionTrigger className="py-2 px-3 bg-gradient-to-r from-[#d4f1f9]/40 to-[#a8e6cf]/40 backdrop-blur-sm border border-[#3a8fb7] rounded-lg shadow-md mb-2 text-[#3a8fb7] font-medium hover:no-underline hover:bg-[#d4f1f9]/60">
-                          <div className="flex items-center">
-                            <Info className="mr-2 h-4 w-4" />
-                            Información del pedido
-                          </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="bg-white/70 backdrop-blur-sm border border-[#3a8fb7] rounded-lg p-3 mb-2">
-                          <div>
-                            <Label htmlFor="notes" className="text-[#3a8fb7] text-xs font-medium">Notas adicionales</Label>
-                            <Textarea
-                              id="notes"
-                              placeholder="Instrucciones especiales, ubicación, etc."
-                              className="bg-white border-[#3a8fb7] mt-1 text-[#4a4a4a] placeholder:text-[#4a4a4a]/60 text-xs h-20"
-                              value={orderForm.notes}
-                              onChange={(e) => setOrderForm({ ...orderForm, notes: e.target.value })}
-                            />
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
-                    </Accordion>
-
-                    {/* Información del cliente seleccionado (móvil) */}
-                    {clienteSeleccionado && !cargandoClientes && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="mt-2 p-3 rounded-md bg-[#d4f1f9]/40 border border-[#3a8fb7]/50 backdrop-blur-sm"
-                      >
-                        <div className="text-xs text-[#3a8fb7]">
-                          <p className="flex items-center">
-                            <Building className="w-3 h-3 mr-1 text-[#3a8fb7]" />
-                            <span className="font-medium">Cliente:</span>
-                            <span className="ml-1 truncate">{orderForm.servicio}</span>
-                          </p>
-
-                          {orderForm.nombreSubServicio && (
-                            <p className="flex items-center mt-1">
-                              <PackageOpen className="w-3 h-3 mr-1 text-[#3a8fb7]" />
-                              <span className="font-medium">Sub-Servicio:</span>
-                              <span className="ml-1 truncate">{orderForm.nombreSubServicio}</span>
-                            </p>
-                          )}
-
-                          {orderForm.nombreSubUbicacion && (
-                            <p className="flex items-center mt-1">
-                              <MapPin className="w-3 h-3 mr-1 text-[#3a8fb7]" />
-                              <span className="font-medium">Sub-Ubicación:</span>
-                              <span className="ml-1 truncate">{orderForm.nombreSubUbicacion}</span>
-                            </p>
-                          )}
-                        </div>
-                      </motion.div>
-                    )}
-                  </div>
-
-                  {/* Versión Desktop */}
-                  <div className="hidden md:grid md:grid-cols-1 lg:grid-cols-2 gap-4">
-                    {/* Selector de clientes */}
-                    <Card className="bg-gradient-to-r from-[#d4f1f9]/40 to-[#a8e6cf]/40 backdrop-blur-sm border-[#3a8fb7] shadow-md lg:col-span-2">
-                      <CardHeader className="border-b border-[#3a8fb7]/50 py-3">
-                        <CardTitle className="text-[#3a8fb7] flex items-center text-lg">
-                          <Building className="mr-2 h-5 w-5" />
-                          Seleccionar Cliente
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-4 pt-4 pb-4">
-                        {cargandoClientes ? (
-                          <div className="py-3 flex justify-center">
-                            <Loader2 className="h-6 w-6 animate-spin text-[#3a8fb7]" />
-                          </div>
-                        ) : errorClientes ? (
-                          <Alert className="bg-[#FF9800]/10 border-[#FF9800] shadow-sm">
-                            <AlertTriangle className="h-4 w-4 text-[#FF9800]" />
-                            <AlertDescription className="ml-2 text-[#3a8fb7]">
-                              {errorClientes}
-                            </AlertDescription>
-                          </Alert>
-                        ) : clientes.length === 0 ? (
-                          <div>
-                            <Alert className="bg-[#FF9800]/10 border-2 border-[#FF9800] mb-4">
-                              <AlertTriangle className="h-4 w-4 text-[#FF9800]" />
-                              <AlertDescription className="ml-2 text-[#3a8fb7] font-medium">
-                                No hay clientes asignados. Por favor, contacta con administración para que te asignen clientes antes de realizar pedidos.
-                              </AlertDescription>
-                            </Alert>
-
-                            <div className="flex justify-center mt-6">
-                              <Button
-                                onClick={() => window.location.href = '/shop'}
-                                className="bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white"
-                              >
-                                <ArrowLeft className="mr-2 h-4 w-4" />
-                                Volver a la tienda
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="grid md:grid-cols-2 gap-4">
-                            {/* Selector de cliente */}
-                            <div className="space-y-2">
-                              <Label htmlFor="clienteSelector" className="text-[#3a8fb7] font-medium flex items-center">
-                                <Building className="mr-2 h-4 w-4" />
-                                Cliente Asociado
-                                {cargandoClientes && <Loader2 className="ml-2 h-3 w-3 animate-spin text-[#3a8fb7]" />}
-                              </Label>
-
-                              {/* Buscador de clientes (desktop) */}
-                              <SearchInput
-                                value={clienteSearch}
-                                onChange={setClienteSearch}
-                                onClear={() => setClienteSearch('')}
-                                placeholder="Buscar cliente..."
-                                disabled={cargandoClientes}
-                                className="mb-2"
-                              />
-
-                              {/* Indicador de operario/supervisor */}
-                              {userRole === 'operario' && supervisorName && (
-                                <div className="text-xs text-[#4a4a4a] mb-2 flex items-center">
-                                  <UserCircle2 className="h-3 w-3 mr-1 text-[#3a8fb7]" />
-                                  Mostrando clientes de: {supervisorName}
-                                </div>
-                              )}
-
-                              <div className="relative mt-1">
-                                {/* Reemplazo del Select por SelectWithClear */}
-                                <SelectWithClear
-                                  value={clienteSeleccionado || ""}
-                                  onValueChange={handleClienteChange}
-                                  disabled={cargandoClientes}
-                                  placeholder="Selecciona un cliente"
-                                >
-                                  {Object.entries(clientesFiltrados).map(([servicio, clientesServicio]) => (
-                                    <div key={servicio} className="px-1 py-1">
-                                      {/* Encabezado de grupo de servicio */}
-                                      <div className="flex items-center px-2 py-1.5 text-xs uppercase tracking-wider font-semibold bg-[#d4f1f9] text-[#3a8fb7] rounded mb-1">
-                                        <Building className="h-3 w-3 mr-2" />
-                                        {servicio}
-                                      </div>
-
-                                      {/* Modificamos para mostrar el nombre del cliente en lugar de la sección */}
-                                      <div className="pl-2">
-                                        {clientesServicio.map(cliente => (
-                                          <SelectItem
-                                            key={cliente._id}
-                                            value={cliente._id}
-                                            className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
-                                          >
-                                            <div className="flex items-center">
-                                              <Building className="h-3 w-3 mr-2 text-[#4a4a4a]" />
-                                              <span>{cliente.nombre}</span>
-                                              {cliente.seccionDelServicio && (
-                                                <span className="ml-1 text-xs text-[#7AA79C]">({cliente.seccionDelServicio})</span>
-                                              )}
-                                            </div>
-                                          </SelectItem>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </SelectWithClear>
-                              </div>
-                            </div>
-
-                            {/* Selector de SubServicio */}
-                            <div className="space-y-2">
-                              <Label htmlFor="subServicioSelector" className="text-[#3a8fb7] font-medium flex items-center">
-                                <PackageOpen className="mr-2 h-4 w-4" />
-                                Seleccionar Sub-Servicio
-                                {subServiciosDisponibles.length === 0 ? (
-                                  <Badge className="ml-2 bg-[#FF9800] text-white text-xs font-normal">No disponible</Badge>
-                                ) : null}
-                              </Label>
-
-                              {/* Buscador de subservicios (desktop) */}
-                              {subServiciosDisponibles.length > 0 && (
-                                <SearchInput
-                                  value={subServicioSearch}
-                                  onChange={setSubServicioSearch}
-                                  onClear={() => setSubServicioSearch('')}
-                                  placeholder="Buscar sub-servicio..."
-                                  disabled={cargandoClientes}
-                                  className="mb-2"
-                                />
-                              )}
-
-                              {subServiciosDisponibles.length === 0 ? (
-                                <div className="text-xs text-[#4a4a4a] mt-1 italic p-2 border border-[#3a8fb7]/20 rounded bg-white/30">
-                                  {userRole === 'operario' 
-                                    ? 'No tienes subservicios asignados para este cliente.' 
-                                    : 'El cliente seleccionado no tiene sub-servicios asignados.'}
-                                </div>
-                              ) : (
-                                <div className="relative mt-1">
-                                  {/* Reemplazo del Select por SelectWithClear */}
-                                  <SelectWithClear
-                                    value={subServicioSeleccionado || ""}
-                                    onValueChange={handleSubServicioChange}
-                                    disabled={cargandoClientes}
-                                    placeholder="Selecciona un sub-servicio"
-                                  >
-                                    {subServiciosFiltrados.map(subServicio => (
-                                      <SelectItem
-                                        key={subServicio._id}
-                                        value={subServicio._id}
-                                        className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
-                                      >
-                                        <div className="flex items-center justify-between w-full">
-                                          <span>{subServicio.nombre}</span>
-
-                                          {/* Badge para mostrar si tiene sububicaciones */}
-                                          {subServicio.subUbicaciones && subServicio.subUbicaciones.length > 0 && (
-                                            <Badge className="ml-2 bg-[#3a8fb7] text-white text-xs">
-                                              {subServicio.subUbicaciones.length} {subServicio.subUbicaciones.length === 1 ? 'ubicación' : 'ubicaciones'}
-                                            </Badge>
-                                          )}
-
-                                          {/* Indicador de asignación para operarios */}
-                                          {userRole === 'operario' && subServicio.isSelected && (
-                                            <Check className="ml-1 h-3 w-3 text-green-600" />
-                                          )}
-                                        </div>
-                                      </SelectItem>
-                                    ))}
-                                  </SelectWithClear>
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Selector de SubUbicación y notas*/}
-                            <div className="space-y-2">
-                              <Label className="text-[#3a8fb7] font-medium flex items-center">
-                                <MapPin className="mr-2 h-4 w-4" />
-                                Seleccionar Sub-Ubicación
-                                {subUbicacionesDisponibles.length === 0 ? (
-                                  <Badge className="ml-2 bg-[#FF9800] text-white text-xs font-normal">No disponible</Badge>
-                                ) : null}
-                              </Label>
-
-                              {/* Buscador de sububicaciones (desktop) */}
-                              {subUbicacionesDisponibles.length > 0 && (
-                                <SearchInput
-                                  value={subUbicacionSearch}
-                                  onChange={setSubUbicacionSearch}
-                                  onClear={() => setSubUbicacionSearch('')}
-                                  placeholder="Buscar sub-ubicación..."
-                                  disabled={cargandoClientes}
-                                  className="mb-2"
-                                />
-                              )}
-
-                              {!subServicioSeleccionado || subUbicacionesDisponibles.length === 0 ? (
-                                <div className="text-xs text-[#4a4a4a] mt-1 italic p-2 border border-[#3a8fb7]/20 rounded bg-white/30">
-                                  {!subServicioSeleccionado ? 'Seleccione un sub-servicio primero' : 'El sub-servicio seleccionado no tiene sub-ubicaciones asignadas.'}
-                                </div>
-                              ) : (
-                                <div className="relative mt-1">
-                                  {/* Reemplazo del Select por SelectWithClear */}
-                                  <SelectWithClear
-                                    value={subUbicacionSeleccionada || ""}
-                                    onValueChange={handleSubUbicacionChange}
-                                    disabled={cargandoClientes}
-                                    placeholder="Selecciona una sub-ubicación"
-                                  >
-                                    {subUbicacionesFiltradas.map(subUbicacion => (
-                                      <SelectItem
                                         key={subUbicacion._id}
                                         value={subUbicacion._id}
-                                        className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
+                                        className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white text-xs py-1"
                                       >
                                         {subUbicacion.nombre}
                                       </SelectItem>
@@ -2127,111 +2014,551 @@ export const Cart: React.FC = () => {
                                   </SelectWithClear>
                                 </div>
                               )}
-                            </div>
+                            </AccordionContent>
+                          </AccordionItem>
+                        )}
 
-                            {/* Notas adicionales */}
-                            <div className="space-y-2">
-                              <Label htmlFor="notes" className="text-[#3a8fb7] font-medium flex items-center">
-                                <Info className="mr-2 h-4 w-4" />
-                                Notas adicionales
-                              </Label>
+                        {/* Información adicional */}
+                        <AccordionItem value="notas" className="border-b-0">
+                          <AccordionTrigger className="py-2 px-3 bg-gradient-to-r from-[#d4f1f9]/40 to-[#a8e6cf]/40 backdrop-blur-sm border border-[#3a8fb7] rounded-lg shadow-md mb-2 text-[#3a8fb7] font-medium hover:no-underline hover:bg-[#d4f1f9]/60">
+                            <div className="flex items-center">
+                              <Info className="mr-2 h-4 w-4" />
+                              Información del pedido
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent className="bg-white/70 backdrop-blur-sm border border-[#3a8fb7] rounded-lg p-3 mb-2">
+                            <div>
+                              <Label htmlFor="notes" className="text-[#3a8fb7] text-xs font-medium">Notas adicionales</Label>
                               <Textarea
                                 id="notes"
-                                placeholder="Instrucciones especiales, ubicación de entrega, etc."
-                                className="bg-white border-[#3a8fb7] mt-1 text-[#4a4a4a] placeholder:text-[#4a4a4a]/60 h-[calc(100%-40px)] min-h-[110px]"
+                                placeholder="Instrucciones especiales, ubicación, etc."
+                                className="bg-white border-[#3a8fb7] mt-1 text-[#4a4a4a] placeholder:text-[#4a4a4a]/60 text-xs h-20"
                                 value={orderForm.notes}
                                 onChange={(e) => setOrderForm({ ...orderForm, notes: e.target.value })}
                               />
                             </div>
-                          </div>
-                        )}
+                          </AccordionContent>
+                        </AccordionItem>
+                      </Accordion>
 
-                        {/* Información del cliente seleccionado */}
-                        {clienteSeleccionado && !cargandoClientes && (
-                          <motion.div
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="mt-4 p-3 rounded-md bg-[#d4f1f9]/40 border border-[#3a8fb7]/50 backdrop-blur-sm"
-                          >
-                            <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-[#3a8fb7]">
-                              <p className="flex items-center">
-                              <Building className="w-4 h-4 mr-2 text-[#3a8fb7]" />
-                                <span className="font-medium">Cliente:</span>
-                                <span className="ml-1">{orderForm.servicio}</span>
+                      {/* Información del cliente seleccionado (móvil) */}
+                      {clienteSeleccionado && !cargandoClientes && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="mt-2 p-3 rounded-md bg-[#d4f1f9]/40 border border-[#3a8fb7]/50 backdrop-blur-sm"
+                        >
+                          <div className="text-xs text-[#3a8fb7]">
+                            <p className="flex items-center">
+                              <Building className="w-3 h-3 mr-1 text-[#3a8fb7]" />
+                              <span className="font-medium">Cliente:</span>
+                              <span className="ml-1 truncate">{orderForm.servicio}</span>
+                            </p>
+
+                            {orderForm.nombreSubServicio && (
+                              <p className="flex items-center mt-1">
+                                <PackageOpen className="w-3 h-3 mr-1 text-[#3a8fb7]" />
+                                <span className="font-medium">Sub-Servicio:</span>
+                                <span className="ml-1 truncate">{orderForm.nombreSubServicio}</span>
                               </p>
+                            )}
 
-                              {orderForm.nombreSubServicio && (
-                                <p className="flex items-center">
-                                  <PackageOpen className="w-4 h-4 mr-2 text-[#3a8fb7]" />
-                                  <span className="font-medium">Sub-Servicio:</span>
-                                  <span className="ml-1">{orderForm.nombreSubServicio}</span>
-                                </p>
-                              )}
+                            {orderForm.nombreSubUbicacion && (
+                              <p className="flex items-center mt-1">
+                                <MapPin className="w-3 h-3 mr-1 text-[#3a8fb7]" />
+                                <span className="font-medium">Sub-Ubicación:</span>
+                                <span className="ml-1 truncate">{orderForm.nombreSubUbicacion}</span>
+                              </p>
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </div>
 
-                              {orderForm.nombreSubUbicacion && (
-                                <p className="flex items-center">
-                                  <MapPin className="w-4 h-4 mr-2 text-[#3a8fb7]" />
-                                  <span className="font-medium">Sub-Ubicación:</span>
-                                  <span className="ml-1">{orderForm.nombreSubUbicacion}</span>
-                                </p>
-                              )}
+                    {/* Versión Desktop */}
+                    <div className="hidden md:grid md:grid-cols-1 lg:grid-cols-2 gap-4">
+                      {/* Selector de clientes */}
+                      <Card className="bg-gradient-to-r from-[#d4f1f9]/40 to-[#a8e6cf]/40 backdrop-blur-sm border-[#3a8fb7] shadow-md lg:col-span-2">
+                        <CardHeader className="border-b border-[#3a8fb7]/50 py-3">
+                          <CardTitle className="text-[#3a8fb7] flex items-center text-lg">
+                            <Building className="mr-2 h-5 w-5" />
+                            Seleccionar Cliente
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4 pt-4 pb-4">
+                          {cargandoClientes ? (
+                            <div className="py-3 flex justify-center">
+                              <Loader2 className="h-6 w-6 animate-spin text-[#3a8fb7]" />
                             </div>
-                          </motion.div>
-                        )}
-                      </CardContent>
-                    </Card>
+                          ) : errorClientes ? (
+                            <Alert className="bg-[#FF9800]/10 border-[#FF9800] shadow-sm">
+                              <AlertTriangle className="h-4 w-4 text-[#FF9800]" />
+                              <AlertDescription className="ml-2 text-[#3a8fb7]">
+                                {errorClientes}
+                              </AlertDescription>
+                            </Alert>
+                          ) : clientes.length === 0 ? (
+                            <div>
+                              <Alert className="bg-[#FF9800]/10 border-2 border-[#FF9800] mb-4">
+                                <AlertTriangle className="h-4 w-4 text-[#FF9800]" />
+                                <AlertDescription className="ml-2 text-[#3a8fb7] font-medium">
+                                  No hay clientes asignados. Por favor, contacta con administración para que te asignen clientes antes de realizar pedidos.
+                                </AlertDescription>
+                              </Alert>
 
-                    {orderError && (
-                      <Alert className="bg-[#F44336]/10 border-2 border-[#F44336] shadow-md lg:col-span-2">
-                        <AlertCircle className="h-5 w-5 text-[#F44336]" />
-                        <AlertDescription className="ml-2 text-[#F44336] font-medium">{orderError}</AlertDescription>
-                      </Alert>
-                    )}
-                  </div>
-                </motion.div>
-              )}
-            </div>
+                              <div className="flex justify-center mt-6">
+                                <Button
+                                  onClick={() => window.location.href = '/shop'}
+                                  className="bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white"
+                                >
+                                  <ArrowLeft className="mr-2 h-4 w-4" />
+                                  Volver a la tienda
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="grid md:grid-cols-2 gap-4">
+                              {/* Selector de cliente */}
+                              <div className="space-y-2">
+                                <Label htmlFor="clienteSelector" className="text-[#3a8fb7] font-medium flex items-center">
+                                  <Building className="mr-2 h-4 w-4" />
+                                  Cliente Asociado
+                                  {cargandoClientes && <Loader2 className="ml-2 h-3 w-3 animate-spin text-[#3a8fb7]" />}
+                                </Label>
 
-            {/* Botones de acción para desktop - Step 1 */}
-            {items.length > 0 && checkoutStep === 1 && (
-              <div className="mt-4 flex justify-between">
-                <Button
-                  variant="outline"
-                  className="border-[#F44336] text-[#F44336] hover:bg-[#F44336]/10 hover:text-[#F44336] h-9 md:h-10 text-xs md:text-sm"
-                  onClick={clearCart}
-                >
-                  <Trash2 className="mr-1 md:mr-2 h-3 w-3 md:h-4 md:w-4" />
-                  Vaciar carrito
-                </Button>
+                                {/* Buscador de clientes (desktop) */}
+                                <SearchInput
+                                  value={clienteSearch}
+                                  onChange={setClienteSearch}
+                                  onClear={() => setClienteSearch('')}
+                                  placeholder="Buscar cliente..."
+                                  disabled={cargandoClientes}
+                                  className="mb-2"
+                                />
+
+                                {/* Indicador de operario/supervisor */}
+                                {userRole === 'operario' && supervisorName && (
+                                  <div className="text-xs text-[#4a4a4a] mb-2 flex items-center">
+                                    <UserCircle2 className="h-3 w-3 mr-1 text-[#3a8fb7]" />
+                                    Mostrando clientes de: {supervisorName}
+                                  </div>
+                                )}
+
+                                <div className="relative mt-1">
+                                  {/* Select de cliente */}
+                                  <SelectWithClear
+                                    value={clienteSeleccionado || ""}
+                                    onValueChange={handleClienteChange}
+                                    disabled={cargandoClientes}
+                                    placeholder="Selecciona un cliente"
+                                  >
+                                    {Object.entries(clientesFiltrados).map(([servicio, clientesServicio]) => (
+                                      <div key={servicio} className="px-1 py-1">
+                                        {/* Encabezado de grupo de servicio */}
+                                        <div className="flex items-center px-2 py-1.5 text-xs uppercase tracking-wider font-semibold bg-[#d4f1f9] text-[#3a8fb7] rounded mb-1">
+                                          <Building className="h-3 w-3 mr-2" />
+                                          {servicio}
+                                        </div>
+
+                                        {/* Modificamos para mostrar el nombre del cliente en lugar de la sección */}
+                                        <div className="pl-2">
+                                          {clientesServicio.map(cliente => (
+                                            <SelectItem
+                                              key={cliente._id}
+                                              value={cliente._id}
+                                              className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
+                                            >
+                                              <div className="flex items-center">
+                                                <Building className="h-3 w-3 mr-2 text-[#4a4a4a]" />
+                                                <span>{cliente.nombre}</span>
+                                                {cliente.seccionDelServicio && (
+                                                  <span className="ml-1 text-xs text-[#7AA79C]">({cliente.seccionDelServicio})</span>
+                                                )}
+                                              </div>
+                                            </SelectItem>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </SelectWithClear>
+                                </div>
+                              </div>
+
+                              {/* Selector de SubServicio */}
+                              <div className="space-y-2">
+                                <Label htmlFor="subServicioSelector" className="text-[#3a8fb7] font-medium flex items-center">
+                                  <PackageOpen className="mr-2 h-4 w-4" />
+                                  Seleccionar Sub-Servicio
+                                  {subServiciosDisponibles.length === 0 ? (
+                                    <Badge className="ml-2 bg-[#FF9800] text-white text-xs font-normal">No disponible</Badge>
+                                  ) : null}
+                                </Label>
+
+                                {/* Buscador de subservicios (desktop) */}
+                                {subServiciosDisponibles.length > 0 && (
+                                  <SearchInput
+                                    value={subServicioSearch}
+                                    onChange={setSubServicioSearch}
+                                    onClear={() => setSubServicioSearch('')}
+                                    placeholder="Buscar sub-servicio..."
+                                    disabled={cargandoClientes}
+                                    className="mb-2"
+                                  />
+                                )}
+
+                                {subServiciosDisponibles.length === 0 ? (
+                                  <div className="text-xs text-[#4a4a4a] mt-1 italic p-2 border border-[#3a8fb7]/20 rounded bg-white/30">
+                                    {userRole === 'operario' 
+                                      ? 'No tienes subservicios asignados para este cliente.' 
+                                      : 'El cliente seleccionado no tiene sub-servicios asignados.'}
+                                  </div>
+                                ) : (
+                                  <div className="relative mt-1">
+                                    {/* Select de subservicio */}
+                                    <SelectWithClear
+                                      value={subServicioSeleccionado || ""}
+                                      onValueChange={handleSubServicioChange}
+                                      disabled={cargandoClientes}
+                                      placeholder="Selecciona un sub-servicio"
+                                    >
+                                      {subServiciosFiltrados.map(subServicio => (
+                                        <SelectItem
+                                          key={subServicio._id}
+                                          value={subServicio._id}
+                                          className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
+                                        >
+                                          <div className="flex items-center justify-between w-full">
+                                            <span>{subServicio.nombre}</span>
+
+                                            {/* Badge para mostrar si tiene sububicaciones */}
+                                            {subServicio.subUbicaciones && subServicio.subUbicaciones.length > 0 && (
+                                              <Badge className="ml-2 bg-[#3a8fb7] text-white text-xs">
+                                                {subServicio.subUbicaciones.length} {subServicio.subUbicaciones.length === 1 ? 'ubicación' : 'ubicaciones'}
+                                              </Badge>
+                                            )}
+
+                                            {/* Indicador de asignación para operarios */}
+                                            {userRole === 'operario' && subServicio.isSelected && (
+                                              <Check className="ml-1 h-3 w-3 text-green-600" />
+                                            )}
+                                          </div>
+                                        </SelectItem>
+                                      ))}
+                                    </SelectWithClear>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Selector de SubUbicación y notas*/}
+                              <div className="space-y-2">
+                                <Label className="text-[#3a8fb7] font-medium flex items-center">
+                                  <MapPin className="mr-2 h-4 w-4" />
+                                  Seleccionar Sub-Ubicación
+                                  {subUbicacionesDisponibles.length === 0 ? (
+                                    <Badge className="ml-2 bg-[#FF9800] text-white text-xs font-normal">No disponible</Badge>
+                                  ) : null}
+                                </Label>
+
+                                {/* Buscador de sububicaciones (desktop) */}
+                                {subUbicacionesDisponibles.length > 0 && (
+                                  <SearchInput
+                                    value={subUbicacionSearch}
+                                    onChange={setSubUbicacionSearch}
+                                    onClear={() => setSubUbicacionSearch('')}
+                                    placeholder="Buscar sub-ubicación..."
+                                    disabled={cargandoClientes}
+                                    className="mb-2"
+                                  />
+                                )}
+
+                                {!subServicioSeleccionado || subUbicacionesDisponibles.length === 0 ? (
+                                  <div className="text-xs text-[#4a4a4a] mt-1 italic p-2 border border-[#3a8fb7]/20 rounded bg-white/30">
+                                    {!subServicioSeleccionado ? 'Seleccione un sub-servicio primero' : 'El sub-servicio seleccionado no tiene sub-ubicaciones asignadas.'}
+                                  </div>
+                                ) : (
+                                  <div className="relative mt-1">
+                                    {/* Select de sububicación */}
+                                    <SelectWithClear
+                                      value={subUbicacionSeleccionada || ""}
+                                      onValueChange={handleSubUbicacionChange}
+                                      disabled={cargandoClientes}
+                                      placeholder="Selecciona una sub-ubicación"
+                                    >
+                                      {subUbicacionesFiltradas.map(subUbicacion => (
+                                        <SelectItem
+                                          key={subUbicacion._id}
+                                          value={subUbicacion._id}
+                                          className="focus:bg-[#d4f1f9] data-[state=checked]:bg-[#3a8fb7] data-[state=checked]:text-white"
+                                        >
+                                          {subUbicacion.nombre}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectWithClear>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Notas adicionales */}
+                              <div className="space-y-2">
+                                <Label htmlFor="notes" className="text-[#3a8fb7] font-medium flex items-center">
+                                  <Info className="mr-2 h-4 w-4" />
+                                  Notas adicionales
+                                </Label>
+                                <Textarea
+                                  id="notes"
+                                  placeholder="Instrucciones especiales, ubicación de entrega, etc."
+                                  className="bg-white border-[#3a8fb7] mt-1 text-[#4a4a4a] placeholder:text-[#4a4a4a]/60 h-[calc(100%-40px)] min-h-[110px]"
+                                  value={orderForm.notes}
+                                  onChange={(e) => setOrderForm({ ...orderForm, notes: e.target.value })}
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Información del cliente seleccionado */}
+                          {clienteSeleccionado && !cargandoClientes && (
+                            <motion.div
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="mt-4 p-3 rounded-md bg-[#d4f1f9]/40 border border-[#3a8fb7]/50 backdrop-blur-sm"
+                            >
+                              <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-[#3a8fb7]">
+                                <p className="flex items-center">
+                                <Building className="w-4 h-4 mr-2 text-[#3a8fb7]" />
+                                  <span className="font-medium">Cliente:</span>
+                                  <span className="ml-1">{orderForm.servicio}</span>
+                                </p>
+
+                                {orderForm.nombreSubServicio && (
+                                  <p className="flex items-center">
+                                    <PackageOpen className="w-4 h-4 mr-2 text-[#3a8fb7]" />
+                                    <span className="font-medium">Sub-Servicio:</span>
+                                    <span className="ml-1">{orderForm.nombreSubServicio}</span>
+                                  </p>
+                                )}
+
+                                {orderForm.nombreSubUbicacion && (
+                                  <p className="flex items-center">
+                                    <MapPin className="w-4 h-4 mr-2 text-[#3a8fb7]" />
+                                    <span className="font-medium">Sub-Ubicación:</span>
+                                    <span className="ml-1">{orderForm.nombreSubUbicacion}</span>
+                                  </p>
+                                )}
+                              </div>
+                            </motion.div>
+                          )}
+                        </CardContent>
+                      </Card>
+
+                      {orderError && (
+                        <Alert className="bg-[#F44336]/10 border-2 border-[#F44336] shadow-md lg:col-span-2">
+                          <AlertCircle className="h-5 w-5 text-[#F44336]" />
+                          <AlertDescription className="ml-2 text-[#F44336] font-medium">{orderError}</AlertDescription>
+                        </Alert>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
               </div>
-            )}
 
-            {/* Botones móviles para Step 2 */}
-            <div className="md:hidden mt-4">
-              {checkoutStep === 2 && (
-                <div className="flex flex-col space-y-3">
-                  {/* Mostrar resumen móvil */}
+              {/* Botones de acción para desktop - Step 1 */}
+              {items.length > 0 && checkoutStep === 1 && (
+                <div className="mt-4 flex justify-between">
                   <Button
                     variant="outline"
-                    className="w-full border-[#3a8fb7] text-[#3a8fb7] flex items-center justify-between h-10"
-                    onClick={() => setShowSummary(!showSummary)}
+                    className="border-[#F44336] text-[#F44336] hover:bg-[#F44336]/10 hover:text-[#F44336] h-9 md:h-10 text-xs md:text-sm"
+                    onClick={clearCart}
                   >
-                    <span className="flex items-center">
-                      <ShoppingCart className="h-4 w-4 mr-2" />
-                      Resumen del pedido
-                    </span>
-                    {showSummary ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    <Trash2 className="mr-1 md:mr-2 h-3 w-3 md:h-4 md:w-4" />
+                    Vaciar carrito
                   </Button>
+                </div>
+              )}
 
-                  {showSummary && (
-                    <Card className="bg-white/70 backdrop-blur-sm border border-[#3a8fb7] mb-3">
-                      <CardContent className="p-3 space-y-2">
+              {/* Botones móviles para Step 2 */}
+              <div className="md:hidden mt-4">
+                {checkoutStep === 2 && (
+                  <div className="flex flex-col space-y-3">
+                    {/* Mostrar resumen móvil */}
+                    <Button
+                      variant="outline"
+                      className="w-full border-[#3a8fb7] text-[#3a8fb7] flex items-center justify-between h-10"
+                      onClick={() => setShowSummary(!showSummary)}
+                    >
+                      <span className="flex items-center">
+                        <ShoppingCart className="h-4 w-4 mr-2" />
+                        Resumen del pedido
+                      </span>
+                      {showSummary ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </Button>
+
+                    {showSummary && (
+                      <Card className="bg-white/70 backdrop-blur-sm border border-[#3a8fb7] mb-3">
+                        <CardContent className="p-3 space-y-2">
+                          {items.map((item) => (
+                            <div key={item.id} className="flex justify-between py-1 text-[#3a8fb7] text-xs">
+                              <span className="truncate mr-2 max-w-[70%]">
+                                {item.name} <span className="text-[#4a4a4a]">x{item.quantity}</span>
+                                {item.isCombo && (
+                                  <Badge className="ml-1 bg-[#ffffff] text-[#3a8fb7] border border-[#3a8fb7] text-[10px]">
+                                    <Package size={8} className="mr-0.5" />
+                                    Combo
+                                  </Badge>
+                                )}
+                              </span>
+                              <span>${(item.price * item.quantity).toFixed(2)}</span>
+                            </div>
+                          ))}
+                          <Separator className="bg-[#3a8fb7]/30 my-1" />
+                          <div className="flex justify-between font-bold text-[#3a8fb7] text-sm">
+                            <span>Total:</span>
+                            <span>${totalPrice.toFixed(2)}</span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {orderError && (
+                      <Alert className="bg-[#F44336]/10 border-2 border-[#F44336] p-2 mb-3">
+                        <AlertCircle className="h-4 w-4 text-[#F44336]" />
+                        <AlertDescription className="ml-2 text-[#F44336] text-xs font-medium">{orderError}</AlertDescription>
+                      </Alert>
+                    )}
+
+                    <div className="flex space-x-3">
+                      <Button
+                        variant="outline"
+                        className="flex-1 border-[#3a8fb7] text-[#3a8fb7] hover:bg-[#3a8fb7]/20 h-10 text-xs"
+                        onClick={() => setCheckoutStep(1)}
+                      >
+                        <ArrowLeft className="mr-1 h-3 w-3" />
+                        Volver al carrito
+                      </Button>
+
+                      <Button
+                        onClick={processOrder}
+                        className="flex-1 bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white shadow-md shadow-[#3a8fb7]/20 h-10 text-xs"
+                        disabled={processingOrder || !formValid}
+                      >
+                        {processingOrder ? (
+                          <>
+                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                            Procesando...
+                          </>
+                        ) : userRole === 'operario' ? (
+                          <>
+                            <CreditCard className="mr-1 h-3 w-3" />
+                            Enviar pedido
+                          </>
+                        ) : (
+                          <>
+                            <CreditCard className="mr-1 h-3 w-3" />
+                            Realizar pedido
+                          </>
+                        )}
+                      </Button>
+                    </div>
+
+                    {/* Mensaje de campos requeridos si el formulario no es válido */}
+                    {!formValid && (
+                      <div className="mt-2 text-sm text-[#F44336]">
+                        <AlertTriangle className="inline-block w-3 h-3 mr-1" />
+                        Por favor, seleccione un cliente y un subservicio para continuar.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Botones desktop para Step 2 */}
+              <div className="hidden md:block">
+                {checkoutStep === 2 && (
+                  <div className="mt-6 flex justify-between">
+                    <Button
+                      variant="outline"
+                      className="border-[#3a8fb7] text-[#3a8fb7] hover:bg-[#3a8fb7]/20"
+                      onClick={() => setCheckoutStep(1)}
+                    >
+                      <ArrowLeft className="mr-2 h-4 w-4" />
+                      Volver al carrito
+                    </Button>
+
+                    <Button
+                      onClick={processOrder}
+                      className="bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white shadow-md shadow-[#3a8fb7]/20"
+                      disabled={processingOrder || !formValid}
+                    >
+                      {processingOrder ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Procesando...
+                        </>
+                      ) : userRole === 'operario' ? (
+                        <>
+                          <CreditCard className="mr-2 h-4 w-4" />
+                          Enviar para aprobación
+                        </>
+                      ) : (
+                        <>
+                          <CreditCard className="mr-2 h-4 w-4" />
+                          Realizar pedido
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+
+                {/* Mensaje de campos requeridos si el formulario no es válido - desktop */}
+                {checkoutStep === 2 && !formValid && (
+                  <div className="mt-2 text-sm text-[#F44336] text-center">
+                    <AlertTriangle className="inline-block w-4 h-4 mr-1" />
+                    Por favor, seleccione un cliente y un subservicio para continuar.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Resumen de compra */}
+            <div className="w-full lg:w-80 flex-shrink-0">
+              <div className="lg:sticky lg:top-20">
+                {/* Móvil - Botón para proceder */}
+                {checkoutStep === 1 && (
+                  <div className="block md:hidden">
+                    <Button
+                      onClick={() => setCheckoutStep(2)}
+                      className="w-full bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white shadow-md shadow-[#3a8fb7]/20 h-12 text-base mb-4"
+                    >
+                      Proceder a confirmar
+                    </Button>
+                  </div>
+                )}
+
+                <Card className="bg-gradient-to-br from-[#3a8fb7]/60 to-[#a8e6cf]/60 backdrop-blur-md border border-[#3a8fb7] shadow-lg shadow-[#3a8fb7]/10">
+                  <CardHeader className="border-b border-[#3a8fb7]/50 py-3 md:py-4">
+                    <CardTitle className="text-white text-lg">Resumen</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 md:space-y-4 pt-4 md:pt-5">
+                    <div className="flex justify-between text-sm text-white">
+                      <span>Subtotal:</span>
+                      <span>${totalPrice.toFixed(2)}</span>
+                    </div>
+
+                    <div className="flex justify-between text-sm text-white">
+                      <span>Productos:</span>
+                      <span>{totalItems} {totalItems === 1 ? 'ítem' : 'ítems'}</span>
+                    </div>
+
+                    {/* Lista de productos en resumen - Mejorado para desktop */}
+                    <div className="hidden md:block">
+                      <Separator className="bg-white/30 my-2" />
+                      <div className="max-h-48 overflow-y-auto pr-1 space-y-1 scrollbar-thin scrollbar-thumb-white/40 scrollbar-track-transparent">
                         {items.map((item) => (
-                          <div key={item.id} className="flex justify-between py-1 text-[#3a8fb7] text-xs">
-                            <span className="truncate mr-2 max-w-[70%]">
-                              {item.name} <span className="text-[#4a4a4a]">x{item.quantity}</span>
+                          <div key={item.id} className="flex justify-between py-1 text-white text-xs">
+                            <span className="truncate mr-2 max-w-[70%] flex items-center">
+                              {item.name} 
+                              <span className="ml-1 text-white/80">x{item.quantity}</span>
                               {item.isCombo && (
-                                <Badge className="ml-1 bg-[#ffffff] text-[#3a8fb7] border border-[#3a8fb7] text-[10px]">
+                                <Badge className="ml-1 bg-white text-[#3a8fb7] border border-[#3a8fb7] text-[10px]">
                                   <Package size={8} className="mr-0.5" />
                                   Combo
                                 </Badge>
@@ -2240,244 +2567,86 @@ export const Cart: React.FC = () => {
                             <span>${(item.price * item.quantity).toFixed(2)}</span>
                           </div>
                         ))}
-                        <Separator className="bg-[#3a8fb7]/30 my-1" />
-                        <div className="flex justify-between font-bold text-[#3a8fb7] text-sm">
-                          <span>Total:</span>
-                          <span>${totalPrice.toFixed(2)}</span>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {orderError && (
-                    <Alert className="bg-[#F44336]/10 border-2 border-[#F44336] p-2 mb-3">
-                      <AlertCircle className="h-4 w-4 text-[#F44336]" />
-                      <AlertDescription className="ml-2 text-[#F44336] text-xs font-medium">{orderError}</AlertDescription>
-                    </Alert>
-                  )}
-
-                  <div className="flex space-x-3">
-                    <Button
-                      variant="outline"
-                      className="flex-1 border-[#3a8fb7] text-[#3a8fb7] hover:bg-[#3a8fb7]/20 h-10 text-xs"
-                      onClick={() => setCheckoutStep(1)}
-                    >
-                      <ArrowLeft className="mr-1 h-3 w-3" />
-                      Volver al carrito
-                    </Button>
-
-                    <Button
-                      onClick={processOrder}
-                      className="flex-1 bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white shadow-md shadow-[#3a8fb7]/20 h-10 text-xs"
-                      disabled={processingOrder || !formValid}
-                    >
-                      {processingOrder ? (
-                        <>
-                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                          Procesando...
-                        </>
-                      ) : userRole === 'operario' ? (
-                        <>
-                          <CreditCard className="mr-1 h-3 w-3" />
-                          Enviar pedido
-                        </>
-                      ) : (
-                        <>
-                          <CreditCard className="mr-1 h-3 w-3" />
-                          Realizar pedido
-                        </>
-                      )}
-                    </Button>
-                  </div>
-
-                  {/* Mensaje de campos requeridos si el formulario no es válido */}
-                  {!formValid && (
-                    <div className="mt-2 text-sm text-[#F44336]">
-                      <AlertTriangle className="inline-block w-3 h-3 mr-1" />
-                      Por favor, seleccione un cliente y un subservicio para continuar.
+                      </div>
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
 
-            {/* Botones desktop para Step 2 */}
-            <div className="hidden md:block">
-              {checkoutStep === 2 && (
-                <div className="mt-6 flex justify-between">
-                  <Button
-                    variant="outline"
-                    className="border-[#3a8fb7] text-[#3a8fb7] hover:bg-[#3a8fb7]/20"
-                    onClick={() => setCheckoutStep(1)}
-                  >
-                    <ArrowLeft className="mr-2 h-4 w-4" />
-                    Volver al carrito
-                  </Button>
-
-                  <Button
-                    onClick={processOrder}
-                    className="bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white shadow-md shadow-[#3a8fb7]/20"
-                    disabled={processingOrder || !formValid}
-                  >
-                    {processingOrder ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Procesando...
-                      </>
-                    ) : userRole === 'operario' ? (
-                      <>
-                        <CreditCard className="mr-2 h-4 w-4" />
-                        Enviar para aprobación
-                      </>
-                    ) : (
-                      <>
-                        <CreditCard className="mr-2 h-4 w-4" />
-                        Realizar pedido
-                      </>
+                    {/* Mostrar información del supervisor para operarios */}
+                    {userRole === 'operario' && supervisorName && (
+                      <div className="bg-white/20 rounded-md p-2 text-xs text-white border border-white/50">
+                        <div className="flex items-center mb-1 text-white">
+                          <UserCircle2 className="h-3 w-3 mr-1" />
+                          <span className="font-medium">Información de pedido</span>
+                        </div>
+                        <p>Supervisor: <span className="font-bold">{supervisorName}</span></p>
+                        <p className="text-white/80 text-[10px] mt-1">
+                          El pedido requiere aprobación
+                        </p>
+                      </div>
                     )}
-                  </Button>
-                </div>
-              )}
 
-              {/* Mensaje de campos requeridos si el formulario no es válido - desktop */}
-              {checkoutStep === 2 && !formValid && (
-                <div className="mt-2 text-sm text-[#F44336] text-center">
-                  <AlertTriangle className="inline-block w-4 h-4 mr-1" />
-                  Por favor, seleccione un cliente y un subservicio para continuar.
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Resumen de compra */}
-          <div className="w-full lg:w-80 flex-shrink-0">
-            <div className="lg:sticky lg:top-20">
-              {/* Móvil - Botón para proceder */}
-              {checkoutStep === 1 && (
-                <div className="block md:hidden">
-                  <Button
-                    onClick={() => setCheckoutStep(2)}
-                    className="w-full bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white shadow-md shadow-[#3a8fb7]/20 h-12 text-base mb-4"
-                  >
-                    Proceder a confirmar
-                  </Button>
-                </div>
-              )}
-
-              <Card className="bg-gradient-to-br from-[#3a8fb7]/60 to-[#a8e6cf]/60 backdrop-blur-md border border-[#3a8fb7] shadow-lg shadow-[#3a8fb7]/10">
-                <CardHeader className="border-b border-[#3a8fb7]/50 py-3 md:py-4">
-                  <CardTitle className="text-white text-lg">Resumen</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 md:space-y-4 pt-4 md:pt-5">
-                  <div className="flex justify-between text-sm text-white">
-                    <span>Subtotal:</span>
-                    <span>${totalPrice.toFixed(2)}</span>
-                  </div>
-
-                  <div className="flex justify-between text-sm text-white">
-                    <span>Productos:</span>
-                    <span>{totalItems} {totalItems === 1 ? 'ítem' : 'ítems'}</span>
-                  </div>
-
-                  {/* Lista de productos en resumen - Mejorado para desktop */}
-                  <div className="hidden md:block">
-                    <Separator className="bg-white/30 my-2" />
-                    <div className="max-h-48 overflow-y-auto pr-1 space-y-1 scrollbar-thin scrollbar-thumb-white/40 scrollbar-track-transparent">
-                      {items.map((item) => (
-                        <div key={item.id} className="flex justify-between py-1 text-white text-xs">
-                          <span className="truncate mr-2 max-w-[70%] flex items-center">
-                            {item.name} 
-                            <span className="ml-1 text-white/80">x{item.quantity}</span>
-                            {item.isCombo && (
-                              <Badge className="ml-1 bg-white text-[#3a8fb7] border border-[#3a8fb7] text-[10px]">
-                                <Package size={8} className="mr-0.5" />
-                                Combo
-                              </Badge>
-                            )}
-                          </span>
-                          <span>${(item.price * item.quantity).toFixed(2)}</span>
+                    {/* Información de subservicios asignados para operarios */}
+                    {userRole === 'operario' && subserviciosAsignados.length > 0 && (
+                      <div className="bg-white/20 rounded-md p-2 text-xs text-white border border-white/50">
+                        <div className="flex items-center mb-1 text-white">
+                          <PackageOpen className="h-3 w-3 mr-1" />
+                          <span className="font-medium">Subservicios asignados</span>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Mostrar información del supervisor para operarios */}
-                  {userRole === 'operario' && supervisorName && (
-                    <div className="bg-white/20 rounded-md p-2 text-xs text-white border border-white/50">
-                      <div className="flex items-center mb-1 text-white">
-                        <UserCircle2 className="h-3 w-3 mr-1" />
-                        <span className="font-medium">Información de pedido</span>
+                        <p className="text-white/80 text-[10px] mt-1">
+                          {subserviciosAsignados.length} subservicios disponibles
+                        </p>
                       </div>
-                      <p>Supervisor: <span className="font-medium">{supervisorName}</span></p>
-                      <p className="text-white/80 text-[10px] mt-1">
-                        El pedido requiere aprobación
-                      </p>
-                    </div>
-                  )}
+                    )}
 
-                  {/* Información de subservicios asignados para operarios */}
-                  {userRole === 'operario' && subserviciosAsignados.length > 0 && (
-                    <div className="bg-white/20 rounded-md p-2 text-xs text-white border border-white/50">
-                      <div className="flex items-center mb-1 text-white">
-                        <PackageOpen className="h-3 w-3 mr-1" />
-                        <span className="font-medium">Subservicios asignados</span>
+                    <Separator className="bg-white/30" />
+
+                    <div className="flex justify-between font-semibold text-lg text-white">
+                      <span>Total:</span>
+                      <span>${totalPrice.toFixed(2)}</span>
+                    </div>
+                  </CardContent>
+
+                  <CardFooter className="px-4 py-3 md:py-4">
+                    {checkoutStep === 1 ? (
+                      <Button
+                        onClick={() => setCheckoutStep(2)}
+                        className="w-full bg-white hover:bg-[#d4f1f9] text-[#3a8fb7] shadow-md transition-all duration-300 hover:shadow-lg font-medium hidden md:flex"
+                        disabled={items.length === 0}
+                      >
+                        Proceder a confirmar el pedido
+                      </Button>
+                    ) : (
+                      <div className="w-full text-center text-xs md:text-sm text-white">
+                        <p>Revisa tu pedido y completa la información requerida.</p>
                       </div>
-                      <p className="text-white/80 text-[10px] mt-1">
-                        {subserviciosAsignados.length} subservicios disponibles
-                      </p>
-                    </div>
-                  )}
+                    )}
+                  </CardFooter>
+                </Card>
 
-                  <Separator className="bg-white/30" />
-
-                  <div className="flex justify-between font-semibold text-lg text-white">
-                    <span>Total:</span>
-                    <span>${totalPrice.toFixed(2)}</span>
-                  </div>
-                </CardContent>
-
-                <CardFooter className="px-4 py-3 md:py-4">
-                  {checkoutStep === 1 ? (
-                    <Button
-                      onClick={() => setCheckoutStep(2)}
-                      className="w-full bg-white hover:bg-[#d4f1f9] text-[#3a8fb7] shadow-md transition-all duration-300 hover:shadow-lg font-medium hidden md:flex"
-                      disabled={items.length === 0}
-                    >
-                      Proceder a confirmar el pedido
-                    </Button>
+                {/* Políticas de pedido - Versión móvil simplificada */}
+                <div className="mt-4 p-3 md:p-4 bg-gradient-to-br from-[#d4f1f9]/20 to-[#a8e6cf]/20 backdrop-blur-sm rounded-lg border border-[#3a8fb7] shadow-md">
+                  <h3 className="flex items-center text-xs md:text-sm font-medium mb-2 text-[#3a8fb7]">
+                    <Check className="text-[#3a8fb7] mr-2 h-3 w-3 md:h-4 md:w-4" />
+                    Política de pedidos
+                  </h3>
+                  {userRole === 'operario' ? (
+                    <p className="text-xs text-[#4a4a4a]">
+                      Los pedidos requieren aprobación del supervisor antes de ser procesados.
+                      Solo puedes realizar pedidos en los subservicios que te han sido asignados.
+                    </p>
                   ) : (
-                    <div className="w-full text-center text-xs md:text-sm text-white">
-                      <p>Revisa tu pedido y completa la información requerida.</p>
-                    </div>
+                    <p className="text-xs text-[#4a4a4a]">
+                      Los pedidos realizados están sujetos a revisión y aprobación por el equipo administrativo.
+                      Una vez confirmado, se coordinará la entrega de los productos.
+                    </p>
                   )}
-                </CardFooter>
-              </Card>
-
-              {/* Políticas de pedido - Versión móvil simplificada */}
-              <div className="mt-4 p-3 md:p-4 bg-gradient-to-br from-[#d4f1f9]/20 to-[#a8e6cf]/20 backdrop-blur-sm rounded-lg border border-[#3a8fb7] shadow-md">
-                <h3 className="flex items-center text-xs md:text-sm font-medium mb-2 text-[#3a8fb7]">
-                  <Check className="text-[#3a8fb7] mr-2 h-3 w-3 md:h-4 md:w-4" />
-                  Política de pedidos
-                </h3>
-                {userRole === 'operario' ? (
-                  <p className="text-xs text-[#4a4a4a]">
-                    Los pedidos requieren aprobación del supervisor antes de ser procesados.
-                    Solo puedes realizar pedidos en los subservicios que te han sido asignados.
-                  </p>
-                ) : (
-                  <p className="text-xs text-[#4a4a4a]">
-                    Los pedidos realizados están sujetos a revisión y aprobación por el equipo administrativo.
-                    Una vez confirmado, se coordinará la entrega de los productos.
-                  </p>
-                )}
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
-  </>
-);
+    </>
+  );
 };
 
-export default Cart;
+export default React.memo(Cart);
