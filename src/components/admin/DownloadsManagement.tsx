@@ -478,7 +478,7 @@ const DownloadsManagement: React.FC = () => {
       setLoadingCacheData(true);
 
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/producto', {
+      const response = await fetch('http://localhost:3000/api/producto', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -535,7 +535,7 @@ const DownloadsManagement: React.FC = () => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/auth/users', {
+      const response = await fetch('http://localhost:3000/api/auth/users', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -587,7 +587,7 @@ const DownloadsManagement: React.FC = () => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/cliente', {
+      const response = await fetch('http://localhost:3000/api/cliente', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -638,7 +638,7 @@ const DownloadsManagement: React.FC = () => {
     setLoadingPedidos(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/pedido', {
+      const response = await fetch('http://localhost:3000/api/pedido', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -701,7 +701,7 @@ const DownloadsManagement: React.FC = () => {
       return [];
     }
 
-    let url = `/api/pedido/cliente/${clienteId}`;
+    let url = `http://localhost:3000/api/pedido/cliente/${clienteId}`;
 
     // Construir URL con query params
     if (subServicioId || subUbicacionId) {
@@ -992,7 +992,7 @@ const DownloadsManagement: React.FC = () => {
       }
 
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/downloads/excel?${params.toString()}`, {
+      const response = await fetch(`http://localhost:3000/api/downloads/excel?${params.toString()}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -1052,7 +1052,7 @@ const DownloadsManagement: React.FC = () => {
       }
 
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/downloads/reporte-mensual?${params.toString()}`, {
+      const response = await fetch(`http://localhost:3000/api/downloads/reporte-mensual?${params.toString()}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -1113,7 +1113,7 @@ const DownloadsManagement: React.FC = () => {
       console.log(`Starting remito download for order: ${pedidoId}`);
 
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/downloads/remito/${pedidoId}`, {
+      const response = await fetch(`http://localhost:3000/api/downloads/remito/${pedidoId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'

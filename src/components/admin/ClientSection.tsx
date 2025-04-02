@@ -296,7 +296,7 @@ const ClientsSection: React.FC = () => {
   const [currentSubServicio, setCurrentSubServicio] = useState<SubServicio | null>(null);
   const [currentClientForSubServicio, setCurrentClientForSubServicio] = useState<Client | null>(null);
   const [currentSubUbicacion, setCurrentSubUbicacion] = useState<SubUbicacion | null>(null);
-  const [currentSupervisorId, setCurrentSupervisorId] = useState<string>('');
+  const [currentSupervisorId, setCurrentSupervisorId] = useState<string[]>([]);
   const [idToDelete, setIdToDelete] = useState<{ id: string, type: 'cliente' | 'subservicio' | 'sububicacion' | 'supervisor', parentId?: string, subServicioId?: string } | null>(null);
 
   // Estados para mensajes de feedback
@@ -529,11 +529,17 @@ const ClientsSection: React.FC = () => {
     setActiveSupervisorId("all");
 
     // Cargar datos
-    fetchClients(false);
-    fetchUsers(false);
-    fetchSupervisors(false);
-    fetchClientsWithoutUser(false);
-    fetchSubservicesWithoutSupervisor(false);
+    const loadData = async () => {
+      await fetchClients(false);
+      await fetchUsers(false);
+      await fetchSupervisors(false);
+
+      // Primero cargar estos datos que generan notificaciones
+      await fetchClientsWithoutUser(false);
+      await fetchSubservicesWithoutSupervisor(false);
+    };
+
+    loadData();
 
     // Los valores de localStorage ya no modificarán la selección por defecto
     // pero aún se usarán para el formulario si es necesario
@@ -661,11 +667,11 @@ const ClientsSection: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      let apiUrl = '/api/cliente';
+      let apiUrl = 'http://localhost:3000/api/cliente';
 
       // Si hay un supervisor activo, obtener los clientes filtrados por supervisor
       if (activeSupervisorId !== "all" && viewMode === 'all') {
-        apiUrl = `/api/cliente/supervisor/${activeSupervisorId}`;
+        apiUrl = `http://localhost:3000/api/cliente/supervisor/${activeSupervisorId}`;
       }
 
       const response = await fetch(apiUrl, {
@@ -747,7 +753,7 @@ const ClientsSection: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('/api/cliente/sin-asignar', {
+      const response = await fetch('http://localhost:3000/api/cliente/sin-asignar', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -796,8 +802,8 @@ const ClientsSection: React.FC = () => {
   };
 
   /**
-   * Carga subservicios sin supervisor asignado
-   */
+  * Carga subservicios sin supervisor asignado
+  */
   const fetchSubservicesWithoutSupervisor = async (forceRefresh: boolean = false) => {
     try {
       // Si no es una actualización forzada, intentar obtener datos de la caché
@@ -806,6 +812,12 @@ const ClientsSection: React.FC = () => {
         if (cachedUnassignedSubservices) {
           console.log("Usando subservicios sin supervisor desde caché");
           setUnassignedSubservices(cachedUnassignedSubservices);
+
+          // Mostrar alerta si hay subservicios sin supervisor (aún usando datos cacheados)
+          if (cachedUnassignedSubservices.length > 0 && addNotification) {
+            const totalSubservicios = cachedUnassignedSubservices.reduce((total, client) => total + client.subServicios.length, 0);
+            addNotification(`Se encontraron ${totalSubservicios} subservicios sin supervisor asignado. Puede asignar supervisores desde el menú de opciones.`, 'warning', 8000);
+          }
           return;
         }
       }
@@ -815,7 +827,7 @@ const ClientsSection: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('/api/cliente/subservicios/sin-supervisor', {
+      const response = await fetch('http://localhost:3000/api/cliente/subservicios/sin-supervisor', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -833,7 +845,7 @@ const ClientsSection: React.FC = () => {
       saveToCache(UNASSIGNED_SUBSERVICES_CACHE_KEY, data);
       setUnassignedSubservices(data);
 
-      // Mostrar alerta si hay subservicios sin supervisor
+      // Mostrar alerta siempre, no solo la primera vez
       if (data.length > 0 && addNotification) {
         const totalSubservicios = data.reduce((total, client) => total + client.subServicios.length, 0);
         addNotification(`Se encontraron ${totalSubservicios} subservicios sin supervisor asignado. Puede asignar supervisores desde el menú de opciones.`, 'warning', 8000);
@@ -867,7 +879,7 @@ const ClientsSection: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('/api/auth/users', {
+      const response = await fetch('http://localhost:3000/api/auth/users', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -930,7 +942,7 @@ const ClientsSection: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('/api/auth/supervisors', {
+      const response = await fetch('http://localhost:3000/api/auth/supervisors', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -969,7 +981,7 @@ const ClientsSection: React.FC = () => {
 
       console.log("Creando cliente con datos:", clientFormData);
 
-      const response = await fetch('/api/cliente', {
+      const response = await fetch('http://localhost:3000/api/cliente', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1025,7 +1037,7 @@ const ClientsSection: React.FC = () => {
 
       console.log("Actualizando cliente:", currentClient._id, "con datos:", clientFormData);
 
-      const response = await fetch(`/api/cliente/${currentClient._id}`, {
+      const response = await fetch(`http://localhost:3000/api/cliente/${currentClient._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -1081,7 +1093,7 @@ const ClientsSection: React.FC = () => {
 
       console.log("Creando subservicio para cliente", currentClientForSubServicio._id, "con datos:", subServicioFormData);
 
-      const response = await fetch(`/api/cliente/${currentClientForSubServicio._id}/subservicio`, {
+      const response = await fetch(`http://localhost:3000/api/cliente/${currentClientForSubServicio._id}/subservicio`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1138,7 +1150,7 @@ const ClientsSection: React.FC = () => {
 
       console.log("Actualizando subservicio:", currentSubServicio._id, "del cliente:", currentClientForSubServicio._id, "con datos:", subServicioFormData);
 
-      const response = await fetch(`/api/cliente/${currentClientForSubServicio._id}/subservicio/${currentSubServicio._id}`, {
+      const response = await fetch(`http://localhost:3000/api/cliente/${currentClientForSubServicio._id}/subservicio/${currentSubServicio._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -1185,7 +1197,15 @@ const ClientsSection: React.FC = () => {
    */
   const handleAssignSupervisor = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentClientForSubServicio?._id || !currentSubServicio?._id || !currentSupervisorId) return;
+    if (!currentClientForSubServicio?._id || !currentSubServicio?._id) return;
+
+    // Validar que haya al menos un supervisor seleccionado
+    if (!Array.isArray(currentSupervisorId) || currentSupervisorId.length === 0) {
+      if (addNotification) {
+        addNotification('Debe seleccionar al menos un supervisor', 'error');
+      }
+      return;
+    }
 
     try {
       const token = getAuthToken();
@@ -1193,9 +1213,9 @@ const ClientsSection: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      console.log("Asignando supervisor", currentSupervisorId, "al subservicio:", currentSubServicio._id, "del cliente:", currentClientForSubServicio._id);
+      console.log("Asignando supervisores", currentSupervisorId, "al subservicio:", currentSubServicio._id, "del cliente:", currentClientForSubServicio._id);
 
-      const response = await fetch(`/api/cliente/${currentClientForSubServicio._id}/subservicio/${currentSubServicio._id}/supervisor`, {
+      const response = await fetch(`http://localhost:3000/api/cliente/${currentClientForSubServicio._id}/subservicio/${currentSubServicio._id}/supervisor`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1206,7 +1226,7 @@ const ClientsSection: React.FC = () => {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.mensaje || 'Error al asignar supervisor');
+        throw new Error(errorData.mensaje || 'Error al asignar supervisores');
       }
 
       // Invalidar caché después de asignar supervisor
@@ -1215,10 +1235,10 @@ const ClientsSection: React.FC = () => {
       await fetchClients(true);
       await fetchSubservicesWithoutSupervisor(true);
       setShowSupervisorModal(false);
-      setCurrentSupervisorId('');
+      setCurrentSupervisorId([]);
 
-      const supervisorNombre = supervisors.find(s => s._id === currentSupervisorId)?.nombre || 'Supervisor';
-      const successMsg = `Supervisor "${supervisorNombre}" asignado correctamente al subservicio "${currentSubServicio.nombre}"`;
+      const supervisorsCount = currentSupervisorId.length;
+      const successMsg = `${supervisorsCount === 1 ? 'Supervisor asignado' : `${supervisorsCount} Supervisores asignados`} correctamente al subservicio "${currentSubServicio.nombre}"`;
       setSuccessMessage(successMsg);
 
       // Notificación de éxito
@@ -1228,7 +1248,7 @@ const ClientsSection: React.FC = () => {
 
       setTimeout(() => setSuccessMessage(''), 5000);
     } catch (err) {
-      const errorMsg = 'Error al asignar supervisor: ' + (err instanceof Error ? err.message : String(err));
+      const errorMsg = 'Error al asignar supervisores: ' + (err instanceof Error ? err.message : String(err));
       setError(errorMsg);
 
       // Notificación de error
@@ -1254,7 +1274,7 @@ const ClientsSection: React.FC = () => {
 
       console.log("Removiendo supervisor del subservicio:", idToDelete.subServicioId, "del cliente:", idToDelete.parentId);
 
-      const response = await fetch(`/api/cliente/${idToDelete.parentId}/subservicio/${idToDelete.subServicioId}/supervisor`, {
+      const response = await fetch(`http://localhost:3000/api/cliente/${idToDelete.parentId}/subservicio/${idToDelete.subServicioId}/supervisor`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -1311,7 +1331,7 @@ const ClientsSection: React.FC = () => {
 
       console.log("Creando sububicación para subservicio", currentSubServicio._id, "del cliente", currentClientForSubServicio._id, "con datos:", subUbicacionFormData);
 
-      const response = await fetch(`/api/cliente/${currentClientForSubServicio._id}/subservicio/${currentSubServicio._id}/sububicacion`, {
+      const response = await fetch(`http://localhost:3000/api/cliente/${currentClientForSubServicio._id}/subservicio/${currentSubServicio._id}/sububicacion`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1367,7 +1387,7 @@ const ClientsSection: React.FC = () => {
 
       console.log("Actualizando sububicación:", currentSubUbicacion._id, "del subservicio:", currentSubServicio._id, "del cliente:", currentClientForSubServicio._id, "con datos:", subUbicacionFormData);
 
-      const response = await fetch(`/api/cliente/${currentClientForSubServicio._id}/subservicio/${currentSubServicio._id}/sububicacion/${currentSubUbicacion._id}`, {
+      const response = await fetch(`http://localhost:3000/api/cliente/${currentClientForSubServicio._id}/subservicio/${currentSubServicio._id}/sububicacion/${currentSubUbicacion._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -1475,15 +1495,26 @@ const ClientsSection: React.FC = () => {
   const handleOpenSupervisorModal = (client: Client, subservicio: SubServicio) => {
     setCurrentClientForSubServicio(client);
     setCurrentSubServicio(subservicio);
-    // Establecer el supervisor actual si existe
+
+    // Establecer el/los supervisor(es) actuales si existen
     if (subservicio.supervisorId) {
-      setCurrentSupervisorId(
-        typeof subservicio.supervisorId === 'object'
-          ? subservicio.supervisorId._id
-          : subservicio.supervisorId
-      );
+      if (Array.isArray(subservicio.supervisorId)) {
+        // Si ya es un array, extraer los IDs
+        const supervisorIds = subservicio.supervisorId.map(id =>
+          typeof id === 'object' && id !== null ? id._id : id.toString()
+        );
+        setCurrentSupervisorId(supervisorIds);
+      } else {
+        // Si es un solo supervisor, convertirlo a array
+        setCurrentSupervisorId([
+          typeof subservicio.supervisorId === 'object' && subservicio.supervisorId
+            ? subservicio.supervisorId._id
+            : subservicio.supervisorId.toString()
+        ]);
+      }
     } else {
-      setCurrentSupervisorId('');
+      // No hay supervisores asignados
+      setCurrentSupervisorId([]);
     }
     setShowSupervisorModal(true);
   };
@@ -1559,18 +1590,18 @@ const ClientsSection: React.FC = () => {
 
       switch (idToDelete.type) {
         case 'cliente':
-          url = `/api/cliente/${idToDelete.id}`;
+          url = `http://localhost:3000/api/cliente/${idToDelete.id}`;
           successMsg = 'Cliente eliminado correctamente';
           break;
         case 'subservicio':
           if (!idToDelete.parentId) throw new Error('ID de cliente requerido para eliminar subservicio');
-          url = `/api/cliente/${idToDelete.parentId}/subservicio/${idToDelete.id}`;
+          url = `http://localhost:3000/api/cliente/${idToDelete.parentId}/subservicio/${idToDelete.id}`;
           successMsg = 'Subservicio eliminado correctamente';
           break;
         case 'sububicacion':
           if (!idToDelete.parentId || !idToDelete.subServicioId)
             throw new Error('ID de cliente y subservicio requeridos para eliminar sububicación');
-          url = `/api/cliente/${idToDelete.parentId}/subservicio/${idToDelete.subServicioId}/sububicacion/${idToDelete.id}`;
+          url = `http://localhost:3000/api/cliente/${idToDelete.parentId}/subservicio/${idToDelete.subServicioId}/sububicacion/${idToDelete.id}`;
           successMsg = 'Sububicación eliminada correctamente';
           break;
       }
@@ -1758,9 +1789,18 @@ const ClientsSection: React.FC = () => {
    * Determina si un cliente contiene subservicios sin supervisor
    */
   const clientHasUnassignedSubservices = (client: Client) => {
-    return client.subServicios.some(subservicio =>
-      !subservicio.supervisorId || subservicio.requiereSupervisor
-    );
+    return client.subServicios.some(subservicio => {
+      // Verificar si supervisorId no existe o está vacío
+      if (!subservicio.supervisorId) return true;
+
+      // Si es un array, verificar si está vacío
+      if (Array.isArray(subservicio.supervisorId) && subservicio.supervisorId.length === 0) return true;
+
+      // Si hay una propiedad explícita que indica que requiere supervisor
+      if (subservicio.requiereSupervisor) return true;
+
+      return false;
+    });
   };
 
   /**
@@ -2291,7 +2331,7 @@ const ClientsSection: React.FC = () => {
                           {client.subServicios && (
                             <span className="text-xs text-[#7AA79C] ml-2">
                               {client.subServicios.length} {client.subServicios.length === 1 ? 'subservicio' : 'subservicios'}
-                              </span>
+                            </span>
                           )}
                           {client.requiereAsignacion && (
                             <Badge variant="outline" className="ml-2 text-xs bg-amber-50 text-amber-700 border-amber-300">
@@ -2428,18 +2468,36 @@ const ClientsSection: React.FC = () => {
                                         <p className="text-sm text-[#7AA79C]">{subservicio.descripcion}</p>
                                       )}
 
-                                      {/* Mostrar información del supervisor */}
+                                      {/* Mostrar información de los supervisores */}
                                       {subservicio.supervisorId ? (
                                         <div className="flex items-center mt-1">
                                           <Shield className="w-3 h-3 text-[#29696B] mr-1" />
                                           <span className="text-xs text-[#29696B]">
-                                            Supervisor: {
+                                            {Array.isArray(subservicio.supervisorId) ? (
+                                              <>
+                                                Supervisores ({subservicio.supervisorId.length}):
+                                                <div className="flex flex-wrap gap-1 mt-1">
+                                                  {subservicio.supervisorId.map(id => {
+                                                    const supervisorData = typeof id === 'object' && id !== null ? id : supervisors.find(s => s._id === id);
+                                                    const displayName = supervisorData
+                                                      ? (supervisorData.email || supervisorData.usuario || `${supervisorData.nombre || ''} ${supervisorData.apellido || ''}`.trim() || String(id).substring(0, 8))
+                                                      : String(id).substring(0, 8);
+
+                                                    return (
+                                                      <Badge key={String(id)} variant="outline" className="bg-[#DFEFE6]/80 text-[#29696B] border-[#91BEAD] text-xs">
+                                                        {displayName}
+                                                      </Badge>
+                                                    );
+                                                  })}
+                                                </div>
+                                              </>
+                                            ) : (
                                               typeof subservicio.supervisorId === 'object' && subservicio.supervisorId
                                                 ? subservicio.supervisorId.email || subservicio.supervisorId.usuario || `${subservicio.supervisorId.nombre || ''} ${subservicio.supervisorId.apellido || ''}`.trim()
                                                 : typeof subservicio.supervisorId === 'string'
                                                   ? getSupervisorIdentifierById(subservicio.supervisorId)
                                                   : 'No asignado'
-                                            }
+                                            )}
                                           </span>
                                         </div>
                                       ) : (
@@ -2736,15 +2794,35 @@ const ClientsSection: React.FC = () => {
                                                 <div>
                                                   <span className="text-sm font-medium text-[#29696B]">{subservicio.nombre}</span>
                                                   {/* Mostrar información del supervisor */}
-                                                  {subservicio.supervisorId ? (
+                                                  {subservicio.supervisorId && (!Array.isArray(subservicio.supervisorId) || subservicio.supervisorId.length > 0) ? (
                                                     <div className="flex items-center mt-1">
-                                                      <Shield className="w-2 h-2 text-[#29696B] mr-1" />
+                                                      <Shield className="w-3 h-3 text-[#29696B] mr-1" />
                                                       <span className="text-xs text-[#29696B]">
-                                                        {typeof subservicio.supervisorId === 'object' && subservicio.supervisorId
-                                                          ? subservicio.supervisorId.email || subservicio.supervisorId.usuario || `${subservicio.supervisorId.nombre || ''} ${subservicio.supervisorId.apellido || ''}`.trim()
-                                                          : typeof subservicio.supervisorId === 'string'
-                                                            ? getSupervisorIdentifierById(subservicio.supervisorId)
-                                                            : 'No asignado'}
+                                                        {Array.isArray(subservicio.supervisorId) ? (
+                                                          <>
+                                                            Supervisores ({subservicio.supervisorId.length}):
+                                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                              {subservicio.supervisorId.map(id => {
+                                                                const supervisorData = typeof id === 'object' && id !== null ? id : supervisors.find(s => s._id === id);
+                                                                const displayName = supervisorData
+                                                                  ? (supervisorData.email || supervisorData.usuario || `${supervisorData.nombre || ''} ${supervisorData.apellido || ''}`.trim() || String(id).substring(0, 8))
+                                                                  : String(id).substring(0, 8);
+
+                                                                return (
+                                                                  <Badge key={String(id)} variant="outline" className="bg-[#DFEFE6]/80 text-[#29696B] border-[#91BEAD] text-xs">
+                                                                    {displayName}
+                                                                  </Badge>
+                                                                );
+                                                              })}
+                                                            </div>
+                                                          </>
+                                                        ) : (
+                                                          typeof subservicio.supervisorId === 'object' && subservicio.supervisorId
+                                                            ? subservicio.supervisorId.email || subservicio.supervisorId.usuario || `${subservicio.supervisorId.nombre || ''} ${subservicio.supervisorId.apellido || ''}`.trim()
+                                                            : typeof subservicio.supervisorId === 'string'
+                                                              ? getSupervisorIdentifierById(subservicio.supervisorId)
+                                                              : 'No asignado'
+                                                        )}
                                                       </span>
                                                     </div>
                                                   ) : (
@@ -3290,7 +3368,7 @@ const ClientsSection: React.FC = () => {
           <DialogHeader>
             <DialogTitle className="text-[#29696B] flex items-center">
               <Shield className="w-5 h-5 mr-2" />
-              {currentSubServicio?.supervisorId ? 'Cambiar Supervisor' : 'Asignar Supervisor'}
+              {currentSubServicio?.supervisorId ? 'Cambiar Supervisores' : 'Asignar Supervisores'}
             </DialogTitle>
             {currentClientForSubServicio && currentSubServicio && (
               <DialogDescription className="text-[#7AA79C]">
@@ -3303,82 +3381,59 @@ const ClientsSection: React.FC = () => {
 
           <form onSubmit={handleAssignSupervisor} className="space-y-4 py-2">
             <div>
-              <Label htmlFor="supervisor-id" className="text-sm text-[#29696B]">Seleccionar Supervisor*</Label>
-              <Select
-                value={currentSupervisorId}
-                onValueChange={setCurrentSupervisorId}
-                required
-              >
-                <SelectTrigger id="supervisor-id" className="mt-1 border-[#91BEAD] focus:ring-[#29696B]/20">
-                  <SelectValue placeholder="Seleccionar supervisor" />
-                </SelectTrigger>
-                <SelectContent>
-                  {/* Obtener solo los supervisores que están asignados al cliente */}
-                  {currentClientForSubServicio && Array.isArray(currentClientForSubServicio.userId) ? (
-                    currentClientForSubServicio.userId.length > 0 ? (
-                      currentClientForSubServicio.userId.map(userId => {
-                        const supervisorId = typeof userId === 'object' && userId !== null && userId._id ? userId._id : String(userId);
-                        const supervisor = supervisors.find(s => s._id === supervisorId);
+              <Label htmlFor="supervisor-id" className="text-sm text-[#29696B]">Seleccionar Supervisores*</Label>
 
-                        return supervisor ? (
-                          <SelectItem key={supervisorId} value={supervisorId}>
-                            {supervisor.email || supervisor.usuario || `${supervisor.nombre || ''} ${supervisor.apellido || ''}`.trim() || supervisorId}
-                          </SelectItem>
-                        ) : null;
-                      }).filter(Boolean)
-                    ) : (
-                      <SelectItem value="no-supervisors" disabled>
-                        No hay supervisores asignados al cliente
-                      </SelectItem>
-                    )
-                  ) : (
-                    <SelectItem value="no-supervisors" disabled>
-                      Cliente no disponible
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
+              {/* Aquí utilizamos el MultiSupervisorSelect en lugar del Select convencional */}
+              <div className="mt-1">
+                <MultiSupervisorSelect
+                  supervisors={currentClientForSubServicio && Array.isArray(currentClientForSubServicio.userId) ?
+                    currentClientForSubServicio.userId.map(userId => {
+                      const supervisorId = typeof userId === 'object' && userId !== null && userId._id ? userId._id : String(userId);
+                      return supervisors.find(s => s._id === supervisorId) || { _id: supervisorId };
+                    }).filter(Boolean) :
+                    []
+                  }
+                  selectedSupervisors={Array.isArray(currentSupervisorId) ? currentSupervisorId : (currentSupervisorId ? [currentSupervisorId] : [])}
+                  onChange={(value) => setCurrentSupervisorId(value)}
+                  placeholder="Seleccionar supervisores..."
+                />
+              </div>
 
-              {/* Mostrar información del supervisor seleccionado */}
-              {currentSupervisorId && (
+              {/* Mostrar información de supervisores seleccionados */}
+              {Array.isArray(currentSupervisorId) && currentSupervisorId.length > 0 ? (
                 <div className="mt-3 p-3 bg-[#DFEFE6]/20 border border-[#91BEAD]/30 rounded-md">
                   <div className="flex items-center mb-2">
                     <Shield className="w-4 h-4 text-[#29696B] mr-2" />
-                    <span className="font-medium text-[#29696B]">Información del Supervisor</span>
+                    <span className="font-medium text-[#29696B]">
+                      {currentSupervisorId.length > 1 ? 'Supervisores seleccionados' : 'Supervisor seleccionado'}
+                    </span>
                   </div>
                   <div className="text-sm space-y-1 text-[#7AA79C]">
-                    {(() => {
-                      const supervisor = supervisors.find(s => s._id === currentSupervisorId);
-                      if (supervisor) {
-                        return (
-                          <>
-                            {supervisor.email && (
-                              <div className="flex items-center">
-                                <Mail className="w-3 h-3 mr-1 text-[#29696B]" />
-                                Email: <span className="ml-1 text-[#29696B]">{supervisor.email}</span>
-                              </div>
-                            )}
-                            {supervisor.usuario && (
-                              <div className="flex items-center">
-                                <Users className="w-3 h-3 mr-1 text-[#29696B]" />
-                                Usuario: <span className="ml-1 text-[#29696B]">{supervisor.usuario}</span>
-                              </div>
-                            )}
-                            {supervisor.nombre && (
-                              <div className="flex items-center">
-                                <User className="w-3 h-3 mr-1 text-[#29696B]" />
-                                Nombre: <span className="ml-1 text-[#29696B]">{`${supervisor.nombre || ''} ${supervisor.apellido || ''}`.trim()}</span>
-                              </div>
-                            )}
-                          </>
-                        );
-                      }
-                      return (
-                        <div className="text-center">No se encontró información del supervisor</div>
+                    {currentSupervisorId.map(id => {
+                      const supervisor = supervisors.find(s => s._id === id);
+                      return supervisor ? (
+                        <div key={id} className="bg-[#DFEFE6]/40 p-1.5 rounded border border-[#91BEAD]/20">
+                          {supervisor.email && (
+                            <div className="flex items-center">
+                              <Mail className="w-3 h-3 mr-1 text-[#29696B]" />
+                              <span className="text-[#29696B]">{supervisor.email}</span>
+                            </div>
+                          )}
+                          {!supervisor.email && supervisor.usuario && (
+                            <div className="flex items-center">
+                              <User className="w-3 h-3 mr-1 text-[#29696B]" />
+                              <span className="text-[#29696B]">{supervisor.usuario}</span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div key={id} className="text-[#7AA79C]">ID: {id.substring(0, 8)}</div>
                       );
-                    })()}
+                    })}
                   </div>
                 </div>
+              ) : (
+                <p className="text-xs text-red-500 mt-1">Debe seleccionar al menos un supervisor</p>
               )}
 
               <p className="text-xs text-[#7AA79C] mt-2">
@@ -3392,7 +3447,7 @@ const ClientsSection: React.FC = () => {
                 variant="outline"
                 onClick={() => {
                   setShowSupervisorModal(false);
-                  setCurrentSupervisorId('');
+                  setCurrentSupervisorId([]);
                 }}
                 className="border-[#91BEAD] text-[#29696B] hover:bg-[#DFEFE6]/30"
               >
@@ -3400,7 +3455,7 @@ const ClientsSection: React.FC = () => {
               </Button>
               <Button
                 type="submit"
-                disabled={!currentSupervisorId || loading || deletingOperation}
+                disabled={!Array.isArray(currentSupervisorId) || currentSupervisorId.length === 0 || loading || deletingOperation}
                 className="bg-[#29696B] hover:bg-[#29696B]/90 text-white"
               >
                 {loading || deletingOperation ? (
@@ -3408,9 +3463,9 @@ const ClientsSection: React.FC = () => {
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     Procesando...
                   </span>
-                ) : currentSubServicio?.supervisorId
-                  ? 'Cambiar Supervisor'
-                  : 'Asignar Supervisor'}
+                ) : (Array.isArray(currentSubServicio?.supervisorId) && currentSubServicio?.supervisorId.length > 0) || currentSubServicio?.supervisorId
+                  ? 'Actualizar Supervisores'
+                  : 'Asignar Supervisores'}
               </Button>
             </DialogFooter>
           </form>

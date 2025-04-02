@@ -17,24 +17,24 @@ export const CACHE_CONFIG = {
    */
   export const API_ENDPOINTS = {
     CLIENTS: {
-      BASE: '/api/cliente',
-      BY_SUPERVISOR: (supervisorId: string) => `/api/cliente/supervisor/${supervisorId}`,
-      UNASSIGNED: '/api/cliente/sin-asignar',
-      SUBSERVICES_UNASSIGNED: '/api/cliente/subservicios/sin-supervisor',
-      CLIENT: (clientId: string) => `/api/cliente/${clientId}`,
-      SUBSERVICIO: (clientId: string) => `/api/cliente/${clientId}/subservicio`,
+      BASE: 'http://localhost:3000/api/cliente',
+      BY_SUPERVISOR: (supervisorId: string) => `http://localhost:3000/api/cliente/supervisor/${supervisorId}`,
+      UNASSIGNED: 'http://localhost:3000/api/cliente/sin-asignar',
+      SUBSERVICES_UNASSIGNED: 'http://localhost:3000/api/cliente/subservicios/sin-supervisor',
+      CLIENT: (clientId: string) => `http://localhost:3000/api/cliente/${clientId}`,
+      SUBSERVICIO: (clientId: string) => `http://localhost:3000/api/cliente/${clientId}/subservicio`,
       SUBSERVICIO_BY_ID: (clientId: string, subservicioId: string) => 
-        `/api/cliente/${clientId}/subservicio/${subservicioId}`,
+        `http://localhost:3000/api/cliente/${clientId}/subservicio/${subservicioId}`,
       SUPERVISOR: (clientId: string, subservicioId: string) => 
-        `/api/cliente/${clientId}/subservicio/${subservicioId}/supervisor`,
+        `http://localhost:3000/api/cliente/${clientId}/subservicio/${subservicioId}/supervisor`,
       SUBUBICACION: (clientId: string, subservicioId: string) => 
-        `/api/cliente/${clientId}/subservicio/${subservicioId}/sububicacion`,
+        `http://localhost:3000/api/cliente/${clientId}/subservicio/${subservicioId}/sububicacion`,
       SUBUBICACION_BY_ID: (clientId: string, subservicioId: string, sububicacionId: string) => 
-        `/api/cliente/${clientId}/subservicio/${subservicioId}/sububicacion/${sububicacionId}`
+        `http://localhost:3000/api/cliente/${clientId}/subservicio/${subservicioId}/sububicacion/${sububicacionId}`
     },
     USERS: {
-      ALL: '/api/auth/users',
-      SUPERVISORS: '/api/auth/supervisors'
+      ALL: 'http://localhost:3000/api/auth/users',
+      SUPERVISORS: 'http://localhost:3000/api/auth/supervisors'
     }
   };
   

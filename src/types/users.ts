@@ -85,3 +85,42 @@ export interface ApiResponse<T> {
   message?: string;
   [key: string]: any;
 }
+
+/**
+ * Interfaz para representar subservicios asignados a un operario
+ */
+export interface SubservicioAsignado {
+  clienteId: string;
+  subServicioId: string;
+}
+
+/**
+ * Interfaces para tipos de cliente y subservicio
+ */
+export interface SubUbicacion {
+  _id: string;
+  nombre: string;
+  descripcion?: string;
+}
+
+export interface SubServicio {
+  _id: string;
+  nombre: string;
+  descripcion?: string;
+  supervisorId?: string | User;
+  subUbicaciones?: SubUbicacion[];
+  operarios?: string[] | User[];
+  isSelected?: boolean; // Para UI
+  isExpanded?: boolean; // Para UI
+}
+
+export interface Cliente {
+  _id: string;
+  clienteId?: string; // Usado en respuestas específicas de la API
+  nombreCliente?: string; // Usado en respuestas específicas de la API
+  nombre: string;
+  descripcion?: string;
+  subServicios: SubServicio[];
+  userId?: string | User;
+  isExpanded?: boolean; // Para UI
+}

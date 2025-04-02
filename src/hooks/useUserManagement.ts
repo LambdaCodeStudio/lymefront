@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import userService from '@/services/userService';
-import { User, CreateUserDTO, UpdateUserDTO } from '@/types/users';
+import { clientService } from '@/services/clientService';
+import { User, CreateUserDTO, UpdateUserDTO, SubservicioAsignado, Cliente, SubServicio } from '@/types/users';
 import { ROLES, roleOptions } from '../types/UserRolesConfig';
 
 /**
@@ -29,6 +30,20 @@ export const useUserManagement = () => {
     role: ROLES.OPERARIO,
     secciones: 'ambos'
   });
+
+  // Estados para gestión de clientes y subservicios
+  const [clientesDelSupervisor, setClientesDelSupervisor] = useState<Cliente[]>([]);
+  const [clientesLoading, setClientesLoading] = useState(false);
+  const [clientesError, setClientesError] = useState('');
+  const [selectedSubservicios, setSelectedSubservicios] = useState<SubservicioAsignado[]>([]);
+  const [availableSupervisors, setAvailableSupervisors] = useState<User[]>([]);
+  const [supervisorsLoading, setSupervisorsLoading] = useState(false);
+  
+  // Estado para rastrear el supervisor anterior (para detectar cambios)
+  const [previousSupervisorId, setPreviousSupervisorId] = useState<string | null>(null);
+  
+  // Estado para rastrear si ya se cargaron los subservicios del operario
+  const [subserviciosLoaded, setSubserviciosLoaded] = useState(false);
 
   // Determinar roles disponibles basado en el rol del usuario actual
   const [currentUserRole, setCurrentUserRole] = useState<string>(ROLES.OPERARIO);
@@ -82,6 +97,220 @@ export const useUserManagement = () => {
     loadUsers();
   }, [loadUsers]);
 
+  // Función para cargar supervisores
+  const loadSupervisors = useCallback(async () => {
+    setSupervisorsLoading(true);
+    try {
+      const supervisors = await userService.getSupervisors();
+      setAvailableSupervisors(supervisors);
+    } catch (err: any) {
+      console.error('Error al cargar supervisores:', err);
+      toast({
+        title: 'Error',
+        description: 'No se pudieron cargar los supervisores',
+        variant: 'destructive'
+      });
+    } finally {
+      setSupervisorsLoading(false);
+    }
+  }, []);
+
+  // Función para aplicar selecciones de subservicios a los clientes cargados
+  const applySubservicioSelections = useCallback(() => {
+    if (selectedSubservicios.length === 0 || clientesDelSupervisor.length === 0) return;
+    
+    console.log('Aplicando selecciones de subservicios a clientes cargados...');
+    console.log('Subservicios seleccionados:', selectedSubservicios.length);
+    console.log('Clientes cargados:', clientesDelSupervisor.length);
+    
+    setClientesDelSupervisor(prevClientes => {
+      return prevClientes.map(cliente => {
+        // Convertir ID a string para comparaciones seguras
+        const clienteIdStr = cliente._id.toString();
+        
+        // Marcar subservicios como seleccionados
+        const subServiciosActualizados = cliente.subServicios.map(subserv => {
+          // Convertir ID a string para comparaciones seguras
+          const subServIdStr = subserv._id.toString();
+          
+          // Verificar si este subservicio está en la lista de seleccionados
+          const isSelected = selectedSubservicios.some(
+            item => 
+              (item.clienteId.toString() === clienteIdStr) && 
+              (item.subServicioId.toString() === subServIdStr)
+          );
+          
+          return { ...subserv, isSelected };
+        });
+        
+        // Verificar si hay subservicios seleccionados en este cliente
+        const tieneSeleccionados = subServiciosActualizados.some(s => s.isSelected);
+        
+        // Expandir automáticamente solo al cargar inicialmente, 
+        // pero no forzar el estado de expansión en actualizaciones posteriores
+        // para permitir que el usuario pueda contraer/expandir a voluntad
+        const shouldExpand = !subserviciosLoaded && tieneSeleccionados;
+        
+        // Devolver cliente actualizado
+        return {
+          ...cliente,
+          // Si es la carga inicial y tiene seleccionados, expandir
+          // Si no, mantener el estado actual de expansión
+          isExpanded: shouldExpand ? true : cliente.isExpanded,
+          subServicios: subServiciosActualizados
+        };
+      });
+    });
+  }, [selectedSubservicios, clientesDelSupervisor, subserviciosLoaded]);
+
+// Efecto para mantener sincronizadas las selecciones
+useEffect(() => {
+  if (clientesDelSupervisor.length > 0 && selectedSubservicios.length > 0) {
+    applySubservicioSelections();
+  }
+}, [subserviciosLoaded, clientesDelSupervisor.length, selectedSubservicios.length, applySubservicioSelections]);
+
+  // Función para cargar clientes y subservicios de un supervisor
+  const loadClientesDelSupervisor = useCallback(async (supervisorId: string) => {
+    if (!supervisorId) return;
+    
+    setClientesLoading(true);
+    setClientesError('');
+    setClientesDelSupervisor([]);
+    
+    try {
+      const response = await clientService.getClientesBySupervisorId(supervisorId);
+      
+      // Mapear los clientes y añadir propiedades de UI
+      const clientesConEstado = response.map((cliente: Cliente) => ({
+        ...cliente,
+        isExpanded: false,
+        subServicios: cliente.subServicios.map((subServ: SubServicio) => ({
+          ...subServ,
+          isSelected: false,
+          isExpanded: false
+        }))
+      }));
+      
+      setClientesDelSupervisor(clientesConEstado);
+      
+      if (clientesConEstado.length === 0) {
+        setClientesError('Este supervisor no tiene clientes asignados');
+      }
+      
+      // Si ya se habían cargado los subservicios, aplicamos las selecciones
+      if (subserviciosLoaded) {
+        // Damos tiempo para que se actualice el estado
+        setTimeout(() => {
+          applySubservicioSelections();
+        }, 0);
+      }
+    } catch (err: any) {
+      console.error('Error al cargar clientes del supervisor:', err);
+      setClientesError('No se pudieron cargar los clientes del supervisor');
+      toast({
+        title: 'Error',
+        description: 'No se pudieron cargar los clientes del supervisor',
+        variant: 'destructive'
+      });
+    } finally {
+      setClientesLoading(false);
+    }
+  }, [applySubservicioSelections, subserviciosLoaded]);
+
+  // Cargar subservicios de un operario existente
+  // Cargar subservicios de un operario existente
+  const loadOperarioSubservicios = useCallback(async (operarioId: string) => {
+    if (!operarioId) return;
+    
+    setLoading(true);
+    setSubserviciosLoaded(false);
+    
+    try {
+      // Intentar obtener los subservicios del operario
+      const response = await clientService.getSubserviciosByOperarioId(operarioId);
+      console.log('Respuesta de API - subservicios del operario:', response);
+      
+      // Si no hay respuesta o es un array vacío, inicializamos vacío
+      if (!response || !Array.isArray(response) || response.length === 0) {
+        setSelectedSubservicios([]);
+        setSubserviciosLoaded(true);
+        return;
+      }
+      
+      // Extraer los IDs de subservicios asignados
+      const subserviciosAsignados: SubservicioAsignado[] = [];
+      
+      response.forEach((cliente: any) => {
+        // Verificar la estructura de los datos
+        const clienteId = cliente.clienteId || cliente._id;
+        
+        // Asegurarnos de que subServicios sea un array
+        const subServicios = Array.isArray(cliente.subServicios) ? cliente.subServicios : [];
+        
+        subServicios.forEach((subserv: any) => {
+          if (subserv && subserv._id) {
+            subserviciosAsignados.push({
+              clienteId,
+              subServicioId: subserv._id
+            });
+          }
+        });
+      });
+      
+      console.log('Subservicios cargados:', subserviciosAsignados.length);
+      
+      // Actualizar selecciones
+      setSelectedSubservicios(subserviciosAsignados);
+      
+      // Actualizar clientes para reflejar selecciones
+      // Esto es importante para la carga inicial
+      if (clientesDelSupervisor.length > 0 && subserviciosAsignados.length > 0) {
+        setClientesDelSupervisor(prevClientes => {
+          return prevClientes.map(cliente => {
+            // Convertir ID a string para comparaciones seguras
+            const clienteIdStr = cliente._id.toString();
+            
+            // Actualizar subservicios
+            const updatedSubservicios = cliente.subServicios.map(subserv => {
+              const subServIdStr = subserv._id.toString();
+              
+              // Verificar si este subservicio está seleccionado
+              const isSelected = subserviciosAsignados.some(
+                item => 
+                  (item.clienteId.toString() === clienteIdStr) && 
+                  (item.subServicioId.toString() === subServIdStr)
+              );
+              
+              return { ...subserv, isSelected };
+            });
+            
+            // Verificar si este cliente tiene selecciones
+            const hasSelections = updatedSubservicios.some(s => s.isSelected);
+            
+            // Expandir automáticamente en la carga inicial si tiene subservicios seleccionados
+            return {
+              ...cliente,
+              // Solo expandir automáticamente en la carga inicial
+              isExpanded: hasSelections ? true : cliente.isExpanded,
+              subServicios: updatedSubservicios
+            };
+          });
+        });
+      }
+      
+      // Marcar como cargado
+      setSubserviciosLoaded(true);
+    } catch (err) {
+      console.error('No se pudieron cargar los subservicios del operario:', err);
+      // Inicializamos con array vacío
+      setSelectedSubservicios([]);
+      setSubserviciosLoaded(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [clientesDelSupervisor]);
+
   // Mostrar notificación
   const showNotification = (type: 'success' | 'error', message: string) => {
     toast({
@@ -96,6 +325,61 @@ export const useUserManagement = () => {
     await loadUsers();
   };
   
+  // Función para expandir/colapsar cliente
+  const toggleClienteExpanded = useCallback((clienteId: string) => {
+    setClientesDelSupervisor(prev => 
+      prev.map(cliente => 
+        cliente._id === clienteId
+          ? { ...cliente, isExpanded: !cliente.isExpanded }
+          : cliente
+      )
+    );
+  }, []);
+
+  // Función para seleccionar/deseleccionar subservicio
+  const toggleSubservicioSelected = useCallback((clienteId: string, subservicioId: string) => {
+    // Convertir a strings para comparación segura
+    const clienteIdStr = clienteId.toString();
+    const subservicioIdStr = subservicioId.toString();
+    
+    // Actualizar la lista de clientes para mostrar la selección
+    setClientesDelSupervisor(prev => 
+      prev.map(cliente => {
+        // Si no es este cliente, dejarlo igual
+        if (cliente._id.toString() !== clienteIdStr) return cliente;
+        
+        return {
+          ...cliente,
+          subServicios: cliente.subServicios.map(subserv => {
+            // Si no es este subservicio, dejarlo igual
+            if (subserv._id.toString() !== subservicioIdStr) return subserv;
+            // Cambiar estado de selección
+            return { ...subserv, isSelected: !subserv.isSelected };
+          })
+        };
+      })
+    );
+    
+    // Actualizar la lista de subservicios seleccionados
+    setSelectedSubservicios(prev => {
+      const existeItem = prev.some(
+        item => item.clienteId.toString() === clienteIdStr && 
+               item.subServicioId.toString() === subservicioIdStr
+      );
+      
+      if (existeItem) {
+        // Si ya existe, quitarlo
+        return prev.filter(
+          item => !(item.clienteId.toString() === clienteIdStr && 
+                  item.subServicioId.toString() === subservicioIdStr)
+        );
+      } else {
+        // Si no existe, agregarlo
+        return [...prev, { clienteId, subServicioId: subservicioId }];
+      }
+    });
+  }, []);
+  
   // Función handleSubmit para procesar creación/actualización de usuarios
   const handleSubmit = async (userData: CreateUserDTO | UpdateUserDTO) => {
     try {
@@ -105,10 +389,76 @@ export const useUserManagement = () => {
       // Log para debugging
       console.log('Procesando usuario con datos:', userData);
       
+      // Validar selección de subservicios para operarios
+      if (userData.role === ROLES.OPERARIO && selectedSubservicios.length === 0 && userData.supervisorId) {
+        setError('Debe seleccionar al menos un subservicio para asignar al operario');
+        setLoading(false);
+        return;
+      }
+      
       // Si estamos editando un usuario existente
       if (editingUser) {
-        // Actualizar el usuario - el servicio ya limpia los datos por rol
-        await userService.updateUser(editingUser._id, userData);
+        console.log('Actualizando usuario existente:', editingUser._id);
+        
+        // Actualizar el usuario
+        const updatedUser = await userService.updateUser(editingUser._id, userData);
+        
+        // Si es operario, actualizar asignación de subservicios
+        if (userData.role === ROLES.OPERARIO && userData.supervisorId) {
+          console.log('Actualizando subservicios para operario:', selectedSubservicios.length);
+          
+          // Si cambió el supervisor, necesitamos un enfoque diferente
+          const supervisorChanged = previousSupervisorId !== null && 
+                                   previousSupervisorId !== userData.supervisorId;
+          
+          if (supervisorChanged) {
+            console.log('El supervisor cambió de', previousSupervisorId, 'a', userData.supervisorId);
+            
+            // 1. Cargar los subservicios actuales del operario
+            const currentSubservicios = await clientService.getSubserviciosByOperarioId(editingUser._id);
+            
+            // 2. Eliminar todas las asignaciones actuales
+            if (currentSubservicios && Array.isArray(currentSubservicios)) {
+              for (const cliente of currentSubservicios) {
+                const clienteId = cliente.clienteId || cliente._id;
+                for (const subserv of cliente.subServicios || []) {
+                  try {
+                    await clientService.removeOperarioFromSubservicio(
+                      clienteId, 
+                      subserv._id, 
+                      editingUser._id
+                    );
+                    console.log(`Eliminada asignación antigua: ${clienteId}/${subserv._id}`);
+                  } catch (err) {
+                    console.error('Error al eliminar asignación:', err);
+                  }
+                }
+              }
+            }
+          }
+          
+          // 3. Asignar los subservicios seleccionados actuales
+          let asignacionesExitosas = 0;
+          let errores = 0;
+          
+          for (const item of selectedSubservicios) {
+            try {
+              await clientService.assignOperarioToSubservicio(
+                item.clienteId, 
+                item.subServicioId, 
+                editingUser._id
+              );
+              asignacionesExitosas++;
+              console.log(`Asignado subservicio: ${item.clienteId}/${item.subServicioId}`);
+            } catch (err) {
+              console.error('Error al asignar subservicio:', err);
+              errores++;
+              // Continuamos con el siguiente para no interrumpir todo el proceso
+            }
+          }
+          
+          console.log(`Subservicios actualizados - Éxitos: ${asignacionesExitosas}, Errores: ${errores}`);
+        }
         
         // Actualizar la lista de usuarios
         await fetchUsers();
@@ -117,7 +467,36 @@ export const useUserManagement = () => {
         showNotification('success', 'Usuario actualizado correctamente');
       } else {
         // Crear un nuevo usuario
-        await userService.createUser(userData);
+        console.log('Creando nuevo usuario');
+        const result = await userService.createUser(userData);
+        
+        // Si es operario, asignar subservicios
+        if (userData.role === ROLES.OPERARIO && result && result.user && result.user.id) {
+          const userId = result.user.id;
+          console.log('Asignando subservicios al nuevo operario:', userId);
+          
+          let asignacionesExitosas = 0;
+          let errores = 0;
+          
+          // Asignar todos los subservicios seleccionados
+          for (const item of selectedSubservicios) {
+            try {
+              await clientService.assignOperarioToSubservicio(
+                item.clienteId, 
+                item.subServicioId, 
+                userId
+              );
+              asignacionesExitosas++;
+              console.log(`Asignado subservicio: ${item.clienteId}/${item.subServicioId}`);
+            } catch (err) {
+              console.error('Error al asignar subservicio:', err);
+              errores++;
+              // Continuamos con el siguiente para no interrumpir todo el proceso
+            }
+          }
+          
+          console.log(`Subservicios asignados - Éxitos: ${asignacionesExitosas}, Errores: ${errores}`);
+        }
         
         // Actualizar la lista de usuarios
         await fetchUsers();
@@ -133,8 +512,50 @@ export const useUserManagement = () => {
     }
   };
 
+  // Manejar cambio de rol en el formulario
+  const handleRoleChange = useCallback((role: string) => {
+    setFormData(prev => ({
+      ...prev,
+      role: role as UserRole,
+      // Resetear supervisorId si cambia el rol
+      ...(role !== ROLES.OPERARIO ? { supervisorId: undefined } : {})
+    }));
+    
+    // Si cambia a operario, cargar supervisores
+    if (role === ROLES.OPERARIO) {
+      loadSupervisors();
+    } else {
+      // Limpiar datos de subservicios si no es operario
+      setClientesDelSupervisor([]);
+      setSelectedSubservicios([]);
+      setPreviousSupervisorId(null);
+      setSubserviciosLoaded(false);
+    }
+  }, [loadSupervisors]);
+
+  // Manejar cambio de supervisor en el formulario
+  const handleSupervisorChange = useCallback((supervisorId: string) => {
+    // Guardar el supervisor anterior para detectar cambios
+    setPreviousSupervisorId(formData.supervisorId || null);
+    
+    setFormData(prev => ({
+      ...prev,
+      supervisorId
+    }));
+    
+    // Cargar clientes y subservicios del supervisor
+    loadClientesDelSupervisor(supervisorId);
+    
+    // Resetear subservicios seleccionados solo si es un cambio de supervisor
+    // y no la selección inicial
+    if (formData.supervisorId && formData.supervisorId !== supervisorId) {
+      setSelectedSubservicios([]);
+      setSubserviciosLoaded(false);
+    }
+  }, [loadClientesDelSupervisor, formData.supervisorId]);
+
   // Manejar edición de usuario
-  const handleEdit = (user: User) => {
+  const handleEdit = useCallback((user: User) => {
     // Preparar datos para edición
     const preparedFormData: UpdateUserDTO = {
       usuario: user.usuario,
@@ -146,15 +567,36 @@ export const useUserManagement = () => {
       isActive: user.isActive
     };
     
-    // Solo agregar supervisorId si el usuario es operario
+    // Limpiar selecciones previas
+    setSelectedSubservicios([]);
+    setClientesDelSupervisor([]);
+    setSubserviciosLoaded(false);
+    
+    // Guardar referencia al supervisorId actual
     if (user.role === ROLES.OPERARIO && user.supervisorId) {
       preparedFormData.supervisorId = user.supervisorId;
+      setPreviousSupervisorId(user.supervisorId);
+      
+      // Secuencia de carga coordinada:
+      // 1. Cargar supervisores disponibles
+      loadSupervisors().then(() => {
+        // 2. Si el usuario tiene supervisor, cargar sus clientes
+        if (user.supervisorId) {
+          // 3. Cargar clientes del supervisor
+          loadClientesDelSupervisor(user.supervisorId);
+          // 4. Cargar subservicios asignados al operario
+          // (debe ejecutarse después para que se apliquen las selecciones)
+          loadOperarioSubservicios(user._id);
+        }
+      });
+    } else {
+      setPreviousSupervisorId(null);
     }
 
     setEditingUser(user);
     setFormData(preparedFormData);
     setShowModal(true);
-  };
+  }, [loadSupervisors, loadClientesDelSupervisor, loadOperarioSubservicios]);
 
   // Manejar eliminación de usuario
   const handleDelete = async (userId: string) => {
@@ -217,6 +659,10 @@ export const useUserManagement = () => {
       role: ROLES.OPERARIO,
       secciones: 'ambos'
     });
+    setClientesDelSupervisor([]);
+    setSelectedSubservicios([]);
+    setPreviousSupervisorId(null);
+    setSubserviciosLoaded(false);
   };
 
   return {
@@ -231,15 +677,35 @@ export const useUserManagement = () => {
     availableRoles,
     currentUserRole,
     
+    // Estados para clientes y subservicios
+    clientesDelSupervisor,
+    clientesLoading,
+    clientesError,
+    selectedSubservicios,
+    availableSupervisors,
+    supervisorsLoading,
+    previousSupervisorId,
+    
+    // Funciones básicas
     setSearchTerm,
     setShowInactiveUsers,
     setShowModal,
     setFormData,
     
+    // Funciones principales
     handleSubmit,
     handleDelete,
     handleToggleStatus,
     handleEdit,
-    resetForm
+    resetForm,
+    
+    // Funciones para clientes y subservicios
+    toggleClienteExpanded,
+    toggleSubservicioSelected,
+    handleRoleChange,
+    handleSupervisorChange,
+    loadClientesDelSupervisor,
+    loadSupervisors,
+    loadOperarioSubservicios
   };
 };

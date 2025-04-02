@@ -313,6 +313,7 @@ interface SubServicio {
     usuario?: string;
   };
   subUbicaciones: SubUbicacion[];
+  isSelected?: boolean; // Para marcar selección del operario
 }
 
 interface Cliente {
@@ -332,6 +333,7 @@ interface Cliente {
   telefono?: string;
   email?: string;
   activo?: boolean;
+  isExpanded?: boolean; // Para UI de expansión
 }
 
 // Interface para el usuario
@@ -383,8 +385,16 @@ interface CartItem {
   }>;
 }
 
-// URL base para API - mejor práctica que hardcodear
-const API_BASE_URL = '';
+// Interface para subservicios asignados a un operario
+interface SubservicioAsignado {
+  clienteId: string;
+  subServicioId: string;
+  nombreCliente: string;
+  nombreSubServicio: string;
+}
+
+// URL base para API
+const API_BASE_URL = 'http://localhost:3000';
 
 export const Cart: React.FC = () => {
   const { items, removeItem, updateQuantity, clearCart, totalItems, totalPrice } = useCartContext();
@@ -403,7 +413,6 @@ export const Cart: React.FC = () => {
   // Estados para clientes
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clienteSeleccionado, setClienteSeleccionado] = useState<string | null>(null);
-  const [subservicioSeleccionado, setSubservicioSeleccionado] = useState<string | null>(null);
   const [clientesAgrupados, setClientesAgrupados] = useState<Record<string, Cliente[]>>({});
   const [subServicioSeleccionado, setSubServicioSeleccionado] = useState<string | null>(null);
   const [subUbicacionSeleccionada, setSubUbicacionSeleccionada] = useState<string | null>(null);
@@ -411,6 +420,9 @@ export const Cart: React.FC = () => {
   const [subUbicacionesDisponibles, setSubUbicacionesDisponibles] = useState<SubUbicacion[]>([]);
   const [cargandoClientes, setCargandoClientes] = useState<boolean>(false);
   const [errorClientes, setErrorClientes] = useState<string | null>(null);
+  
+  // Nuevo estado para subservicios asignados al operario
+  const [subserviciosAsignados, setSubserviciosAsignados] = useState<SubservicioAsignado[]>([]);
 
   // Estados para búsquedas
   const [clienteSearch, setClienteSearch] = useState<string>('');
@@ -504,7 +516,7 @@ export const Cart: React.FC = () => {
   // Actualizar la validación del formulario cuando cambien los valores relevantes
   useEffect(() => {
     validarFormulario();
-  }, [clienteSeleccionado, subservicioSeleccionado, items, validarFormulario]);
+  }, [clienteSeleccionado, subServicioSeleccionado, items, validarFormulario]);
 
   // Función de inicialización asíncrona
   const initializeCart = async () => {
@@ -518,8 +530,8 @@ export const Cart: React.FC = () => {
           // Obtener información del supervisor primero
           await fetchSupervisorInfo(userData);
 
-          // Luego obtener los clientes a través del endpoint específico para operarios
-          await fetchClientesForOperario();
+          // Luego obtener los subservicios asignados al operario
+          await fetchSubserviciosAsignadosOperario();
         } else {
           // Para supervisores y otros roles, cargar clientes con filtrado adecuado
           const { clientes } = await fetchClientesYSubserviciosFiltrados();
@@ -580,7 +592,7 @@ export const Cart: React.FC = () => {
             };
           }
           return null;
-        }).filter(Boolean); // Eliminar clientes sin subservicios asignados
+        }).filter(Boolean) as Cliente[]; // Eliminar clientes sin subservicios asignados
 
         return { clientes: clientesFiltrados, subservicios: [] };
       } else {
@@ -613,7 +625,7 @@ export const Cart: React.FC = () => {
       setRefreshingSupervisor(true);
       const token = getToken();
 
-      // Try using the dedicated supervisor endpoint first (better approach)
+      // Usar el endpoint dedicado para obtener información del supervisor
       try {
         const response = await fetch(`${API_BASE_URL}/api/auth/me/supervisor`, {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -641,12 +653,9 @@ export const Cart: React.FC = () => {
         console.warn('Error al obtener supervisor mediante endpoint específico:', error);
       }
 
-      // Fallback: Check if the user has a supervisorId directly assigned
+      // Alternativa: Verificar si el usuario tiene un supervisorId asignado directamente
       if (userData.supervisorId) {
-        // We should avoid calling this endpoint as regular users don't have permission,
-        // but we'll keep it as a fallback with better error handling
         try {
-          // This is not recommended since regular users don't have access to this endpoint
           const response = await fetch(`${API_BASE_URL}/api/auth/users/${userData.supervisorId}`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
@@ -664,9 +673,9 @@ export const Cart: React.FC = () => {
             setSupervisorId(userData.supervisorId);
             return supervisor;
           } else {
-            // Silently ignore permission errors as this is expected for regular users
+            // Ignorar errores de permiso silenciosamente, ya que es esperado para usuarios regulares
             const statusCode = response.status;
-            if (statusCode !== 403) { // Only log non-permission errors
+            if (statusCode !== 403) {
               console.warn('No se pudo obtener información del supervisor asignado:',
                 await response.text());
             }
@@ -676,7 +685,7 @@ export const Cart: React.FC = () => {
         }
       }
 
-      // If we got here, no supervisor info was found
+      // Si llegamos aquí, no se encontró información del supervisor
       setSupervisorName('No asignado');
       setSupervisorId(null);
       return null;
@@ -690,20 +699,19 @@ export const Cart: React.FC = () => {
     }
   };
 
-  // Función específica para obtener clientes para operarios
-  const fetchClientesForOperario = async () => {
+  // Nueva función para obtener los subservicios asignados al operario
+  const fetchSubserviciosAsignadosOperario = async () => {
     try {
       setCargandoClientes(true);
       setErrorClientes(null);
 
       const token = getToken();
 
-      // Usar el endpoint específico para operarios
-      const response = await fetch(`${API_BASE_URL}/api/cliente/mi-supervisor`, {
+      // Usar el endpoint para mis-subservicios (específico para operarios)
+      const response = await fetch(`${API_BASE_URL}/api/cliente/mis-subservicios`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
-      // Manejar el caso común de error: supervisor sin clientes
       if (!response.ok) {
         const errorCode = response.status;
         let errorMessage = '';
@@ -711,12 +719,11 @@ export const Cart: React.FC = () => {
         try {
           // Intentar obtener un objeto JSON con el error
           const errorData = await response.json();
-          errorMessage = errorData.mensaje || errorData.error || 'Error desconocido';
+          errorMessage = errorData.mensaje || errorData.message || errorData.error || 'Error desconocido';
 
-          // Casos específicos basados en mensajes de error del backend
-          if (errorMessage.includes("User is not defined") ||
-            errorMessage.includes("no tiene clientes asignados")) {
-            setErrorClientes('Tu supervisor no tiene clientes asignados. Por favor, contacta con administración para que le asignen clientes.');
+          if (errorMessage.includes("No tienes subservicios") ||
+              errorMessage.includes("no eres un operario")) {
+            setErrorClientes('No tienes subservicios asignados. Por favor, contacta con tu supervisor.');
             return;
           }
         } catch (jsonError) {
@@ -724,36 +731,71 @@ export const Cart: React.FC = () => {
           errorMessage = await response.text();
         }
 
-        // Casos específicos basados en códigos de error
         if (errorCode === 404) {
-          setErrorClientes('No hay clientes asignados a tu supervisor. Por favor, contacta con administración.');
-          return;
-        } else if (errorCode === 500) {
-          setErrorClientes('Tu supervisor no tiene clientes asignados. Por favor, contacta con administración.');
+          setErrorClientes('No tienes subservicios asignados. Por favor, contacta con tu supervisor.');
           return;
         } else {
-          setErrorClientes(`No se pudieron cargar los clientes: ${errorMessage}`);
+          setErrorClientes(`No se pudieron cargar tus subservicios: ${errorMessage}`);
           return;
         }
       }
 
-      const data = await response.json();
-
-      if (!data || data.length === 0) {
-        setErrorClientes('Tu supervisor no tiene clientes disponibles. Por favor, contacta con administración.');
+      // Procesar la respuesta de subservicios asignados
+      const asignacionesData = await response.json();
+      
+      if (!asignacionesData || asignacionesData.length === 0) {
+        setErrorClientes('No tienes subservicios asignados. Por favor, contacta con tu supervisor.');
         return;
       }
 
-      processClientesData(data);
-    } catch (error) {
-      console.error('Error al cargar clientes para operario:', error);
+      // Transformar la respuesta del backend en nuestro formato
+      const clientesConSubservicios: Cliente[] = [];
+      const asignaciones: SubservicioAsignado[] = [];
 
-      // Mensaje más amigable para el usuario
-      if (error instanceof Error && error.message.includes('User is not defined')) {
-        setErrorClientes('Tu supervisor no tiene clientes asignados. Por favor, contacta con administración.');
-      } else {
-        setErrorClientes('No se pudieron cargar los clientes. Por favor, intenta nuevamente o contacta con administración.');
-      }
+      // Procesar cada asignación de cliente con sus subservicios
+      asignacionesData.forEach((asignacion: any) => {
+        // Extraer datos del cliente
+        const cliente: Cliente = {
+          _id: asignacion.clienteId,
+          nombre: asignacion.nombreCliente || 'Cliente sin nombre',
+          servicio: asignacion.nombreCliente || 'Cliente sin nombre',
+          seccionDelServicio: '',
+          userId: [],
+          subServicios: [],
+          isExpanded: true // Por defecto expandido para mejor UX
+        };
+
+        // Agregar los subservicios asignados a este cliente
+        if (asignacion.subServicios && asignacion.subServicios.length > 0) {
+          asignacion.subServicios.forEach((subserv: any) => {
+            // Agregar al listado de subservicios del cliente
+            cliente.subServicios.push({
+              _id: subserv._id,
+              nombre: subserv.nombre || 'Subservicio sin nombre',
+              subUbicaciones: subserv.subUbicaciones || [],
+              isSelected: true // Estos son los asignados al operario
+            });
+
+            // Agregar a la lista de asignaciones
+            asignaciones.push({
+              clienteId: cliente._id,
+              subServicioId: subserv._id,
+              nombreCliente: cliente.nombre,
+              nombreSubServicio: subserv.nombre || 'Subservicio sin nombre'
+            });
+          });
+        }
+
+        clientesConSubservicios.push(cliente);
+      });
+
+      // Guardar datos procesados
+      setSubserviciosAsignados(asignaciones);
+      processClientesData(clientesConSubservicios);
+
+    } catch (error) {
+      console.error('Error al cargar subservicios asignados al operario:', error);
+      setErrorClientes('No se pudieron cargar tus subservicios asignados. Por favor, intenta nuevamente.');
     } finally {
       setCargandoClientes(false);
     }
@@ -768,7 +810,7 @@ export const Cart: React.FC = () => {
       setErrorClientes(null);
 
       await fetchSupervisorInfo(currentUser);
-      await fetchClientesForOperario();
+      await fetchSubserviciosAsignadosOperario();
 
       addNotification('Información actualizada correctamente', 'success');
     } catch (error) {
@@ -853,7 +895,7 @@ export const Cart: React.FC = () => {
     }
   };
 
-  // Procesar datos de clientes (común para ambos métodos de obtención)
+  // Procesar datos de clientes 
   const processClientesData = (data: Cliente[]) => {
     if (!data || data.length === 0) {
       setErrorClientes('No hay clientes disponibles. Por favor, contacta con administración.');
@@ -940,6 +982,23 @@ export const Cart: React.FC = () => {
       // Cargar subservicios del cliente seleccionado por defecto
       if (clientesFiltrados[0].subServicios && clientesFiltrados[0].subServicios.length > 0) {
         setSubServiciosDisponibles(clientesFiltrados[0].subServicios);
+
+        // Para operarios, preseleccionar el primer subservicio asignado
+        if (userRole === 'operario' && clientesFiltrados[0].subServicios.some(s => s.isSelected)) {
+          const primerSubservicioAsignado = clientesFiltrados[0].subServicios.find(s => s.isSelected);
+          if (primerSubservicioAsignado) {
+            setSubServicioSeleccionado(primerSubservicioAsignado._id);
+            setOrderForm(prev => ({
+              ...prev,
+              nombreSubServicio: primerSubservicioAsignado.nombre
+            }));
+
+            // Cargar sububicaciones si existen
+            if (primerSubservicioAsignado.subUbicaciones && primerSubservicioAsignado.subUbicaciones.length > 0) {
+              setSubUbicacionesDisponibles(primerSubservicioAsignado.subUbicaciones);
+            }
+          }
+        }
       } else {
         setSubServiciosDisponibles([]);
       }
@@ -1002,7 +1061,15 @@ export const Cart: React.FC = () => {
 
       // Actualizar subservicios disponibles
       if (clienteSeleccionadoObj.subServicios && clienteSeleccionadoObj.subServicios.length > 0) {
-        setSubServiciosDisponibles(clienteSeleccionadoObj.subServicios);
+        // Para operarios, mostrar solo subservicios asignados
+        if (userRole === 'operario') {
+          const subserviciosFiltrados = clienteSeleccionadoObj.subServicios.filter(subServ => 
+            subServ.isSelected
+          );
+          setSubServiciosDisponibles(subserviciosFiltrados);
+        } else {
+          setSubServiciosDisponibles(clienteSeleccionadoObj.subServicios);
+        }
       } else {
         setSubServiciosDisponibles([]);
       }
@@ -1078,6 +1145,20 @@ export const Cart: React.FC = () => {
     if (!subServicioSeleccionado) {
       setOrderError('Por favor, seleccione un subservicio para el pedido');
       return;
+    }
+
+    // Para operarios, verificar que el subservicio seleccionado esté asignado
+    if (userRole === 'operario') {
+      const isAssigned = subserviciosAsignados.some(
+        asignacion => 
+          asignacion.clienteId === clienteSeleccionado && 
+          asignacion.subServicioId === subServicioSeleccionado
+      );
+
+      if (!isAssigned) {
+        setOrderError('No tienes permiso para realizar pedidos con este subservicio. Por favor, selecciona uno que te haya sido asignado.');
+        return;
+      }
     }
 
     setProcessingOrder(true);
@@ -1184,8 +1265,14 @@ export const Cart: React.FC = () => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.mensaje || `Error al crear el pedido (status: ${response.status})`);
+        let errorMessage = 'Error al crear el pedido';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.mensaje || errorData.message || `Error (status: ${response.status})`;
+        } catch (e) {
+          errorMessage = `Error al crear el pedido (status: ${response.status})`;
+        }
+        throw new Error(errorMessage);
       }
 
       // Obtener datos del pedido creado para guardar el ID
@@ -1646,7 +1733,9 @@ export const Cart: React.FC = () => {
                             <AccordionContent className="bg-white/70 backdrop-blur-sm border border-[#3a8fb7] rounded-lg p-3 mb-2">
                               {subServiciosDisponibles.length === 0 ? (
                                 <div className="text-xs text-[#4a4a4a] italic p-2 border border-[#3a8fb7]/20 rounded bg-white/30">
-                                  El cliente seleccionado no tiene sub-servicios asignados.
+                                  {userRole === 'operario' 
+                                    ? 'No tienes subservicios asignados para este cliente.'
+                                    : 'El cliente seleccionado no tiene sub-servicios asignados.'}
                                 </div>
                               ) : (
                                 <div className="space-y-2">
@@ -1686,6 +1775,11 @@ export const Cart: React.FC = () => {
                                             <Badge className="ml-1 bg-[#3a8fb7] text-white text-xs px-1 py-0 h-4">
                                               {subServicio.subUbicaciones.length}
                                             </Badge>
+                                          )}
+
+                                          {/* Indicador de asignación para operarios */}
+                                          {userRole === 'operario' && subServicio.isSelected && (
+                                            <Check className="ml-1 h-3 w-3 text-green-600" />
                                           )}
                                         </div>
                                       </SelectItem>
@@ -1945,7 +2039,9 @@ export const Cart: React.FC = () => {
 
                               {subServiciosDisponibles.length === 0 ? (
                                 <div className="text-xs text-[#4a4a4a] mt-1 italic p-2 border border-[#3a8fb7]/20 rounded bg-white/30">
-                                  El cliente seleccionado no tiene sub-servicios asignados.
+                                  {userRole === 'operario' 
+                                    ? 'No tienes subservicios asignados para este cliente.' 
+                                    : 'El cliente seleccionado no tiene sub-servicios asignados.'}
                                 </div>
                               ) : (
                                 <div className="relative mt-1">
@@ -1970,6 +2066,11 @@ export const Cart: React.FC = () => {
                                             <Badge className="ml-2 bg-[#3a8fb7] text-white text-xs">
                                               {subServicio.subUbicaciones.length} {subServicio.subUbicaciones.length === 1 ? 'ubicación' : 'ubicaciones'}
                                             </Badge>
+                                          )}
+
+                                          {/* Indicador de asignación para operarios */}
+                                          {userRole === 'operario' && subServicio.isSelected && (
+                                            <Check className="ml-1 h-3 w-3 text-green-600" />
                                           )}
                                         </div>
                                       </SelectItem>
@@ -2314,6 +2415,19 @@ export const Cart: React.FC = () => {
                     </div>
                   )}
 
+                  {/* Información de subservicios asignados para operarios */}
+                  {userRole === 'operario' && subserviciosAsignados.length > 0 && (
+                    <div className="bg-white/20 rounded-md p-2 text-xs text-white border border-white/50">
+                      <div className="flex items-center mb-1 text-white">
+                        <PackageOpen className="h-3 w-3 mr-1" />
+                        <span className="font-medium">Subservicios asignados</span>
+                      </div>
+                      <p className="text-white/80 text-[10px] mt-1">
+                        {subserviciosAsignados.length} subservicios disponibles
+                      </p>
+                    </div>
+                  )}
+
                   <Separator className="bg-white/30" />
 
                   <div className="flex justify-between font-semibold text-lg text-white">
@@ -2348,6 +2462,7 @@ export const Cart: React.FC = () => {
                 {userRole === 'operario' ? (
                   <p className="text-xs text-[#4a4a4a]">
                     Los pedidos requieren aprobación del supervisor antes de ser procesados.
+                    Solo puedes realizar pedidos en los subservicios que te han sido asignados.
                   </p>
                 ) : (
                   <p className="text-xs text-[#4a4a4a]">

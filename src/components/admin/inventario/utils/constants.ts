@@ -1,7 +1,7 @@
 // utils/constants.ts
 
 // Configuración general
-export const API_URL = "/api/";
+export const API_URL = "http://localhost:3000/api/";
 export const DEFAULT_IMAGE_URL = "/lyme.png";
 
 // Constantes relacionadas con el stock

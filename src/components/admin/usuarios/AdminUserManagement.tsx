@@ -1,7 +1,7 @@
 /**
  * Componente para gestión de usuarios en el panel de administración
  * Permite crear, editar, activar/desactivar y eliminar usuarios del sistema
- * Actualizado para usar la nueva estructura de roles del sistema
+ * Actualizado para manejar subservicios asignados a operarios
  */
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
@@ -93,7 +93,21 @@ const UserManagementContent: React.FC = () => {
     handleToggleStatus,
     handleEdit,
     resetForm,
-    currentUserRole
+    currentUserRole,
+    
+    // Nuevos estados para clientes y subservicios
+    clientesDelSupervisor,
+    clientesLoading,
+    clientesError,
+    selectedSubservicios,
+    availableSupervisors,
+    supervisorsLoading,
+    
+    // Nuevas funciones para clientes y subservicios
+    toggleClienteExpanded,
+    toggleSubservicioSelected,
+    handleRoleChange,
+    handleSupervisorChange
   } = useUserManagement();
 
   // Estado para la paginación
@@ -355,7 +369,7 @@ const UserManagementContent: React.FC = () => {
         )}
       </div>
 
-      {/* Modal de Usuario */}
+      {/* Modal de Usuario con nuevas props para manejar subservicios */}
       <UserForm 
         isOpen={showModal}
         onClose={closeUserModal}
@@ -367,6 +381,20 @@ const UserManagementContent: React.FC = () => {
         loading={loading}
         error={error}
         currentUserRole={currentUserRole}
+        
+        // Nuevas props para clientes y subservicios
+        clientesDelSupervisor={clientesDelSupervisor}
+        clientesLoading={clientesLoading}
+        clientesError={clientesError}
+        selectedSubservicios={selectedSubservicios}
+        availableSupervisors={availableSupervisors}
+        supervisorsLoading={supervisorsLoading}
+        
+        // Funciones para manejar clientes y subservicios
+        toggleClienteExpanded={toggleClienteExpanded}
+        toggleSubservicioSelected={toggleSubservicioSelected}
+        handleRoleChange={handleRoleChange}
+        handleSupervisorChange={handleSupervisorChange}
       />
 
       {/* Diálogo de confirmación de eliminación */}
