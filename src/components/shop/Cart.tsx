@@ -1575,10 +1575,6 @@ export const Cart: React.FC = () => {
                         </div>
                       </div>
                     )}
-
-                    <p className="text-xs text-[#3a8fb7] mt-1 italic">
-                      ID de pedido: {createdOrderId}
-                    </p>
                   </div>
                 </div>
               )}

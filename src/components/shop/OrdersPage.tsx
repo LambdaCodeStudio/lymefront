@@ -549,11 +549,15 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No se encontró token de autenticación');
       }
 
-      let url = `http://localhost:3000/api/pedido/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
-
-      // Si es operario, añadir el parámetro de usuario
-      if (userRole === 'operario' && userId) {
-        url += `&userId=${userId}`;
+      let url;
+      if (userRole === 'supervisor' && userId) {
+        // Fetch both orders created by supervisor and orders they supervise
+        url = `http://localhost:3000/api/pedido/supervisor/${userId}/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
+      } else {
+        url = `http://localhost:3000/api/pedido/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
+        if (userRole === 'operario' && userId) {
+          url += `&userId=${userId}`;
+        }
       }
 
       const response = await fetch(url, {
@@ -1202,7 +1206,7 @@ export const OrdersPage: React.FC = () => {
                       <Button
                         variant="default"
                         onClick={filterOrdersByDate}
-                        className="flex-1 bg-[#3a8fb7] hover:bg-[#2a7a9f]"
+                        className="flex-1 bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white transition-all duration-200"
                       >
                         Aplicar Filtros
                       </Button>
