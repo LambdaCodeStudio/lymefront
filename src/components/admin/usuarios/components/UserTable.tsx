@@ -40,10 +40,11 @@ const UserTable: React.FC<UserTableProps> = ({
 }) => {
   // Función para determinar si un usuario ha expirado
   const isUserExpired = (user: User): boolean => {
+    // SOLUCIÓN: Eliminar la condición de que el usuario debe estar inactivo
+    // para ser considerado expirado
     return user.role === ROLES.OPERARIO && 
            user.expiresAt && 
-           new Date(user.expiresAt) < new Date() &&
-           !user.isActive;
+           new Date(user.expiresAt) < new Date();
   };
 
   // Función para obtener el texto de estado específico para este componente

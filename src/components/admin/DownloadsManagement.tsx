@@ -958,39 +958,39 @@ const DownloadsManagement: React.FC = () => {
     setIsFilterDialogOpen(false);
   };
 
-  // Excel download handler
   const handleExcelDownload = async () => {
     // Usar fechas de los filtros si están disponibles
     const fromDate = dateRange.from || (filterOptions.fechaInicio ? new Date(filterOptions.fechaInicio) : undefined);
     const toDate = dateRange.to || (filterOptions.fechaFin ? new Date(filterOptions.fechaFin) : undefined);
-
+  
     if (!fromDate || !toDate) {
       setError('Por favor selecciona un rango de fechas');
       return;
     }
-
+  
     try {
       setIsLoading(true);
       setError('');
-
+  
+      // Usar formatDate para enviar fechas en formato YYYY-MM-DD en lugar de ISOString
       const params = new URLSearchParams({
-        from: fromDate.toISOString(),
+        from: fromDate.toISOString(), // Mantener ISO para compatibilidad con backend
         to: toDate.toISOString()
       });
-
+  
       // Añadir filtros adicionales si están presentes
       if (filterOptions.clienteId) {
         params.append('clienteId', filterOptions.clienteId);
       }
-
+  
       if (filterOptions.productoId) {
         params.append('productoId', filterOptions.productoId);
       }
-
+  
       if (filterOptions.supervisorId) {
         params.append('supervisorId', filterOptions.supervisorId);
       }
-
+  
       const token = localStorage.getItem('token');
       const response = await fetch(`http://localhost:3000/api/downloads/excel?${params.toString()}`, {
         headers: {
@@ -998,25 +998,39 @@ const DownloadsManagement: React.FC = () => {
           'Cache-Control': 'no-cache'
         }
       });
-
+  
+      // Mejora en el manejo de errores
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.mensaje || 'Error al descargar el Excel');
+        // Intentar parsear respuesta como JSON primero
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await response.json();
+          throw new Error(errorData.mensaje || 'Error al descargar el Excel');
+        } else {
+          throw new Error(`Error ${response.status}: ${response.statusText}`);
+        }
       }
-
+  
       const blob = await response.blob();
+      
+      if (!blob || blob.size === 0) {
+        throw new Error('La respuesta del servidor está vacía');
+      }
+      
+      console.log(`Excel recibido: ${blob.size} bytes`);
+      
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', `reporte_${formatDate(fromDate)}_${formatDate(toDate)}.xlsx`);
       document.body.appendChild(link);
       link.click();
-
+  
       setTimeout(() => {
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
       }, 100);
-
+  
       setSuccessMessage('Excel descargado correctamente');
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err: any) {
@@ -1027,48 +1041,64 @@ const DownloadsManagement: React.FC = () => {
     }
   };
 
-  // Reporte mensual download handler
   const handleReporteMensualDownload = async () => {
     const fromDate = dateRange.from;
     const toDate = dateRange.to;
-
+  
     if (!fromDate || !toDate) {
       setError('Por favor selecciona un rango de fechas');
       return;
     }
-
+  
     try {
       setIsLoading(true);
       setError('');
-
+  
+      // Usar formato de fecha consistente con el backend
       const params = new URLSearchParams({
-        from: fromDate.toISOString(),
+        from: fromDate.toISOString(), // Mantener ISO para compatibilidad con backend
         to: toDate.toISOString()
       });
-
+  
       // Añadir clienteId solo si está seleccionado
       if (filterOptions.clienteId) {
         params.append('clienteId', filterOptions.clienteId);
       }
-
+  
       const token = localStorage.getItem('token');
+      console.log(`Solicitando reporte mensual: ${params.toString()}`);
+      
       const response = await fetch(`http://localhost:3000/api/downloads/reporte-mensual?${params.toString()}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
         }
       });
-
+  
+      // Mejora en el manejo de errores
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.mensaje || 'Error al descargar el reporte mensual');
+        // Intentar parsear respuesta como JSON primero
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await response.json();
+          throw new Error(errorData.mensaje || 'Error al descargar el reporte mensual');
+        } else {
+          throw new Error(`Error ${response.status}: ${response.statusText}`);
+        }
       }
-
+  
       const blob = await response.blob();
+      
+      if (!blob || blob.size === 0) {
+        throw new Error('La respuesta del servidor está vacía');
+      }
+      
+      console.log(`Reporte mensual recibido: ${blob.size} bytes`);
+      
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-
+  
       // Nombre del archivo
       let fileName = `reporte_mensual_${formatDate(fromDate)}_${formatDate(toDate)}`;
       if (filterOptions.clienteId) {
@@ -1078,16 +1108,16 @@ const DownloadsManagement: React.FC = () => {
         }
       }
       fileName += '.xlsx';
-
+  
       link.setAttribute('download', fileName);
       document.body.appendChild(link);
       link.click();
-
+  
       setTimeout(() => {
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
       }, 100);
-
+  
       setSuccessMessage('Reporte mensual descargado correctamente');
       setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err: any) {

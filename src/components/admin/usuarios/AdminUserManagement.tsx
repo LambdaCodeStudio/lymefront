@@ -49,12 +49,6 @@ export const filterUsers = (
   selectedRole: string | null
 ): User[] => {
   return users.filter((user) => {
-    // Determinar si el usuario está expirado
-    const isExpired = user.role === ROLES.OPERARIO && 
-                     user.expiresAt && 
-                     new Date(user.expiresAt) < new Date() &&
-                     !user.isActive;
-    
     // Filtrar por término de búsqueda
     const matchesSearch =
       searchTerm === '' ||
@@ -63,7 +57,7 @@ export const filterUsers = (
       (user.apellido && user.apellido.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (user.celular && user.celular.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    // Filtrar por estado activo/inactivo (incluir expirados cuando showInactiveUsers es true)
+    // Filtrar por estado activo/inactivo
     const matchesActiveState = showInactiveUsers || user.isActive;
 
     // Filtrar por rol
@@ -254,12 +248,6 @@ const UserManagementContent: React.FC = () => {
     resetForm();
   }, [resetForm, setShowModal]);
 
-  // Función modificada para manejar el envío del formulario sin validación de subservicios
-  const handleFormSubmission = useCallback(async (data) => {
-    // Si estamos en modo modificación usamos el método del hook directamente
-    await handleSubmit(data);
-  }, [handleSubmit]);
-
   return (
     <div className={STYLES.container}>
       {/* Contenedor de notificaciones */}
@@ -410,7 +398,7 @@ const UserManagementContent: React.FC = () => {
       <UserForm 
         isOpen={showModal}
         onClose={closeUserModal}
-        onSubmit={handleFormSubmission}
+        onSubmit={handleSubmit}
         availableRoles={availableRoles}
         formData={formData}
         setFormData={setFormData}

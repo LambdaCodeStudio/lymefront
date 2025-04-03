@@ -57,7 +57,6 @@ const STYLES = {
   selectAllBtn: "text-xs text-blue-600 hover:text-blue-800 font-medium",
   selectionSummary: "flex justify-between items-center mb-2",
   badge: "bg-[#DFEFE6] text-[#29696B] font-normal text-xs",
-  expirationNote: "text-amber-500 text-xs mt-1 flex items-center",
 };
 
 interface UserFormProps {
@@ -133,16 +132,6 @@ const UserForm: React.FC<UserFormProps> = ({
   
   // Determinar si mostrar nombres cortos según ancho de pantalla
   const useShortNames = useMemo(() => windowWidth < 450, [windowWidth]);
-  
-  // Determinar si el usuario es un operario expirado
-  const isUserExpired = useMemo(() => {
-    if (!editingUser) return false;
-    
-    return editingUser.role === ROLES.OPERARIO && 
-           editingUser.expiresAt && 
-           new Date(editingUser.expiresAt) < new Date() &&
-           !editingUser.isActive;
-  }, [editingUser]);
 
   // Efecto para detectar el tamaño de la ventana
   useEffect(() => {
@@ -160,14 +149,13 @@ const UserForm: React.FC<UserFormProps> = ({
   useEffect(() => {
     if (editingUser) {
       // Detectar si es un operario temporal
-      const isTemp = editingUser.role === ROLES.OPERARIO && 
-                    (editingUser.expiresAt || formData.expirationMinutes);
+      const isTemp = editingUser.role === ROLES.OPERARIO && editingUser.expiresAt;
       setIsTemporary(!!isTemp);
     } else {
       // Para nuevo usuario, inicializar en false
       setIsTemporary(false);
     }
-  }, [editingUser, formData.expirationMinutes]);
+  }, [editingUser]);
 
   // Filtrar clientes y subservicios según término de búsqueda
   const filteredClientes = useMemo(() => {
@@ -314,17 +302,9 @@ const UserForm: React.FC<UserFormProps> = ({
   // Maneja el envío del formulario
   const handleFormSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Crear una copia del formData para posibles modificaciones
-    const dataToSubmit = { ...formData };
-    
-    // Si estamos editando un usuario expirado, asegurar que se marque como activo
-    if (isUserExpired) {
-      dataToSubmit.isActive = true;
-    }
-    
-    await onSubmit(dataToSubmit);
-  }, [formData, isUserExpired, onSubmit]);
+    // Ya no validamos la selección de subservicios para operarios
+    await onSubmit(formData);
+  }, [formData, onSubmit]);
 
   // Función para resetear búsqueda
   const clearSearch = useCallback(() => {
@@ -337,11 +317,6 @@ const UserForm: React.FC<UserFormProps> = ({
         <DialogHeader className="sticky top-0 bg-white pt-4 pb-2 z-10">
           <DialogTitle>
             {editingUser ? 'Editar Usuario' : 'Nuevo Usuario'}
-            {isUserExpired && (
-              <Badge variant="outline" className="ml-2 bg-amber-100 text-amber-700 border-amber-300">
-                Expirado
-              </Badge>
-            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -513,12 +488,6 @@ const UserForm: React.FC<UserFormProps> = ({
                   <p className={STYLES.helperText}>
                     Tiempo máximo: 7 días (10080 minutos)
                   </p>
-                  {isUserExpired && (
-                    <p className={STYLES.expirationNote}>
-                      <Info className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-                      Este operario estaba expirado. Al guardar, se extenderá su tiempo y será reactivado.
-                    </p>
-                  )}
                 </div>
               )}
 
@@ -738,7 +707,7 @@ const UserForm: React.FC<UserFormProps> = ({
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" aria-hidden="true" />
                 Procesando...
               </span>
-            ) : isUserExpired ? 'Guardar y Reactivar' : editingUser ? 'Guardar Cambios' : 'Crear Usuario'}
+            ) : editingUser ? 'Guardar Cambios' : 'Crear Usuario'}
           </Button>
         </DialogFooter>
       </DialogContent>

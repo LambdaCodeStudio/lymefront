@@ -1121,6 +1121,7 @@ const OrdersSection = () => {
   // Estado de filtros
   const [terminoBusqueda, setTerminoBusqueda] = useState('');
   const [filtroFecha, setFiltroFecha] = useState({ from: '', to: '' });
+  const [filtroFechaActivo, setFiltroFechaActivo] = useState({ from: '', to: '' }); // Nuevo estado para filtros activos
   const [filtroEstado, setFiltroEstado] = useState('todos');
   const [filtroSupervisor, setFiltroSupervisor] = useState('');
   const [filtroServicio, setFiltroServicio] = useState('');
@@ -1261,10 +1262,10 @@ const OrdersSection = () => {
     isRefetching: actualizandoPedidos,
     refetch: refrescarPedidos
   } = useQuery(
-    ['pedidos', filtroFecha, filtroEstado, filtroSupervisor, filtroServicio, filtroCliente],
+    ['pedidos', filtroFechaActivo, filtroEstado, filtroSupervisor, filtroServicio, filtroCliente],
     () => ServicioPedidos.obtenerPedidos({
-      from: filtroFecha.from,
-      to: filtroFecha.to,
+      from: filtroFechaActivo.from,
+      to: filtroFechaActivo.to,
       estado: filtroEstado !== 'todos' ? filtroEstado : undefined,
       // Solo incluir filtroSupervisor si existe Y no es 'all'
       supervisor: filtroSupervisor && filtroSupervisor !== 'all' ? filtroSupervisor : undefined,
@@ -1983,6 +1984,8 @@ const OrdersSection = () => {
       return;
     }
 
+    // Actualizar los filtros activos con los valores actuales
+    setFiltroFechaActivo(filtroFecha);
     refrescarPedidos();
     setMostrarFiltrosMovil(false);
   };
@@ -1991,6 +1994,7 @@ const OrdersSection = () => {
   const limpiarTodosFiltros = () => {
     setTerminoBusqueda('');
     setFiltroFecha({ from: '', to: '' });
+    setFiltroFechaActivo({ from: '', to: '' }); // También limpiar filtros activos
     setFiltroEstado('todos');
     setFiltroSupervisor('');
     setFiltroServicio('');
@@ -2566,15 +2570,6 @@ const OrdersSection = () => {
             {filtroSupervisor && " para el supervisor seleccionado"}
             {filtroCliente.clienteId && " para el cliente seleccionado"}
           </p>
-
-          {(clientes.length === 0 || productos.length === 0) && (
-            <p className="mt-4 text-sm text-red-500 flex items-center justify-center">
-              <Info className="w-4 h-4 mr-2" />
-              {clientes.length === 0
-                ? "No tienes clientes asignados. Contacta a un administrador."
-                : "No hay productos disponibles para crear pedidos."}
-            </p>
-          )}
         </div>
       ) : (
         <>
@@ -2852,50 +2847,50 @@ const OrdersSection = () => {
               <EsqueletoPedidos count={3} />
             ) : (
               pedidosPaginados.map(pedido => (
-                <Card 
-                key={pedido._id} 
-                className="overflow-hidden shadow-sm border border-[#91BEAD]/20 h-auto"
-              >
-                <CardHeader className="pb-2 p-3">
-                  <div className="flex justify-between items-start">
-                    <div className="w-[70%]">
-                      <CardTitle className="text-sm font-medium flex items-center text-[#29696B] line-clamp-1">
-                        <Building className="w-4 h-4 text-[#7AA79C] mr-1 flex-shrink-0" />
-                        <span className="truncate max-w-[calc(100%-20px)]">
-                          {truncarTexto(pedido.cliente?.nombreCliente || pedido.servicio || "Ningún cliente.", 18)}
-                        </span>
-                      </CardTitle>
-              
-                      {(pedido.cliente?.nombreSubServicio || pedido.seccionDelServicio) && (
-                        <div className="text-xs text-[#7AA79C] flex items-center mt-1 max-w-full">
-                          <MapPin className="w-3 h-3 mr-1 flex-shrink-0" />
-                          <div className="truncate max-w-[calc(100%-16px)]">
-                            {truncarTexto(pedido.cliente?.nombreSubServicio || pedido.seccionDelServicio, 15)}
-                            {pedido.cliente?.nombreSubUbicacion && (
-                              <span className="ml-1 hidden sm:inline">
-                                ({truncarTexto(pedido.cliente.nombreSubUbicacion, 10)})
-                              </span>
-                            )}
+                <Card
+                  key={pedido._id}
+                  className="overflow-hidden shadow-sm border border-[#91BEAD]/20 h-auto"
+                >
+                  <CardHeader className="pb-2 p-3">
+                    <div className="flex justify-between items-start">
+                      <div className="w-[70%]">
+                        <CardTitle className="text-sm font-medium flex items-center text-[#29696B] line-clamp-1">
+                          <Building className="w-4 h-4 text-[#7AA79C] mr-1 flex-shrink-0" />
+                          <span className="truncate max-w-[calc(100%-20px)]">
+                            {truncarTexto(pedido.cliente?.nombreCliente || pedido.servicio || "Ningún cliente.", 18)}
+                          </span>
+                        </CardTitle>
+
+                        {(pedido.cliente?.nombreSubServicio || pedido.seccionDelServicio) && (
+                          <div className="text-xs text-[#7AA79C] flex items-center mt-1 max-w-full">
+                            <MapPin className="w-3 h-3 mr-1 flex-shrink-0" />
+                            <div className="truncate max-w-[calc(100%-16px)]">
+                              {truncarTexto(pedido.cliente?.nombreSubServicio || pedido.seccionDelServicio, 15)}
+                              {pedido.cliente?.nombreSubUbicacion && (
+                                <span className="ml-1 hidden sm:inline">
+                                  ({truncarTexto(pedido.cliente.nombreSubUbicacion, 10)})
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
+                      </div>
+
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        {/* Badge para número de pedido */}
+                        <Badge variant="outline" className="text-xs border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/20">
+                          <Hash className="w-3 h-3 mr-1" />
+                          {pedido.nPedido}
+                        </Badge>
+
+                        {/* Badge para fecha */}
+                        <Badge variant="outline" className="text-xs border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/20">
+                          <Calendar className="w-3 h-3 mr-1" />
+                          {new Date(pedido.fecha).toLocaleDateString()}
+                        </Badge>
+                      </div>
                     </div>
-              
-                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                      {/* Badge para número de pedido */}
-                      <Badge variant="outline" className="text-xs border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/20">
-                        <Hash className="w-3 h-3 mr-1" />
-                        {pedido.nPedido}
-                      </Badge>
-              
-                      {/* Badge para fecha */}
-                      <Badge variant="outline" className="text-xs border-[#91BEAD] text-[#29696B] bg-[#DFEFE6]/20">
-                        <Calendar className="w-3 h-3 mr-1" />
-                        {new Date(pedido.fecha).toLocaleDateString()}
-                      </Badge>
-                    </div>
-                  </div>
-                </CardHeader>
+                  </CardHeader>
 
                   <CardContent className="py-2">
                     <div className="text-xs space-y-1">
@@ -3759,24 +3754,24 @@ const OrdersSection = () => {
                 ) : (
                   <div className="space-y-2">
                     {productosFiltrados.map(producto => (
-                      <div 
-                      key={producto._id} 
-                      className="py-2 px-3 rounded-md border border-[#91BEAD]/10 flex items-center justify-between bg-white hover:bg-[#DFEFE6]/10 transition-colors"
-                    >
-                      <div className="flex-1 min-w-0 mr-2 max-w-[65%]">
-                        <div className="font-medium text-[#29696B] text-sm truncate">
-                          {producto.nombre.toUpperCase()}
+                      <div
+                        key={producto._id}
+                        className="py-2 px-3 rounded-md border border-[#91BEAD]/10 flex items-center justify-between bg-white hover:bg-[#DFEFE6]/10 transition-colors"
+                      >
+                        <div className="flex-1 min-w-0 mr-2 max-w-[65%]">
+                          <div className="font-medium text-[#29696B] text-sm truncate">
+                            {producto.nombre.toUpperCase()}
+                          </div>
+                          <div className="flex flex-wrap items-center text-xs">
+                            <span className="text-[#29696B] font-medium">${producto.precio.toFixed(2)}</span>
+                            <span className="text-[#7AA79C] ml-2">
+                              Stock: {producto.stock}
+                            </span>
+                            <span className="text-xs text-[#7AA79C] capitalize mt-0.5 w-full truncate">
+                              {producto.categoria}
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex flex-wrap items-center text-xs">
-                          <span className="text-[#29696B] font-medium">${producto.precio.toFixed(2)}</span>
-                          <span className="text-[#7AA79C] ml-2">
-                            Stock: {producto.stock}
-                          </span>
-                          <span className="text-xs text-[#7AA79C] capitalize mt-0.5 w-full truncate">
-                            {producto.categoria}
-                          </span>
-                        </div>
-                      </div>
 
                         {/* Botón de seleccionar con controles de cantidad */}
                         <div className="flex items-center">
