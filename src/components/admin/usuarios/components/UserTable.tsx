@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { UserCog, Trash2, CheckCircle, XCircle, Clock, ShieldAlert, Shield } from 'lucide-react';
+import { UserCog, Trash2, CheckCircle, XCircle, Clock, ShieldAlert, Shield, RefreshCw } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -38,6 +38,32 @@ const UserTable: React.FC<UserTableProps> = ({
   getFullName,
   currentUserRole
 }) => {
+  // Función para determinar si un usuario ha expirado
+  const isUserExpired = (user: User): boolean => {
+    return user.role === ROLES.OPERARIO && 
+           user.expiresAt && 
+           new Date(user.expiresAt) < new Date() &&
+           !user.isActive;
+  };
+
+  // Función para obtener el texto de estado específico para este componente
+  const getStatusText = (user: User): string => {
+    if (isUserExpired(user)) {
+      return 'Expirado';
+    }
+    return user.isActive ? 'Activo' : 'Inactivo';
+  };
+
+  // Función para obtener la clase de estilo según el estado
+  const getStatusClass = (user: User): string => {
+    if (isUserExpired(user)) {
+      return 'bg-amber-100 text-amber-800';
+    }
+    return user.isActive 
+      ? 'bg-green-100 text-green-800' 
+      : 'bg-red-100 text-red-800';
+  };
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full">
@@ -52,137 +78,160 @@ const UserTable: React.FC<UserTableProps> = ({
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-200">
-          {users.map((user) => (
-            <tr key={user._id} className="hover:bg-gray-50">
-              <td className="px-6 py-4">
-                <div className="text-sm font-medium text-gray-900 truncate max-w-[150px]">
-                  {getUserIdentifier(user)}
-                </div>
-                {getFullName(user) && (
-                  <div className="text-xs text-gray-500 truncate max-w-[150px]">
-                    {getFullName(user)}
+          {users.map((user) => {
+            // Determinar si el usuario está expirado
+            const expired = isUserExpired(user);
+            
+            return (
+              <tr key={user._id} className="hover:bg-gray-50">
+                <td className="px-6 py-4">
+                  <div className="text-sm font-medium text-gray-900 truncate max-w-[150px]">
+                    {getUserIdentifier(user)}
                   </div>
-                )}
-                {hasExpiration(user) && user.expiresAt && (
-                  <div className="text-xs text-gray-500 flex items-center">
-                    <Clock className="inline-block w-3 h-3 mr-1 flex-shrink-0" aria-hidden="true" />
-                    <span className="truncate max-w-[140px]">
-                      Expira: {new Date(user.expiresAt).toLocaleString()}
+                  {getFullName(user) && (
+                    <div className="text-xs text-gray-500 truncate max-w-[150px]">
+                      {getFullName(user)}
+                    </div>
+                  )}
+                  {hasExpiration(user) && user.expiresAt && (
+                    <div className="text-xs text-gray-500 flex items-center">
+                      <Clock className={`inline-block w-3 h-3 mr-1 flex-shrink-0 ${expired ? 'text-amber-600' : ''}`} aria-hidden="true" />
+                      <span className={`truncate max-w-[140px] ${expired ? 'text-amber-600 font-medium' : ''}`}>
+                        Expira: {new Date(user.expiresAt).toLocaleString()}
+                        {expired && ' (Expirado)'}
+                      </span>
+                    </div>
+                  )}
+                </td>
+                <td className="px-6 py-4">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div>
+                          <Badge 
+                            variant="outline" 
+                            className={`${getRoleBadgeClass(user.role)}`}
+                          >
+                            {user.role === ROLES.ADMIN && <ShieldAlert className="w-3 h-3 mr-1 flex-shrink-0" aria-hidden="true" />}
+                            {user.role === ROLES.SUPERVISOR_DE_SUPERVISORES && <Shield className="w-3 h-3 mr-1 flex-shrink-0" aria-hidden="true" />}
+                            {/* Usar un nombre más corto para Supervisor de Supervisores en tablet */}
+                            {user.role === ROLES.SUPERVISOR_DE_SUPERVISORES ? (
+                              <>
+                                <span className="hidden md:inline xl:hidden">Sup. de Sups.</span>
+                                <span className="inline md:hidden xl:inline">{rolesDisplayNames[user.role]}</span>
+                              </>
+                            ) : (
+                              <span>{rolesDisplayNames[user.role] || user.role}</span>
+                            )}
+                          </Badge>
+                        </div>
+                      </TooltipTrigger>
+                      {user.role === ROLES.SUPERVISOR_DE_SUPERVISORES && (
+                        <TooltipContent>
+                          <p>Supervisor de Supervisores</p>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TooltipProvider>
+                </td>
+                <td className="px-6 py-4">
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusClass(user)}`}>
+                      {getStatusText(user)}
                     </span>
                   </div>
-                )}
-              </td>
-              <td className="px-6 py-4">
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div>
-                        <Badge 
-                          variant="outline" 
-                          className={`${getRoleBadgeClass(user.role)}`}
-                        >
-                          {user.role === ROLES.ADMIN && <ShieldAlert className="w-3 h-3 mr-1 flex-shrink-0" aria-hidden="true" />}
-                          {user.role === ROLES.SUPERVISOR_DE_SUPERVISORES && <Shield className="w-3 h-3 mr-1 flex-shrink-0" aria-hidden="true" />}
-                          {/* Usar un nombre más corto para Supervisor de Supervisores en tablet */}
-                          {user.role === ROLES.SUPERVISOR_DE_SUPERVISORES ? (
-                            <>
-                              <span className="hidden md:inline xl:hidden">Sup. de Sups.</span>
-                              <span className="inline md:hidden xl:inline">{rolesDisplayNames[user.role]}</span>
-                            </>
-                          ) : (
-                            <span>{rolesDisplayNames[user.role] || user.role}</span>
-                          )}
-                        </Badge>
-                      </div>
-                    </TooltipTrigger>
-                    {user.role === ROLES.SUPERVISOR_DE_SUPERVISORES && (
-                      <TooltipContent>
-                        <p>Supervisor de Supervisores</p>
-                      </TooltipContent>
-                    )}
-                  </Tooltip>
-                </TooltipProvider>
-              </td>
-              <td className="px-6 py-4">
-                <div className="flex items-center gap-2">
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getUserStatusClass(user)}`}>
-                    {getUserStatusText(user)}
-                  </span>
-                </div>
-              </td>
-              <td className="px-6 py-4 text-sm text-gray-700">
-                {user.secciones ? (
-                  <span className="capitalize">{user.secciones}</span>
-                ) : (
-                  <span className="text-gray-400">No especificado</span>
-                )}
-              </td>
-              <td className="px-6 py-4 text-sm text-gray-500 truncate max-w-[150px]">
-                {getCreatorName(user)}
-              </td>
-              <td className="px-6 py-4 text-right">
-                <div className="flex justify-end space-x-2">
-                  {/* Acciones basadas en permisos */}
-                  {canModifyUser(currentUserRole, user.role) ? (
-                    <>
-                      {/* Botón de activar/desactivar */}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onToggleStatus(user._id, !user.isActive)}
-                        disabled={!canDeleteOrDeactivate(user.role)}
-                        aria-label={user.isActive ? "Desactivar usuario" : "Activar usuario"}
-                        className={`${user.isActive 
-                          ? 'text-red-600 hover:text-red-800 hover:bg-red-50' 
-                          : 'text-green-600 hover:text-green-800 hover:bg-green-50'}
-                          ${!canDeleteOrDeactivate(user.role) ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                        {user.isActive ? (
-                          <XCircle className="w-4 h-4" aria-hidden="true" />
-                        ) : (
-                          <CheckCircle className="w-4 h-4" aria-hidden="true" />
-                        )}
-                      </Button>
-                      
-                      {/* Botón de editar */}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onEdit(user)}
-                        aria-label="Editar usuario"
-                        className="text-blue-600 hover:text-blue-800 hover:bg-blue-50">
-                        <UserCog className="w-4 h-4" aria-hidden="true" />
-                      </Button>
-                      
-                      {/* Botón de eliminar */}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onDelete(user._id)}
-                        disabled={!canDeleteOrDeactivate(user.role)}
-                        aria-label="Eliminar usuario"
-                        className={`text-red-600 hover:text-red-800 hover:bg-red-50
-                          ${!canDeleteOrDeactivate(user.role) ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                        <Trash2 className="w-4 h-4" aria-hidden="true" />
-                      </Button>
-                    </>
+                </td>
+                <td className="px-6 py-4 text-sm text-gray-700">
+                  {user.secciones ? (
+                    <span className="capitalize">{user.secciones}</span>
                   ) : (
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="text-xs text-gray-500 italic px-2">
-                            Sin permisos
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>No tienes permisos para modificar este usuario</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                    <span className="text-gray-400">No especificado</span>
                   )}
-                </div>
-              </td>
-            </tr>
-          ))}
+                </td>
+                <td className="px-6 py-4 text-sm text-gray-500 truncate max-w-[150px]">
+                  {getCreatorName(user)}
+                </td>
+                <td className="px-6 py-4 text-right">
+                  <div className="flex justify-end space-x-2">
+                    {/* Acciones basadas en permisos */}
+                    {canModifyUser(currentUserRole, user.role) ? (
+                      <>
+                        {/* Botón de activar/desactivar/reactivar */}
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => onToggleStatus(user._id, !user.isActive)}
+                                disabled={!canDeleteOrDeactivate(user.role)}
+                                aria-label={user.isActive ? "Desactivar usuario" : expired ? "Reactivar usuario expirado" : "Activar usuario"}
+                                className={`${user.isActive 
+                                  ? 'text-red-600 hover:text-red-800 hover:bg-red-50' 
+                                  : expired
+                                    ? 'text-amber-600 hover:text-amber-800 hover:bg-amber-50'
+                                    : 'text-green-600 hover:text-green-800 hover:bg-green-50'}
+                                  ${!canDeleteOrDeactivate(user.role) ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                {user.isActive ? (
+                                  <XCircle className="w-4 h-4" aria-hidden="true" />
+                                ) : expired ? (
+                                  <RefreshCw className="w-4 h-4" aria-hidden="true" />
+                                ) : (
+                                  <CheckCircle className="w-4 h-4" aria-hidden="true" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {user.isActive 
+                                ? "Desactivar usuario" 
+                                : expired 
+                                  ? "Reactivar usuario y extender expiración" 
+                                  : "Activar usuario"}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        
+                        {/* Botón de editar */}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onEdit(user)}
+                          aria-label="Editar usuario"
+                          className="text-blue-600 hover:text-blue-800 hover:bg-blue-50">
+                          <UserCog className="w-4 h-4" aria-hidden="true" />
+                        </Button>
+                        
+                        {/* Botón de eliminar */}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onDelete(user._id)}
+                          disabled={!canDeleteOrDeactivate(user.role)}
+                          aria-label="Eliminar usuario"
+                          className={`text-red-600 hover:text-red-800 hover:bg-red-50
+                            ${!canDeleteOrDeactivate(user.role) ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                          <Trash2 className="w-4 h-4" aria-hidden="true" />
+                        </Button>
+                      </>
+                    ) : (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="text-xs text-gray-500 italic px-2">
+                              Sin permisos
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>No tienes permisos para modificar este usuario</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

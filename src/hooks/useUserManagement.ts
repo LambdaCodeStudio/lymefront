@@ -49,6 +49,14 @@ export const useUserManagement = () => {
   const [currentUserRole, setCurrentUserRole] = useState<string>(ROLES.OPERARIO);
   const [availableRoles, setAvailableRoles] = useState<{value: string, label: string}[]>([]);
 
+  // Función auxiliar para determinar si un usuario está expirado
+  const isUserExpired = (user: User): boolean => {
+    return user.role === ROLES.OPERARIO && 
+           user.expiresAt && 
+           new Date(user.expiresAt) < new Date() &&
+           !user.isActive;
+  };
+
   // Cargar usuario actual al iniciar
   useEffect(() => {
     const loadCurrentUser = async () => {
@@ -389,16 +397,24 @@ useEffect(() => {
       // Log para debugging
       console.log('Procesando usuario con datos:', userData);
       
-      // Validar selección de subservicios para operarios
-      if (userData.role === ROLES.OPERARIO && selectedSubservicios.length === 0 && userData.supervisorId) {
-        setError('Debe seleccionar al menos un subservicio para asignar al operario');
-        setLoading(false);
-        return;
-      }
+      // Ya no validamos la selección de subservicios para operarios
+      // Eliminado: if (userData.role === ROLES.OPERARIO && selectedSubservicios.length === 0 && userData.supervisorId) { ... }
       
       // Si estamos editando un usuario existente
       if (editingUser) {
         console.log('Actualizando usuario existente:', editingUser._id);
+        
+        // Si el usuario es un operario expirado, asegurarnos de reactivarlo
+        if (isUserExpired(editingUser)) {
+          userData.isActive = true;
+          
+          // Si no se especificó un nuevo tiempo de expiración, extender 24 horas por defecto
+          if (userData.role === ROLES.OPERARIO && editingUser.expiresAt && !userData.expirationMinutes) {
+            // Calcular minutos para 24 horas desde ahora
+            const expirationMinutes = 24 * 60; // 24 horas en minutos
+            userData.expirationMinutes = expirationMinutes;
+          }
+        }
         
         // Actualizar el usuario
         const updatedUser = await userService.updateUser(editingUser._id, userData);
@@ -477,8 +493,8 @@ useEffect(() => {
         console.log('Creando nuevo usuario');
         const result = await userService.createUser(userData);
         
-        // Si es operario, asignar subservicios
-        if (userData.role === ROLES.OPERARIO && result && result.user && result.user.id) {
+        // Si es operario y hay subservicios seleccionados, asignarlos
+        if (userData.role === ROLES.OPERARIO && result && result.user && result.user.id && selectedSubservicios.length > 0) {
           const userId = result.user.id;
           console.log('Asignando subservicios al nuevo operario:', userId);
           
@@ -574,6 +590,15 @@ useEffect(() => {
       isActive: user.isActive
     };
     
+    // Si el usuario es un operario expirado, configurar para reactivación
+    if (isUserExpired(user)) {
+      // Agregar propiedad para indicar que es un operario temporal
+      preparedFormData.isTemporary = true;
+      
+      // Calcular tiempo de expiración por defecto (24 horas)
+      preparedFormData.expirationMinutes = 24 * 60; // 24 horas en minutos
+    }
+    
     // Limpiar selecciones previas
     setSelectedSubservicios([]);
     setClientesDelSupervisor([]);
@@ -634,14 +659,40 @@ useEffect(() => {
     setLoading(true);
     setError('');
     try {
-      const updatedUser = await userService.toggleUserStatus(userId, activate);
+      // Obtener el usuario que estamos modificando
+      const userToUpdate = users.find(user => user._id === userId);
+      
+      // Si estamos activando un operario que estaba expirado, necesitamos extender su expiración
+      const isExpiredOperator = userToUpdate && 
+                                isUserExpired(userToUpdate) &&
+                                activate;
+      
+      // Parámetros para la API
+      const params: any = { activate };
+      
+      // Si es un operario expirado que estamos reactivando, extender su tiempo de expiración
+      if (isExpiredOperator) {
+        // Extender 24 horas desde ahora
+        const extendedExpiration = new Date();
+        extendedExpiration.setHours(extendedExpiration.getHours() + 24);
+        
+        // Añadir el nuevo tiempo de expiración a los parámetros
+        params.expiresAt = extendedExpiration.toISOString();
+      }
+      
+      // Llamada a la API con los parámetros actualizados
+      const updatedUser = await userService.toggleUserStatus(userId, params);
+      
+      // Actualizar el estado en memoria
       setUsers(prevUsers => 
         prevUsers.map(user => user._id === updatedUser._id ? updatedUser : user)
       );
+      
+      // Mostrar notificación
       toast({
         title: 'Éxito',
         description: activate 
-          ? 'Usuario activado correctamente' 
+          ? `Usuario ${isExpiredOperator ? 'reactivado y expiración extendida' : 'activado'} correctamente` 
           : 'Usuario desactivado correctamente',
         variant: 'default'
       });

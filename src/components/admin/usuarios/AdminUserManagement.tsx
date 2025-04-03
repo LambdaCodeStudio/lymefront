@@ -26,6 +26,7 @@ import EnhancedPagination from '../components/Pagination';
 import { useUserManagement } from '../../../hooks/useUserManagement';
 import { getUserIdentifier, getFullName } from '@/utils/userUtils';
 import { User } from '@/types/users';
+import { ROLES } from '@/utils/userComponentUtils';
 
 // Estilos comunes para reutilización
 const STYLES = {
@@ -48,6 +49,12 @@ export const filterUsers = (
   selectedRole: string | null
 ): User[] => {
   return users.filter((user) => {
+    // Determinar si el usuario está expirado
+    const isExpired = user.role === ROLES.OPERARIO && 
+                     user.expiresAt && 
+                     new Date(user.expiresAt) < new Date() &&
+                     !user.isActive;
+    
     // Filtrar por término de búsqueda
     const matchesSearch =
       searchTerm === '' ||
@@ -56,13 +63,34 @@ export const filterUsers = (
       (user.apellido && user.apellido.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (user.celular && user.celular.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    // Filtrar por estado activo/inactivo
+    // Filtrar por estado activo/inactivo (incluir expirados cuando showInactiveUsers es true)
     const matchesActiveState = showInactiveUsers || user.isActive;
 
     // Filtrar por rol
     const matchesRole = !selectedRole || user.role === selectedRole;
 
     return matchesSearch && matchesActiveState && matchesRole;
+  });
+};
+
+// Función para ordenar usuarios por jerarquía
+export const sortUsersByHierarchy = (users: User[]): User[] => {
+  // Definir el orden jerárquico de los roles
+  const roleOrder: Record<string, number> = {
+    [ROLES.ADMIN]: 1,                       // Administrador
+    [ROLES.SUPERVISOR_DE_SUPERVISORES]: 2,  // Supervisor de Supervisores
+    [ROLES.SUPERVISOR]: 3,                  // Supervisor
+    [ROLES.OPERARIO]: 4                     // Operario
+  };
+
+  // Crear una copia del array para no mutar el original
+  return [...users].sort((a, b) => {
+    // Obtener el orden de cada rol, defaulteando a 999 si no existe
+    const orderA = roleOrder[a.role] || 999;
+    const orderB = roleOrder[b.role] || 999;
+    
+    // Ordenar por jerarquía (menor número = mayor jerarquía)
+    return orderA - orderB;
   });
 };
 
@@ -155,7 +183,10 @@ const UserManagementContent: React.FC = () => {
 
   // Filtrar usuarios con useMemo para evitar recálculos innecesarios
   const filteredUsers = useMemo(() => {
-    return filterUsers(users, searchTerm, showInactiveUsers, selectedRole);
+    // Primero filtramos los usuarios según criterios
+    const filtered = filterUsers(users, searchTerm, showInactiveUsers, selectedRole);
+    // Luego ordenamos por jerarquía
+    return sortUsersByHierarchy(filtered);
   }, [users, searchTerm, showInactiveUsers, selectedRole]);
 
   // Calcular los índices para el slice con useMemo
@@ -222,6 +253,12 @@ const UserManagementContent: React.FC = () => {
     setShowModal(false);
     resetForm();
   }, [resetForm, setShowModal]);
+
+  // Función modificada para manejar el envío del formulario sin validación de subservicios
+  const handleFormSubmission = useCallback(async (data) => {
+    // Si estamos en modo modificación usamos el método del hook directamente
+    await handleSubmit(data);
+  }, [handleSubmit]);
 
   return (
     <div className={STYLES.container}>
@@ -373,7 +410,7 @@ const UserManagementContent: React.FC = () => {
       <UserForm 
         isOpen={showModal}
         onClose={closeUserModal}
-        onSubmit={handleSubmit}
+        onSubmit={handleFormSubmission}
         availableRoles={availableRoles}
         formData={formData}
         setFormData={setFormData}

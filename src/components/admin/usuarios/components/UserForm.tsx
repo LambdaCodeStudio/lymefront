@@ -57,6 +57,7 @@ const STYLES = {
   selectAllBtn: "text-xs text-blue-600 hover:text-blue-800 font-medium",
   selectionSummary: "flex justify-between items-center mb-2",
   badge: "bg-[#DFEFE6] text-[#29696B] font-normal text-xs",
+  expirationNote: "text-amber-500 text-xs mt-1 flex items-center",
 };
 
 interface UserFormProps {
@@ -132,6 +133,16 @@ const UserForm: React.FC<UserFormProps> = ({
   
   // Determinar si mostrar nombres cortos según ancho de pantalla
   const useShortNames = useMemo(() => windowWidth < 450, [windowWidth]);
+  
+  // Determinar si el usuario es un operario expirado
+  const isUserExpired = useMemo(() => {
+    if (!editingUser) return false;
+    
+    return editingUser.role === ROLES.OPERARIO && 
+           editingUser.expiresAt && 
+           new Date(editingUser.expiresAt) < new Date() &&
+           !editingUser.isActive;
+  }, [editingUser]);
 
   // Efecto para detectar el tamaño de la ventana
   useEffect(() => {
@@ -149,13 +160,14 @@ const UserForm: React.FC<UserFormProps> = ({
   useEffect(() => {
     if (editingUser) {
       // Detectar si es un operario temporal
-      const isTemp = editingUser.role === ROLES.OPERARIO && editingUser.expiresAt;
+      const isTemp = editingUser.role === ROLES.OPERARIO && 
+                    (editingUser.expiresAt || formData.expirationMinutes);
       setIsTemporary(!!isTemp);
     } else {
       // Para nuevo usuario, inicializar en false
       setIsTemporary(false);
     }
-  }, [editingUser]);
+  }, [editingUser, formData.expirationMinutes]);
 
   // Filtrar clientes y subservicios según término de búsqueda
   const filteredClientes = useMemo(() => {
@@ -303,13 +315,16 @@ const UserForm: React.FC<UserFormProps> = ({
   const handleFormSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validar selección de subservicios para operarios
-    if (formData.role === ROLES.OPERARIO && selectedSubservicios.length === 0 && formData.supervisorId) {
-      // Error ya manejado en onSubmit
+    // Crear una copia del formData para posibles modificaciones
+    const dataToSubmit = { ...formData };
+    
+    // Si estamos editando un usuario expirado, asegurar que se marque como activo
+    if (isUserExpired) {
+      dataToSubmit.isActive = true;
     }
     
-    await onSubmit(formData);
-  }, [formData, onSubmit, selectedSubservicios]);
+    await onSubmit(dataToSubmit);
+  }, [formData, isUserExpired, onSubmit]);
 
   // Función para resetear búsqueda
   const clearSearch = useCallback(() => {
@@ -322,6 +337,11 @@ const UserForm: React.FC<UserFormProps> = ({
         <DialogHeader className="sticky top-0 bg-white pt-4 pb-2 z-10">
           <DialogTitle>
             {editingUser ? 'Editar Usuario' : 'Nuevo Usuario'}
+            {isUserExpired && (
+              <Badge variant="outline" className="ml-2 bg-amber-100 text-amber-700 border-amber-300">
+                Expirado
+              </Badge>
+            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -493,6 +513,12 @@ const UserForm: React.FC<UserFormProps> = ({
                   <p className={STYLES.helperText}>
                     Tiempo máximo: 7 días (10080 minutos)
                   </p>
+                  {isUserExpired && (
+                    <p className={STYLES.expirationNote}>
+                      <Info className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                      Este operario estaba expirado. Al guardar, se extenderá su tiempo y será reactivado.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -543,17 +569,22 @@ const UserForm: React.FC<UserFormProps> = ({
                 </Select>
               </div>
 
-              {/* Lista mejorada de clientes y subservicios del supervisor */}
+              {/* Lista mejorada de clientes y subservicios del supervisor (ahora opcionales) */}
               {formData.role === ROLES.OPERARIO && formData.supervisorId && (
                 <div className="mt-2">
                   <div className={STYLES.selectionSummary}>
                     <Label className="mb-0">
-                      Subservicios asignados <span className={STYLES.requiredMark}>*</span>
+                      Subservicios asignados {/* Quitado el asterisco de requerido */}
                     </Label>
                     <Badge className={STYLES.badge}>
                       {selectedSubservicios.length} de {selectionStats.totalSubservicios} seleccionados
                     </Badge>
                   </div>
+                  
+                  {/* Texto informativo de que es opcional */}
+                  <p className={STYLES.helperText + " mb-2"}>
+                    Opcional: Si no selecciona ningún subservicio, el operario se creará sin asignaciones específicas.
+                  </p>
                   
                   {/* Acciones y búsqueda */}
                   <div className="flex flex-col sm:flex-row gap-2 mb-3">
@@ -707,7 +738,7 @@ const UserForm: React.FC<UserFormProps> = ({
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" aria-hidden="true" />
                 Procesando...
               </span>
-            ) : editingUser ? 'Guardar Cambios' : 'Crear Usuario'}
+            ) : isUserExpired ? 'Guardar y Reactivar' : editingUser ? 'Guardar Cambios' : 'Crear Usuario'}
           </Button>
         </DialogFooter>
       </DialogContent>

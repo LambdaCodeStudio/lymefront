@@ -1392,167 +1392,167 @@ const InventorySection = () => {
     setShowComboSelectionModal(true);
   };
 
-  /**
+/**
    * Manejar envío del formulario (crear/editar)
    * @param e - Evento de formulario
    */
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setError('');
 
+  try {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('No hay token de autenticación');
+    }
+
+    // Validar que se haya seleccionado una categoría y subcategoría
+    if (!formData.categoria) {
+      throw new Error('Debe seleccionar una categoría');
+    }
+
+    if (!formData.subCategoria) {
+      throw new Error('Debe seleccionar una subcategoría');
+    }
+
+    // Si es un combo, validar que tenga items y que haya stock suficiente
+    if (isCombo) {
+      if (selectedComboItems.length === 0) {
+        throw new Error('Un combo debe tener al menos un producto');
+      }
+
+      const { valid, warnings } = validateComboStock(selectedComboItems);
+      if (!valid) {
+        throw new Error(`No hay suficiente stock para crear el combo: ${warnings.join(', ')}`);
+      }
+    }
+
+    const url = editingProduct
+      ? `${API_URL}producto/${editingProduct._id}`
+      : `${API_URL}producto`;
+
+    const method = editingProduct ? 'PUT' : 'POST';
+
+    // Procesar el stock basado en si es adición o reemplazo
+    let finalStock = parseInt(formData.stock || '0');
+
+    // Si estamos editando y agregando stock, sumamos al stock existente
+    if (editingProduct && isAddingStock) {
+      finalStock = editingProduct.stock + finalStock;
+    }
+
+    // Datos básicos del producto
+    const payload = {
+      nombre: formData.nombre,
+      descripcion: formData.descripcion,
+      categoria: formData.categoria,
+      subCategoria: formData.subCategoria,
+      marca: "", // Campo vacío como solicitado
+      precio: Number(formData.precio),
+      stock: finalStock,
+      stockMinimo: Number(formData.stockMinimo),
+      proveedor: {
+        nombre: "",
+        contacto: "",
+        telefono: "",
+        email: ""
+      }, // Objeto proveedor con valores vacíos
+      estado: "activo", // Valor por defecto
+      // Si es combo, incluir los ítems del combo
+      esCombo: isCombo,
+      itemsCombo: isCombo ? selectedComboItems.map(item => ({
+        productoId: typeof item.productoId === 'string' ? item.productoId : item.productoId._id,
+        cantidad: item.cantidad
+      })) : []
+    };
+
+    const response = await fetch(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || error.mensaje || 'Error al procesar la solicitud');
+    }
+
+    // Parsear la respuesta JSON
+    let savedProduct: Product;
     try {
-      const token = getAuthToken();
-      if (!token) {
-        throw new Error('No hay token de autenticación');
+      savedProduct = await response.json();
+    } catch (jsonError) {
+      console.error("Error al parsear JSON:", jsonError);
+      throw new Error('Error al procesar datos del producto guardado');
+    }
+
+    // Manejar la subida de imagen de manera unificada
+    if (formData.imagen) {
+      // Si tenemos un archivo, usar handleImageUpload mejorado
+      const imageUploaded = await handleImageUpload(savedProduct._id);
+      if (!imageUploaded) {
+        console.log('Hubo un problema al subir la imagen, pero el producto se guardó correctamente');
+      }
+    } else if (formData.imagenPreview && typeof formData.imagenPreview === 'string' && formData.imagenPreview.startsWith('data:image')) {
+      // Si tenemos una imagen en base64, convertir y usar el mismo método
+      const imageUploaded = await handleImageUpload(savedProduct._id);
+      if (!imageUploaded) {
+        console.log('Hubo un problema al subir la imagen, pero el producto se guardó correctamente');
+      }
+    }
+
+    setShowModal(false);
+    resetForm();
+
+    // Actualizar el producto específico en el estado o agregar si es nuevo
+    if (editingProduct) {
+      // Obtener la versión actualizada del producto
+      const updatedProduct = await fetchProductById(savedProduct._id);
+      if (updatedProduct) {
+        updateProductInState(updatedProduct);
       }
 
-      // Validar que se haya seleccionado una categoría y subcategoría
-      if (!formData.categoria) {
-        throw new Error('Debe seleccionar una categoría');
-      }
-
-      if (!formData.subCategoria) {
-        throw new Error('Debe seleccionar una subcategoría');
-      }
-
-      // Si es un combo, validar que tenga items y que haya stock suficiente
-      if (isCombo) {
-        if (selectedComboItems.length === 0) {
-          throw new Error('Un combo debe tener al menos un producto');
-        }
-
-        const { valid, warnings } = validateComboStock(selectedComboItems);
-        if (!valid) {
-          throw new Error(`No hay suficiente stock para crear el combo: ${warnings.join(', ')}`);
-        }
-      }
-
-      const url = editingProduct
-        ? `${API_URL}producto/${editingProduct._id}`
-        : `${API_URL}producto`;
-
-      const method = editingProduct ? 'PUT' : 'POST';
-
-      // Procesar el stock basado en si es adición o reemplazo
-      let finalStock = parseInt(formData.stock || '0');
-
-      // Si estamos editando y agregando stock, sumamos al stock existente
-      if (editingProduct && isAddingStock) {
-        finalStock = editingProduct.stock + finalStock;
-      }
-
-      // Datos básicos del producto
-      const payload = {
-        nombre: formData.nombre,
-        descripcion: formData.descripcion,
-        categoria: formData.categoria,
-        subCategoria: formData.subCategoria,
-        marca: "", // Campo vacío como solicitado
-        precio: Number(formData.precio),
-        stock: finalStock,
-        stockMinimo: Number(formData.stockMinimo),
-        proveedor: {
-          nombre: "",
-          contacto: "",
-          telefono: "",
-          email: ""
-        }, // Objeto proveedor con valores vacíos
-        estado: "activo", // Valor por defecto
-        // Si es combo, incluir los ítems del combo
-        esCombo: isCombo,
-        itemsCombo: isCombo ? selectedComboItems.map(item => ({
-          productoId: typeof item.productoId === 'string' ? item.productoId : item.productoId._id,
-          cantidad: item.cantidad
-        })) : []
-      };
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(payload),
+      // Recargar productos para la página actual (en lugar de ir a página 1)
+      fetchProducts(true, currentPage, itemsPerPage);
+    } else {
+      // Para productos nuevos, sí vamos a la primera página
+      setCurrentPage(1);
+      
+      // Añadir el nuevo producto al inicio de la lista o recargar todos
+      setProducts(prevProducts => {
+        // Asegurarnos de que prevProducts sea un array
+        if (!Array.isArray(prevProducts)) return [savedProduct];
+        return [savedProduct, ...prevProducts];
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || error.mensaje || 'Error al procesar la solicitud');
-      }
-
-      // Parsear la respuesta JSON
-      let savedProduct: Product;
-      try {
-        savedProduct = await response.json();
-      } catch (jsonError) {
-        console.error("Error al parsear JSON:", jsonError);
-        throw new Error('Error al procesar datos del producto guardado');
-      }
-
-      // Manejar la subida de imagen de manera unificada
-      if (formData.imagen) {
-        // Si tenemos un archivo, usar handleImageUpload mejorado
-        const imageUploaded = await handleImageUpload(savedProduct._id);
-        if (!imageUploaded) {
-          console.log('Hubo un problema al subir la imagen, pero el producto se guardó correctamente');
-        }
-      } else if (formData.imagenPreview && typeof formData.imagenPreview === 'string' && formData.imagenPreview.startsWith('data:image')) {
-        // Si tenemos una imagen en base64, convertir y usar el mismo método
-        const imageUploaded = await handleImageUpload(savedProduct._id);
-        if (!imageUploaded) {
-          console.log('Hubo un problema al subir la imagen, pero el producto se guardó correctamente');
-        }
-      }
-
-      setShowModal(false);
-      resetForm();
-
-      // Establecer explícitamente la página a 1 después de editar
-      setCurrentPage(1);
-
-      // Actualizar el producto específico en el estado o agregar si es nuevo
-      if (editingProduct) {
-        // Obtener la versión actualizada del producto
-        const updatedProduct = await fetchProductById(savedProduct._id);
-        if (updatedProduct) {
-          updateProductInState(updatedProduct);
-        }
-
-        // Recargar productos para la página 1
-        fetchProducts(true, 1, itemsPerPage);
-      } else {
-        // Añadir el nuevo producto al inicio de la lista o recargar todos
-        setProducts(prevProducts => {
-          // Asegurarnos de que prevProducts sea un array
-          if (!Array.isArray(prevProducts)) return [savedProduct];
-          return [savedProduct, ...prevProducts];
-        });
-
-        // Recargar productos para la página 1
-        fetchProducts(true, 1, itemsPerPage);
-      }
-
-      // Notificar a otros componentes que deben actualizarse
-      inventoryObservable.notify();
-
-      // Actualizar contadores
-      countLowStockProducts();
-      countNoStockProducts();
-
-      const successMsg = `Producto ${editingProduct ? 'actualizado' : 'creado'} correctamente`;
-      setSuccessMessage(successMsg);
-
-      addNotification(successMsg, 'success');
-
-      // Limpiar mensaje después de unos segundos
-      setTimeout(() => setSuccessMessage(''), 5000);
-    } catch (err: any) {
-      const errorMsg = 'Error al guardar producto: ' + err.message;
-      setError(errorMsg);
-
-      addNotification(errorMsg, 'error');
+      // Recargar productos para la página 1
+      fetchProducts(true, 1, itemsPerPage);
     }
-  };
+
+    // Notificar a otros componentes que deben actualizarse
+    inventoryObservable.notify();
+
+    // Actualizar contadores
+    countLowStockProducts();
+    countNoStockProducts();
+
+    const successMsg = `Producto ${editingProduct ? 'actualizado' : 'creado'} correctamente`;
+    setSuccessMessage(successMsg);
+
+    addNotification(successMsg, 'success');
+
+    // Limpiar mensaje después de unos segundos
+    setTimeout(() => setSuccessMessage(''), 5000);
+  } catch (err: any) {
+    const errorMsg = 'Error al guardar producto: ' + err.message;
+    setError(errorMsg);
+
+    addNotification(errorMsg, 'error');
+  }
+};
 
   /**
    * Iniciar el proceso de eliminación mostrando el diálogo de confirmación

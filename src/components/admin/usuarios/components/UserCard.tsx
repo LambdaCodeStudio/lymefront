@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { UserCog, Trash2, CheckCircle, XCircle, Clock, ShieldAlert, Shield } from 'lucide-react';
+import { UserCog, Trash2, CheckCircle, XCircle, Clock, ShieldAlert, Shield, RefreshCw } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -47,6 +47,35 @@ const UserCard: React.FC<UserCardProps> = ({
   getFullName,
   currentUserRole
 }) => {
+  // Función para determinar si un usuario ha expirado
+  const isUserExpired = (user: User): boolean => {
+    return user.role === ROLES.OPERARIO && 
+           user.expiresAt && 
+           new Date(user.expiresAt) < new Date() &&
+           !user.isActive;
+  };
+
+  // Función para obtener el texto de estado específico para este componente
+  const getStatusText = (user: User): string => {
+    if (isUserExpired(user)) {
+      return 'Expirado';
+    }
+    return user.isActive ? 'Activo' : 'Inactivo';
+  };
+
+  // Función para obtener la clase de estilo según el estado
+  const getStatusClass = (user: User): string => {
+    if (isUserExpired(user)) {
+      return 'bg-amber-100 text-amber-800';
+    }
+    return user.isActive 
+      ? 'bg-green-100 text-green-800' 
+      : 'bg-red-100 text-red-800';
+  };
+
+  // Determinar si el usuario está expirado
+  const isExpired = isUserExpired(user);
+
   return (
     <Card className="overflow-hidden">
       <CardHeader className="p-4 pb-0">
@@ -57,8 +86,8 @@ const UserCard: React.FC<UserCardProps> = ({
               <CardDescription className="truncate">{getFullName(user)}</CardDescription>
             )}
           </div>
-          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full whitespace-nowrap ${getUserStatusClass(user)}`}>
-            {getUserStatusText(user)}
+          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full whitespace-nowrap ${getStatusClass(user)}`}>
+            {getStatusText(user)}
           </span>
         </div>
       </CardHeader>
@@ -91,9 +120,12 @@ const UserCard: React.FC<UserCardProps> = ({
           </div>
           {hasExpiration(user) && user.expiresAt && (
             <div className="col-span-2 flex items-center">
-              <Clock className="w-3.5 h-3.5 mr-1 text-yellow-600 flex-shrink-0" aria-hidden="true" />
+              <Clock className={`w-3.5 h-3.5 mr-1 flex-shrink-0 ${isExpired ? 'text-amber-600' : 'text-yellow-600'}`} aria-hidden="true" />
               <span className="text-gray-500">Expira:</span>
-              <span className="ml-1 truncate">{new Date(user.expiresAt).toLocaleString()}</span>
+              <span className={`ml-1 truncate ${isExpired ? 'text-amber-600 font-medium' : ''}`}>
+                {new Date(user.expiresAt).toLocaleString()}
+                {isExpired && ' (Expirado)'}
+              </span>
             </div>
           )}
           {user.celular && (
@@ -114,21 +146,38 @@ const UserCard: React.FC<UserCardProps> = ({
         {/* Mostrar acciones sólo si tiene permisos */}
         {canModifyUser(currentUserRole, user.role) ? (
           <>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onToggleStatus(user._id, !user.isActive)}
-              disabled={!canDeleteOrDeactivate(user.role)}
-              aria-label={user.isActive ? "Desactivar usuario" : "Activar usuario"}
-              className={`p-0 w-8 h-8 ${user.isActive ? 'text-red-600' : 'text-green-600'}
-                ${!canDeleteOrDeactivate(user.role) ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              {user.isActive ? (
-                <XCircle className="w-4 h-4" aria-hidden="true" />
-              ) : (
-                <CheckCircle className="w-4 h-4" aria-hidden="true" />
-              )}
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onToggleStatus(user._id, !user.isActive)}
+                    disabled={!canDeleteOrDeactivate(user.role)}
+                    aria-label={user.isActive ? "Desactivar usuario" : isExpired ? "Reactivar usuario expirado" : "Activar usuario"}
+                    className={`p-0 w-8 h-8 ${user.isActive 
+                      ? 'text-red-600' 
+                      : isExpired ? 'text-amber-600' : 'text-green-600'}
+                      ${!canDeleteOrDeactivate(user.role) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    {user.isActive ? (
+                      <XCircle className="w-4 h-4" aria-hidden="true" />
+                    ) : isExpired ? (
+                      <RefreshCw className="w-4 h-4" aria-hidden="true" />
+                    ) : (
+                      <CheckCircle className="w-4 h-4" aria-hidden="true" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {user.isActive 
+                    ? "Desactivar usuario" 
+                    : isExpired 
+                      ? "Reactivar usuario y extender expiración" 
+                      : "Activar usuario"}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             
             <Button
               variant="ghost"

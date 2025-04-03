@@ -107,7 +107,7 @@ const UserFilters: React.FC<UserFiltersProps> = ({
         ) : (
           <>
             <EyeOff className="h-4 w-4" aria-hidden="true" />
-            <span>Ocultos inactivos</span>
+            <span>Ocultar inactivos</span>
           </>
         )}
       </button>
