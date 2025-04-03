@@ -59,7 +59,7 @@ class PedidoService extends BaseService<Order> {
   // Método para descargar remito en PDF
   async downloadRemito(id: string): Promise<string> {
     // Devuelve la URL para descargar el remito
-    return `${api.getBaseUrl()}http://localhost:3000/api/downloads/remito/${id}`;
+    return `${api.getBaseUrl()}/api/downloads/remito/${id}`;
   }
 }
 

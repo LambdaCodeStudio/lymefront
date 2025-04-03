@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/accordion';
 
 // API base URL - Extraído para fácil configuración
-const API_BASE_URL = 'http://localhost:3000';
+const API_BASE_URL = '';
 
 // Interfaces para la estructura jerárquica de clientes
 interface SubUbicacion {
@@ -1305,27 +1305,27 @@ export const Cart: React.FC = () => {
       setOrderError('No hay productos en el carrito. Añada productos para realizar un pedido.');
       return;
     }
-
+  
     if (!formValid) {
       setOrderError('Por favor complete todos los campos requeridos (Cliente y Subservicio) antes de realizar el pedido.');
       return;
     }
-
+  
     if (clientes.length === 0) {
       setOrderError('No hay clientes asignados. No puedes realizar pedidos hasta que administración asigne clientes.');
       return;
     }
-
+  
     if (!clienteSeleccionado) {
       setOrderError('Por favor, seleccione un cliente para el pedido');
       return;
     }
-
+  
     if (!subServicioSeleccionado) {
       setOrderError('Por favor, seleccione un subservicio para el pedido');
       return;
     }
-
+  
     // Para operarios, verificar que el subservicio seleccionado esté asignado
     if (userRole === 'operario') {
       const isAssigned = subserviciosAsignados.some(
@@ -1333,21 +1333,21 @@ export const Cart: React.FC = () => {
           asignacion.clienteId === clienteSeleccionado && 
           asignacion.subServicioId === subServicioSeleccionado
       );
-
+  
       if (!isAssigned) {
         setOrderError('No tienes permiso para realizar pedidos con este subservicio. Por favor, selecciona uno que te haya sido asignado.');
         return;
       }
     }
-
+  
     setProcessingOrder(true);
     setOrderError(null);
-
+  
     try {
       // Determinar el ID de usuario para el pedido y el ID real del usuario
       let orderUserId;
       let actualUserId = currentUser?._id || currentUser?.id;
-
+  
       // Si es operario, usar el ID del supervisor
       if (userRole === 'operario' && supervisorId) {
         orderUserId = supervisorId;
@@ -1356,7 +1356,7 @@ export const Cart: React.FC = () => {
       } else {
         throw new Error('No se pudo determinar el ID del usuario para el pedido');
       }
-
+  
       // Formato de los productos para la API
       const productsData = items.map(item => ({
         productoId: item.id,
@@ -1364,20 +1364,20 @@ export const Cart: React.FC = () => {
         nombre: item.name,
         precio: item.price
       }));
-
+  
       // Encontrar el cliente seleccionado
       const clienteObj = clientes.find(c => c._id === clienteSeleccionado);
-
+  
       if (!clienteObj) {
         throw new Error('Cliente seleccionado no encontrado en la lista de clientes');
       }
-
-      // Estado del pedido (pendiente para operarios, aprobado para supervisores)
-      const estadoPedido = userRole === 'operario' ? 'pendiente' : 'aprobado';
-
+  
+      // Estado del pedido (pendiente para todos los roles)
+      const estadoPedido = 'pendiente';
+  
       // Encontrar el subservicio seleccionado
       const subServicio = subServiciosDisponibles.find(s => s._id === subServicioSeleccionado);
-
+  
       // Crear objeto de pedido con estructura jerárquica
       const orderData = {
         userId: orderUserId,
@@ -1396,18 +1396,18 @@ export const Cart: React.FC = () => {
           supervisorNombre: supervisorName
         } : undefined
       };
-
+  
       // Estructura jerárquica de cliente
       orderData.cliente = {
         clienteId: clienteObj._id,
         nombreCliente: clienteObj.nombre || clienteObj.servicio
       };
-
+  
       // Agregar subservicio si está seleccionado
       if (subServicio) {
         orderData.cliente.subServicioId = subServicio._id;
         orderData.cliente.nombreSubServicio = subServicio.nombre;
-
+  
         // Siempre usar el supervisor asignado al subservicio (si existe)
         if (subServicio.supervisorId) {
           // Verificación mejorada para array de supervisores
@@ -1426,7 +1426,7 @@ export const Cart: React.FC = () => {
           }
         }
       }
-
+  
       // Agregar sububicación si está seleccionada
       if (subUbicacionSeleccionada) {
         const subUbicacion = subUbicacionesDisponibles.find(u => u._id === subUbicacionSeleccionada);
@@ -1435,35 +1435,35 @@ export const Cart: React.FC = () => {
           orderData.cliente.nombreSubUbicacion = subUbicacion.nombre;
         }
       }
-
+  
       // Guardar datos del pedido para mostrar en confirmación
       setOrderData(orderData);
-
+  
       // Enviar pedido a la API
       const pedidoCreado = await fetchWithAuth('/api/pedido', {
         method: 'POST',
         body: JSON.stringify(orderData)
       });
-
+  
       // Obtener datos del pedido creado para guardar el ID
       setCreatedOrderId(pedidoCreado._id);
-
+  
       // Pedido creado correctamente
       setOrderComplete(true);
       clearCart();
-
+  
       // Notificar al usuario
       if (addNotification) {
         if (userRole === 'operario' && supervisorName) {
           addNotification(`Pedido enviado para aprobación de ${supervisorName}`, 'success');
         } else {
-          addNotification('Pedido realizado exitosamente', 'success');
+          addNotification('Pedido enviado para aprobación', 'success');
         }
       }
     } catch (error: any) {
       console.error('Error al procesar pedido:', error);
       setOrderError(error instanceof Error ? error.message : 'Hubo un problema al procesar tu pedido. Por favor, intenta nuevamente.');
-
+  
       if (addNotification) {
         addNotification('Error al procesar el pedido', 'error');
       }

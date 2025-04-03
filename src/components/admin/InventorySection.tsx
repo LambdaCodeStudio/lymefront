@@ -77,7 +77,7 @@ import { getProductImageUrl as utilsGetProductImageUrl, hasProductImage } from '
 import ImageActionButton from './components/ImageActionButton';
 
 // Definir URL base para la API
-const API_URL = "http://localhost:3000/api/";
+const API_URL = "/api/";
 
 /**
  * Obtiene la URL de la imagen para un producto

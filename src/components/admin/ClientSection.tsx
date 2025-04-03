@@ -667,11 +667,11 @@ const ClientsSection: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      let apiUrl = 'http://localhost:3000/api/cliente';
+      let apiUrl = '/api/cliente';
 
       // Si hay un supervisor activo, obtener los clientes filtrados por supervisor
       if (activeSupervisorId !== "all" && viewMode === 'all') {
-        apiUrl = `http://localhost:3000/api/cliente/supervisor/${activeSupervisorId}`;
+        apiUrl = `/api/cliente/supervisor/${activeSupervisorId}`;
       }
 
       const response = await fetch(apiUrl, {
@@ -753,7 +753,7 @@ const ClientsSection: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('http://localhost:3000/api/cliente/sin-asignar', {
+      const response = await fetch('/api/cliente/sin-asignar', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -827,7 +827,7 @@ const ClientsSection: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('http://localhost:3000/api/cliente/subservicios/sin-supervisor', {
+      const response = await fetch('/api/cliente/subservicios/sin-supervisor', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -879,7 +879,7 @@ const ClientsSection: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('http://localhost:3000/api/auth/users', {
+      const response = await fetch('/api/auth/users', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -942,7 +942,7 @@ const ClientsSection: React.FC = () => {
         throw new Error('No hay token de autenticación');
       }
 
-      const response = await fetch('http://localhost:3000/api/auth/supervisors', {
+      const response = await fetch('/api/auth/supervisors', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -981,7 +981,7 @@ const ClientsSection: React.FC = () => {
 
       console.log("Creando cliente con datos:", clientFormData);
 
-      const response = await fetch('http://localhost:3000/api/cliente', {
+      const response = await fetch('/api/cliente', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1037,7 +1037,7 @@ const ClientsSection: React.FC = () => {
 
       console.log("Actualizando cliente:", currentClient._id, "con datos:", clientFormData);
 
-      const response = await fetch(`http://localhost:3000/api/cliente/${currentClient._id}`, {
+      const response = await fetch(`/api/cliente/${currentClient._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -1093,7 +1093,7 @@ const ClientsSection: React.FC = () => {
 
       console.log("Creando subservicio para cliente", currentClientForSubServicio._id, "con datos:", subServicioFormData);
 
-      const response = await fetch(`http://localhost:3000/api/cliente/${currentClientForSubServicio._id}/subservicio`, {
+      const response = await fetch(`/api/cliente/${currentClientForSubServicio._id}/subservicio`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1150,7 +1150,7 @@ const ClientsSection: React.FC = () => {
 
       console.log("Actualizando subservicio:", currentSubServicio._id, "del cliente:", currentClientForSubServicio._id, "con datos:", subServicioFormData);
 
-      const response = await fetch(`http://localhost:3000/api/cliente/${currentClientForSubServicio._id}/subservicio/${currentSubServicio._id}`, {
+      const response = await fetch(`/api/cliente/${currentClientForSubServicio._id}/subservicio/${currentSubServicio._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -1215,7 +1215,7 @@ const ClientsSection: React.FC = () => {
 
       console.log("Asignando supervisores", currentSupervisorId, "al subservicio:", currentSubServicio._id, "del cliente:", currentClientForSubServicio._id);
 
-      const response = await fetch(`http://localhost:3000/api/cliente/${currentClientForSubServicio._id}/subservicio/${currentSubServicio._id}/supervisor`, {
+      const response = await fetch(`/api/cliente/${currentClientForSubServicio._id}/subservicio/${currentSubServicio._id}/supervisor`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1274,7 +1274,7 @@ const ClientsSection: React.FC = () => {
 
       console.log("Removiendo supervisor del subservicio:", idToDelete.subServicioId, "del cliente:", idToDelete.parentId);
 
-      const response = await fetch(`http://localhost:3000/api/cliente/${idToDelete.parentId}/subservicio/${idToDelete.subServicioId}/supervisor`, {
+      const response = await fetch(`/api/cliente/${idToDelete.parentId}/subservicio/${idToDelete.subServicioId}/supervisor`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -1331,7 +1331,7 @@ const ClientsSection: React.FC = () => {
 
       console.log("Creando sububicación para subservicio", currentSubServicio._id, "del cliente", currentClientForSubServicio._id, "con datos:", subUbicacionFormData);
 
-      const response = await fetch(`http://localhost:3000/api/cliente/${currentClientForSubServicio._id}/subservicio/${currentSubServicio._id}/sububicacion`, {
+      const response = await fetch(`/api/cliente/${currentClientForSubServicio._id}/subservicio/${currentSubServicio._id}/sububicacion`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1387,7 +1387,7 @@ const ClientsSection: React.FC = () => {
 
       console.log("Actualizando sububicación:", currentSubUbicacion._id, "del subservicio:", currentSubServicio._id, "del cliente:", currentClientForSubServicio._id, "con datos:", subUbicacionFormData);
 
-      const response = await fetch(`http://localhost:3000/api/cliente/${currentClientForSubServicio._id}/subservicio/${currentSubServicio._id}/sububicacion/${currentSubUbicacion._id}`, {
+      const response = await fetch(`/api/cliente/${currentClientForSubServicio._id}/subservicio/${currentSubServicio._id}/sububicacion/${currentSubUbicacion._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -1590,18 +1590,18 @@ const ClientsSection: React.FC = () => {
 
       switch (idToDelete.type) {
         case 'cliente':
-          url = `http://localhost:3000/api/cliente/${idToDelete.id}`;
+          url = `/api/cliente/${idToDelete.id}`;
           successMsg = 'Cliente eliminado correctamente';
           break;
         case 'subservicio':
           if (!idToDelete.parentId) throw new Error('ID de cliente requerido para eliminar subservicio');
-          url = `http://localhost:3000/api/cliente/${idToDelete.parentId}/subservicio/${idToDelete.id}`;
+          url = `/api/cliente/${idToDelete.parentId}/subservicio/${idToDelete.id}`;
           successMsg = 'Subservicio eliminado correctamente';
           break;
         case 'sububicacion':
           if (!idToDelete.parentId || !idToDelete.subServicioId)
             throw new Error('ID de cliente y subservicio requeridos para eliminar sububicación');
-          url = `http://localhost:3000/api/cliente/${idToDelete.parentId}/subservicio/${idToDelete.subServicioId}/sububicacion/${idToDelete.id}`;
+          url = `/api/cliente/${idToDelete.parentId}/subservicio/${idToDelete.subServicioId}/sububicacion/${idToDelete.id}`;
           successMsg = 'Sububicación eliminada correctamente';
           break;
       }

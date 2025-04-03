@@ -154,10 +154,6 @@ export const OrdersPage: React.FC = () => {
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Filtros
-  const [dateFilter, setDateFilter] = useState({
-    fechaInicio: '',
-    fechaFin: ''
-  });
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   // Estado para la pestaña actual
@@ -202,7 +198,7 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No se encontró token de autenticación');
       }
 
-      const response = await fetch('http://localhost:3000/api/auth/me', {
+      const response = await fetch('/api/auth/me', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -245,25 +241,67 @@ export const OrdersPage: React.FC = () => {
 
     // Si el usuario es un supervisor, obtener pedidos específicos
     if (userRole === 'supervisor' && userId) {
-      const response = await fetch(`http://localhost:3000/api/pedido/supervisor/${userId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Cache-Control': 'no-cache'
+      try {
+        // Obtener los pedidos de operarios supervisados
+        const supervisorOrdersResponse = await fetch(`/api/pedido/supervisor/${userId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Cache-Control': 'no-cache'
+          }
+        });
+
+        if (!supervisorOrdersResponse.ok) {
+          handleAuthError(supervisorOrdersResponse);
+          throw new Error(`Error al cargar pedidos de operarios (estado: ${supervisorOrdersResponse.status})`);
         }
-      });
 
-      if (!response.ok) {
-        handleAuthError(response);
-        throw new Error(`Error al cargar pedidos (estado: ${response.status})`);
+        const supervisorOrders = await supervisorOrdersResponse.json();
+        allOrders = [...supervisorOrders];
+
+        // También obtener los pedidos propios del supervisor
+        try {
+          const ownOrdersResponse = await fetch(`/api/pedido/user/${userId}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Cache-Control': 'no-cache'
+            }
+          });
+
+          if (ownOrdersResponse.ok) {
+            const ownOrders = await ownOrdersResponse.json();
+
+            // Combinar ambos conjuntos de pedidos
+            const orderMap = new Map<string, Order>();
+
+            // Procesar pedidos de operarios
+            supervisorOrders.forEach(order => {
+              orderMap.set(order._id, order);
+            });
+
+            // Añadir pedidos propios del supervisor
+            ownOrders.forEach(order => {
+              orderMap.set(order._id, order);
+            });
+
+            // Convertir el Map de vuelta a un array
+            allOrders = Array.from(orderMap.values());
+
+            console.log(`Total de pedidos para supervisor: ${allOrders.length} (${supervisorOrders.length} de operarios, ${ownOrders.length} propios)`);
+          }
+        } catch (ownOrdersError) {
+          console.error('Error al obtener pedidos propios del supervisor:', ownOrdersError);
+          // Continuar con los pedidos de operarios si hay un error con los pedidos propios
+        }
+      } catch (error) {
+        console.error('Error al obtener pedidos para supervisor:', error);
+        throw error;
       }
-
-      allOrders = await response.json();
     }
     // Si el usuario es operario, obtener sus pedidos regulares y los que ha creado
     else if (userRole === 'operario' && userId) {
       try {
         // Obtener los pedidos regulares del operario
-        const regularOrdersResponse = await fetch(`http://localhost:3000/api/pedido/user/${userId}`, {
+        const regularOrdersResponse = await fetch(`/api/pedido/user/${userId}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Cache-Control': 'no-cache'
@@ -280,7 +318,7 @@ export const OrdersPage: React.FC = () => {
 
         // Obtener los pedidos creados por el operario
         try {
-          const createdOrdersResponse = await fetch(`http://localhost:3000/api/pedido/operario/${userId}`, {
+          const createdOrdersResponse = await fetch(`/api/pedido/operario/${userId}`, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Cache-Control': 'no-cache'
@@ -319,7 +357,7 @@ export const OrdersPage: React.FC = () => {
     }
     // Para cualquier otro rol, obtener todos los pedidos
     else {
-      const response = await fetch('http://localhost:3000/api/pedido', {
+      const response = await fetch('/api/pedido', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Cache-Control': 'no-cache'
@@ -458,179 +496,9 @@ export const OrdersPage: React.FC = () => {
     setFilteredOrders(result);
   }, [searchTerm, orders, statusFilter, activeTab, userId, userRole]);
 
-  // Mutación para aprobar un pedido
-  const approveMutation = useMutation({
-    mutationFn: async (orderId: string) => {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-
-      const response = await fetch(`http://localhost:3000/api/pedido/${orderId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          estado: OrderStatus.APPROVED,
-          fechaAprobacion: new Date().toISOString()
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.mensaje || `Error al aprobar pedido (${response.status})`);
-      }
-
-      return orderId;
-    },
-    onSuccess: (orderId) => {
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
-      addNotification('Pedido aprobado correctamente', 'success');
-      setApprovalDialogOpen(false);
-      setSelectedOrderId(null);
-    },
-    onError: (error) => {
-      addNotification(`Error al aprobar pedido: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
-    }
-  });
-
-  // Mutación para rechazar un pedido
-  const rejectMutation = useMutation({
-    mutationFn: async ({ orderId, motivo }: { orderId: string, motivo: string }) => {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-
-      const response = await fetch(`http://localhost:3000/api/pedido/${orderId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          estado: OrderStatus.REJECTED,
-          observaciones: motivo,
-          fechaRechazo: new Date().toISOString()
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.mensaje || `Error al rechazar pedido (${response.status})`);
-      }
-
-      return orderId;
-    },
-    onSuccess: (orderId) => {
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
-      addNotification('Pedido rechazado correctamente', 'success');
-      setRejectionDialogOpen(false);
-      setSelectedOrderId(null);
-      setRejectionReason('');
-    },
-    onError: (error) => {
-      addNotification(`Error al rechazar pedido: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
-    }
-  });
-
-  // Filtrar pedidos por rango de fechas
-  const filterOrdersByDate = async () => {
-    if (!dateFilter.fechaInicio || !dateFilter.fechaFin) {
-      addNotification('Por favor seleccione ambas fechas, inicio y fin', 'warning');
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('No se encontró token de autenticación');
-      }
-
-      let url;
-      if (userRole === 'supervisor' && userId) {
-        // Fetch both orders created by supervisor and orders they supervise
-        url = `http://localhost:3000/api/pedido/supervisor/${userId}/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
-      } else {
-        url = `http://localhost:3000/api/pedido/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
-        if (userRole === 'operario' && userId) {
-          url += `&userId=${userId}`;
-        }
-      }
-
-      const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error al filtrar pedidos por fecha (estado: ${response.status})`);
-      }
-
-      let data = await response.json();
-
-      // Si es operario, intentar también obtener los pedidos creados
-      if (userRole === 'operario' && userId) {
-        try {
-          const createdOrdersUrl = `http://localhost:3000/api/pedido/operario/${userId}/fecha?fechaInicio=${encodeURIComponent(dateFilter.fechaInicio)}&fechaFin=${encodeURIComponent(dateFilter.fechaFin)}`;
-
-          const createdOrdersResponse = await fetch(createdOrdersUrl, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-
-          if (createdOrdersResponse.ok) {
-            const createdOrdersData = await createdOrdersResponse.json();
-
-            // Combinar ambos conjuntos y eliminar duplicados
-            const orderMap = new Map<string, Order>();
-
-            // Añadir pedidos regulares
-            data.forEach((order: Order) => {
-              orderMap.set(order._id, order);
-            });
-
-            // Añadir pedidos creados
-            createdOrdersData.forEach((order: Order) => {
-              orderMap.set(order._id, order);
-            });
-
-            // Convertir el Map de vuelta a un array
-            data = Array.from(orderMap.values());
-          }
-        } catch (error) {
-          console.error('Error al obtener pedidos creados por fecha:', error);
-          // Continuar con los pedidos regulares si hay un error
-        }
-      }
-
-      // Procesar pedidos (calcular totales y ordenar)
-      const processedOrders = data.map((order: Order) => ({
-        ...order,
-        displayNumber: order.nPedido?.toString() || 'S/N',
-        total: calculateOrderTotal(order)
-      })).sort((a: Order, b: Order) =>
-        new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
-      );
-
-      // Actualizar la caché de React Query manualmente
-      queryClient.setQueryData(['orders', userId, userRole], processedOrders);
-
-      addNotification(`Se encontraron ${processedOrders.length} pedidos en el rango de fechas seleccionado`,
-        processedOrders.length === 0 ? 'info' : 'success');
-
-      // Cerrar filtros móviles si están abiertos
-      setShowMobileFilters(false);
-    } catch (error) {
-      console.error('Error al filtrar por fecha:', error);
-      addNotification(`Error al filtrar por fecha: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
-    }
-  };
-
   // Limpiar todos los filtros
   const clearAllFilters = () => {
     setSearchTerm('');
-    setDateFilter({ fechaInicio: '', fechaFin: '' });
     setStatusFilter('all');
     setActiveTab('todos');
     refetch();
@@ -665,7 +533,7 @@ export const OrdersPage: React.FC = () => {
         throw new Error('No se encontró token de autenticación');
       }
 
-      const response = await fetch(`http://localhost:3000/api/downloads/remito/${orderId}`, {
+      const response = await fetch(`/api/downloads/remito/${orderId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         },
@@ -910,6 +778,84 @@ export const OrdersPage: React.FC = () => {
     );
   };
 
+  // Mutación para aprobar un pedido
+  const approveMutation = useMutation({
+    mutationFn: async (orderId: string) => {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
+
+      const response = await fetch(`/api/pedido/${orderId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          estado: OrderStatus.APPROVED,
+          fechaAprobacion: new Date().toISOString()
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.mensaje || `Error al aprobar pedido (${response.status})`);
+      }
+
+      return orderId;
+    },
+    onSuccess: (orderId) => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      addNotification('Pedido aprobado correctamente', 'success');
+      setApprovalDialogOpen(false);
+      setSelectedOrderId(null);
+    },
+    onError: (error) => {
+      addNotification(`Error al aprobar pedido: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
+    }
+  });
+
+  // Mutación para rechazar un pedido
+  const rejectMutation = useMutation({
+    mutationFn: async ({ orderId, motivo }: { orderId: string, motivo: string }) => {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
+
+      const response = await fetch(`/api/pedido/${orderId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          estado: OrderStatus.REJECTED,
+          observaciones: motivo,
+          fechaRechazo: new Date().toISOString()
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.mensaje || `Error al rechazar pedido (${response.status})`);
+      }
+
+      return orderId;
+    },
+    onSuccess: (orderId) => {
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      addNotification('Pedido rechazado correctamente', 'success');
+      setRejectionDialogOpen(false);
+      setSelectedOrderId(null);
+      setRejectionReason('');
+    },
+    onError: (error) => {
+      addNotification(`Error al rechazar pedido: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
+    }
+  });
+
   return (
     <>
       <ShopNavbar />
@@ -1055,191 +1001,6 @@ export const OrdersPage: React.FC = () => {
             </Tabs>
           </div>
 
-          {/* Filtros para desktop */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-            className="mb-6 space-y-4 bg-white p-4 rounded-xl shadow-sm border border-[#3a8fb7]/10 hover:shadow-md transition-all duration-300 hidden md:block"
-          >
-            <div className="flex flex-wrap gap-4 items-center justify-between">
-              <div className="relative flex-1 min-w-[280px]">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#3a8fb7] w-4 h-4" />
-                <Input
-                  type="text"
-                  placeholder="Buscar pedidos..."
-                  className="pl-10 bg-[#f2f2f2] border-[#5baed1] focus:border-[#3a8fb7] text-[#333333] placeholder:text-[#5c5c5c] transition-all duration-200"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleManualRefresh}
-                disabled={isLoading || approveMutation.isPending || rejectMutation.isPending}
-                className="border-[#5baed1] text-[#333333] hover:bg-[#3a8fb7]/10 transition-all duration-200"
-              >
-                {isLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="w-4 h-4" />
-                )}
-              </Button>
-            </div>
-
-            <div className="flex flex-wrap gap-4 items-end">
-              <div>
-                <label htmlFor="fechaInicio" className="text-[#333333] text-sm font-medium">
-                  Fecha Inicio
-                </label>
-                <Input
-                  id="fechaInicio"
-                  type="date"
-                  value={dateFilter.fechaInicio}
-                  onChange={(e) => setDateFilter({ ...dateFilter, fechaInicio: e.target.value })}
-                  className="w-full bg-[#f2f2f2] border-[#5baed1] focus:border-[#3a8fb7] text-[#333333] mt-1 transition-all duration-200"
-                />
-              </div>
-              <div>
-                <label htmlFor="fechaFin" className="text-[#333333] text-sm font-medium">
-                  Fecha Fin
-                </label>
-                <Input
-                  id="fechaFin"
-                  type="date"
-                  value={dateFilter.fechaFin}
-                  onChange={(e) => setDateFilter({ ...dateFilter, fechaFin: e.target.value })}
-                  className="w-full bg-[#f2f2f2] border-[#5baed1] focus:border-[#3a8fb7] text-[#333333] mt-1 transition-all duration-200"
-                />
-              </div>
-              <Button
-                variant="outline"
-                onClick={filterOrdersByDate}
-                className="border-[#5baed1] text-[#333333] hover:bg-[#3a8fb7]/10 transition-all duration-200"
-              >
-                <Filter className="w-4 h-4 mr-2" />
-                Filtrar
-              </Button>
-              {(dateFilter.fechaInicio || dateFilter.fechaFin || searchTerm || statusFilter !== 'all') && (
-                <Button
-                  variant="ghost"
-                  onClick={clearAllFilters}
-                  className="text-[#5c5c5c] hover:text-[#333333] hover:bg-[#3a8fb7]/10 transition-all duration-200"
-                >
-                  Limpiar filtros
-                </Button>
-              )}
-            </div>
-          </motion.div>
-
-          {/* Filtros móviles */}
-          <div className="md:hidden mb-4">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#3a8fb7] w-4 h-4" />
-                <Input
-                  type="text"
-                  placeholder="Buscar pedidos..."
-                  className="pl-10 bg-[#f2f2f2] border-[#5baed1] focus:border-[#3a8fb7] text-[#333333] placeholder:text-[#5c5c5c] transition-all duration-200"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setShowMobileFilters(!showMobileFilters)}
-                className="border-[#5baed1] text-[#333333] hover:bg-[#3a8fb7]/10 transition-all duration-200"
-              >
-                <Filter className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={handleManualRefresh}
-                disabled={isLoading}
-                className="border-[#5baed1] text-[#333333] hover:bg-[#3a8fb7]/10 transition-all duration-200"
-              >
-                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              </Button>
-            </div>
-
-            <AnimatePresence>
-              {showMobileFilters && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className="mt-2 p-4 bg-white rounded-lg border border-[#5baed1]/20 shadow-sm"
-                >
-                  <div className="space-y-4">
-                    <div>
-                      <label htmlFor="mobileFechaInicio" className="text-[#333333] text-sm font-medium">
-                        Fecha Inicio
-                      </label>
-                      <Input
-                        id="mobileFechaInicio"
-                        type="date"
-                        value={dateFilter.fechaInicio}
-                        onChange={(e) => setDateFilter({ ...dateFilter, fechaInicio: e.target.value })}
-                        className="w-full bg-[#f2f2f2] border-[#5baed1] mt-1"
-                      />
-                    </div>
-
-                    <div>
-                      <label htmlFor="mobileFechaFin" className="text-[#333333] text-sm font-medium">
-                        Fecha Fin
-                      </label>
-                      <Input
-                        id="mobileFechaFin"
-                        type="date"
-                        value={dateFilter.fechaFin}
-                        onChange={(e) => setDateFilter({ ...dateFilter, fechaFin: e.target.value })}
-                        className="w-full bg-[#f2f2f2] border-[#5baed1] mt-1"
-                      />
-                    </div>
-
-                    <div className="flex space-x-2">
-                      <Button
-                        variant="default"
-                        onClick={filterOrdersByDate}
-                        className="flex-1 bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white transition-all duration-200"
-                      >
-                        Aplicar Filtros
-                      </Button>
-
-                      <Button
-                        variant="outline"
-                        onClick={clearAllFilters}
-                        className="border-[#5baed1] text-[#333333]"
-                      >
-                        Limpiar
-                      </Button>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          {/* Estado de carga */}
-          {isLoading && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="flex justify-center items-center py-20"
-            >
-              <div className="flex flex-col items-center">
-                <div className="w-16 h-16 border-4 border-t-[#3a8fb7] border-r-[#a8e6cf] border-b-[#d4f1f9] border-l-[#f2f2f2] rounded-full animate-spin mb-4"></div>
-                <p className="mt-4 text-[#333333]">Cargando pedidos...</p>
-              </div>
-            </motion.div>
-          )}
-
           {/* Sin pedidos */}
           {!isLoading && filteredOrders.length === 0 && (
             <motion.div
@@ -1253,7 +1014,7 @@ export const OrdersPage: React.FC = () => {
               </div>
               <h2 className="text-xl font-bold mb-2 text-[#333333]">No se encontraron pedidos</h2>
               <p className="text-[#4a4a4a] max-w-lg mx-auto">
-                {searchTerm || dateFilter.fechaInicio || dateFilter.fechaFin || statusFilter !== 'all'
+                {searchTerm || statusFilter !== 'all'
                   ? 'No hay pedidos que coincidan con los filtros seleccionados.'
                   : activeTab === 'porAprobar'
                     ? 'No hay pedidos pendientes de aprobación.'
@@ -1267,7 +1028,7 @@ export const OrdersPage: React.FC = () => {
                             ? 'No has creado ningún pedido como operario.'
                             : 'Aún no has realizado ningún pedido. Comienza a comprar para ver tus pedidos aquí.'}
               </p>
-              {(searchTerm || dateFilter.fechaInicio || dateFilter.fechaFin || statusFilter !== 'all' || activeTab !== 'todos') && (
+              {(searchTerm || statusFilter !== 'all' || activeTab !== 'todos') && (
                 <Button
                   onClick={clearAllFilters}
                   className="mt-4 bg-[#3a8fb7] hover:bg-[#2a7a9f] text-white transition-all duration-200"
@@ -1387,21 +1148,6 @@ export const OrdersPage: React.FC = () => {
                               </td>
                               <td className="px-6 py-4 text-right whitespace-nowrap">
                                 <div className="flex justify-end space-x-2">
-                                  {/* Botón para descargar remito */}
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleRemitoDownload(order._id)}
-                                    disabled={isDownloadingRemito === order._id}
-                                    className="border-[#5baed1] text-[#333333] hover:bg-[#3a8fb7]/10 transition-all duration-200"
-                                  >
-                                    {isDownloadingRemito === order._id ? (
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                      <Download className="h-4 w-4" />
-                                    )}
-                                  </Button>
-
                                   {/* Botones de aprobación para supervisores */}
                                   {canApproveOrder(order) && (
                                     <>
@@ -1663,20 +1409,6 @@ export const OrdersPage: React.FC = () => {
                         </Accordion>
                       </CardContent>
                       <CardFooter className="pt-0 pb-3 flex justify-between">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleRemitoDownload(order._id)}
-                          disabled={isDownloadingRemito === order._id}
-                          className="border-[#5baed1] text-[#333333] hover:bg-[#3a8fb7]/10 transition-all duration-200"
-                        >
-                          {isDownloadingRemito === order._id ? (
-                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                          ) : (
-                            <Download className="h-4 w-4 mr-2" />
-                          )}
-                          Remito
-                        </Button>
 
                         {/* Botones de aprobación para supervisores en móvil */}
                         {canApproveOrder(order) && (

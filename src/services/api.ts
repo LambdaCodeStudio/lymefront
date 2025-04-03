@@ -3,7 +3,7 @@ import axios, { type AxiosInstance, AxiosError, type AxiosRequestConfig, type Ax
 
 // Configuración del API base
 const API_CONFIG = {
-  baseURL: 'http://localhost:3000/api',
+  baseURL: '/api',
   headers: {
     'Content-Type': 'application/json',
   },
